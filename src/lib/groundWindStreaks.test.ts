@@ -74,7 +74,7 @@ describe("groundWindStreaks", () => {
     expect(groundWindLifeAlpha(4, 4)).toBe(0);
   });
 
-  it("indexes one ribbon plus one arrowhead per streak", () => {
+  it("indexes one line strip per streak", () => {
     const idx = groundWindStreakIndices(2);
     expect(idx.length).toBe(2 * GROUND_WIND_INDICES_PER_STREAK);
     expect(Math.max(...idx)).toBe(2 * GROUND_WIND_VERTS_PER_STREAK - 1);

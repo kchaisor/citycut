@@ -27,46 +27,79 @@ import {
 import { useColourRevision } from "../lib/useColourRevision";
 import { GROUND_WIND_EMPTY_MASK_RECT, groundWindHudMaskFromDom, type GroundWindMaskRect } from "../lib/groundWindHudMask";
 import { SURFACE } from "../lib/surfaceLayers";
-import type { WindPeriodStats } from "../lib/windRose";
+import { sectorCenterDeg, type WindPeriodStats } from "../lib/windRose";
+import { GROUND_WIND_RAMP } from "../lib/groundWindRamp";
+
+declare global {
+  interface Window {
+    __citycutGroundWind?: { readonly streaks: number; readonly heading: number };
+  }
+}
 
 const FIELD_BUDGET_MS = 4;
 const MAX_FRAME_DT = 0.05;
 const HUD_MASK_POLL_MS = 500;
 
+const LINE_WIDTH_PX = 1.5;
+const LINE_FRINGE_PX = 0.6;
+const RAMP_SIZE = GROUND_WIND_RAMP.length;
+
 const VERTEX_SHADER = `
+attribute vec2 tangent;
+attribute float side;
 attribute float speed;
 attribute float alpha;
 uniform vec2 resolution;
+uniform float halfWidthPx;
 varying float vSpeed;
 varying float vAlpha;
+varying float vSide;
 varying vec2 vScreenPx;
 void main() {
-  vec4 clip = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  mat4 mvp = projectionMatrix * modelViewMatrix;
+  vec4 clip = mvp * vec4(position, 1.0);
+  vec4 ahead = mvp * vec4(position + vec3(tangent.x, 0.0, tangent.y), 1.0);
+  vec2 dir = (ahead.xy / max(1e-5, ahead.w) - clip.xy / max(1e-5, clip.w)) * resolution;
+  float len = length(dir);
+  vec2 normal = len > 1e-6 ? vec2(-dir.y, dir.x) / len : vec2(0.0, 1.0);
+  clip.xy += normal * side * halfWidthPx * 2.0 / resolution * clip.w;
   vScreenPx = (clip.xy / max(1e-5, clip.w) * 0.5 + 0.5) * resolution;
   vSpeed = speed;
   vAlpha = alpha;
+  vSide = side;
   gl_Position = clip;
 }
 `;
 
 const FRAGMENT_SHADER = `
+#define RAMP_SIZE ${RAMP_SIZE}
 uniform vec2 resolution;
-uniform vec3 shelteredColour;
-uniform vec3 openColour;
-uniform vec3 speedingColour;
+uniform float halfWidthPx;
+uniform float lineHalfPx;
+uniform vec3 rampColour[RAMP_SIZE];
+uniform float rampSpeed[RAMP_SIZE];
 uniform vec4 maskRight;
 uniform vec4 maskBottom;
 varying float vSpeed;
 varying float vAlpha;
+varying float vSide;
 varying vec2 vScreenPx;
+vec3 rampAt(float speed) {
+  vec3 colour = rampColour[0];
+  for (int i = 1; i < RAMP_SIZE; i++) {
+    float t = clamp((speed - rampSpeed[i - 1]) / (rampSpeed[i] - rampSpeed[i - 1]), 0.0, 1.0);
+    colour = mix(colour, rampColour[i], t);
+  }
+  return colour;
+}
 void main() {
   vec2 css = vec2(vScreenPx.x, resolution.y - vScreenPx.y);
   if (css.x >= maskRight.x && css.x <= maskRight.z && css.y >= maskRight.y && css.y <= maskRight.w) discard;
   if (css.x >= maskBottom.x && css.x <= maskBottom.z && css.y >= maskBottom.y && css.y <= maskBottom.w) discard;
-  if (vAlpha < 0.004) discard;
-  vec3 slow = mix(shelteredColour, openColour, smoothstep(0.45, 0.85, vSpeed));
-  vec3 colour = mix(slow, speedingColour, smoothstep(1.06, 1.3, vSpeed));
-  gl_FragColor = vec4(colour, min(0.92, vAlpha));
+  float coverage = clamp(lineHalfPx + 0.5 - abs(vSide) * halfWidthPx, 0.0, 1.0);
+  float a = vAlpha * coverage;
+  if (a < 0.004) discard;
+  gl_FragColor = vec4(rampAt(vSpeed), a);
 }
 `;
 
@@ -81,8 +114,10 @@ function createStreakGeometry(count: number) {
   const data = new THREE.InterleavedBuffer(vertices, GROUND_WIND_VERTEX_STRIDE);
   data.setUsage(THREE.DynamicDrawUsage);
   geometry.setAttribute("position", new THREE.InterleavedBufferAttribute(data, 3, 0));
-  geometry.setAttribute("speed", new THREE.InterleavedBufferAttribute(data, 1, 3));
-  geometry.setAttribute("alpha", new THREE.InterleavedBufferAttribute(data, 1, 4));
+  geometry.setAttribute("tangent", new THREE.InterleavedBufferAttribute(data, 2, 3));
+  geometry.setAttribute("side", new THREE.InterleavedBufferAttribute(data, 1, 5));
+  geometry.setAttribute("speed", new THREE.InterleavedBufferAttribute(data, 1, 6));
+  geometry.setAttribute("alpha", new THREE.InterleavedBufferAttribute(data, 1, 7));
   geometry.setIndex(new THREE.BufferAttribute(groundWindStreakIndices(count), 1));
   geometry.setDrawRange(0, 0);
   geometry.boundingSphere = new THREE.Sphere(new THREE.Vector3(), Number.POSITIVE_INFINITY);
@@ -96,9 +131,10 @@ function makeWindMaterial(width: number, height: number) {
     fragmentShader: FRAGMENT_SHADER,
     uniforms: {
       resolution: { value: new THREE.Vector2(width, height) },
-      shelteredColour: { value: new THREE.Color() },
-      openColour: { value: new THREE.Color() },
-      speedingColour: { value: new THREE.Color() },
+      halfWidthPx: { value: LINE_WIDTH_PX / 2 + LINE_FRINGE_PX },
+      lineHalfPx: { value: LINE_WIDTH_PX / 2 },
+      rampColour: { value: GROUND_WIND_RAMP.map(() => new THREE.Color()) },
+      rampSpeed: { value: GROUND_WIND_RAMP.map((stop) => stop.speed) },
       maskRight: { value: new THREE.Vector4(empty.x0, empty.y0, empty.x1, empty.y1) },
       maskBottom: { value: new THREE.Vector4(empty.x0, empty.y0, empty.x1, empty.y1) },
     },
@@ -142,15 +178,21 @@ export function GroundWindFlow({
 
   const colourRevision = useColourRevision();
   useEffect(() => {
-    (material.uniforms.shelteredColour!.value as THREE.Color).set(getColour("--ground-wind-sheltered"));
-    (material.uniforms.openColour!.value as THREE.Color).set(getColour("--ground-wind-open"));
-    (material.uniforms.speedingColour!.value as THREE.Color).set(getColour("--ground-wind-speeding"));
+    const ramp = material.uniforms.rampColour!.value as THREE.Color[];
+    GROUND_WIND_RAMP.forEach((stop, i) => ramp[i]!.set(getColour(stop.token)));
     invalidate();
   }, [material, colourRevision, invalidate]);
 
   useEffect(() => {
     (material.uniforms.resolution!.value as THREE.Vector2).set(size.width, size.height);
   }, [material, size.height, size.width]);
+
+  useEffect(() => {
+    window.__citycutGroundWind = { streaks: count, heading: sectorCenterDeg(sector) };
+    return () => {
+      delete window.__citycutGroundWind;
+    };
+  }, [count, sector]);
 
   useEffect(() => () => geometry.dispose(), [geometry]);
   useEffect(() => () => material.dispose(), [material]);

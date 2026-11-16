@@ -173,9 +173,13 @@
   --primary-plinth-wall: #000000;
   --uniform-road: #555555;
   --plinth-wall: #ffffff;
-  --ground-wind-sheltered: #3d8ad6;
-  --ground-wind-open: #3d4f73;
-  --ground-wind-speeding: #e2601e;
+  --ground-wind-sheltered: #24208a;
+  --ground-wind-calm: #1f4fd0;
+  --ground-wind-easing: #008cc4;
+  --ground-wind-open: #009c78;
+  --ground-wind-rising: #d9a300;
+  --ground-wind-fast: #e8670f;
+  --ground-wind-speeding: #cc1f1f;
   --wind-band-0: #9ec5e8;
   --wind-band-1: #5b9bd5;
   --wind-band-2: #2f6fd6;

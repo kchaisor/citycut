@@ -41,7 +41,11 @@ export function ModelPageView({ vm }: { vm: ModelPageViewModel }) {
         <ModelPageSidebar vm={vm} />
         {leftOpen === "analysis" && tab !== "satellite" && analysisKind === "wind" && siteWind ? (
           <div className="wind-rose-analysis-card hud-card" aria-label="Wind rose panel">
-            <WindRosePanel selection={siteWind} period={windSettings.period} />
+            <WindRosePanel
+              selection={siteWind}
+              period={windSettings.period}
+              showGroundWindLegend={windSettings.enabled && tab === "3d"}
+            />
           </div>
         ) : null}
         <ModelPageViewportFooter vm={vm} />

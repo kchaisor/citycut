@@ -294,9 +294,13 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--wind-rose-n-label` | `#111111` | Wind rose north label. |
 | `--wind-rose-h-label` | `#5f5f5f` | Wind rose E/S/W labels. |
 | `--wind-calm-caption` | `#1f2a33` | Calm caption under the on-card wind rose. |
-| `--ground-wind-sheltered` | `#3d8ad6` | 3D ground-wind streaks slower than open-ground wind (sheltered). |
-| `--ground-wind-open` | `#3d4f73` | 3D ground-wind streaks at open-ground wind speed. |
-| `--ground-wind-speeding` | `#e2601e` | 3D ground-wind streaks faster than open-ground wind (speeding up). |
+| `--ground-wind-sheltered` | `#24208a` | 3D ground-wind line velocity ramp: near-still air in a building wake (speed ≈ 0.15× open ground). |
+| `--ground-wind-calm` | `#1f4fd0` | 3D ground-wind line velocity ramp: well below open-ground speed (≈ 0.45×). |
+| `--ground-wind-easing` | `#008cc4` | 3D ground-wind line velocity ramp: a little below open-ground speed (≈ 0.8×). |
+| `--ground-wind-open` | `#009c78` | 3D ground-wind line velocity ramp: open-ground speed (1×). |
+| `--ground-wind-rising` | `#d9a300` | 3D ground-wind line velocity ramp: speeding up (≈ 1.12×). |
+| `--ground-wind-fast` | `#e8670f` | 3D ground-wind line velocity ramp: speeding up (≈ 1.25×). |
+| `--ground-wind-speeding` | `#cc1f1f` | 3D ground-wind line velocity ramp: strongest speed-up at corners and gaps (≥ 1.4×). |
 | `--wind-band-0` | `#9ec5e8` | Wind console swatch: 2–10 km/h. |
 | `--wind-band-1` | `#5b9bd5` | Wind console swatch: 10–20 km/h. |
 | `--wind-band-2` | `#2f6fd6` | Wind console swatch: 20–30 km/h. |

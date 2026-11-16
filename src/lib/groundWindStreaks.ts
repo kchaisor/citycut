@@ -7,10 +7,10 @@ import {
 
 export const GROUND_WIND_TRAIL_POINTS = 10;
 export const GROUND_WIND_TRAIL_SAMPLE_S = 0.07;
-export const GROUND_WIND_VERTS_PER_STREAK = GROUND_WIND_TRAIL_POINTS * 2 + 3;
-export const GROUND_WIND_INDICES_PER_STREAK = (GROUND_WIND_TRAIL_POINTS - 1) * 6 + 3;
-export const GROUND_WIND_VERTEX_STRIDE = 5;
-export const GROUND_WIND_STREAKS_DEFAULT = 1500;
+export const GROUND_WIND_VERTS_PER_STREAK = GROUND_WIND_TRAIL_POINTS * 2;
+export const GROUND_WIND_INDICES_PER_STREAK = (GROUND_WIND_TRAIL_POINTS - 1) * 6;
+export const GROUND_WIND_VERTEX_STRIDE = 8;
+export const GROUND_WIND_STREAKS_DEFAULT = 2500;
 export const GROUND_WIND_STREAKS_MIN = 400;
 export const GROUND_WIND_STREAKS_MAX = 3000;
 export const GROUND_WIND_DEFAULT_AREA_M2 = 1000 * 1000;
@@ -18,9 +18,7 @@ export const GROUND_WIND_LIFE_MIN_S = 3;
 export const GROUND_WIND_LIFE_MAX_S = 5;
 export const GROUND_WIND_FADE_IN_S = 0.5;
 export const GROUND_WIND_FADE_OUT_S = 0.7;
-export const GROUND_WIND_HALF_WIDTH_FRAC = 0.0016;
-export const GROUND_WIND_HEAD_LENGTH = 4.2;
-export const GROUND_WIND_HEAD_HALF_WIDTH = 2.3;
+export const GROUND_WIND_TAIL_FADE = 0.5;
 export const GROUND_WIND_MAX_STEP_S = 0.05;
 export const GROUND_WIND_WARM_S = 1.2;
 
@@ -34,7 +32,6 @@ export type GroundWindStreaks = {
   maxE: number;
   minN: number;
   maxN: number;
-  halfWidthM: number;
   headE: Float32Array;
   headN: Float32Array;
   headY: Float32Array;
@@ -93,10 +90,6 @@ export function groundWindStreakIndices(count: number): Uint32Array {
       out[o++] = a + 3;
       out[o++] = a + 2;
     }
-    const h = v + GROUND_WIND_TRAIL_POINTS * 2;
-    out[o++] = h;
-    out[o++] = h + 1;
-    out[o++] = h + 2;
   }
   return out;
 }
@@ -207,7 +200,6 @@ export function createGroundWindStreaks(
     maxE: w / 2,
     minN: -h / 2,
     maxN: h / 2,
-    halfWidthM: Math.max(w, h) * GROUND_WIND_HALF_WIDTH_FRAC,
     headE: f(),
     headN: f(),
     headY: f(),
@@ -324,19 +316,32 @@ const trailN = new Float32Array(GROUND_WIND_TRAIL_POINTS);
 const trailY = new Float32Array(GROUND_WIND_TRAIL_POINTS);
 const trailS = new Float32Array(GROUND_WIND_TRAIL_POINTS);
 
-function writeVertex(out: Float32Array, o: number, e: number, y: number, n: number, speed: number, alpha: number) {
+function writeVertex(
+  out: Float32Array,
+  o: number,
+  e: number,
+  y: number,
+  n: number,
+  te: number,
+  tn: number,
+  side: number,
+  speed: number,
+  alpha: number,
+) {
   out[o] = e;
   out[o + 1] = y;
   out[o + 2] = -n;
-  out[o + 3] = speed;
-  out[o + 4] = alpha;
+  out[o + 3] = te;
+  out[o + 4] = -tn;
+  out[o + 5] = side;
+  out[o + 6] = speed;
+  out[o + 7] = alpha;
 }
 
 export function writeGroundWindStreakVertices(streaks: GroundWindStreaks): number {
   const out = streaks.vertices;
   const last = GROUND_WIND_TRAIL_POINTS - 1;
   const phase = streaks.sampleClock / GROUND_WIND_TRAIL_SAMPLE_S;
-  const halfW = streaks.halfWidthM;
   const stride = GROUND_WIND_VERTEX_STRIDE;
   const { headE, headN, headY, headSpeed, dirE, dirN, histE, histN, histY, histSpeed, age, life, ring } = streaks;
   let drawn = 0;
@@ -377,26 +382,15 @@ export function writeGroundWindStreakVertices(streaks: GroundWindStreaks): numbe
         te = fe;
         tn = fn;
       }
-      const along = k / last;
-      const w = halfW * (1 - along * 0.85);
-      const alpha = lifeAlpha * (1 - along);
+      const alpha = lifeAlpha * (1 - (k / last) * GROUND_WIND_TAIL_FADE);
       const e = trailE[k]!;
       const n = trailN[k]!;
       const y = trailY[k]!;
       const s = trailS[k]!;
-      writeVertex(out, o, e - tn * w, y, n + te * w, s, alpha);
-      writeVertex(out, o + stride, e + tn * w, y, n - te * w, s, alpha);
+      writeVertex(out, o, e, y, n, te, tn, -1, s, alpha);
+      writeVertex(out, o + stride, e, y, n, te, tn, 1, s, alpha);
       o += stride * 2;
     }
-    const he = headE[p]!;
-    const hn = headN[p]!;
-    const hy = headY[p]!;
-    const hs = headSpeed[p]!;
-    const headLen = halfW * GROUND_WIND_HEAD_LENGTH;
-    const headHalf = halfW * GROUND_WIND_HEAD_HALF_WIDTH;
-    writeVertex(out, o, he + fe * headLen, hy, hn + fn * headLen, hs, lifeAlpha);
-    writeVertex(out, o + stride, he - fn * headHalf, hy, hn + fe * headHalf, hs, lifeAlpha);
-    writeVertex(out, o + stride * 2, he + fn * headHalf, hy, hn - fe * headHalf, hs, lifeAlpha);
     drawn += 1;
   }
   return drawn;

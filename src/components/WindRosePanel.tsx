@@ -7,13 +7,16 @@ import { windRoseStationLines } from "../lib/windRoseCaptions";
 import { getColour } from "../lib/colours";
 import { WindRoseSvgChart } from "./WindRoseSvgChart";
 import { WindRoseSpeedLegend } from "./WindRoseSpeedLegend";
+import { GroundWindSpeedLegend } from "./GroundWindSpeedLegend";
 
 export function WindRosePanel({
   selection,
   period,
+  showGroundWindLegend = false,
 }: {
   selection: SiteWindSelection;
   period: WindPeriodId;
+  showGroundWindLegend?: boolean;
 }) {
   const stats = useMemo(() => analyzeSiteWind(selection, period), [selection, period]);
   const lines = useMemo(() => windRoseStationLines(selection), [selection]);
@@ -36,6 +39,7 @@ export function WindRosePanel({
       />
       <p className="wind-rose-calm-caption">{calmCaption}</p>
       <WindRoseSpeedLegend />
+      {showGroundWindLegend && <GroundWindSpeedLegend />}
       <p className="wind-rose-meta">{lines.line1}</p>
       <p className="wind-rose-meta wind-rose-meta-source">{lines.line2}</p>
       <p className="wind-rose-meta wind-rose-meta-note">{regionalNote}</p>
