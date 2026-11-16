@@ -44,3 +44,4 @@ Approved by Kelvin on 15 Nov 2026 to cut usage.
 5. Before starting any new draft, check which screens and features it will touch against every open draft. If nothing overlaps, go ahead. If something overlaps, stop and send Kelvin one plain-English line naming the clashing screen or feature and the draft (e.g. "This touches the same sun panel as #231. Finish #231 first, or go anyway?"), suggest which to do first, and wait for his call. Use no file names.
 
 6. All UI work follows DESIGN-SYSTEM.md: tokens only, and list deviations in the PR body under "Design-system deviations:".
+7. Spec before code: every new feature starts with a short spec from docs/specs/TEMPLATE.md; stop and get Kelvin's OK on the spec before writing any code.
