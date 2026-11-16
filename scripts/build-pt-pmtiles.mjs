@@ -4,13 +4,17 @@
  *
  * Licence: Creative Commons Attribution 4.0 (dataset page on opendata.transport.vic.gov.au).
  */
-import { createWriteStream, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { createReadStream, createWriteStream, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
+import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { pipeline } from "node:stream/promises";
 import { Readable } from "node:stream";
+import { pick } from "stream-json/filters/pick.js";
+import { streamArray } from "stream-json/streamers/stream-array.js";
 import { lookupPtResources, probeUrl, ptCandidates, useFirstWorking } from "./pt-data-lib.mjs";
 
-const METRO = { west: 144.35, south: -38.25, east: 145.55, north: -37.45 };
+export const METRO = { west: 144.35, south: -38.25, east: 145.55, north: -37.45 };
 const CACHE = "tmp/pt-cache";
 const OUT = "public";
 
@@ -61,23 +65,33 @@ async function resolveCandidates() {
   return ptCandidates(found);
 }
 
-function filterGeojson(path, outPath, keepProps) {
-  const raw = JSON.parse(readFileSync(path, "utf8"));
-  const features = (raw.features ?? [])
-    .filter((feature) => {
-      const box = featureBBox(feature);
-      return box && bboxIntersects(box, METRO);
-    })
-    .map((feature) => ({
-      type: "Feature",
-      properties: keepProps(feature.properties ?? {}),
-      geometry: {
-        type: feature.geometry.type,
-        coordinates: simplifyCoords(feature.geometry.coordinates),
-      },
-    }));
-  writeFileSync(outPath, JSON.stringify({ type: "FeatureCollection", features }));
-  return features.length;
+export async function filterGeojson(path, outPath, keepProps) {
+  let count = 0;
+  await pipeline(
+    createReadStream(path),
+    pick.withParserAsStream({ filter: "features" }),
+    streamArray.asStream(),
+    async function* (source) {
+      yield '{"type":"FeatureCollection","features":[';
+      for await (const { value: feature } of source) {
+        const box = featureBBox(feature);
+        if (!box || !bboxIntersects(box, METRO)) continue;
+        const kept = {
+          type: "Feature",
+          properties: keepProps(feature.properties ?? {}),
+          geometry: {
+            type: feature.geometry.type,
+            coordinates: simplifyCoords(feature.geometry.coordinates),
+          },
+        };
+        yield (count === 0 ? "" : ",") + JSON.stringify(kept);
+        count += 1;
+      }
+      yield "]}";
+    },
+    createWriteStream(outPath),
+  );
+  return count;
 }
 
 function runTippecanoe(input, output, layerName, extraArgs = []) {
@@ -122,10 +136,10 @@ async function main() {
   }
   const metroLines = `${CACHE}/metro-lines.geojson`;
   const metroStops = `${CACHE}/metro-stops.geojson`;
-  const lineCount = filterGeojson(linesCache, metroLines, (props) => ({
+  const lineCount = await filterGeojson(linesCache, metroLines, (props) => ({
     MODE: props.MODE ?? props.mode ?? "",
   }));
-  const stopCount = filterGeojson(stopsCache, metroStops, (props) => ({
+  const stopCount = await filterGeojson(stopsCache, metroStops, (props) => ({
     MODE: props.MODE ?? props.mode ?? "",
   }));
   console.log(`Metro filter: ${lineCount} lines, ${stopCount} stops`);
@@ -154,7 +168,9 @@ async function main() {
   console.log(`Wrote ${linesPmtiles} (${statLines} bytes) and ${stopsPmtiles} (${statStops} bytes)`);
 }
 
-main().catch((error) => {
-  console.error(error);
-  process.exit(1);
-});
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main().catch((error) => {
+    console.error(error);
+    process.exit(1);
+  });
+}
