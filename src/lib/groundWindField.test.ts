@@ -115,6 +115,23 @@ describe("groundWindField", () => {
     expect(groundWindCellIndex(field, 1000, 0)).toBe(-1);
   });
 
+  it("flips the flow when the prevailing heading turns from north to south", () => {
+    const model = modelWith([{ ring: ring(-20, -30, 20, 30), height: 20 }]);
+    const north = createGroundWindFieldBuilder(model, groundWindBaseVector(0)).finish();
+    const south = createGroundWindFieldBuilder(model, groundWindBaseVector(8)).finish();
+    const out = { east: 0, north: 0 };
+    for (const [e, n] of [
+      [-80, 80],
+      [80, -80],
+      [-80, 0],
+    ] as const) {
+      const fromNorth = groundWindVelocityAt(north, e, n, out).north;
+      const fromSouth = groundWindVelocityAt(south, e, n, out).north;
+      expect(fromNorth).toBeLessThan(-0.5);
+      expect(fromSouth).toBeGreaterThan(0.5);
+    }
+  });
+
   it("builds in bounded steps and matches the synchronous build", () => {
     const model = modelWith([{ ring: ring(-30, -30, 30, 30), height: 12 }]);
     const builder = createGroundWindFieldBuilder(model, westerly);

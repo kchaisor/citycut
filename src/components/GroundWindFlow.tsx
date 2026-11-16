@@ -17,6 +17,8 @@ import {
   GROUND_WIND_PARTICLES_MAX,
   GROUND_WIND_POINTS_PER_PARTICLE,
   GROUND_WIND_POINT_STRIDE,
+  GROUND_WIND_TRAIL_POINTS,
+  GROUND_WIND_TRAIL_SAMPLE_S,
   groundWindMetresPerSecond,
   groundWindPointsLength,
   layoutGroundWindScreenSeeds,
@@ -37,6 +39,8 @@ import type { WindPeriodStats } from "../lib/windRose";
 const FIELD_BUDGET_MS = 5;
 const WARM_LIVE_S = 2.6;
 const WARM_FROZEN_S = 2.4;
+const WARM_RELAYOUT_S = GROUND_WIND_TRAIL_POINTS * GROUND_WIND_TRAIL_SAMPLE_S;
+const STEP_EVERY_FRAMES = 2;
 const MAX_FRAME_DT = 0.05;
 const HUD_MASK_POLL_MS = 500;
 
@@ -227,7 +231,6 @@ export function GroundWindFlow({
   animate: boolean;
 }) {
   const targetBase = useMemo(() => groundWindBaseVector(stats?.prevailingSector), [stats?.prevailingSector]);
-  const baseRef = useRef(targetBase);
   const medianKmh = stats?.prevailingMedianKmh && stats.prevailingMedianKmh > 0 ? stats.prevailingMedianKmh : 18;
   const metresPerSecond = groundWindMetresPerSecond(
     model.sideM,
@@ -243,6 +246,9 @@ export function GroundWindFlow({
   const cameraSettleRef = useRef(0);
   const layoutDigestRef = useRef("");
   const layoutPendingRef = useRef(false);
+  const stepFrameRef = useRef(0);
+  const stepDtRef = useRef(0);
+  const meshesRef = useRef<THREE.Mesh[]>([]);
 
   const points = useMemo(() => new Float32Array(groundWindPointsLength(GROUND_WIND_PARTICLES_MAX)), []);
   const { geometry, data } = useMemo(() => createRibbonGeometry(points), [points]);
@@ -273,6 +279,7 @@ export function GroundWindFlow({
 
   const builderRef = useRef<GroundWindFieldBuilder | null>(null);
   const fieldRef = useRef<GroundWindField | null>(null);
+  const fieldModelRef = useRef<CityModel | null>(null);
   const particlesRef = useRef<GroundWindParticles | null>(null);
   const invalidate = useThree((state) => state.invalidate);
   const canvasElement = useThree((state) => state.gl.domElement);
@@ -336,43 +343,23 @@ export function GroundWindFlow({
   );
 
   useEffect(() => {
-    builderRef.current = createGroundWindFieldBuilder(model, baseRef.current);
-    fieldRef.current = null;
-    particlesRef.current = null;
-    geometry.instanceCount = 0;
+    builderRef.current = createGroundWindFieldBuilder(model, targetBase);
+    if (fieldModelRef.current !== model) {
+      fieldModelRef.current = model;
+      fieldRef.current = null;
+      particlesRef.current = null;
+      geometry.instanceCount = 0;
+    }
     invalidate();
-  }, [model, geometry, invalidate]);
+  }, [model, targetBase, geometry, invalidate]);
 
   useEffect(() => {
     if (!frozen) invalidate();
   }, [frozen, invalidate]);
 
   useFrame((_, delta) => {
-    const cur = baseRef.current;
-    const dot = cur.east * targetBase.east + cur.north * targetBase.north;
-    const cross = cur.east * targetBase.north - cur.north * targetBase.east;
-    const angle = Math.atan2(cross, dot);
-    if (Math.abs(angle) > 0.001) {
-      const step = Math.sign(angle) * Math.min(Math.abs(angle), delta * 1.6);
-      const cos = Math.cos(step);
-      const sin = Math.sin(step);
-      const next = {
-        east: cur.east * cos - cur.north * sin,
-        north: cur.east * sin + cur.north * cos,
-      };
-      baseRef.current = next;
-      if (fieldRef.current) fieldRef.current.base = next;
-    } else if (cur.east !== targetBase.east || cur.north !== targetBase.north) {
-      baseRef.current = targetBase;
-      if (fieldRef.current) fieldRef.current.base = targetBase;
-    }
-
     const builder = builderRef.current;
-    if (!fieldRef.current && builder) {
-      if (!builder.step(FIELD_BUDGET_MS)) {
-        invalidate();
-        return;
-      }
+    if (builder?.step(FIELD_BUDGET_MS)) {
       const field = builder.finish();
       fieldRef.current = field;
       builderRef.current = null;
@@ -393,6 +380,7 @@ export function GroundWindFlow({
       invalidate();
       return;
     }
+    if (builder) invalidate();
     const field = fieldRef.current;
     const particles = particlesRef.current;
     if (!field || !particles) return;
@@ -411,6 +399,12 @@ export function GroundWindFlow({
     const cameraSettled = cameraSettleRef.current > 0.4;
     const needsInitialLayout = layoutPendingRef.current && cameraSettled;
     const needsCameraRelayout = !layoutPendingRef.current && cameraSettled && layoutDigestRef.current !== digest;
+    const cameraMoving = !cameraSettled && layoutDigestRef.current !== digest;
+    for (const mesh of meshesRef.current) mesh.visible = !cameraMoving;
+    if (cameraMoving) {
+      invalidate();
+      return;
+    }
     if (needsInitialLayout || needsCameraRelayout) {
       layoutDigestRef.current = digest;
       layoutPendingRef.current = false;
@@ -425,7 +419,7 @@ export function GroundWindFlow({
         ? frozenRef.current
           ? WARM_FROZEN_S
           : WARM_LIVE_S
-        : 1.1;
+        : WARM_RELAYOUT_S;
       warmGroundWindParticles(particles, field, heightAt, metresPerSecond, warmS);
       data.needsUpdate = true;
       if (debugWind && typeof window !== "undefined") {
@@ -435,7 +429,14 @@ export function GroundWindFlow({
       return;
     }
     if (frozenRef.current) return;
-    stepGroundWindParticles(particles, field, heightAt, Math.min(delta, MAX_FRAME_DT), metresPerSecond);
+    stepDtRef.current += Math.min(delta, MAX_FRAME_DT);
+    stepFrameRef.current = (stepFrameRef.current + 1) % STEP_EVERY_FRAMES;
+    if (stepFrameRef.current !== 0) {
+      invalidate();
+      return;
+    }
+    stepGroundWindParticles(particles, field, heightAt, stepDtRef.current, metresPerSecond);
+    stepDtRef.current = 0;
     data.needsUpdate = true;
     if (debugWind && typeof window !== "undefined") {
       debugFrameRef.current += 1;
@@ -448,8 +449,8 @@ export function GroundWindFlow({
 
   return (
     <>
-      <mesh geometry={geometry} material={casingMaterial} frustumCulled={false} renderOrder={SURFACE.building.renderOrder - 0.55} />
-      <mesh geometry={geometry} material={coreMaterial} frustumCulled={false} renderOrder={SURFACE.building.renderOrder - 0.5} />
+      <mesh ref={(m) => void (m && (meshesRef.current[0] = m))} geometry={geometry} material={casingMaterial} frustumCulled={false} renderOrder={SURFACE.building.renderOrder - 0.55} />
+      <mesh ref={(m) => void (m && (meshesRef.current[1] = m))} geometry={geometry} material={coreMaterial} frustumCulled={false} renderOrder={SURFACE.building.renderOrder - 0.5} />
     </>
   );
 }

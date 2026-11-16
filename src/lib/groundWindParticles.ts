@@ -22,12 +22,12 @@ import {
   GROUND_WIND_STREAMLINE_CELL_PX,
   groundWindTargetParticleCount,
 } from "./groundWindScreen";
-export const GROUND_WIND_TRAIL_POINTS = 28;
+export const GROUND_WIND_TRAIL_POINTS = 14;
 export const GROUND_WIND_POINTS_PER_PARTICLE = GROUND_WIND_TRAIL_POINTS + 1;
 export const GROUND_WIND_POINT_STRIDE = 8;
-export const GROUND_WIND_TRAIL_SAMPLE_S = 1 / 40;
+export const GROUND_WIND_TRAIL_SAMPLE_S = 1 / 20;
 export const GROUND_WIND_PARTICLES_MIN = 520;
-export const GROUND_WIND_PARTICLES_MAX = 3200;
+export const GROUND_WIND_PARTICLES_MAX = 1000;
 export const GROUND_WIND_AREA_PER_PARTICLE_M2 = 380;
 export const GROUND_WIND_LIFE_MIN_S = 1.6;
 export const GROUND_WIND_LIFE_MAX_S = 3.2;
@@ -35,7 +35,7 @@ export const GROUND_WIND_LIFE_FADE_IN_FRAC = 0.1;
 export const GROUND_WIND_LIFE_FADE_OUT_FRAC = 0.25;
 export const GROUND_WIND_ROAD_SLOT_KEEP = 0.6;
 export const GROUND_WIND_WOBBLE = 0.11;
-export const GROUND_WIND_TRAIL_LEN_MIN = 8;
+export const GROUND_WIND_TRAIL_LEN_MIN = 4;
 export const GROUND_WIND_TRAIL_LEN_MAX = GROUND_WIND_TRAIL_POINTS - 1;
 export const GROUND_WIND_CASING_WIDTH_PX = 3;
 export const GROUND_WIND_CORE_WIDTH_PX = 1.75;

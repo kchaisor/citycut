@@ -107,7 +107,7 @@ describe("groundWindRender", () => {
       expect(frameBench.respawnLoopMax).toBeLessThanOrEqual(GROUND_WIND_RESPAWN_MAX_TRIES);
       bench.respawnLoopMax = Math.max(bench.respawnLoopMax, frameBench.respawnLoopMax);
     }
-    expect(particles.count).toBeGreaterThan(2000);
+    expect(particles.count).toBe(GROUND_WIND_PARTICLES_MAX);
     const meanMs = times.reduce((sum, t) => sum + t, 0) / times.length;
     expect(meanMs).toBeLessThan(4.5);
     expect(bench.respawnRaycasts).toBe(0);
