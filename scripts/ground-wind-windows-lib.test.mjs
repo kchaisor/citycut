@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { groundWindDrawnWindows } from "./ground-wind-windows-lib.mjs";
+import { groundWindDrawnWindows, groundWindPixelClass } from "./ground-wind-windows-lib.mjs";
 
 const GROUND = [182, 182, 182];
 const TRAIL = [30, 64, 175];
@@ -26,6 +26,14 @@ const striped = (gap) => (x, y) => {
 };
 
 describe("groundWindDrawnWindows", () => {
+  it("counts sheltered, open and speeding-up streak colours as trail", () => {
+    expect(groundWindPixelClass(61, 138, 214)).toBe("trail");
+    expect(groundWindPixelClass(61, 79, 115)).toBe("trail");
+    expect(groundWindPixelClass(226, 96, 30)).toBe("trail");
+    expect(groundWindPixelClass(...GROUND)).toBe("ground");
+    expect(groundWindPixelClass(...ROOF)).toBe("other");
+  });
+
   it("passes an evenly trailed frame", () => {
     const rgba = frame(1440, 900, striped(() => false));
     const audit = groundWindDrawnWindows(rgba, 1440, 900);

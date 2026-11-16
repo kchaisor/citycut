@@ -294,9 +294,9 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--wind-rose-n-label` | `#111111` | Wind rose north label. |
 | `--wind-rose-h-label` | `#5f5f5f` | Wind rose E/S/W labels. |
 | `--wind-calm-caption` | `#1f2a33` | Calm caption under the on-card wind rose. |
-| `--ground-wind-flow` | `#0b2e8a` | Reserve fast-stream token (unused by ground shader). |
-| `--ground-wind-core` | `#1e40af` | Ground-wind trail core at constant 1.75px screen width. |
-| `--ground-wind-glow` | `#2f6fd6` | Reserve token paired with ground-wind trail fills. |
+| `--ground-wind-sheltered` | `#3d8ad6` | 3D ground-wind streaks slower than open-ground wind (sheltered). |
+| `--ground-wind-open` | `#3d4f73` | 3D ground-wind streaks at open-ground wind speed. |
+| `--ground-wind-speeding` | `#e2601e` | 3D ground-wind streaks faster than open-ground wind (speeding up). |
 | `--wind-band-0` | `#9ec5e8` | Wind console swatch: 2–10 km/h. |
 | `--wind-band-1` | `#5b9bd5` | Wind console swatch: 10–20 km/h. |
 | `--wind-band-2` | `#2f6fd6` | Wind console swatch: 20–30 km/h. |

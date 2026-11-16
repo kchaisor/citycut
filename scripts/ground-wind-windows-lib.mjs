@@ -5,6 +5,7 @@ export const GROUND_WIND_WINDOW_MIN_RATIO = 0.35;
 
 export function groundWindPixelClass(r, g, b) {
   if (b - r > 50 && b > 110) return "trail";
+  if (r - b > 90 && r > 150 && g < r - 40) return "trail";
   if (Math.abs(r - g) < 12 && Math.abs(g - b) < 14 && r >= 160 && r <= 200) return "ground";
   return "other";
 }

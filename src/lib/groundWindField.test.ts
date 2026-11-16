@@ -1,13 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
-  buildGroundWindField,
-  createGroundWindFieldBuilder,
-  groundWindBaseVector,
+  buildGroundWindGrid,
+  createGroundWindGridBuilder,
   groundWindCellIndex,
+  groundWindFieldCache,
   groundWindIsSolid,
-  groundWindSpeedAt,
-  groundWindVelocityAt,
-  rasterSolids,
+  groundWindSector,
+  rasterGroundWindObstacles,
+  sampleGroundWindFlow,
+  type GroundWindFlowGrid,
 } from "./groundWindField";
 import type { CityModel, Pt } from "../types";
 
@@ -35,14 +36,17 @@ function modelWith(buildings: Array<{ ring: Pt[]; height: number }>, sideM = 240
   };
 }
 
-const westerly = { east: 1, north: 0 };
+const WEST_SECTOR = 12;
+
+function at(grid: GroundWindFlowGrid, east: number, north: number) {
+  return sampleGroundWindFlow(grid, east, north, { east: 0, north: 0, speed: 0 });
+}
 
 describe("groundWindField", () => {
-  it("points downwind of the prevailing sector and falls back to a unit vector", () => {
-    const east = groundWindBaseVector(4);
-    const fallback = groundWindBaseVector(undefined);
-    expect(east.east).toBeCloseTo(-1, 5);
-    expect(Math.hypot(fallback.east, fallback.north)).toBeCloseTo(1, 5);
+  it("wraps sectors and falls back to north", () => {
+    expect(groundWindSector(undefined)).toBe(0);
+    expect(groundWindSector(16)).toBe(0);
+    expect(groundWindSector(-1)).toBe(15);
   });
 
   it("rasterises footprints, not bounding boxes", () => {
@@ -55,28 +59,37 @@ describe("groundWindField", () => {
       [-40, 40],
       [-40, -40],
     ];
-    const raster = rasterSolids(modelWith([{ ring: lShape, height: 12 }]));
-    const at = (e: number, n: number) =>
-      raster.solid[Math.floor((n - raster.originN) / raster.cellM) * raster.cols + Math.floor((e - raster.originE) / raster.cellM)];
-    expect(at(0, -30)).toBe(1);
-    expect(at(-30, 0)).toBe(1);
-    expect(at(20, 20)).toBe(0);
+    const obs = rasterGroundWindObstacles(modelWith([{ ring: lShape, height: 12 }]));
+    expect(groundWindIsSolid(obs, 0, -30)).toBe(true);
+    expect(groundWindIsSolid(obs, -30, 0)).toBe(true);
+    expect(groundWindIsSolid(obs, 20, 20)).toBe(false);
+    expect(groundWindCellIndex(obs, 1000, 0)).toBe(-1);
+    for (let k = 0; k < obs.fluidCells.length; k++) expect(obs.solid[obs.fluidCells[k]!]).toBe(0);
   });
 
-  it("drives velocity normal to walls to zero", () => {
-    const model = modelWith([{ ring: ring(-30, -30, 30, 30), height: 12 }]);
-    const field = buildGroundWindField(model, westerly);
-    const faceE = field.originE + Math.floor((-30 - field.originE) / field.cellM) * field.cellM;
-    const out = { east: 0, north: 0 };
-    for (const n of [-20, -8, 0, 11, 24]) {
-      groundWindVelocityAt(field, faceE, n, out);
-      expect(Math.abs(out.east)).toBeLessThan(0.05);
+  it("flips the flow between 0 and 180 degree headings", () => {
+    const model = modelWith([{ ring: ring(-20, -30, 20, 30), height: 20 }]);
+    const north = buildGroundWindGrid(model, 0);
+    const south = buildGroundWindGrid(model, 8);
+    for (const [e, n] of [
+      [-80, 80],
+      [80, -80],
+      [-80, 0],
+    ] as const) {
+      expect(at(north, e, n).north).toBeLessThan(-0.5);
+      expect(at(south, e, n).north).toBeGreaterThan(0.5);
     }
-    const faceN = field.originN + Math.floor((30 - field.originN) / field.cellM + 1) * field.cellM;
-    for (const e of [-20, 0, 20]) {
-      groundWindVelocityAt(field, e, faceN, out);
-      expect(Math.abs(out.north)).toBeLessThan(0.08);
-    }
+  });
+
+  it("bends the flow around a building instead of into it", () => {
+    const model = modelWith([{ ring: ring(-20, -30, 20, 30), height: 20 }]);
+    const grid = buildGroundWindGrid(model, WEST_SECTOR);
+    const above = at(grid, -24, 24);
+    const below = at(grid, -24, -24);
+    expect(above.east).toBeGreaterThan(0);
+    expect(above.north).toBeGreaterThan(0.1);
+    expect(below.north).toBeLessThan(-0.1);
+    expect(at(grid, 0, 0).speed).toBe(0);
   });
 
   it("speeds up through the gap between two buildings", () => {
@@ -84,62 +97,44 @@ describe("groundWindField", () => {
       { ring: ring(-30, 12, 30, 70), height: 15 },
       { ring: ring(-30, -70, 30, -12), height: 15 },
     ]);
-    const field = buildGroundWindField(model, westerly);
-    const gap = groundWindSpeedAt(field, 0, 0);
-    const free = groundWindSpeedAt(field, -100, 100);
-    expect(free).toBeGreaterThan(0.85);
-    expect(gap).toBeGreaterThan(1.15);
+    const grid = buildGroundWindGrid(model, WEST_SECTOR);
+    const gap = at(grid, 0, 0).speed;
+    const free = at(grid, -100, 100).speed;
+    expect(free).toBeCloseTo(1, 1);
     expect(gap).toBeGreaterThan(free * 1.15);
   });
 
   it("shelters the wake behind a building", () => {
     const model = modelWith([{ ring: ring(-20, -30, 20, 30), height: 20 }]);
-    const field = buildGroundWindField(model, westerly);
-    const wake = groundWindSpeedAt(field, 32, 0);
-    const beside = groundWindSpeedAt(field, 0, 48);
-    const free = groundWindSpeedAt(field, -100, -100);
-    expect(wake).toBeGreaterThanOrEqual(0.24);
-    expect(wake).toBeLessThan(free * 0.85);
-    expect(wake).toBeLessThan(beside);
-    expect(groundWindSpeedAt(field, 110, 0)).toBeGreaterThan(wake);
+    const grid = buildGroundWindGrid(model, WEST_SECTOR);
+    const wake = at(grid, 32, 0).speed;
+    expect(wake).toBeLessThan(at(grid, -100, -100).speed * 0.6);
+    expect(wake).toBeLessThan(at(grid, 0, 48).speed);
+    expect(at(grid, 110, 0).speed).toBeGreaterThan(wake);
   });
 
-  it("keeps solid cells out of the fluid spawn list", () => {
+  it("caches each heading so a season swap does not rebuild", () => {
     const model = modelWith([{ ring: ring(-30, -30, 30, 30), height: 12 }]);
-    const field = buildGroundWindField(model, westerly);
-    for (let k = 0; k < field.fluidCells.length; k++) {
-      expect(field.solid[field.fluidCells[k]!]).toBe(0);
-    }
-    expect(groundWindIsSolid(field, 0, 0)).toBe(true);
-    expect(groundWindIsSolid(field, 80, 80)).toBe(false);
-    expect(groundWindCellIndex(field, 1000, 0)).toBe(-1);
+    const cache = groundWindFieldCache(model);
+    const summer = createGroundWindGridBuilder(cache, 8).finish();
+    const winter = createGroundWindGridBuilder(cache, 0).finish();
+    expect(cache.builds).toBe(2);
+    const obstacles = cache.obstacles;
+    const builder = createGroundWindGridBuilder(cache, 8);
+    expect(builder.step(0)).toBe(true);
+    expect(builder.finish()).toBe(summer);
+    expect(createGroundWindGridBuilder(cache, 0).finish()).toBe(winter);
+    expect(cache.builds).toBe(2);
+    expect(cache.obstacles).toBe(obstacles);
+    expect(summer.obstacles).toBe(winter.obstacles);
   });
 
-  it("flips the flow when the prevailing heading turns from north to south", () => {
-    const model = modelWith([{ ring: ring(-20, -30, 20, 30), height: 20 }]);
-    const north = createGroundWindFieldBuilder(model, groundWindBaseVector(0)).finish();
-    const south = createGroundWindFieldBuilder(model, groundWindBaseVector(8)).finish();
-    const out = { east: 0, north: 0 };
-    for (const [e, n] of [
-      [-80, 80],
-      [80, -80],
-      [-80, 0],
-    ] as const) {
-      const fromNorth = groundWindVelocityAt(north, e, n, out).north;
-      const fromSouth = groundWindVelocityAt(south, e, n, out).north;
-      expect(fromNorth).toBeLessThan(-0.5);
-      expect(fromSouth).toBeGreaterThan(0.5);
-    }
-  });
-
-  it("builds in bounded steps and matches the synchronous build", () => {
-    const model = modelWith([{ ring: ring(-30, -30, 30, 30), height: 12 }]);
-    const builder = createGroundWindFieldBuilder(model, westerly);
+  it("builds in bounded steps", () => {
+    const model = modelWith([{ ring: ring(-30, -30, 30, 30), height: 12 }], 900);
+    const builder = createGroundWindGridBuilder(groundWindFieldCache(model), WEST_SECTOR);
     let steps = 0;
-    while (!builder.step(0.25)) steps++;
-    expect(steps).toBeGreaterThan(1);
-    const stepped = builder.finish();
-    const direct = buildGroundWindField(model, westerly);
-    expect(groundWindSpeedAt(stepped, 60, 40)).toBeCloseTo(groundWindSpeedAt(direct, 60, 40), 6);
+    while (!builder.step(0.01)) steps++;
+    expect(steps).toBeGreaterThan(3);
+    expect(at(builder.finish(), 300, 300).east).toBeGreaterThan(0.5);
   });
 });
