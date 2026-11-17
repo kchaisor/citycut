@@ -301,7 +301,13 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--ground-wind-rising` | `#d9a300` | 3D ground-wind line velocity ramp: speeding up (≈ 1.12×). |
 | `--ground-wind-fast` | `#e8670f` | 3D ground-wind line velocity ramp: speeding up (≈ 1.25×). |
 | `--ground-wind-speeding` | `#cc1f1f` | 3D ground-wind line velocity ramp: strongest speed-up at corners and gaps (≥ 1.4×). |
-| `--wind-plan-sitting` | `#dcebd8` | Plan wind comfort map (Plan view, Wind Rose, Comfort): Lawson sitting band, and its card swatch. The Wind speed map reuses the `--ground-wind-*` ramp spread over 0–4 m/s. |
+| `--wind-plan-speed-still` | `#2e42d4` | Plan Wind speed map (CFD-style ramp, fixed 0–4 m/s, linear between stops): 0 m/s, deep royal blue for sheltered wakes. Plan only; the 3D streaks keep `--ground-wind-*`. |
+| `--wind-plan-speed-calm` | `#4f68de` | Plan Wind speed map: 1 m/s, mid blue (typical lee-side wakes). |
+| `--wind-plan-speed-breeze` | `#46d4e8` | Plan Wind speed map: 2 m/s, cyan (half scale). |
+| `--wind-plan-speed-brisk` | `#b5e35c` | Plan Wind speed map: 2.8 m/s, green-yellow. |
+| `--wind-plan-speed-strong` | `#f3dc3c` | Plan Wind speed map: 3.5 m/s, yellow. |
+| `--wind-plan-speed-fast` | `#ec6a2e` | Plan Wind speed map: 4 m/s and above, orange-red (top of the Velocity legend). |
+| `--wind-plan-sitting` | `#dcebd8` | Plan wind comfort map (Plan view, Wind Rose, Comfort): Lawson sitting band, and its card swatch. |
 | `--wind-plan-standing` | `#9fcb94` | Plan wind comfort map: Lawson standing band. |
 | `--wind-plan-walking` | `#f1de97` | Plan wind comfort map: Lawson walking band (leisure and business walking merged). |
 | `--wind-plan-uncomfortable` | `#e8964f` | Plan wind comfort map: uncomfortable band. |
@@ -406,9 +412,9 @@ A dash is two lengths in millimetres: how long the mark is, then how long the ga
 | `--tram-dash` | Dash of a tram route | `1.2 0.6` | mm, on then off |
 | `--axo-guide-dash` | Dash of exploded axo vertical guides | `0.8 0.5` | mm, on then off |
 | `--building-edge` | Colour of the massing edge in the 3D view | `#000000` | colour |
-| `--wind-plan-contour-stroke` | Plan wind speed map: colour of the 1, 2 and 3 m/s contour lines | `#FFFFFF` | colour |
-| `--wind-plan-contour-opacity` | Plan wind speed map: opacity of those contours | `0.35` | 0–1 |
-| `--wind-plan-contour-px` | Plan wind speed map: contour weight on screen | `1` | screen px |
+| `--wind-plan-contour-stroke` | Plan wind speed map: colour of the fine isolines every 0.25 m/s | `#5A5A5A` | colour |
+| `--wind-plan-contour-opacity` | Plan wind speed map: opacity of those isolines | `0.3` | 0–1 |
+| `--wind-plan-contour-px` | Plan wind speed map: isoline weight on screen | `0.75` | screen px |
 | `--wind-plan-building-edge` | Plan wind maps: building footprint edge colour | `#1A1A1A` | colour |
 | `--wind-plan-building-edge-opacity` | Plan wind maps: building edge opacity | `0.4` | 0–1 |
 | `--wind-plan-building-edge-px` | Plan wind maps: building edge weight | `1` | screen px |

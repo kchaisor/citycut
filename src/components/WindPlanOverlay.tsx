@@ -5,10 +5,18 @@ import type { CityModel, Pt } from "../types";
 import { colourRgb, getColour, type ColourKey } from "../lib/colours";
 import { useColourRevision } from "../lib/useColourRevision";
 import { downwindFromSector, sectorLabel } from "../lib/windRose";
-import { rampRgb, windPlanRampStops, type WindPlanComfort, type WindPlanSpeed } from "../lib/windPlanField";
+import {
+  bilinearSample,
+  rampRgb,
+  windPlanImageUpscale,
+  windPlanRampStops,
+  type WindPlanComfort,
+  type WindPlanSpeed,
+} from "../lib/windPlanField";
 import { windPlanComfortBands, windPlanSpeedContours, type WorldRing } from "../lib/windPlanContours";
 import { windPlanLineStyle, type WindPlanLineStyle, type WindPlanPen } from "../lib/windPlanStyle";
 import { placeWindArrow, type ScreenRect, type WindArrowLayout } from "../lib/windPlanArrow";
+import { WIND_PLAN_HUD_EVENT } from "../lib/windPlanLegendLayout";
 import type { WindPlanState } from "./useWindPlan";
 
 export type WindPlanTransform = { ox: number; oy: number; exX: number; exY: number; enX: number; enY: number };
@@ -83,19 +91,26 @@ function speedImage(speed: WindPlanSpeed, revision: number): HTMLCanvasElement {
   const cached = speedImages.get(speed);
   if (cached && cached.revision === revision) return cached.canvas;
   const { cols, rows } = speed.geometry;
+  const up = windPlanImageUpscale(cols, rows);
+  const width = cols * up;
+  const height = rows * up;
   const canvas = document.createElement("canvas");
-  canvas.width = cols;
-  canvas.height = rows;
+  canvas.width = width;
+  canvas.height = height;
   const ctx = canvas.getContext("2d")!;
-  const image = ctx.createImageData(cols, rows);
+  const image = ctx.createImageData(width, height);
   const stops = windPlanRampStops(colourRgb);
   const rgb: [number, number, number] = [0, 0, 0];
-  for (let idx = 0; idx < cols * rows; idx++) {
-    rampRgb(stops, speed.speedMs[idx]!, rgb);
-    image.data[idx * 4] = rgb[0];
-    image.data[idx * 4 + 1] = rgb[1];
-    image.data[idx * 4 + 2] = rgb[2];
-    image.data[idx * 4 + 3] = 255;
+  for (let py = 0; py < height; py++) {
+    const gy = (py + 0.5) / up - 0.5;
+    for (let px = 0; px < width; px++) {
+      rampRgb(stops, bilinearSample(speed.speedMs, cols, rows, (px + 0.5) / up - 0.5, gy), rgb);
+      const at = (py * width + px) * 4;
+      image.data[at] = rgb[0];
+      image.data[at + 1] = rgb[1];
+      image.data[at + 2] = rgb[2];
+      image.data[at + 3] = 255;
+    }
   }
   ctx.putImageData(image, 0, 0);
   speedImages.set(speed, { revision, canvas });
@@ -284,7 +299,7 @@ export function WindPlanOverlay({
       ctx.rect(originE + cellM / 2, originN + cellM / 2, gridW - cellM, gridH - cellM);
       ctx.clip();
       const levels = windPlanSpeedContours(speed);
-      for (const rings of levels) strokePen(ctx, cachedPath(rings, () => rings), style.contour, scale);
+      strokePen(ctx, cachedPath(levels, () => levels.flat()), style.contour, scale);
       ctx.restore();
     } else if (mode === "comfort" && comfort) {
       ctx.fillStyle = getColour("--wind-plan-sitting");
@@ -376,10 +391,12 @@ export function WindPlanOverlay({
     const observer = typeof ResizeObserver !== "undefined" && host ? new ResizeObserver(schedule) : null;
     if (observer && host) observer.observe(host);
     window.addEventListener("resize", schedule);
+    window.addEventListener(WIND_PLAN_HUD_EVENT, schedule);
     return () => {
       unsubscribe();
       observer?.disconnect();
       window.removeEventListener("resize", schedule);
+      window.removeEventListener(WIND_PLAN_HUD_EVENT, schedule);
       if (frame.current !== null) cancelAnimationFrame(frame.current);
       frame.current = null;
     };

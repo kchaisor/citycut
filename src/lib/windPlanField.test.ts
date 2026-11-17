@@ -4,6 +4,7 @@ import { WIND_SPEED_BIN_EDGES_MS } from "./windBins";
 import { comfortClassAt, sectorReferenceSpeedMs, windSeasonWeights } from "./windComfort";
 import type { WindRoseSeasonRecord } from "./windRoseData";
 import {
+  bilinearSample,
   boxBlur3,
   buildWindPlanRatio,
   cachedWindPlanSpeed,
@@ -16,7 +17,9 @@ import {
   rampRgb,
   WIND_PLAN_CONTOUR_LEVELS_MS,
   WIND_PLAN_SPEED_MAX_MS,
+  WIND_PLAN_SPEED_RAMP,
   WIND_PLAN_SPEED_TICKS_MS,
+  windPlanImageUpscale,
   windPlanRampStops,
   windPlanReferenceMs,
   windPlanSpeedKey,
@@ -272,10 +275,33 @@ describe("field helpers", () => {
     expect(rampRgb(stops, -1, out)).toEqual([0, 0, 0]);
   });
 
-  it("spreads the ramp over a fixed 0 to 4 m/s scale with contours at 1, 2 and 3 m/s", () => {
+  it("spreads the ramp over a fixed 0 to 4 m/s scale with isolines every 0.25 m/s", () => {
     expect(WIND_PLAN_SPEED_MAX_MS).toBe(4);
-    expect([...WIND_PLAN_CONTOUR_LEVELS_MS]).toEqual([1, 2, 3]);
+    expect([...WIND_PLAN_CONTOUR_LEVELS_MS]).toEqual([
+      0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.25, 2.5, 2.75, 3, 3.25, 3.5, 3.75,
+    ]);
     expect([...WIND_PLAN_SPEED_TICKS_MS]).toEqual([0, 1, 2, 3, 4]);
+  });
+
+  it("uses its own plan speed tokens, not the 3D ground-wind ramp", () => {
+    expect(WIND_PLAN_SPEED_RAMP.map((stop) => stop.ms)).toEqual([0, 1, 2, 2.8, 3.5, 4]);
+    for (const stop of WIND_PLAN_SPEED_RAMP) expect(stop.token.startsWith("--wind-plan-speed-")).toBe(true);
+  });
+
+  it("samples the speed field bilinearly between cell centres and clamps at the edges", () => {
+    const values = [0, 4, 2, 6];
+    expect(bilinearSample(values, 2, 2, 0, 0)).toBe(0);
+    expect(bilinearSample(values, 2, 2, 0.5, 0)).toBe(2);
+    expect(bilinearSample(values, 2, 2, 0.5, 0.5)).toBe(3);
+    expect(bilinearSample(values, 2, 2, 0.25, 1)).toBe(3);
+    expect(bilinearSample(values, 2, 2, -3, 9)).toBe(2);
+    expect(bilinearSample(values, 2, 2, 5, -1)).toBe(4);
+  });
+
+  it("paints the speed image at four times the grid unless that gets too large", () => {
+    expect(windPlanImageUpscale(300, 300)).toBe(4);
+    expect(windPlanImageUpscale(800, 800)).toBe(2);
+    expect(windPlanImageUpscale(5000, 5000)).toBe(1);
   });
 
   it("maps 0 m/s to the first ramp colour and 4 m/s or more to the last", () => {

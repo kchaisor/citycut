@@ -1,8 +1,7 @@
 import { getColour } from "../lib/colours";
-import { groundWindLegendGradient } from "../lib/groundWindRamp";
 import { useColourRevision } from "../lib/useColourRevision";
 import { COMFORT_CLASSES, COMFORT_CLASS_LABELS, unsafeAreasLabel } from "../lib/windComfort";
-import { WIND_PLAN_SPEED_TICKS_MS } from "../lib/windPlanField";
+import { WIND_PLAN_SPEED_MAX_MS, WIND_PLAN_SPEED_TICKS_MS, windPlanLegendGradient } from "../lib/windPlanField";
 import { monthPeriodLabel, type WindPeriodId } from "../lib/windRose";
 import type { WindPlanState } from "./useWindPlan";
 
@@ -54,7 +53,7 @@ export function WindPlanRows({ plan, period }: { plan: WindPlanState; period: Wi
         <div className="wind-plan-row">
           <dt>{speedMode ? "Reference" : "Criteria"}</dt>
           <dd className={speedMode ? "mono" : undefined}>
-            {speedMode ? (plan.referenceMs != null ? `${plan.referenceMs.toFixed(1)} m/s` : "—") : "Lawson"}
+            {speedMode ? windPlanReferenceLabel(plan.referenceMs) : "Lawson"}
           </dd>
         </div>
       </dl>
@@ -85,20 +84,7 @@ const COMFORT_SWATCH: Record<(typeof COMFORT_CLASSES)[number], string> = {
 };
 
 export function WindPlanLegend({ plan }: { plan: Pick<WindPlanState, "mode"> }) {
-  useColourRevision();
-  if (plan.mode === "speed") {
-    return (
-      <div className="wind-plan-legend" aria-label="Wind speed, metres per second">
-        <p className="wind-plan-legend-title">Velocity · m/s</p>
-        <span className="wind-plan-legend-bar" aria-hidden="true" style={{ background: groundWindLegendGradient(getColour) }} />
-        <span className="wind-plan-legend-ticks mono" aria-hidden="true">
-          {WIND_PLAN_SPEED_TICKS_MS.map((tick) => (
-            <span key={tick}>{tick}</span>
-          ))}
-        </span>
-      </div>
-    );
-  }
+  if (plan.mode === "speed") return null;
   return (
     <div className="wind-plan-legend" aria-label="Pedestrian comfort, Lawson">
       <p className="wind-plan-legend-title">Comfort</p>
@@ -110,6 +96,50 @@ export function WindPlanLegend({ plan }: { plan: Pick<WindPlanState, "mode"> }) 
           </li>
         ))}
       </ul>
+    </div>
+  );
+}
+
+export function windPlanReferenceLabel(referenceMs: number | null): string {
+  return referenceMs != null ? `${referenceMs.toFixed(1)} m/s` : "—";
+}
+
+export function WindPlanInfo({ plan, period }: { plan: WindPlanState; period: WindPeriodId }) {
+  return (
+    <dl className="wind-plan-info hud-card" aria-label="Plan wind conditions">
+      <div className="wind-plan-row">
+        <dt>Wind speed</dt>
+        <dd className="mono">{windPlanReferenceLabel(plan.referenceMs)}</dd>
+      </div>
+      <div className="wind-plan-row">
+        <dt>Direction</dt>
+        <dd>{plan.dirLabel}</dd>
+      </div>
+      <div className="wind-plan-row">
+        <dt>Season</dt>
+        <dd>{windPlanSeasonLabel(period)}</dd>
+      </div>
+    </dl>
+  );
+}
+
+export function WindPlanVelocityLegend() {
+  useColourRevision();
+  return (
+    <div className="wind-plan-velocity hud-card" aria-label="Wind speed, metres per second">
+      <p className="wind-plan-legend-title">
+        Velocity <span className="wind-plan-unit">(m/s)</span>
+      </p>
+      <div className="wind-plan-velocity-scale">
+        <span className="wind-plan-velocity-bar" aria-hidden="true" style={{ background: windPlanLegendGradient(getColour) }} />
+        <span className="wind-plan-velocity-ticks mono" aria-hidden="true">
+          {WIND_PLAN_SPEED_TICKS_MS.map((tick) => (
+            <span key={tick} style={{ bottom: `${(tick / WIND_PLAN_SPEED_MAX_MS) * 100}%` }}>
+              {tick}
+            </span>
+          ))}
+        </span>
+      </div>
     </div>
   );
 }

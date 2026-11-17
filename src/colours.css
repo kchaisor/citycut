@@ -180,6 +180,12 @@
   --ground-wind-rising: #d9a300;
   --ground-wind-fast: #e8670f;
   --ground-wind-speeding: #cc1f1f;
+  --wind-plan-speed-still: #2e42d4;
+  --wind-plan-speed-calm: #4f68de;
+  --wind-plan-speed-breeze: #46d4e8;
+  --wind-plan-speed-brisk: #b5e35c;
+  --wind-plan-speed-strong: #f3dc3c;
+  --wind-plan-speed-fast: #ec6a2e;
   --wind-plan-sitting: #dcebd8;
   --wind-plan-standing: #9fcb94;
   --wind-plan-walking: #f1de97;

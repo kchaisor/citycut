@@ -84,9 +84,9 @@
   --nsw-hatch-m: 4;
   --nsw-zoning-opacity: 0.5;
 
-  --wind-plan-contour-stroke: #FFFFFF;
-  --wind-plan-contour-opacity: 0.35;
-  --wind-plan-contour-px: 1;
+  --wind-plan-contour-stroke: #5A5A5A;
+  --wind-plan-contour-opacity: 0.3;
+  --wind-plan-contour-px: 0.75;
   --wind-plan-building-edge: #1A1A1A;
   --wind-plan-building-edge-opacity: 0.4;
   --wind-plan-building-edge-px: 1;

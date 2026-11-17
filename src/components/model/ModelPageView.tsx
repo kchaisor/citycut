@@ -1,6 +1,14 @@
 import { useLayoutEffect } from "react";
 import { ShortcutCheatsheet } from "../ShortcutCheatsheet";
 import { WindRosePanel } from "../WindRosePanel";
+import { WindPlanInfo, WindPlanVelocityLegend } from "../WindPlanCard";
+import {
+  placeWindPlanLegend,
+  WIND_PLAN_HUD_EVENT,
+  WIND_PLAN_HUD_GAP_PX,
+  WIND_PLAN_LEGEND_BAR_MAX_PX,
+  WIND_PLAN_LEGEND_BAR_MIN_PX,
+} from "../../lib/windPlanLegendLayout";
 import { shouldShowIntroBridgePill } from "./shouldShowIntroBridgePill";
 import { ModelPageSidebar } from "./ModelPageSidebar";
 import { ModelPageViewportFooter } from "./ModelPageViewportFooter";
@@ -25,6 +33,9 @@ export function ModelPageView({ vm }: { vm: ModelPageViewModel }) {
   } = vm;
 
   useWindPlanCardTop(windPlan.active);
+  const windCardOn = leftOpen === "analysis" && tab !== "satellite" && analysisKind === "wind" && siteWind != null;
+  const speedHudOn = windCardOn && windPlan.active && windPlan.mode === "speed";
+  useWindPlanLegendPlacement(speedHudOn);
 
   return (
     <div
@@ -44,7 +55,7 @@ export function ModelPageView({ vm }: { vm: ModelPageViewModel }) {
       >
         <ModelPageViewportTabs vm={vm} />
         <ModelPageSidebar vm={vm} />
-        {leftOpen === "analysis" && tab !== "satellite" && analysisKind === "wind" && siteWind ? (
+        {windCardOn && siteWind ? (
           <div
             className={windPlan.active ? "wind-rose-analysis-card is-plan hud-card" : "wind-rose-analysis-card hud-card"}
             aria-label="Wind rose panel"
@@ -57,13 +68,19 @@ export function ModelPageView({ vm }: { vm: ModelPageViewModel }) {
             />
           </div>
         ) : null}
+        {speedHudOn ? (
+          <>
+            <WindPlanInfo plan={windPlan} period={windSettings.period} />
+            <WindPlanVelocityLegend />
+          </>
+        ) : null}
         <ModelPageViewportFooter vm={vm} />
       </div>
       <ShortcutCheatsheet open={shortcutCheatsheetOpen} onClose={() => setShortcutCheatsheetOpen(false)} />
     </div>
   );
 }
-const WIND_PLAN_CARD_GAP_PX = 8;
+const WIND_PLAN_CARD_GAP_PX = WIND_PLAN_HUD_GAP_PX;
 
 function useWindPlanCardTop(active: boolean) {
   useLayoutEffect(() => {
@@ -80,6 +97,62 @@ function useWindPlanCardTop(active: boolean) {
       observer?.disconnect();
       window.removeEventListener("resize", sync);
       root.style.removeProperty("--wind-plan-card-top");
+    };
+  }, [active]);
+}
+
+const WIND_PLAN_HUD_INSET_PX = 14;
+
+function rectOf(selector: string) {
+  const el = document.querySelector<HTMLElement>(selector);
+  if (!el) return null;
+  const r = el.getBoundingClientRect();
+  return r.width > 0 && r.height > 0 ? { left: r.left, top: r.top, right: r.right, bottom: r.bottom } : null;
+}
+
+function useWindPlanLegendPlacement(active: boolean) {
+  useLayoutEffect(() => {
+    if (!active || typeof document === "undefined") return;
+    const root = document.documentElement;
+    const card = document.querySelector<HTMLElement>(".model .wind-plan-velocity");
+    const bar = card?.querySelector<HTMLElement>(".wind-plan-velocity-bar");
+    if (!card || !bar) return;
+    const watched = [".model .right-inspector", ".model .bottom-bar.env-console", ".model .studio-compass", ".model .left-tool-rail"];
+    const sync = () => {
+      const rail = rectOf(".model .left-tool-rail");
+      const floors = [rectOf(".model .bottom-bar.env-console"), rectOf(".model .studio-compass")].filter((r) => r !== null);
+      const next = placeWindPlanLegend({
+        viewW: window.innerWidth,
+        viewH: window.innerHeight,
+        cardW: card.offsetWidth,
+        chromeH: card.offsetHeight - bar.offsetHeight,
+        inset: WIND_PLAN_HUD_INSET_PX,
+        gap: WIND_PLAN_HUD_GAP_PX,
+        topLimit: rail ? rail.top : WIND_PLAN_HUD_INSET_PX,
+        barMax: WIND_PLAN_LEGEND_BAR_MAX_PX,
+        barMin: WIND_PLAN_LEGEND_BAR_MIN_PX,
+        inspector: rectOf(".model .right-inspector"),
+        floors,
+      });
+      root.style.setProperty("--wind-plan-legend-right", `${next.right}px`);
+      root.style.setProperty("--wind-plan-legend-bottom", `${next.bottom}px`);
+      root.style.setProperty("--wind-plan-legend-bar", `${next.barPx}px`);
+      window.dispatchEvent(new Event(WIND_PLAN_HUD_EVENT));
+    };
+    sync();
+    const observer = typeof ResizeObserver !== "undefined" ? new ResizeObserver(sync) : null;
+    for (const selector of watched) {
+      const el = document.querySelector(selector);
+      if (el) observer?.observe(el);
+    }
+    window.addEventListener("resize", sync);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener("resize", sync);
+      root.style.removeProperty("--wind-plan-legend-right");
+      root.style.removeProperty("--wind-plan-legend-bottom");
+      root.style.removeProperty("--wind-plan-legend-bar");
+      window.dispatchEvent(new Event(WIND_PLAN_HUD_EVENT));
     };
   }, [active]);
 }

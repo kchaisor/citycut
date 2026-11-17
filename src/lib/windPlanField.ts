@@ -15,7 +15,7 @@ import {
   type GroundWindGridBuilder,
   type GroundWindObstacles,
 } from "./groundWindField";
-import { GROUND_WIND_RAMP } from "./groundWindRamp";
+import type { ColourKey } from "./colours";
 import {
   accumulateSectorExceedance,
   emptyComfortFields,
@@ -29,7 +29,22 @@ import {
 
 export const WIND_PLAN_SPEED_MAX_MS = 4;
 export const WIND_PLAN_SPEED_TICKS_MS = [0, 1, 2, 3, 4] as const;
-export const WIND_PLAN_CONTOUR_LEVELS_MS = [1, 2, 3] as const;
+export const WIND_PLAN_CONTOUR_STEP_MS = 0.25;
+export const WIND_PLAN_CONTOUR_LEVELS_MS: readonly number[] = Array.from(
+  { length: Math.round(WIND_PLAN_SPEED_MAX_MS / WIND_PLAN_CONTOUR_STEP_MS) - 1 },
+  (_, k) => (k + 1) * WIND_PLAN_CONTOUR_STEP_MS,
+);
+export const WIND_PLAN_IMAGE_UPSCALE = 4;
+export const WIND_PLAN_IMAGE_MAX_PIXELS = 4_000_000;
+
+export const WIND_PLAN_SPEED_RAMP: ReadonlyArray<{ token: ColourKey; ms: number }> = [
+  { token: "--wind-plan-speed-still", ms: 0 },
+  { token: "--wind-plan-speed-calm", ms: 1 },
+  { token: "--wind-plan-speed-breeze", ms: 2 },
+  { token: "--wind-plan-speed-brisk", ms: 2.8 },
+  { token: "--wind-plan-speed-strong", ms: 3.5 },
+  { token: "--wind-plan-speed-fast", ms: WIND_PLAN_SPEED_MAX_MS },
+];
 export const WIND_PLAN_BLUR_PASSES = 2;
 export const WIND_PLAN_DISPLAY_SIGMA_M = 6;
 export const WIND_PLAN_ROWS_PER_SLICE = 32;
@@ -404,11 +419,35 @@ export function createWindPlanComfortJob(model: CityModel, seasonKey: string, we
 
 export type RampStop = { ms: number; rgb: [number, number, number] };
 
-export function windPlanRampStops(colourRgb: (token: (typeof GROUND_WIND_RAMP)[number]["token"]) => { r: number; g: number; b: number }): RampStop[] {
-  return GROUND_WIND_RAMP.map((stop) => {
+export function windPlanRampStops(colourRgb: (token: ColourKey) => { r: number; g: number; b: number }): RampStop[] {
+  return WIND_PLAN_SPEED_RAMP.map((stop) => {
     const { r, g, b } = colourRgb(stop.token);
-    return { ms: stop.legendAt * WIND_PLAN_SPEED_MAX_MS, rgb: [r, g, b] };
+    return { ms: stop.ms, rgb: [r, g, b] };
   });
+}
+
+export function windPlanLegendGradient(colourOf: (token: ColourKey) => string): string {
+  const stops = WIND_PLAN_SPEED_RAMP.map((s) => `${colourOf(s.token)} ${((s.ms / WIND_PLAN_SPEED_MAX_MS) * 100).toFixed(1)}%`);
+  return `linear-gradient(to top, ${stops.join(", ")})`;
+}
+
+export function windPlanImageUpscale(cols: number, rows: number): number {
+  const fit = Math.floor(Math.sqrt(WIND_PLAN_IMAGE_MAX_PIXELS / Math.max(1, cols * rows)));
+  return Math.max(1, Math.min(WIND_PLAN_IMAGE_UPSCALE, fit));
+}
+
+export function bilinearSample(values: ArrayLike<number>, cols: number, rows: number, x: number, y: number): number {
+  const cx = Math.min(cols - 1, Math.max(0, x));
+  const cy = Math.min(rows - 1, Math.max(0, y));
+  const i0 = Math.floor(cx);
+  const j0 = Math.floor(cy);
+  const i1 = Math.min(cols - 1, i0 + 1);
+  const j1 = Math.min(rows - 1, j0 + 1);
+  const tx = cx - i0;
+  const ty = cy - j0;
+  const top = values[j0 * cols + i0]! * (1 - tx) + values[j0 * cols + i1]! * tx;
+  const bottom = values[j1 * cols + i0]! * (1 - tx) + values[j1 * cols + i1]! * tx;
+  return top * (1 - ty) + bottom * ty;
 }
 
 export function rampRgb(stops: readonly RampStop[], ms: number, out: [number, number, number]): [number, number, number] {
