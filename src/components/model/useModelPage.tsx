@@ -78,6 +78,7 @@ import { writeStoredView, writeViewSearch, ViewMemory } from "../../lib/viewMemo
 import { treeTierCounts } from "../../lib/trees";
 
 import { clearPlanShadowCache } from "../../lib/buildingShadows";
+import { useWindPlan } from "../useWindPlan";
 import {
   appendManualHeightCredit,
   applyHeightOverrides,
@@ -1331,6 +1332,12 @@ export function useModelPage({
     () => (siteWind ? analyzeSiteWind(siteWind, windSettings.period) : null),
     [siteWind, windSettings.period],
   );
+  const windPlan = useWindPlan({
+    model: displayModel,
+    siteWind,
+    period: windSettings.period,
+    active: tab === "3d" && view.projection === "plan" && leftOpen === "analysis" && analysisKind === "wind" && siteWind != null,
+  });
 
   useEffect(() => {
     if (typeof document === "undefined") return;
@@ -2302,6 +2309,7 @@ export function useModelPage({
     windMotion,
     windNote,
     windSettings,
+    windPlan,
     siteWind,
     writeStoredShowManualHeights,
   };

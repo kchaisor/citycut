@@ -1919,3 +1919,250 @@ input[type="range"]::-moz-range-thumb {
 
 .site-analysis-tabs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 14px; }
 .site-analysis-tab { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+
+.wind-plan-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  overflow: hidden;
+  pointer-events: none;
+}
+.wind-plan-canvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.wind-plan-arrow {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.wind-plan-arrow-shaft {
+  stroke: var(--ink);
+  stroke-width: var(--wind-plan-arrow-shaft-px);
+  stroke-linecap: round;
+}
+.wind-plan-arrow-head {
+  fill: var(--ink);
+}
+.wind-plan-arrow-chip {
+  position: absolute;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  border-radius: 4px;
+  background: var(--bg-elev);
+  box-shadow: inset 0 0 0 1px var(--border-outer);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 16px;
+  white-space: nowrap;
+}
+
+.model[data-wind-plan] .wind-rose-analysis-card.is-plan {
+  top: var(--wind-plan-card-top, 214px);
+  bottom: auto;
+  left: 14px;
+  width: 236px;
+  max-height: calc(100vh - var(--wind-plan-card-top, 214px) - 14px);
+  overflow-y: auto;
+  box-sizing: border-box;
+  padding: 12px;
+  border-radius: 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-outer);
+  box-shadow: var(--shadow-hud);
+}
+.wind-rose-panel.is-plan .wind-rose-panel-svg {
+  width: min(160px, 100%);
+  margin-top: 8px;
+}
+.wind-rose-panel.is-plan .wind-rose-meta-source {
+  margin-top: 8px;
+}
+.wind-plan-title,
+.wind-plan-legend-title {
+  margin: 0 0 8px;
+  font-family: var(--sans);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.wind-plan-list {
+  margin: 0;
+  display: grid;
+  gap: 4px;
+}
+.wind-plan-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 20px;
+  font-family: var(--sans);
+  font-size: 12px;
+  line-height: 16px;
+}
+.wind-plan-row dt {
+  color: var(--ink-2);
+  font-weight: 500;
+}
+.wind-plan-row dd {
+  margin: 0;
+  color: var(--ink);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.wind-plan-stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.wind-plan-stepper button {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink-2);
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  pointer-events: auto;
+}
+.wind-plan-stepper button:hover {
+  background: var(--bg-sub);
+  color: var(--ink);
+}
+.wind-plan-stepper button:focus-visible,
+.model .bottom-bar.env-console .wind-plan-switch-btn:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+.wind-plan-dir {
+  min-width: 32px;
+  text-align: center;
+}
+.wind-plan-note {
+  margin: 8px 0 0;
+  font-family: var(--sans);
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--ink-3);
+}
+.wind-plan-unsafe {
+  margin: 8px 0 0;
+  font-family: var(--sans);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 16px;
+  color: var(--ink);
+}
+.wind-plan-unsafe.is-flagged {
+  color: var(--status-failed);
+}
+.wind-plan-legend {
+  margin-top: 12px;
+}
+.wind-plan-legend-bar {
+  display: block;
+  width: 100%;
+  height: 8px;
+  border-radius: 2px;
+}
+.wind-plan-legend-ticks {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 4px;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 16px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-2);
+}
+.wind-plan-swatches {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 8px;
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 16px;
+  color: var(--ink);
+}
+.wind-plan-swatches li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.wind-plan-swatch {
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  box-sizing: border-box;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--wind-plan-swatch-edge) calc(var(--wind-plan-swatch-edge-opacity) * 100%), transparent);
+}
+
+.model .bottom-bar.env-console .wind-plan-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+  padding: 2px;
+  border-radius: 8px;
+  background: var(--bg-sub);
+  flex-shrink: 0;
+}
+.model .bottom-bar.env-console .wind-plan-switch-btn {
+  height: 24px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink-3);
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  box-shadow: none;
+}
+.model .bottom-bar.env-console .wind-plan-switch-btn.is-active {
+  background: var(--bg-elev);
+  color: var(--ink);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--ink) 8%, transparent);
+}
+
+@media (max-width: 1280px) {
+  .model[data-wind-plan] .right-inspector > :not(.insp-head) {
+    display: none !important;
+  }
+  .model[data-wind-plan] .right-inspector {
+    max-height: none;
+    overflow: hidden;
+  }
+  .model[data-wind-plan] .bottom-bar.env-console {
+    left: calc(14px + 236px + 8px) !important;
+    right: auto !important;
+    transform: none !important;
+    min-width: 0 !important;
+    max-width: calc(100vw - 14px - 236px - 8px - 80px) !important;
+  }
+}

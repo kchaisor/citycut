@@ -86,6 +86,7 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
     walkRippleToast,
     windMotion,
     windSettings,
+    windPlan,
     siteWind,
   } = vm;
 
@@ -129,6 +130,7 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
                 siteWind={siteWind}
                 windPeriod={windSettings.period}
                 windAnimateStreaks={windMotion.animateStreaks}
+                windPlan={windPlan.active ? windPlan : null}
                 onExportReady={onExportReady}
                 onSceneInspectPick={(selection) => {
                   setSceneSelection(selection);
@@ -187,7 +189,7 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
               {tab === "3d" && studioCompassVisible(view.projection, view.freeRotate) && (
                 <StudioCompass needleDeg={compassNeedleDeg} />
               )}
-              {windSettings.enabled && windSettings.showRose && siteWind && tab === "3d" && (
+              {windSettings.enabled && windSettings.showRose && siteWind && tab === "3d" && !windPlan.active && (
                 <WindRoseOverlay
                   selection={siteWind}
                   period={windSettings.period}

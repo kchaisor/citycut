@@ -8,15 +8,20 @@ import { getColour } from "../lib/colours";
 import { WindRoseSvgChart } from "./WindRoseSvgChart";
 import { WindRoseSpeedLegend } from "./WindRoseSpeedLegend";
 import { GroundWindSpeedLegend } from "./GroundWindSpeedLegend";
+import { WindPlanLegend, WindPlanRows } from "./WindPlanCard";
+import type { WindPlanState } from "./useWindPlan";
+import { readableWindStationName } from "../lib/windStationNames";
 
 export function WindRosePanel({
   selection,
   period,
   showGroundWindLegend = false,
+  plan = null,
 }: {
   selection: SiteWindSelection;
   period: WindPeriodId;
   showGroundWindLegend?: boolean;
+  plan?: WindPlanState | null;
 }) {
   const stats = useMemo(() => analyzeSiteWind(selection, period), [selection, period]);
   const lines = useMemo(() => windRoseStationLines(selection), [selection]);
@@ -28,6 +33,23 @@ export function WindRosePanel({
 
   if (!stats) {
     return <p className="field-note">Wind data is not available for this period.</p>;
+  }
+
+  if (plan?.active) {
+    const station = readableWindStationName(selection.station.name, selection.station.id);
+    return (
+      <div className="wind-rose-panel is-plan" aria-label={lines.line1}>
+        <WindPlanRows plan={plan} period={period} />
+        <WindRoseSvgChart
+          stats={stats}
+          hubFill={getColour("--wind-rose-card-surface")}
+          className="wind-rose-panel-svg"
+        />
+        <p className="wind-rose-calm-caption">{calmCaption}</p>
+        <p className="wind-rose-meta wind-rose-meta-source">{station} · Regional station wind</p>
+        <WindPlanLegend plan={plan} />
+      </div>
+    );
   }
 
   return (

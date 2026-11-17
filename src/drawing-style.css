@@ -83,4 +83,19 @@
   --nsw-heritage-dash: none;
   --nsw-hatch-m: 4;
   --nsw-zoning-opacity: 0.5;
+
+  --wind-plan-contour-stroke: #FFFFFF;
+  --wind-plan-contour-opacity: 0.35;
+  --wind-plan-contour-px: 1;
+  --wind-plan-building-edge: #1A1A1A;
+  --wind-plan-building-edge-opacity: 0.4;
+  --wind-plan-building-edge-px: 1;
+  --wind-plan-unsafe-stroke: #7A1A12;
+  --wind-plan-unsafe-outline-px: 2;
+  --wind-plan-unsafe-hatch-px: 1;
+  --wind-plan-unsafe-hatch-spacing-px: 6;
+  --wind-plan-unsafe-min-px: 12;
+  --wind-plan-swatch-edge: #1A1A1A;
+  --wind-plan-swatch-edge-opacity: 0.2;
+  --wind-plan-arrow-shaft-px: 2;
 }
