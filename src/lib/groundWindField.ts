@@ -174,6 +174,22 @@ export function rasterGroundWindObstacles(model: CityModel): GroundWindObstacles
   return groundWindObstaclesFromRasters(grid, heights, canopy);
 }
 
+export function rasterGroundWindWater(model: CityModel, grid: GroundWindRasterGrid, solid: Uint8Array): Uint8Array {
+  const n = grid.cols * grid.rows;
+  const water = new Uint8Array(n);
+  const outer = new Float32Array(n);
+  const holes = new Float32Array(n);
+  for (const area of model.areas) {
+    if (area.kind !== "water") continue;
+    outer.fill(0);
+    holes.fill(0);
+    rasterRing(area.ring, grid, 1, outer);
+    for (const hole of area.holes) rasterRing(hole, grid, 1, holes);
+    for (let idx = 0; idx < n; idx++) if (outer[idx]! > 0 && !(holes[idx]! > 0) && !solid[idx]) water[idx] = 1;
+  }
+  return water;
+}
+
 export function groundWindObstaclesFromRasters(grid: GroundWindRasterGrid, heights: Float32Array, canopy: Float32Array): GroundWindObstacles {
   const { cols, rows, cellM } = grid;
   const solid = new Uint8Array(cols * rows);

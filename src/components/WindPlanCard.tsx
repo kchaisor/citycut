@@ -66,6 +66,7 @@ export function WindPlanRows({ plan, period }: { plan: WindPlanState; period: Wi
         </div>
       </dl>
       <p className="wind-plan-note">Indicative only, not a CFD study</p>
+      {plan.overWater ? <p className="wind-plan-note">Faster over water (smoother surface)</p> : null}
       {plan.designWind && !speedMode ? <p className="wind-plan-note">Comfort uses all winds (annual)</p> : null}
       {!plan.hasData ? (
         <p className="wind-plan-note">No wind records for this season.</p>

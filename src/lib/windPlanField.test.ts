@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vitest";
 import type { CityModel, Pt } from "../types";
 import { WIND_SPEED_BIN_EDGES_MS } from "./windBins";
-import { comfortClassAt, sectorReferenceSpeedMs, windSeasonWeights } from "./windComfort";
+import {
+  accumulateSectorExceedance,
+  comfortClassAt,
+  emptyComfortFields,
+  sectorReferenceSpeedMs,
+  windSeasonWeights,
+} from "./windComfort";
+import { rasterGroundWindObstacles, rasterGroundWindWater } from "./groundWindField";
 import type { WindRoseSeasonRecord } from "./windRoseData";
 import {
   bilinearSample,
@@ -13,13 +20,19 @@ import {
   fillSolidCells,
   gaussianBlur,
   PEDESTRIAN_HEIGHT_FACTOR,
+  pedestrianHeightFactorAt,
+  pedestrianHeightFactors,
   powerLawHeightFactor,
   rampRgb,
   WIND_PLAN_CONTOUR_LEVELS_MS,
   WIND_PLAN_SPEED_MAX_MS,
   WIND_PLAN_SPEED_RAMP,
   WIND_PLAN_SPEED_TICKS_MS,
+  WATER_PEDESTRIAN_HEIGHT_FACTOR,
+  WATER_SHORE_BLEND_M,
+  windPlanDisplayField,
   windPlanImageUpscale,
+  windPlanOverWater,
   windPlanRampStops,
   windPlanReferenceMs,
   windPlanSpeedKey,
@@ -54,6 +67,10 @@ function modelOf(sideM: number, boxes: Box[]): CityModel {
     buildingCapHit: false,
     sourceNote: "",
   };
+}
+
+function withWater(model: CityModel, water: Pt[]): CityModel {
+  return { ...model, areas: [{ id: 1, ring: water, holes: [], kind: "water" }] };
 }
 
 function oneBuilding(): CityModel {
@@ -177,6 +194,94 @@ describe("pedestrian height", () => {
     const centre = (comfort.geometry.rows >> 1) * comfort.geometry.cols + (comfort.geometry.cols >> 1);
     expect(comfort.fields.p6[centre]).toBe(0);
     expect(comfortClassAt(comfort.fields, centre)).toBe("standing");
+  });
+});
+
+describe("wind over water", () => {
+  const weights = windSeasonWeights(season({ [WEST]: [0.2, 0.3, 0.1, 0, 0] }), WIND_SPEED_BIN_EDGES_MS);
+  const halfWater = () => withWater(modelOf(240, []), ring(0, -120, 120, 120));
+
+  it("brings open-water wind down to walking height with a smooth-surface power law", () => {
+    expect(WATER_PEDESTRIAN_HEIGHT_FACTOR).toBeCloseTo(powerLawHeightFactor(10, 1.5, 0.11), 9);
+    expect(WATER_PEDESTRIAN_HEIGHT_FACTOR).toBeCloseTo(0.8117, 4);
+    expect(pedestrianHeightFactorAt(0)).toBe(WATER_PEDESTRIAN_HEIGHT_FACTOR);
+    expect(pedestrianHeightFactorAt(WATER_SHORE_BLEND_M)).toBe(PEDESTRIAN_HEIGHT_FACTOR);
+    expect(pedestrianHeightFactorAt(500)).toBe(PEDESTRIAN_HEIGHT_FACTOR);
+  });
+
+  it("runs about 1.3 times faster over open water than over open land", () => {
+    const model = halfWater();
+    const speed = run(createWindPlanSpeedJob(model, "water:annual", windPlanReferenceMs(weights, WEST), WEST));
+    const land = at(speed.geometry, speed.speedMs, -100, 0);
+    const water = at(speed.geometry, speed.speedMs, 100, 0);
+    expect(land).toBeCloseTo(speed.referenceMs, 4);
+    expect(water / land).toBeCloseTo(WATER_PEDESTRIAN_HEIGHT_FACTOR / PEDESTRIAN_HEIGHT_FACTOR, 3);
+    expect(water / land).toBeCloseTo(1.304, 2);
+    expect(windPlanOverWater(model)).toBe(true);
+  });
+
+  it("blends the boost across the shore, falling steadily with distance inland", () => {
+    const model = halfWater();
+    const obs = rasterGroundWindObstacles(model);
+    const factors = pedestrianHeightFactors(rasterGroundWindWater(model, obs, obs.solid), obs.cols, obs.rows, obs.cellM)!;
+    const j = obs.rows >> 1;
+    const profile = Array.from({ length: obs.cols }, (_, i) => factors[j * obs.cols + i]!).reverse();
+    for (let k = 1; k < profile.length; k++) expect(profile[k]!).toBeLessThanOrEqual(profile[k - 1]!);
+    expect(profile[0]).toBeCloseTo(WATER_PEDESTRIAN_HEIGHT_FACTOR, 6);
+    expect(profile[profile.length - 1]).toBeCloseTo(PEDESTRIAN_HEIGHT_FACTOR, 6);
+    const shoreIdx = j * obs.cols + Math.floor((-WATER_SHORE_BLEND_M / 2 - obs.originE) / obs.cellM);
+    expect(factors[shoreIdx]!).toBeGreaterThan(PEDESTRIAN_HEIGHT_FACTOR);
+    expect(factors[shoreIdx]!).toBeLessThan(WATER_PEDESTRIAN_HEIGHT_FACTOR);
+  });
+
+  it("keeps buildings over water solid and out of the water mask", () => {
+    const model = withWater(modelOf(240, [{ ring: ring(40, -10, 60, 10), height: 12 }]), ring(0, -120, 120, 120));
+    const obs = rasterGroundWindObstacles(model);
+    const water = rasterGroundWindWater(model, obs, obs.solid);
+    const idx = Math.floor((0 - obs.originN) / obs.cellM) * obs.cols + Math.floor((50 - obs.originE) / obs.cellM);
+    expect(obs.solid[idx]).toBe(1);
+    expect(water[idx]).toBe(0);
+    expect(water[idx + 10]).toBe(1);
+  });
+
+  it("uses the same walking-height factor for comfort", () => {
+    const comfortWeights = windSeasonWeights(season({ [WEST]: [0.1, 0.3, 0.4, 0.1, 0] }, 0), WIND_SPEED_BIN_EDGES_MS);
+    const comfort = run(createWindPlanComfortJob(halfWater(), "water:annual", comfortWeights));
+    const expected = (factor: number) => {
+      const one = emptyComfortFields(1, 1);
+      accumulateSectorExceedance(one, comfortWeights, WEST, [1], 0, 1, factor);
+      return one;
+    };
+    const land = expected(PEDESTRIAN_HEIGHT_FACTOR);
+    const water = expected(WATER_PEDESTRIAN_HEIGHT_FACTOR);
+    expect(water.p4[0]!).toBeGreaterThan(land.p4[0]!);
+    expect(at(comfort.geometry, comfort.fields.p4, -100, 0)).toBeCloseTo(land.p4[0]!, 4);
+    expect(at(comfort.geometry, comfort.fields.p4, 100, 0)).toBeCloseTo(water.p4[0]!, 4);
+    expect(at(comfort.geometry, comfort.fields.p6, 100, 0)).toBeCloseTo(water.p6[0]!, 4);
+  });
+
+  it("leaves a site with no water exactly as before", () => {
+    const model = scatteredHouses(300, 120, 7);
+    const speed = run(createWindPlanSpeedJob(model, "dry:annual", windPlanReferenceMs(weights, WEST), WEST));
+    const { geometry, ratio } = buildWindPlanRatio(model, WEST);
+    expect(Array.from(speed.speedMs)).toEqual(Array.from(windPlanDisplayField(ratio, geometry, speed.referenceMs)));
+    expect(windPlanOverWater(model)).toBe(false);
+    expect(cachedWindPlanSpeed(model, windPlanSpeedKey("dry:annual", WEST))).toBe(speed);
+
+    const comfort = run(createWindPlanComfortJob(model, "dry:annual", weights));
+    const expected = emptyComfortFields(geometry.cols, geometry.rows);
+    accumulateSectorExceedance(expected, weights, WEST, ratio, 0, ratio.length, PEDESTRIAN_HEIGHT_FACTOR);
+    for (let idx = 0; idx < ratio.length; idx++) {
+      if (geometry.solid[idx]) continue;
+      expect(comfort.fields.p4[idx]).toBe(expected.p4[idx]);
+    }
+  });
+
+  it("keeps cached water fields apart from dry ones for the same season", () => {
+    const model = halfWater();
+    const speed = run(createWindPlanSpeedJob(model, "water:annual", windPlanReferenceMs(weights, WEST), WEST));
+    expect(cachedWindPlanSpeed(model, windPlanSpeedKey("water:annual", WEST))).toBe(speed);
+    expect(speed.key).toBe(windPlanSpeedKey("water:annual", WEST));
   });
 });
 

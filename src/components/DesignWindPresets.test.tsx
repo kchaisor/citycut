@@ -81,3 +81,31 @@ describe("DesignWindPresets", () => {
     expect(screen.getByRole("button", { name: "Design wind S" }).getAttribute("aria-pressed")).toBe("false");
   });
 });
+
+describe("WindPlanRows water note", () => {
+  afterEach(cleanup);
+
+  const plan = (overWater: boolean) => ({
+    active: true,
+    mode: "speed" as const,
+    setMode: () => {},
+    sector: 12,
+    designWind: null,
+    dirLabel: "W",
+    stepSector: () => {},
+    referenceMs: 3.4,
+    hasData: true,
+    ready: true,
+    overWater,
+    speed: null,
+    comfort: null,
+  });
+
+  it("says wind runs faster over water only when the site has water", () => {
+    const { rerender } = render(<WindPlanRows plan={plan(true)} period="annual" />);
+    expect(screen.getByText("Faster over water (smoother surface)")).toBeTruthy();
+    expect(screen.getByText("3.4 m/s")).toBeTruthy();
+    rerender(<WindPlanRows plan={plan(false)} period="annual" />);
+    expect(screen.queryByText("Faster over water (smoother surface)")).toBeNull();
+  });
+});
