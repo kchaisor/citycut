@@ -1,5 +1,5 @@
 import type { WindRoseAsset, SiteWindSelection } from "./windRoseData";
-import { WIND_ROSE_ASSET_VERSION, WIND_ROSE_SOURCE, WIND_SPEED_BIN_EDGES_MS } from "./windRoseData";
+import { WIND_ROSE_SOURCE, WIND_ROSE_SUPPORTED_ASSET_VERSIONS, WIND_SPEED_BIN_EDGES_MS } from "./windRoseData";
 import { siteWindSelection } from "./windStation";
 
 const WIND_ASSET_URL = `${import.meta.env.BASE_URL}wind/australia-tmyx.json`;
@@ -14,7 +14,8 @@ export type WindLoadResult =
 function normalizeAsset(raw: unknown): WindRoseAsset | null {
   if (!raw || typeof raw !== "object") return null;
   const body = raw as Partial<WindRoseAsset>;
-  if (body.version !== WIND_ROSE_ASSET_VERSION || !Array.isArray(body.stations)) return null;
+  if (typeof body.version !== "number" || !WIND_ROSE_SUPPORTED_ASSET_VERSIONS.includes(body.version)) return null;
+  if (!Array.isArray(body.stations)) return null;
   return {
     version: body.version,
     speedBinEdgesMs: body.speedBinEdgesMs ?? [...WIND_SPEED_BIN_EDGES_MS],

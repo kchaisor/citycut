@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   aggregateEpwSeason,
   parseEpwDataRow,
+  parseEpwPeriodComment,
   parseEpwWindRows,
   SOUTHERN_SEASON_MONTHS,
   speedBinIndexMs,
@@ -45,5 +46,18 @@ describe("windRoseEpw", () => {
     expect(winter.calmPct).toBeCloseTo(50, 1);
     expect(summer.sectors[0]!.reduce((a, b) => a + b, 0)).toBeGreaterThan(0);
     expect(winter.prevailingDirDeg).toBe(180);
+  });
+
+  it("reads the number of years in the record", () => {
+    const line = 'COMMENTS 1,"NCEI ISD/ERA5 - #years=[7] Period of Record=2009-2015; Jan=2015"';
+    expect(parseEpwPeriodComment(line)).toEqual({ periodStart: "2009", periodEnd: "2015", years: 7 });
+  });
+
+  it("averages non-calm speed per sector", () => {
+    const { rows } = parseEpwWindRows(SAMPLE_EPW);
+    const winter = aggregateEpwSeason(rows, "winter");
+    expect(winter.sectorMeanSpeedMs).toHaveLength(16);
+    expect(winter.sectorMeanSpeedMs![8]).toBeCloseTo(4, 6);
+    expect(winter.sectorMeanSpeedMs![0]).toBe(0);
   });
 });

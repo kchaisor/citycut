@@ -1,6 +1,7 @@
 import type { WindRoseAsset, WindRoseStationRecord, SiteWindSelection } from "./windRoseData";
 import { WIND_ROSE_SOURCE } from "./windRoseData";
 import { readableWindStationName } from "./windStationNames";
+import { areWindSeasonsSane } from "./windStationSanity";
 
 const EARTH_RADIUS_KM = 6371;
 
@@ -14,14 +15,10 @@ export function haversineKm(lat1: number, lon1: number, lat2: number, lon2: numb
   return 2 * EARTH_RADIUS_KM * Math.asin(Math.min(1, Math.sqrt(a)));
 }
 
-export const WIND_STATION_SANE_MAX_WINTER_CALM_PCT = 30;
-export const WIND_STATION_SANE_MAX_ANNUAL_CALM_PCT = 35;
 export const WIND_STATION_SEARCH_MAX_KM = 28;
 
 export function isWindStationSane(station: WindRoseStationRecord): boolean {
-  const winter = station.seasons.winter.calmPct;
-  const annual = station.seasons.annual.calmPct;
-  return winter <= WIND_STATION_SANE_MAX_WINTER_CALM_PCT && annual <= WIND_STATION_SANE_MAX_ANNUAL_CALM_PCT;
+  return areWindSeasonsSane(station.seasons);
 }
 
 export function nearestWindStation(
@@ -67,18 +64,4 @@ export function siteWindSelection(
 export function stationIdFromZipName(zipName: string): string {
   const match = /(\d{6})_TMYx/.exec(zipName);
   return match?.[1] ?? zipName.replace(/\.zip$/i, "");
-}
-
-export function preferTmyxZipName(names: readonly string[]): string | null {
-  const tmyx = names.filter((n) => /_TMYx/i.test(n) && n.endsWith(".zip"));
-  if (!tmyx.length) return null;
-  const ranked = (name: string) => {
-    if (name.includes("2009-2023")) return 0;
-    if (name.includes("2011-2025")) return 1;
-    if (name.includes("2007-2021")) return 2;
-    if (/\.(\d{4})-(\d{4})\.zip$/.test(name)) return 3;
-    if (/_TMYx\.zip$/i.test(name)) return 4;
-    return 5;
-  };
-  return [...tmyx].sort((a, b) => ranked(a) - ranked(b))[0] ?? null;
 }

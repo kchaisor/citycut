@@ -34,7 +34,11 @@ Sketch or screenshot:
 - [ ] Pyrmont: NE, S and W can be picked on the maps next to the seasons, and each shows its own wakes and speeds.
 - [ ] Pyrmont: the bay runs visibly faster than the streets on Wind speed.
 - [ ] Mont Albert North (−37.80458, 145.1065), 1 km cut: still uses Viewbank, and the panel names it.
-- [ ] Observatory Hill stays skipped while its record fails the calm checks (no more than 30% calm in winter, 35% over the year).
+- [ ] Observatory Hill is used or skipped by the calm checks (no more than 30% calm in winter, 35% over the year), never by name.
+
+Note after fix 1 (18 Nov 2026): Observatory Hill's full record (1954–2025, 64 years) passes the calm checks (5.4% calm in winter, 6.7% over the year). Its 2009–2023 file failed them (99.9% calm in winter). Until fix 2, Pyrmont therefore uses Observatory Hill, 2.0 km away, instead of Riverview. Fix 2 still prefers Sydney Airport for harbour sites, so the panel has to say why Observatory Hill was skipped.
+
+Melbourne Regional Office shows the same pattern. Its full record (1954–2015, 54 years) passes the calm checks (11.5% calm in winter), so Melbourne CBD now uses it, 0.9 km away, instead of Olympic Park (2.8 km). The station closed in 2015. 17 stations now pass the calm checks that failed before; none went the other way. The station list grows from 796 to 875, because full-record files were never listed before.
 
 ## Out of scope
 

@@ -50,11 +50,14 @@ export function parseEpwLocation(line: string): { name: string; lat: number; lon
   };
 }
 
-export function parseEpwPeriodComment(line: string): { periodStart: string; periodEnd: string } | null {
+export function parseEpwPeriodComment(
+  line: string,
+): { periodStart: string; periodEnd: string; years: number | null } | null {
   if (!line.startsWith("COMMENTS 1,")) return null;
   const match = /Period of Record=(\d{4})-(\d{4})/.exec(line);
   if (!match) return null;
-  return { periodStart: match[1]!, periodEnd: match[2]! };
+  const years = /#years=\[(\d+)\]/.exec(line);
+  return { periodStart: match[1]!, periodEnd: match[2]!, years: years ? Number(years[1]) : null };
 }
 
 export function parseEpwDataRow(line: string): EpwHourRow | null {
@@ -82,6 +85,8 @@ export function aggregateEpwSeason(
   let calm = 0;
   let speedSum = 0;
   let speedCount = 0;
+  const sectorSpeedSums = new Array<number>(WIND_SECTOR_COUNT).fill(0);
+  const sectorSpeedCounts = new Array<number>(WIND_SECTOR_COUNT).fill(0);
 
   for (const row of rows) {
     if (!months.has(row.month)) continue;
@@ -93,6 +98,8 @@ export function aggregateEpwSeason(
     speedSum += row.speedMs;
     speedCount += 1;
     const sector = sectorIndex(row.dirDeg);
+    sectorSpeedSums[sector]! += row.speedMs;
+    sectorSpeedCounts[sector]! += 1;
     const band = speedBinIndexMs(row.speedMs, edges);
     if (band < 0) continue;
     counts[sector]![band]! += 1;
@@ -117,6 +124,7 @@ export function aggregateEpwSeason(
     prevailingDirDeg: sectorCenterDeg(maxSector),
     meanSpeedMs: speedCount > 0 ? speedSum / speedCount : 0,
     sectors,
+    sectorMeanSpeedMs: sectorSpeedSums.map((sum, s) => (sectorSpeedCounts[s]! > 0 ? sum / sectorSpeedCounts[s]! : 0)),
   };
 }
 

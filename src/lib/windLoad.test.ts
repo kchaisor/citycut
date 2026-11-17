@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach } from "vitest";
-import { loadSiteWind, resetWindRoseAssetCache } from "./windLoad";
+import { loadSiteWind, loadWindRoseAsset, resetWindRoseAssetCache } from "./windLoad";
 import type { WindRoseAsset } from "./windRoseData";
 
 const fixture: WindRoseAsset = {
@@ -40,5 +40,24 @@ describe("windLoad", () => {
     expect(result.selection.station.name).toContain("Moorabbin");
     expect(result.selection.station.distanceKm).toBeGreaterThan(0);
     expect(result.selection.station.periodStart).toBe("2009");
+  });
+
+  it("loads a version 2 asset with record length and source file", async () => {
+    const station = fixture.stations[0]!;
+    const v2: WindRoseAsset = {
+      ...fixture,
+      version: 2,
+      stations: [{ ...station, years: 19, sourceZip: "AUS_VIC_Melbourne-Moorabbin.AP.948700_TMYx.zip" }],
+    };
+    const fetchImpl: typeof fetch = async () => new Response(JSON.stringify(v2), { status: 200 });
+    const asset = await loadWindRoseAsset(fetchImpl);
+    expect(asset?.version).toBe(2);
+    expect(asset?.stations[0]?.years).toBe(19);
+    expect(asset?.stations[0]?.sourceZip).toContain("_TMYx.zip");
+  });
+
+  it("rejects an unknown asset version", async () => {
+    const fetchImpl: typeof fetch = async () => new Response(JSON.stringify({ ...fixture, version: 99 }), { status: 200 });
+    expect(await loadWindRoseAsset(fetchImpl)).toBeNull();
   });
 });
