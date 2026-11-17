@@ -14,6 +14,10 @@ import {
   PEDESTRIAN_HEIGHT_FACTOR,
   powerLawHeightFactor,
   rampRgb,
+  WIND_PLAN_CONTOUR_LEVELS_MS,
+  WIND_PLAN_SPEED_MAX_MS,
+  WIND_PLAN_SPEED_TICKS_MS,
+  windPlanRampStops,
   windPlanReferenceMs,
   windPlanSpeedKey,
   type WindPlanGeometry,
@@ -266,5 +270,27 @@ describe("field helpers", () => {
     expect(rampRgb(stops, 3, out)).toEqual([30, 60, 120]);
     expect(rampRgb(stops, 9, out)).toEqual([60, 120, 240]);
     expect(rampRgb(stops, -1, out)).toEqual([0, 0, 0]);
+  });
+
+  it("spreads the ramp over a fixed 0 to 4 m/s scale with contours at 1, 2 and 3 m/s", () => {
+    expect(WIND_PLAN_SPEED_MAX_MS).toBe(4);
+    expect([...WIND_PLAN_CONTOUR_LEVELS_MS]).toEqual([1, 2, 3]);
+    expect([...WIND_PLAN_SPEED_TICKS_MS]).toEqual([0, 1, 2, 3, 4]);
+  });
+
+  it("maps 0 m/s to the first ramp colour and 4 m/s or more to the last", () => {
+    let n = 0;
+    const stops = windPlanRampStops(() => {
+      n += 1;
+      return { r: n, g: n * 2, b: n * 3 };
+    });
+    const first = stops[0]!;
+    const last = stops[stops.length - 1]!;
+    expect(first.ms).toBe(0);
+    expect(last.ms).toBe(4);
+    const out: [number, number, number] = [0, 0, 0];
+    expect(rampRgb(stops, 0, out)).toEqual(first.rgb);
+    expect(rampRgb(stops, 4, out)).toEqual(last.rgb);
+    expect(rampRgb(stops, 7.5, out)).toEqual(last.rgb);
   });
 });

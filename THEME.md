@@ -301,7 +301,7 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--ground-wind-rising` | `#d9a300` | 3D ground-wind line velocity ramp: speeding up (≈ 1.12×). |
 | `--ground-wind-fast` | `#e8670f` | 3D ground-wind line velocity ramp: speeding up (≈ 1.25×). |
 | `--ground-wind-speeding` | `#cc1f1f` | 3D ground-wind line velocity ramp: strongest speed-up at corners and gaps (≥ 1.4×). |
-| `--wind-plan-sitting` | `#dcebd8` | Plan wind comfort map (Plan view, Wind Rose, Comfort): Lawson sitting band, and its card swatch. The Wind speed map reuses the `--ground-wind-*` ramp spread over 0–6 m/s. |
+| `--wind-plan-sitting` | `#dcebd8` | Plan wind comfort map (Plan view, Wind Rose, Comfort): Lawson sitting band, and its card swatch. The Wind speed map reuses the `--ground-wind-*` ramp spread over 0–4 m/s. |
 | `--wind-plan-standing` | `#9fcb94` | Plan wind comfort map: Lawson standing band. |
 | `--wind-plan-walking` | `#f1de97` | Plan wind comfort map: Lawson walking band (leisure and business walking merged). |
 | `--wind-plan-uncomfortable` | `#e8964f` | Plan wind comfort map: uncomfortable band. |
@@ -406,7 +406,7 @@ A dash is two lengths in millimetres: how long the mark is, then how long the ga
 | `--tram-dash` | Dash of a tram route | `1.2 0.6` | mm, on then off |
 | `--axo-guide-dash` | Dash of exploded axo vertical guides | `0.8 0.5` | mm, on then off |
 | `--building-edge` | Colour of the massing edge in the 3D view | `#000000` | colour |
-| `--wind-plan-contour-stroke` | Plan wind speed map: colour of the 1–5 m/s contour lines | `#FFFFFF` | colour |
+| `--wind-plan-contour-stroke` | Plan wind speed map: colour of the 1, 2 and 3 m/s contour lines | `#FFFFFF` | colour |
 | `--wind-plan-contour-opacity` | Plan wind speed map: opacity of those contours | `0.35` | 0–1 |
 | `--wind-plan-contour-px` | Plan wind speed map: contour weight on screen | `1` | screen px |
 | `--wind-plan-building-edge` | Plan wind maps: building footprint edge colour | `#1A1A1A` | colour |

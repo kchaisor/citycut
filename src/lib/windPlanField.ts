@@ -27,9 +27,9 @@ import {
   type WindSeasonWeights,
 } from "./windComfort";
 
-export const WIND_PLAN_SPEED_MAX_MS = 6;
-export const WIND_PLAN_SPEED_TICKS_MS = [0, 1, 2, 3, 4, 5, 6] as const;
-export const WIND_PLAN_CONTOUR_LEVELS_MS = [1, 2, 3, 4, 5] as const;
+export const WIND_PLAN_SPEED_MAX_MS = 4;
+export const WIND_PLAN_SPEED_TICKS_MS = [0, 1, 2, 3, 4] as const;
+export const WIND_PLAN_CONTOUR_LEVELS_MS = [1, 2, 3] as const;
 export const WIND_PLAN_BLUR_PASSES = 2;
 export const WIND_PLAN_DISPLAY_SIGMA_M = 6;
 export const WIND_PLAN_ROWS_PER_SLICE = 32;

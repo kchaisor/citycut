@@ -16,12 +16,13 @@ Sketch or screenshot (Paper mock-ups v2, approved by Designbot on 17 Nov 2026):
 The 1024 mock-ups are on the shared computer at `/workspace/wind-plan-mock/v2-speed-1024.png` and `v2-comfort-1024.png`. Three tweaks sit on top of the mock-ups: smooth comfort-band edges, Standing deepened to #9FCB94 with edged legend swatches, and the wind arrow at the upwind map edge.
 
 ### Wind speed
-- The ground shows a smooth velocity field in m/s: the #232 speed-ratio field for the heading, times the season's reference speed for that direction. Colours use the #232 round 3 CFD ramp (blue sheltered, cyan, green, yellow, red), legend 0–6 m/s.
+- The ground shows a smooth velocity field in m/s: the #232 speed-ratio field for the heading, times the season's reference speed for that direction. Colours use the #232 round 3 CFD ramp (blue sheltered, cyan, green, yellow, red), legend 0–4 m/s. The scale is fixed, not per site; speeds above 4 m/s take the top colour.
 - Pedestrian height: the Viewbank TMYx speeds are measured at 10 m in open terrain, so they are brought down to 1.5 m with a power-law profile, suburban exponent α = 0.25 (factor (1.5/10)^0.25 ≈ 0.62), before multiplying by the speed-ratio field. The card's Reference row shows this corrected speed; the console median stays the station value.
 - The map is smoothed for display only (Gaussian, about 6 m) so it reads as flow shaped by buildings, not speckle. Contours use the same smoothed field; comfort classes use the unsmoothed one.
 - Cells near the cut edge are computed with the cut's buildings wrapped round its edges (a periodic boundary), so the edge sees built-up ground upwind and downwind like the rest of the site rather than open land. Nothing outside the cut is drawn.
 - Wakes (low speed) sit on the lee side of each building and move when the season or direction changes. Corners and gaps speed up.
-- Contours only at 1, 2, 3, 4 and 5 m/s: 1px white at 35% opacity.
+- Contours only at 1, 2 and 3 m/s: 1px white at 35% opacity.
+- Kelvin's call, 17 Nov 2026: keep the pedestrian-height correction, and use a tighter fixed speed scale (0–4 m/s) so differences show; fixed, not per-site, so maps compare between sites.
 - Direction defaults to the season's prevailing direction and can be stepped through the 16 directions on the card. The wind arrow sits at the upwind edge of the map (the cut square on screen: centred on the top edge for N, at the top-right corner for NE), just outside it and pointing in, and follows the camera. It slides along that edge, or steps just inside it, only as far as needed to stay at least 24px clear of any panel (and of buildings when inside the map): 2px ink shaft, filled head, white label chip ("Wind NNE"), 11px/600.
 
 ### Comfort (Lawson LDDC, indicative)
@@ -32,7 +33,7 @@ The 1024 mock-ups are on the shared computer at `/workspace/wind-plan-mock/v2-sp
 - The card shows "Unsafe: N areas" or "Unsafe: none". Direction reads "All".
 
 ### Panels and console
-- The plan rows (Season, Direction, Reference in m/s or Criteria "Lawson", "Indicative only, not a CFD study") sit at the top of the existing wind-rose card. The legend sits at its bottom: speed as a full-width 8px bar with 11px Geist Mono ticks 0–6 m/s; comfort as five 8px swatches with a 1px rgba(26,26,26,0.2) edge in a 2-column grid. No separate floating legend.
+- The plan rows (Season, Direction, Reference in m/s or Criteria "Lawson", "Indicative only, not a CFD study") sit at the top of the existing wind-rose card. The legend sits at its bottom: speed as a full-width 8px bar with 11px Geist Mono ticks 0–4 m/s; comfort as five 8px swatches with a 1px rgba(26,26,26,0.2) edge in a 2-column grid. No separate floating legend.
 - The switch uses the white raised sub-option style. Wind Rose stays the one yellow active.
 - Plan wind views use m/s only (no km/h in the console) and the console has no DIR readout.
 - Buildings are white footprints with a 1px #1A1A1A edge at 40% opacity. Tree dots are hidden in wind plan views.
@@ -42,7 +43,7 @@ The 1024 mock-ups are on the shared computer at `/workspace/wind-plan-mock/v2-sp
 ## How we'll know it works
 
 - [ ] Plan view + Wind Rose shows the Wind speed | Comfort switch in the console, white raised style, with Wind Rose the only yellow active.
-- [ ] Wind speed: smooth blue-to-red field in m/s; wakes on the lee side of buildings that flip when the season or direction changes; white contours only at 1–5 m/s.
+- [ ] Wind speed: smooth blue-to-red field in m/s; wakes on the lee side of buildings that flip when the season or direction changes; white contours only at 1, 2 and 3 m/s.
 - [ ] Wind arrow at the upwind edge, rotating with direction, at least 24px clear of panels and buildings, with a white "Wind NNE" chip.
 - [ ] Comfort: five Lawson bands with clean edges at 1440 and the listed palette; Unsafe hatched and outlined, at least 12px; the card reads "Unsafe: N areas" or "Unsafe: none"; Direction reads "All".
 - [ ] Plan rows and legend sit inside the wind-rose card; no separate floating legend.
