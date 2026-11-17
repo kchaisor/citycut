@@ -29,12 +29,6 @@ import {
 } from "./windComfort";
 
 export const WIND_PLAN_SPEED_MAX_MS = 4;
-export const WIND_PLAN_SPEED_TICKS_MS = [0, 1, 2, 3, 4] as const;
-export const WIND_PLAN_CONTOUR_STEP_MS = 0.25;
-export const WIND_PLAN_CONTOUR_LEVELS_MS: readonly number[] = Array.from(
-  { length: Math.round(WIND_PLAN_SPEED_MAX_MS / WIND_PLAN_CONTOUR_STEP_MS) - 1 },
-  (_, k) => (k + 1) * WIND_PLAN_CONTOUR_STEP_MS,
-);
 export const WIND_PLAN_IMAGE_UPSCALE = 4;
 export const WIND_PLAN_IMAGE_MAX_PIXELS = 4_000_000;
 
@@ -46,6 +40,41 @@ export const WIND_PLAN_SPEED_RAMP: ReadonlyArray<{ token: ColourKey; ms: number 
   { token: "--wind-plan-speed-strong", ms: 3.5 },
   { token: "--wind-plan-speed-fast", ms: WIND_PLAN_SPEED_MAX_MS },
 ];
+
+export function windPlanScaleMaxMs(peakMs: number): number {
+  if (!Number.isFinite(peakMs) || peakMs <= WIND_PLAN_SPEED_MAX_MS) return WIND_PLAN_SPEED_MAX_MS;
+  if (peakMs <= 6) return Math.ceil(peakMs);
+  return Math.ceil(peakMs / 2) * 2;
+}
+
+export function windPlanSiteScaleMaxMs(viewPeaksMs: readonly number[]): number {
+  const finite = viewPeaksMs.filter((peak) => Number.isFinite(peak));
+  return windPlanScaleMaxMs(finite.length > 0 ? Math.max(...finite) : NaN);
+}
+
+export function windPlanSpeedTicks(scaleMaxMs: number): number[] {
+  const step = [1, 2, 4, 5, 10, 20].find((s) => scaleMaxMs % s === 0 && scaleMaxMs / s <= 5) ?? 2;
+  const ticks: number[] = [];
+  for (let tick = 0; tick < scaleMaxMs; tick += step) ticks.push(tick);
+  ticks.push(scaleMaxMs);
+  return ticks;
+}
+
+export function windPlanContourStepMs(scaleMaxMs: number): number {
+  if (scaleMaxMs <= WIND_PLAN_SPEED_MAX_MS) return 0.25;
+  return scaleMaxMs <= 8 ? 0.5 : 1;
+}
+
+export function windPlanContourLevels(scaleMaxMs: number): number[] {
+  const step = windPlanContourStepMs(scaleMaxMs);
+  return Array.from({ length: Math.round(scaleMaxMs / step) - 1 }, (_, k) => (k + 1) * step);
+}
+
+export function windPlanSpeedRamp(scaleMaxMs: number): Array<{ token: ColourKey; ms: number }> {
+  const stretch = scaleMaxMs / WIND_PLAN_SPEED_MAX_MS;
+  return WIND_PLAN_SPEED_RAMP.map((stop) => ({ token: stop.token, ms: stop.ms * stretch }));
+}
+
 export const WIND_PLAN_BLUR_PASSES = 2;
 export const WIND_PLAN_DISPLAY_SIGMA_M = 6;
 export const WIND_PLAN_ROWS_PER_SLICE = 32;
@@ -149,22 +178,30 @@ export type WindPlanJob<T> = {
   result: () => T | null;
 };
 
+export type WindPlanView = { sector: number; referenceMs: number };
+
 type PlanFlow = {
   inner: GroundWindObstacles;
   pad: number;
   padded: GroundWindFieldCache;
   ratios: Map<number, Float32Array>;
+  peakRatios: Map<number, number>;
   heightFactors: Float32Array | null;
 };
 
-type PlanCache = { flow: PlanFlow | null; speed: Map<string, WindPlanSpeed>; comfort: Map<string, WindPlanComfort> };
+type PlanCache = {
+  flow: PlanFlow | null;
+  speed: Map<string, WindPlanSpeed>;
+  comfort: Map<string, WindPlanComfort>;
+  scale: Map<string, number>;
+};
 
 const planCaches = new WeakMap<CityModel, PlanCache>();
 
 function planCache(model: CityModel): PlanCache {
   let cache = planCaches.get(model);
   if (!cache) {
-    cache = { flow: null, speed: new Map(), comfort: new Map() };
+    cache = { flow: null, speed: new Map(), comfort: new Map(), scale: new Map() };
     planCaches.set(model, cache);
   }
   return cache;
@@ -322,7 +359,7 @@ function planFlow(model: CityModel): PlanFlow {
     const padded: GroundWindFieldCache = { model, obstacles: periodicPadObstacles(inner, pad), grids: new Map(), builds: 0 };
     const water = rasterGroundWindWater(model, inner, inner.solid);
     const heightFactors = pedestrianHeightFactors(water, inner.cols, inner.rows, inner.cellM);
-    cache.flow = { inner, pad, padded, ratios: new Map(), heightFactors };
+    cache.flow = { inner, pad, padded, ratios: new Map(), peakRatios: new Map(), heightFactors };
   }
   return cache.flow;
 }
@@ -398,6 +435,61 @@ export function windPlanDisplayField(
   const speed = windPlanSpeedField(gaussianBlur(ratio, cols, rows, WIND_PLAN_DISPLAY_SIGMA_M / cellM), referenceMs);
   if (heightFactors) for (let idx = 0; idx < speed.length; idx++) speed[idx] = speed[idx]! * (heightFactors[idx]! / PEDESTRIAN_HEIGHT_FACTOR);
   return speed;
+}
+
+export function windPlanPeakRatio(ratio: Float32Array, geometry: WindPlanGeometry, heightFactors: Float32Array | null = null): number {
+  const display = windPlanDisplayField(ratio, geometry, 1, heightFactors);
+  let peak = 0;
+  for (let idx = 0; idx < display.length; idx++) if (display[idx]! > peak) peak = display[idx]!;
+  return peak;
+}
+
+export function windPlanScaleKey(views: readonly WindPlanView[]): string {
+  return views.map((view) => `${groundWindSector(view.sector)}@${view.referenceMs.toFixed(4)}`).join(",");
+}
+
+export function cachedWindPlanScale(model: CityModel, key: string): number | null {
+  return planCache(model).scale.get(surfaceKey(model, key)) ?? null;
+}
+
+export function createWindPlanScaleJob(model: CityModel, views: readonly WindPlanView[]): WindPlanJob<number> {
+  const cache = planCache(model);
+  const cacheKey = surfaceKey(model, windPlanScaleKey(views));
+  let result = cache.scale.get(cacheKey) ?? null;
+  const sectors = [...new Set(views.map((view) => groundWindSector(view.sector)))];
+  let sectorAt = 0;
+  let ratioJob: PlanRatioJob | null = null;
+
+  const work = (budgetMs: number): boolean => {
+    const flow = planFlow(model);
+    if (sectorAt >= sectors.length) {
+      const peaks = views.map((view) => view.referenceMs * flow.peakRatios.get(groundWindSector(view.sector))!);
+      result = windPlanSiteScaleMaxMs(peaks);
+      cache.scale.set(cacheKey, result);
+      return true;
+    }
+    const sector = sectors[sectorAt]!;
+    if (!flow.peakRatios.has(sector)) {
+      ratioJob ??= createPlanRatioJob(model, sector);
+      if (!ratioJob.step(budgetMs)) return false;
+      flow.peakRatios.set(sector, windPlanPeakRatio(ratioJob.ratio()!, windPlanGeometry(flow.inner), flow.heightFactors));
+      ratioJob = null;
+    }
+    sectorAt += 1;
+    return false;
+  };
+
+  return {
+    step(budgetMs) {
+      const start = now();
+      while (!result) {
+        if (work(Math.max(0, budgetMs - (now() - start)))) break;
+        if (now() - start >= budgetMs) break;
+      }
+      return result !== null;
+    },
+    result: () => result,
+  };
 }
 
 export function buildWindPlanRatio(model: CityModel, sector: number): { geometry: WindPlanGeometry; ratio: Float32Array } {
@@ -504,8 +596,11 @@ export function createWindPlanComfortJob(model: CityModel, seasonKey: string, we
 
 export type RampStop = { ms: number; rgb: [number, number, number] };
 
-export function windPlanRampStops(colourRgb: (token: ColourKey) => { r: number; g: number; b: number }): RampStop[] {
-  return WIND_PLAN_SPEED_RAMP.map((stop) => {
+export function windPlanRampStops(
+  colourRgb: (token: ColourKey) => { r: number; g: number; b: number },
+  scaleMaxMs: number = WIND_PLAN_SPEED_MAX_MS,
+): RampStop[] {
+  return windPlanSpeedRamp(scaleMaxMs).map((stop) => {
     const { r, g, b } = colourRgb(stop.token);
     return { ms: stop.ms, rgb: [r, g, b] };
   });

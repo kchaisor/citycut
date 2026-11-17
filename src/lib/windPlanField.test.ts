@@ -24,18 +24,23 @@ import {
   pedestrianHeightFactors,
   powerLawHeightFactor,
   rampRgb,
-  WIND_PLAN_CONTOUR_LEVELS_MS,
   WIND_PLAN_SPEED_MAX_MS,
   WIND_PLAN_SPEED_RAMP,
-  WIND_PLAN_SPEED_TICKS_MS,
   WATER_PEDESTRIAN_HEIGHT_FACTOR,
   WATER_SHORE_BLEND_M,
+  cachedWindPlanScale,
+  createWindPlanScaleJob,
+  windPlanContourLevels,
   windPlanDisplayField,
   windPlanImageUpscale,
   windPlanOverWater,
   windPlanRampStops,
   windPlanReferenceMs,
+  windPlanScaleKey,
+  windPlanScaleMaxMs,
+  windPlanSiteScaleMaxMs,
   windPlanSpeedKey,
+  windPlanSpeedTicks,
   type WindPlanGeometry,
   type WindPlanJob,
 } from "./windPlanField";
@@ -380,12 +385,12 @@ describe("field helpers", () => {
     expect(rampRgb(stops, -1, out)).toEqual([0, 0, 0]);
   });
 
-  it("spreads the ramp over a fixed 0 to 4 m/s scale with isolines every 0.25 m/s", () => {
+  it("uses 0 to 4 m/s as the smallest scale, with ticks every 1 m/s and isolines every 0.25 m/s", () => {
     expect(WIND_PLAN_SPEED_MAX_MS).toBe(4);
-    expect([...WIND_PLAN_CONTOUR_LEVELS_MS]).toEqual([
+    expect(windPlanContourLevels(WIND_PLAN_SPEED_MAX_MS)).toEqual([
       0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.25, 2.5, 2.75, 3, 3.25, 3.5, 3.75,
     ]);
-    expect([...WIND_PLAN_SPEED_TICKS_MS]).toEqual([0, 1, 2, 3, 4]);
+    expect(windPlanSpeedTicks(WIND_PLAN_SPEED_MAX_MS)).toEqual([0, 1, 2, 3, 4]);
   });
 
   it("uses its own plan speed tokens, not the 3D ground-wind ramp", () => {
@@ -423,5 +428,76 @@ describe("field helpers", () => {
     expect(rampRgb(stops, 0, out)).toEqual(first.rgb);
     expect(rampRgb(stops, 4, out)).toEqual(last.rgb);
     expect(rampRgb(stops, 7.5, out)).toEqual(last.rgb);
+  });
+});
+
+describe("wind plan site speed scale", () => {
+  it("keeps a light-wind suburban site on 0 to 4 m/s", () => {
+    expect(windPlanScaleMaxMs(2.6)).toBe(4);
+    expect(windPlanScaleMaxMs(4)).toBe(4);
+    expect(windPlanSiteScaleMaxMs([2.1, 3.4, 3.9])).toBe(4);
+  });
+
+  it("rounds a harbour site's peak up to a nice top", () => {
+    expect(windPlanScaleMaxMs(4.2)).toBe(5);
+    expect(windPlanScaleMaxMs(5.5)).toBe(6);
+    for (const peak of [6.8, 7.2, 7.9, 8]) expect(windPlanScaleMaxMs(peak)).toBe(8);
+    expect(windPlanScaleMaxMs(8.1)).toBe(10);
+  });
+
+  it("falls back to 4 m/s when there is no usable peak", () => {
+    expect(windPlanScaleMaxMs(NaN)).toBe(4);
+    expect(windPlanScaleMaxMs(Infinity)).toBe(4);
+    expect(windPlanSiteScaleMaxMs([])).toBe(4);
+  });
+
+  it("gives every season and design wind at one site the same top", () => {
+    const viewPeaks = { annual: 3.2, summer: 3.1, autumn: 3.3, winter: 2.8, spring: 3.6, ne: 6.1, s: 7.4, w: 5.2 };
+    const top = windPlanSiteScaleMaxMs(Object.values(viewPeaks));
+    expect(top).toBe(8);
+    expect(windPlanScaleMaxMs(viewPeaks.summer)).toBe(4);
+    expect(windPlanScaleMaxMs(viewPeaks.w)).toBe(6);
+  });
+
+  it("spaces ticks and isolines to suit the top", () => {
+    expect(windPlanSpeedTicks(5)).toEqual([0, 1, 2, 3, 4, 5]);
+    expect(windPlanSpeedTicks(6)).toEqual([0, 2, 4, 6]);
+    expect(windPlanSpeedTicks(8)).toEqual([0, 2, 4, 6, 8]);
+    expect(windPlanSpeedTicks(10)).toEqual([0, 2, 4, 6, 8, 10]);
+    const at8 = windPlanContourLevels(8);
+    expect(at8).toHaveLength(15);
+    expect(at8[0]).toBe(0.5);
+    expect(at8[at8.length - 1]).toBe(7.5);
+    expect(windPlanContourLevels(10)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9]);
+  });
+
+  it("stretches the ramp across the site scale so mid-scale stays cyan", () => {
+    const rgb = (token: string) => {
+      const k = WIND_PLAN_SPEED_RAMP.findIndex((stop) => stop.token === token);
+      return { r: k, g: k, b: k };
+    };
+    const stops = windPlanRampStops(rgb, 8);
+    expect(stops.map((stop) => stop.ms)).toEqual([0, 2, 4, 5.6, 7, 8]);
+    const out: [number, number, number] = [0, 0, 0];
+    expect(rampRgb(stops, 4, out)).toEqual([2, 2, 2]);
+    expect(rampRgb(stops, 8, out)).toEqual(stops[stops.length - 1]!.rgb);
+    expect(rampRgb(stops, 11, out)).toEqual(stops[stops.length - 1]!.rgb);
+  });
+
+  it("sizes the scale from the strongest painted view and caches it per site", () => {
+    const model = withWater(oneBuilding(), ring(-120, -120, 120, -40));
+    const views = [
+      { sector: WEST, referenceMs: 2 },
+      { sector: EAST, referenceMs: 3 },
+      { sector: WEST, referenceMs: 5.5 },
+    ];
+    const top = run(createWindPlanScaleJob(model, views));
+    const strongest = run(createWindPlanSpeedJob(model, "scale:design-w", 5.5, WEST));
+    const painted = Math.max(...strongest.speedMs);
+    expect(top).toBeGreaterThan(4);
+    expect(top).toBe(windPlanScaleMaxMs(painted));
+    expect(top).toBeGreaterThanOrEqual(painted);
+    expect(cachedWindPlanScale(model, windPlanScaleKey(views))).toBe(top);
+    expect(cachedWindPlanScale(model, windPlanScaleKey(views.slice(0, 2)))).toBeNull();
   });
 });

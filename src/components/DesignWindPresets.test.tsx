@@ -97,6 +97,7 @@ describe("WindPlanRows water note", () => {
     hasData: true,
     ready: true,
     overWater,
+    scaleMaxMs: 4,
     speed: null,
     comfort: null,
   });

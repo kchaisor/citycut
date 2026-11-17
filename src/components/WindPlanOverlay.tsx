@@ -85,11 +85,11 @@ const ARROW_CHIP_FONT = "600 11px Geist, system-ui, sans-serif";
 const VIEW_INSET_PX = 14;
 const HUD_SELECTOR = ".hud-card, .studio-compass";
 
-const speedImages = new WeakMap<WindPlanSpeed, { revision: number; canvas: HTMLCanvasElement }>();
+const speedImages = new WeakMap<WindPlanSpeed, { revision: number; scaleMaxMs: number; canvas: HTMLCanvasElement }>();
 
-function speedImage(speed: WindPlanSpeed, revision: number): HTMLCanvasElement {
+function speedImage(speed: WindPlanSpeed, scaleMaxMs: number, revision: number): HTMLCanvasElement {
   const cached = speedImages.get(speed);
-  if (cached && cached.revision === revision) return cached.canvas;
+  if (cached && cached.revision === revision && cached.scaleMaxMs === scaleMaxMs) return cached.canvas;
   const { cols, rows } = speed.geometry;
   const up = windPlanImageUpscale(cols, rows);
   const width = cols * up;
@@ -99,7 +99,7 @@ function speedImage(speed: WindPlanSpeed, revision: number): HTMLCanvasElement {
   canvas.height = height;
   const ctx = canvas.getContext("2d")!;
   const image = ctx.createImageData(width, height);
-  const stops = windPlanRampStops(colourRgb);
+  const stops = windPlanRampStops(colourRgb, scaleMaxMs);
   const rgb: [number, number, number] = [0, 0, 0];
   for (let py = 0; py < height; py++) {
     const gy = (py + 0.5) / up - 0.5;
@@ -113,7 +113,7 @@ function speedImage(speed: WindPlanSpeed, revision: number): HTMLCanvasElement {
     }
   }
   ctx.putImageData(image, 0, 0);
-  speedImages.set(speed, { revision, canvas });
+  speedImages.set(speed, { revision, scaleMaxMs, canvas });
   return canvas;
 }
 
@@ -252,7 +252,7 @@ export function WindPlanOverlay({
   const [arrow, setArrow] = useState<WindArrowLayout | null>(null);
   const buildings = useMemo(() => buildingShapes(model), [model]);
   const cut = useMemo(() => cutExtent(model), [model]);
-  const { mode, speed, comfort, sector } = plan;
+  const { mode, speed, comfort, sector, scaleMaxMs } = plan;
   const arrowLabel = sector != null ? `Wind ${sectorLabel(sector)}` : "";
 
   const draw = useCallback(() => {
@@ -270,7 +270,7 @@ export function WindPlanOverlay({
     if (!ctx) return;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, width, height);
-    const data: WindPlanSpeed | WindPlanComfort | null = mode === "speed" ? speed : comfort;
+    const data: WindPlanSpeed | WindPlanComfort | null = mode === "speed" ? (scaleMaxMs != null ? speed : null) : comfort;
     if (!data) {
       setArrow(null);
       return;
@@ -290,15 +290,15 @@ export function WindPlanOverlay({
     ctx.rect(cut.minE, cut.minN, cut.maxE - cut.minE, cut.maxN - cut.minN);
     ctx.clip();
 
-    if (mode === "speed" && speed) {
+    if (mode === "speed" && speed && scaleMaxMs != null) {
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = "high";
-      ctx.drawImage(speedImage(speed, colourRevision), originE, originN, gridW, gridH);
+      ctx.drawImage(speedImage(speed, scaleMaxMs, colourRevision), originE, originN, gridW, gridH);
       ctx.save();
       ctx.beginPath();
       ctx.rect(originE + cellM / 2, originN + cellM / 2, gridW - cellM, gridH - cellM);
       ctx.clip();
-      const levels = windPlanSpeedContours(speed);
+      const levels = windPlanSpeedContours(speed, scaleMaxMs);
       strokePen(ctx, cachedPath(levels, () => levels.flat()), style.contour, scale);
       ctx.restore();
     } else if (mode === "comfort" && comfort) {
@@ -370,7 +370,7 @@ export function WindPlanOverlay({
     const view = { x0: VIEW_INSET_PX, y0: VIEW_INSET_PX, x1: rect.width - VIEW_INSET_PX, y1: rect.height - VIEW_INSET_PX };
     const next = placeWindArrow({ view, map, downwind, chipW, chipH: ARROW_CHIP_HEIGHT_PX, panels, buildings: buildingRects });
     setArrow((prev) => (sameArrow(prev, next) ? prev : next));
-  }, [store, mode, speed, comfort, sector, buildings, cut, colourRevision, arrowLabel]);
+  }, [store, mode, speed, comfort, sector, scaleMaxMs, buildings, cut, colourRevision, arrowLabel]);
 
   const frame = useRef<number | null>(null);
   const schedule = useCallback(() => {

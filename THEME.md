@@ -301,12 +301,12 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--ground-wind-rising` | `#d9a300` | 3D ground-wind line velocity ramp: speeding up (≈ 1.12×). |
 | `--ground-wind-fast` | `#e8670f` | 3D ground-wind line velocity ramp: speeding up (≈ 1.25×). |
 | `--ground-wind-speeding` | `#cc1f1f` | 3D ground-wind line velocity ramp: strongest speed-up at corners and gaps (≥ 1.4×). |
-| `--wind-plan-speed-still` | `#2e42d4` | Plan Wind speed map (CFD-style ramp, fixed 0–4 m/s, linear between stops): 0 m/s, deep royal blue for sheltered wakes. Plan only; the 3D streaks keep `--ground-wind-*`. |
+| `--wind-plan-speed-still` | `#2e42d4` | Plan Wind speed map (CFD-style ramp, linear between stops, stretched from 0 to each site's scale top, minimum 4 m/s): 0 m/s, deep royal blue for sheltered wakes. Plan only; the 3D streaks keep `--ground-wind-*`. |
 | `--wind-plan-speed-calm` | `#4f68de` | Plan Wind speed map: 1 m/s, mid blue (typical lee-side wakes). |
 | `--wind-plan-speed-breeze` | `#46d4e8` | Plan Wind speed map: 2 m/s, cyan (half scale). |
 | `--wind-plan-speed-brisk` | `#b5e35c` | Plan Wind speed map: 2.8 m/s, green-yellow. |
 | `--wind-plan-speed-strong` | `#f3dc3c` | Plan Wind speed map: 3.5 m/s, yellow. |
-| `--wind-plan-speed-fast` | `#ec6a2e` | Plan Wind speed map: 4 m/s and above, orange-red (top of the Velocity legend). |
+| `--wind-plan-speed-fast` | `#ec6a2e` | Plan Wind speed map: top of the site scale and above, orange-red (top of the Velocity legend). |
 | `--wind-plan-sitting` | `#dcebd8` | Plan wind comfort map (Plan view, Wind Rose, Comfort): Lawson sitting band, and its card swatch. |
 | `--wind-plan-standing` | `#9fcb94` | Plan wind comfort map: Lawson standing band. |
 | `--wind-plan-walking` | `#f1de97` | Plan wind comfort map: Lawson walking band (leisure and business walking merged). |

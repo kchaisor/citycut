@@ -71,7 +71,7 @@ export function ModelPageView({ vm }: { vm: ModelPageViewModel }) {
         {speedHudOn ? (
           <>
             <WindPlanInfo plan={windPlan} period={windSettings.period} />
-            <WindPlanVelocityLegend />
+            <WindPlanVelocityLegend scaleMaxMs={windPlan.scaleMaxMs} />
           </>
         ) : null}
         <ModelPageViewportFooter vm={vm} />

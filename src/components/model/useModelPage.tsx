@@ -1349,6 +1349,7 @@ export function useModelPage({
     siteWind,
     period: windSettings.period,
     designWind,
+    designWinds,
     active: tab === "3d" && view.projection === "plan" && leftOpen === "analysis" && analysisKind === "wind" && siteWind != null,
   });
 

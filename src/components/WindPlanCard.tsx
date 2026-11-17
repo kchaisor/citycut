@@ -1,7 +1,7 @@
 import { getColour } from "../lib/colours";
 import { useColourRevision } from "../lib/useColourRevision";
 import { COMFORT_CLASSES, COMFORT_CLASS_LABELS, unsafeAreasLabel } from "../lib/windComfort";
-import { WIND_PLAN_SPEED_MAX_MS, WIND_PLAN_SPEED_TICKS_MS, windPlanLegendGradient } from "../lib/windPlanField";
+import { windPlanLegendGradient, windPlanSpeedTicks } from "../lib/windPlanField";
 import { monthPeriodLabel, type WindPeriodId } from "../lib/windRose";
 import type { DesignWind } from "../lib/windDesignWinds";
 import type { WindPlanState } from "./useWindPlan";
@@ -134,7 +134,7 @@ export function WindPlanInfo({ plan, period }: { plan: WindPlanState; period: Wi
   );
 }
 
-export function WindPlanVelocityLegend() {
+export function WindPlanVelocityLegend({ scaleMaxMs }: { scaleMaxMs: number | null }) {
   useColourRevision();
   return (
     <div className="wind-plan-velocity hud-card" aria-label="Wind speed, metres per second">
@@ -144,11 +144,13 @@ export function WindPlanVelocityLegend() {
       <div className="wind-plan-velocity-scale">
         <span className="wind-plan-velocity-bar" aria-hidden="true" style={{ background: windPlanLegendGradient(getColour) }} />
         <span className="wind-plan-velocity-ticks mono" aria-hidden="true">
-          {WIND_PLAN_SPEED_TICKS_MS.map((tick) => (
-            <span key={tick} style={{ bottom: `${(tick / WIND_PLAN_SPEED_MAX_MS) * 100}%` }}>
-              {tick}
-            </span>
-          ))}
+          {scaleMaxMs != null
+            ? windPlanSpeedTicks(scaleMaxMs).map((tick) => (
+                <span key={tick} style={{ bottom: `${(tick / scaleMaxMs) * 100}%` }}>
+                  {tick}
+                </span>
+              ))
+            : null}
         </span>
       </div>
     </div>
