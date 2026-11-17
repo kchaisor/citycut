@@ -189,6 +189,13 @@ function strokePen(ctx: CanvasRenderingContext2D, path: Path2D, pen: WindPlanPen
   ctx.globalAlpha = 1;
 }
 
+function strokeInside(ctx: CanvasRenderingContext2D, path: Path2D, pen: WindPlanPen, scale: number) {
+  ctx.save();
+  ctx.clip(path, "nonzero");
+  strokePen(ctx, path, { ...pen, px: pen.px * 2 }, scale);
+  ctx.restore();
+}
+
 function hatch(ctx: CanvasRenderingContext2D, width: number, height: number, style: WindPlanLineStyle, dpr: number) {
   ctx.save();
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -316,7 +323,7 @@ export function WindPlanOverlay({
 
     ctx.fillStyle = getColour("--wind-plan-building");
     ctx.fill(buildings.path, "nonzero");
-    strokePen(ctx, buildings.path, style.buildingEdge, scale);
+    strokeInside(ctx, buildings.path, style.buildingEdge, scale);
     ctx.restore();
 
     if (mode !== "speed" || sector == null) {

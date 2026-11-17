@@ -8,6 +8,7 @@ export const WIND_ARROW_CLEAR_PX = 24;
 export const WIND_ARROW_STEP_PX = 8;
 export const WIND_ARROW_EDGE_GAP_PX = 4;
 export const WIND_ARROW_MAX_INWARD_PX = 240;
+export const WIND_ARROW_MARGIN_REACH_PX = 320;
 
 export type WindArrowLayout = {
   tail: ScreenVec;
@@ -180,17 +181,97 @@ export function placeWindArrow({
     const offset = inward - WIND_ARROW_EDGE_GAP_PX;
     return { x: p.x + d.x * offset, y: p.y + d.y * offset };
   };
+  const boxAt = (tip: ScreenVec) => shift(rel.bounds, { x: tip.x - rel.head.x, y: tip.y - rel.head.y });
   const clearOf = (box: ScreenRect, rects: readonly ScreenRect[]) => rects.every((r) => !rectsOverlap(box, r, clearPx));
-  for (let inward = 0; inward <= WIND_ARROW_MAX_INWARD_PX; inward += WIND_ARROW_STEP_PX) {
-    let fallback: ScreenVec | null = null;
+  const open = (box: ScreenRect) => insideView(box, view) && clearOf(box, panels);
+  for (const at of slides) {
+    const tip = tipAt(at, 0);
+    const box = boxAt(tip);
+    if (open(box) && clearOf(box, buildings)) return layoutAt(tip, true);
+  }
+  const margin = marginTip(edge, map, rel.bounds, rel.head, view, (box) => open(box) && clearOf(box, buildings));
+  if (margin) return layoutAt(margin, true);
+  let best: ScreenVec | null = null;
+  let bestGap = -Infinity;
+  for (let inward = 0; inward <= WIND_ARROW_MAX_INWARD_PX && bestGap < clearPx; inward += WIND_ARROW_STEP_PX) {
     for (const at of slides) {
       const tip = tipAt(at, inward);
-      const box = shift(rel.bounds, { x: tip.x - rel.head.x, y: tip.y - rel.head.y });
-      if (!insideView(box, view) || !clearOf(box, panels)) continue;
-      if (inward === 0 || clearOf(box, buildings)) return layoutAt(tip, true);
-      fallback ??= tip;
+      const box = boxAt(tip);
+      if (!open(box)) continue;
+      const gap = clearance(box, buildings, bestGap, clearPx);
+      if (gap > bestGap) {
+        best = tip;
+        bestGap = gap;
+        if (gap >= clearPx) break;
+      }
     }
-    if (fallback) return layoutAt(fallback, true);
   }
-  return layoutAt(tipAt(edge.anchorAt, 0), false);
+  return layoutAt(best ?? tipAt(edge.anchorAt, 0), false);
+}
+
+function rectGap(a: ScreenRect, b: ScreenRect): number {
+  const dx = Math.max(a.x0 - b.x1, b.x0 - a.x1, 0);
+  const dy = Math.max(a.y0 - b.y1, b.y0 - a.y1, 0);
+  return dx > 0 && dy > 0 ? Math.hypot(dx, dy) : Math.max(dx, dy);
+}
+
+function clearance(box: ScreenRect, rects: readonly ScreenRect[], floor: number, cap: number): number {
+  let gap = cap;
+  for (const r of rects) {
+    gap = Math.min(gap, rectGap(box, r));
+    if (gap <= floor) return gap;
+  }
+  return gap;
+}
+
+function outsidePolygon(box: ScreenRect, poly: readonly ScreenVec[], gap: number): boolean {
+  const boxCorners = [
+    { x: box.x0, y: box.y0 },
+    { x: box.x1, y: box.y0 },
+    { x: box.x1, y: box.y1 },
+    { x: box.x0, y: box.y1 },
+  ];
+  const axes: ScreenVec[] = [{ x: 1, y: 0 }, { x: 0, y: 1 }];
+  for (let k = 0; k < poly.length; k++) {
+    const a = poly[k]!;
+    const b = poly[(k + 1) % poly.length]!;
+    axes.push(unit({ x: b.y - a.y, y: a.x - b.x }));
+  }
+  return axes.some((axis) => {
+    const proj = (p: ScreenVec) => p.x * axis.x + p.y * axis.y;
+    const boxP = boxCorners.map(proj);
+    const polyP = poly.map(proj);
+    return Math.min(...boxP) >= Math.max(...polyP) + gap || Math.max(...boxP) <= Math.min(...polyP) - gap;
+  });
+}
+
+function marginTip(
+  edge: UpwindEdge,
+  map: readonly ScreenVec[],
+  bounds: ScreenRect,
+  head: ScreenVec,
+  view: ScreenRect,
+  ok: (box: ScreenRect) => boolean,
+): ScreenVec | null {
+  const total = edge.lengths[edge.lengths.length - 1]!;
+  const ends = [
+    { p: edge.points[0]!, far: edge.anchorAt },
+    { p: edge.points[edge.points.length - 1]!, far: total - edge.anchorAt },
+  ];
+  const reach = WIND_ARROW_MARGIN_REACH_PX;
+  const candidates: Array<{ tip: ScreenVec; box: ScreenRect; score: number }> = [];
+  for (const end of ends) {
+    for (let dy = -reach; dy <= reach; dy += WIND_ARROW_STEP_PX) {
+      for (let dx = -reach; dx <= reach; dx += WIND_ARROW_STEP_PX) {
+        const tip = { x: end.p.x + dx, y: end.p.y + dy };
+        const box = shift(bounds, { x: tip.x - head.x, y: tip.y - head.y });
+        if (!insideView(box, view) || !outsidePolygon(box, map, WIND_ARROW_EDGE_GAP_PX)) continue;
+        const ex = Math.max(box.x0 - end.p.x, end.p.x - box.x1, 0);
+        const ey = Math.max(box.y0 - end.p.y, end.p.y - box.y1, 0);
+        candidates.push({ tip, box, score: Math.hypot(ex, ey) + end.far * 1e-3 + tip.x * 1e-6 });
+      }
+    }
+  }
+  candidates.sort((a, b) => a.score - b.score);
+  return candidates.find((c) => ok(c.box))?.tip ?? null;
 }
