@@ -6,7 +6,8 @@ import {
   sampleGroundWindFlow,
   type GroundWindFlowGrid,
 } from "./groundWindField";
-import { windObstacleModel } from "./windObstacleModel";
+import { filterHiddenBuildings } from "./hiddenBuildings";
+import { windObstacleModel, withImportedOutlines } from "./windObstacleModel";
 import type { BuildingFeat, CityModel, Pt, TreeFeat } from "../types";
 
 const ring = (x0: number, y0: number, x1: number, y1: number): Pt[] => [
@@ -103,5 +104,44 @@ describe("windObstacleModel", () => {
     expect(groundWindIsSolid(a, 0, 0)).toBe(true);
     expect(groundWindIsSolid(b, 0, 0)).toBe(false);
     expect(groundWindIsSolid(b, -60, -65)).toBe(true);
+  });
+});
+
+describe("withImportedOutlines", () => {
+  it("keeps the model reference without imports", () => {
+    const base = modelWith([building(1, ring(60, 60, 80, 80), 9)]);
+    expect(withImportedOutlines(base, [])).toBe(base);
+  });
+
+  it("adds the import footprint and keeps map buildings under it", () => {
+    const under = building(2, ring(-5, -5, 5, 5), 6);
+    const base = modelWith([building(1, ring(60, 60, 80, 80), 9), under]);
+    const block = imported(100, ring(-20, -15, 20, 15), 30);
+    const outlines = withImportedOutlines(base, [block]);
+    expect(outlines).not.toBe(base);
+    expect(outlines.buildings.map((b) => b.id)).toEqual([1, 2, 100]);
+    expect(outlines.buildings.map((b) => b.ring)).toContain(block.ring);
+    expect(outlines.buildings).toContain(under);
+    expect(base.buildings).toHaveLength(2);
+    expect(windObstacleModel(base, [block]).buildings.map((b) => b.id)).toEqual([1, 100]);
+  });
+});
+
+describe("hidden map buildings", () => {
+  const model = modelWith([building(1, ring(-60, -60, -40, -40), 9), building(2, ring(40, 40, 60, 60), 9)]);
+  const display = { ...model, buildings: filterHiddenBuildings(model.buildings, new Set([1])) };
+
+  it("leave the wind obstacle grid", () => {
+    expect(groundWindIsSolid(rasterGroundWindObstacles(model), -50, -50)).toBe(true);
+    const obs = rasterGroundWindObstacles(windObstacleModel(display, []));
+    expect(groundWindIsSolid(obs, -50, -50)).toBe(false);
+    expect(groundWindIsSolid(obs, 50, 50)).toBe(true);
+  });
+
+  it("stay out of the grid with an import elsewhere", () => {
+    const obs = rasterGroundWindObstacles(windObstacleModel(display, [imported(100, ring(-20, -15, 20, 15), 30)]));
+    expect(groundWindIsSolid(obs, -50, -50)).toBe(false);
+    expect(groundWindIsSolid(obs, 50, 50)).toBe(true);
+    expect(groundWindIsSolid(obs, 0, 0)).toBe(true);
   });
 });

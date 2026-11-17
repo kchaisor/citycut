@@ -27,6 +27,7 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
     compassNeedleDeg,
     displayModel,
     windModel,
+    windPlanOutlineModel,
     drawing,
     drawingModel,
     effectiveSunStudyCasters,
@@ -120,6 +121,7 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
               <Scene3D
                 model={displayModel}
                 windModel={windModel}
+                windPlanOutlineModel={windPlanOutlineModel}
                 uniformBuildings={!colourByUse && !showSource}
                 colourBySource={showSource}
                 showManualEdits={showManualEdits}

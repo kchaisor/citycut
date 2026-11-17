@@ -79,7 +79,7 @@ import { treeTierCounts } from "../../lib/trees";
 
 import { clearPlanShadowCache } from "../../lib/buildingShadows";
 import { useWindPlan } from "../useWindPlan";
-import { windObstacleModel } from "../../lib/windObstacleModel";
+import { windObstacleModel, withImportedOutlines } from "../../lib/windObstacleModel";
 import {
   appendManualHeightCredit,
   applyHeightOverrides,
@@ -1337,6 +1337,10 @@ export function useModelPage({
     () => windObstacleModel(displayModel, massing.drawingBuildings),
     [displayModel, massing.drawingBuildings],
   );
+  const windPlanOutlineModel = useMemo(
+    () => withImportedOutlines(displayModel, massing.drawingBuildings),
+    [displayModel, massing.drawingBuildings],
+  );
   const windPlan = useWindPlan({
     model: windModel,
     siteWind,
@@ -2130,6 +2134,7 @@ export function useModelPage({
     defaultExplodedAxoSettings,
     displayModel,
     windModel,
+    windPlanOutlineModel,
     dragReorderAxoLayer,
     draggedAxoLayer,
     drawing,

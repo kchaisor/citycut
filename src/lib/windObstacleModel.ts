@@ -83,3 +83,8 @@ export function windObstacleModel(model: CityModel, importedBuildings: BuildingF
     trees: model.trees.filter((tree) => !treeUnderImport(tree)),
   };
 }
+
+export function withImportedOutlines(model: CityModel, importedBuildings: BuildingFeat[]): CityModel {
+  if (importedBuildings.length === 0) return model;
+  return { ...model, buildings: [...model.buildings, ...importedBuildings] };
+}

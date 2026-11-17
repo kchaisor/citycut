@@ -2125,6 +2125,7 @@ function WindLayer({
 export function Scene3D({
   model,
   windModel,
+  windPlanOutlineModel,
   uniformBuildings,
   colourBySource,
   showManualEdits,
@@ -2161,6 +2162,7 @@ export function Scene3D({
 }: {
   model: CityModel;
   windModel?: CityModel;
+  windPlanOutlineModel?: CityModel;
   uniformBuildings: boolean;
   colourBySource: boolean;
   showManualEdits: boolean;
@@ -2401,7 +2403,7 @@ export function Scene3D({
         gizmoOrbitLock={sectionKnifeGizmoInteraction.orbitLock}
       />
       </Canvas>
-      {windPlanOn && windPlan ? <WindPlanOverlay model={model} plan={windPlan} store={windPlanStore} /> : null}
+      {windPlanOn && windPlan ? <WindPlanOverlay model={windPlanOutlineModel ?? model} plan={windPlan} store={windPlanStore} /> : null}
     </div>
   );
 }
