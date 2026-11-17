@@ -37,6 +37,8 @@ function mockSelection(): SiteWindSelection {
       distanceKm: 12,
       periodStart: "2009",
       periodEnd: "2023",
+      reason: "nearest",
+      skippedCloser: [],
       source: "climate.onebuilding.org TMYx EPW",
     },
   };

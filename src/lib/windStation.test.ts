@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { WindRoseAsset } from "./windRoseData";
-import { haversineKm, isWindStationSane, nearestWindStation } from "./windStation";
+import { haversineKm, isWindStationSane, nearestWindStation, referenceStationRule, siteWindSelection } from "./windStation";
+import { formatSkippedCloserLine, formatStationLine1, plainWindCaption, windRoseStationCaption } from "./windRoseCaptions";
 
 const seasonStub = { calmPct: 5, prevailingDirDeg: 0, meanSpeedMs: 3, sectors: [] as number[][] };
 
@@ -74,5 +75,57 @@ describe("windStation", () => {
 
   it("computes haversine distance", () => {
     expect(haversineKm(-37.98, 145.096, -37.983826, 145.21555)).toBeGreaterThan(10);
+  });
+
+  it("names the calm station a site skipped, with its winter calm", () => {
+    const cbd = siteWindSelection(asset, -37.8136, 144.9631)!;
+    expect(cbd.station.reason).toBe("nearest");
+    expect(cbd.station.skippedCloser).toEqual([
+      { name: "Melbourne Regional Office", distanceKm: expect.any(Number), reason: "wind record mostly calm, 72% calm in winter" },
+    ]);
+  });
+
+  it("names each reason once for a run of skipped stations", () => {
+    const pick = siteWindSelection(asset, -37.8136, 144.9631)!;
+    pick.station.skippedCloser = [
+      { name: "A", distanceKm: 1, reason: "wind record mostly calm, 90% calm in winter" },
+      { name: "B", distanceKm: 2, reason: "harbour site: Sydney Airport preferred" },
+      { name: "C", distanceKm: 3, reason: "harbour site: Sydney Airport preferred" },
+    ];
+    expect(formatSkippedCloserLine(pick)).toBe(
+      "Closer: A 1.0 km (wind record mostly calm, 90% calm in winter) · B 2.0 km · C 3.0 km (harbour site: Sydney Airport preferred)",
+    );
+  });
+
+  it("shows the years covered in the station line", () => {
+    const pick = siteWindSelection({ ...asset, stations: [{ ...asset.stations[2]!, years: 15 }] }, -37.98, 145.1)!;
+    expect(plainWindCaption(formatStationLine1(pick))).toContain("2009–2023 (15 yrs)");
+  });
+
+  it("keeps the export caption to plain spaces", () => {
+    const pick = siteWindSelection({ ...asset, stations: [{ ...asset.stations[2]!, years: 15 }] }, -37.98, 145.1)!;
+    const caption = windRoseStationCaption(pick, "annual");
+    expect(caption).toContain("2009–2023 (15 yrs)");
+    expect(caption).not.toMatch(/[\u00a0\u2060]/);
+  });
+
+  it.each([
+    ["Pyrmont", -33.86627, 151.18389],
+    ["Sydney CBD", -33.8688, 151.2093],
+    ["North Sydney", -33.839, 151.207],
+    ["Balmain", -33.859, 151.179],
+    ["Rozelle", -33.862, 151.17],
+    ["Mosman", -33.829, 151.244],
+  ])("treats %s as a harbour site", (_name, lat, lon) => {
+    expect(referenceStationRule(lat, lon)?.stationId).toBe("947670");
+  });
+
+  it.each([
+    ["Parramatta", -33.815, 151.003],
+    ["Penrith", -33.751, 150.694],
+    ["Hornsby", -33.703, 151.099],
+    ["Mont Albert North", -37.80458, 145.1065],
+  ])("does not treat %s as a harbour site", (_name, lat, lon) => {
+    expect(referenceStationRule(lat, lon)).toBeNull();
   });
 });

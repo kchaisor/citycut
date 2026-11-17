@@ -1356,6 +1356,8 @@ export function useModelPage({
       root.setAttribute("data-wind-station", siteWind.station.name);
       root.setAttribute("data-wind-distance-km", String(siteWind.station.distanceKm ?? ""));
       root.setAttribute("data-wind-period", `${siteWind.station.periodStart}–${siteWind.station.periodEnd}`);
+      root.setAttribute("data-wind-years", String(siteWind.station.years ?? ""));
+      root.setAttribute("data-wind-reason", siteWind.station.reason);
       const record = seasonRecord(siteWind, windSettings.period);
       root.setAttribute(
         "data-ground-wind-deg",
@@ -1366,6 +1368,8 @@ export function useModelPage({
       root.removeAttribute("data-wind-station");
       root.removeAttribute("data-wind-distance-km");
       root.removeAttribute("data-wind-period");
+      root.removeAttribute("data-wind-years");
+      root.removeAttribute("data-wind-reason");
       root.removeAttribute("data-ground-wind-deg");
       root.removeAttribute("data-ground-wind-season");
     }

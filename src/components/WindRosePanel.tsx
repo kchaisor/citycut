@@ -10,7 +10,6 @@ import { WindRoseSpeedLegend } from "./WindRoseSpeedLegend";
 import { GroundWindSpeedLegend } from "./GroundWindSpeedLegend";
 import { WindPlanLegend, WindPlanRows } from "./WindPlanCard";
 import type { WindPlanState } from "./useWindPlan";
-import { readableWindStationName } from "../lib/windStationNames";
 
 export function WindRosePanel({
   selection,
@@ -36,7 +35,6 @@ export function WindRosePanel({
   }
 
   if (plan?.active) {
-    const station = readableWindStationName(selection.station.name, selection.station.id);
     return (
       <div className="wind-rose-panel is-plan" aria-label={lines.line1}>
         <WindPlanRows plan={plan} period={period} />
@@ -46,7 +44,15 @@ export function WindRosePanel({
           className="wind-rose-panel-svg"
         />
         <p className="wind-rose-calm-caption">{calmCaption}</p>
-        <p className="wind-rose-meta wind-rose-meta-source">{station} · Regional station wind</p>
+        <p className="wind-rose-meta wind-rose-meta-source wind-rose-meta-station" title={lines.line1}>
+          {lines.line1}
+        </p>
+        {lines.skipped && (
+          <p className="wind-rose-meta wind-rose-meta-skipped" title={lines.skipped}>
+            {lines.skipped}
+          </p>
+        )}
+        <p className="wind-rose-meta wind-rose-meta-note">Regional station wind</p>
         <WindPlanLegend plan={plan} />
       </div>
     );
@@ -62,7 +68,14 @@ export function WindRosePanel({
       <p className="wind-rose-calm-caption">{calmCaption}</p>
       <WindRoseSpeedLegend />
       {showGroundWindLegend && <GroundWindSpeedLegend />}
-      <p className="wind-rose-meta">{lines.line1}</p>
+      <p className="wind-rose-meta wind-rose-meta-station" title={lines.line1}>
+        {lines.line1}
+      </p>
+      {lines.skipped && (
+        <p className="wind-rose-meta wind-rose-meta-skipped" title={lines.skipped}>
+          {lines.skipped}
+        </p>
+      )}
       <p className="wind-rose-meta wind-rose-meta-source">{lines.line2}</p>
       <p className="wind-rose-meta wind-rose-meta-note">{regionalNote}</p>
     </div>

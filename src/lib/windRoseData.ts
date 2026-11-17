@@ -63,7 +63,19 @@ export type WindRoseAsset = {
   stations: WindRoseStationRecord[];
 };
 
+export type WindStationSkip = {
+  name: string;
+  distanceKm: number;
+  reason: string;
+};
+
+export type SiteWindStationMeta = WindRoseStationMeta & {
+  years?: number;
+  reason: string;
+  skippedCloser: WindStationSkip[];
+};
+
 export type SiteWindSelection = {
-  station: WindRoseStationMeta;
+  station: SiteWindStationMeta;
   asset: WindRoseAsset;
 };

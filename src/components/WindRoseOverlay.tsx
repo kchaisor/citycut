@@ -30,7 +30,14 @@ export function WindRoseOverlay({
   return (
     <div className={className} aria-label={lines.line1}>
       <WindRoseSvgChart stats={stats} hubFill={getColour("--wind-rose-card-surface")} />
-      <p className="wind-rose-caption">{lines.line1}</p>
+      <p className="wind-rose-caption wind-rose-meta-station" title={lines.line1}>
+        {lines.line1}
+      </p>
+      {lines.skipped && (
+        <p className="wind-rose-caption wind-rose-meta-skipped" title={lines.skipped}>
+          {lines.skipped}
+        </p>
+      )}
       <p className="wind-rose-caption wind-rose-meta-note">Regional station wind, not site wind.</p>
       {streaksPaused && onAnimateAnyway && (
         <WindReducedMotionNote animateAnyway={animateAnyway} onAnimateAnyway={onAnimateAnyway} />

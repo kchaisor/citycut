@@ -918,9 +918,6 @@ input[type="range"]::-moz-range-thumb {
   .wind-rose-panel-svg {
     width: min(160px, 100%);
   }
-  .wind-rose-analysis-card .wind-rose-meta:not(.wind-rose-meta-source):not(.wind-rose-meta-note) {
-    white-space: nowrap;
-  }
 }
 .model[data-env-console="1"] .wind-rose-analysis-card {
   bottom: max(148px, calc(var(--env-console-height, 148px) + 12px));
@@ -981,6 +978,18 @@ input[type="range"]::-moz-range-thumb {
   font-size: 11px;
   line-height: 1.35;
   color: var(--muted-text);
+}
+.wind-rose-meta-station {
+  pointer-events: auto;
+}
+.wind-rose-meta-skipped {
+  display: -webkit-box;
+  margin-top: 2px;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  line-clamp: 4;
+  pointer-events: auto;
 }
 .wind-reduced-motion-note {
   margin-top: 6px;

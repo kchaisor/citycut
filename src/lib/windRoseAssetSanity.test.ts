@@ -3,7 +3,8 @@ import { describe, expect, it } from "vitest";
 import path from "node:path";
 import type { WindRoseAsset } from "./windRoseData";
 import { WIND_ROSE_ASSET_VERSION } from "./windRoseData";
-import { isWindStationSane, nearestWindStation } from "./windStation";
+import { isWindStationSane, nearestWindStation, siteWindSelection } from "./windStation";
+import { formatSkippedCloserLine, formatStationLine1, plainWindCaption } from "./windRoseCaptions";
 
 const assetPath = path.join(process.cwd(), "public/wind/australia-tmyx.json");
 
@@ -69,13 +70,51 @@ describe("australia TMYx wind asset", () => {
     expect(nearestWindStation(asset, -37.80458, 145.1065)?.station.id).toBe("958740");
   });
 
-  it("uses Sydney Observatory Hill's full record, which passes the calm caps and is nearest for Pyrmont", () => {
+  it("uses Sydney Observatory Hill's full record, which passes the calm caps", () => {
     const asset = readAsset();
     if (!asset) return;
     const obsHill = stationById(asset, "947680");
     expect(obsHill).toBeDefined();
     expect(obsHill!.years).toBeGreaterThanOrEqual(50);
     expect(isWindStationSane(obsHill!)).toBe(true);
-    expect(nearestWindStation(asset, -33.86627, 151.18389)?.station.id).toBe("947680");
+  });
+
+  it("gives Pyrmont Sydney Airport and explains the closer stations it skipped", () => {
+    const asset = readAsset();
+    if (!asset) return;
+    const pick = siteWindSelection(asset, -33.86627, 151.18389)!;
+    expect(pick.station.id).toBe("947670");
+    expect(pick.station.name).toBe("Sydney Airport");
+    expect(pick.station.distanceKm).toBeCloseTo(9, 0);
+    expect(pick.station.years).toBeGreaterThanOrEqual(80);
+    expect(pick.station.reason).toMatch(/^Harbour site/);
+    expect(pick.station.skippedCloser.length).toBeLessThanOrEqual(3);
+    const byName = Object.fromEntries(pick.station.skippedCloser.map((s) => [s.name, s]));
+    expect(byName["Sydney Observatory Hill"]?.reason).toBe("harbour site: Sydney Airport preferred");
+    expect(byName["Sydney Observatory Hill"]?.distanceKm).toBeCloseTo(2, 0);
+    expect(byName["Riverview Observatory"]?.reason).toBe("harbour site: Sydney Airport preferred");
+    expect(pick.station.skippedCloser[0]?.name).toBe("Sydney Observatory Hill");
+    expect(plainWindCaption(formatStationLine1(pick))).toBe("Sydney Airport · 9.0 km · 1940–2025 (82 yrs)");
+    expect(formatSkippedCloserLine(pick)).toBe(
+      "Closer: Sydney Observatory Hill 2.0 km · Riverview Observatory 4.8 km · Canterbury Park Racecourse 7.9 km (harbour site: Sydney Airport preferred)",
+    );
+  });
+
+  it("keeps Mont Albert North on Viewbank as the nearest station", () => {
+    const asset = readAsset();
+    if (!asset) return;
+    const pick = siteWindSelection(asset, -37.80458, 145.1065)!;
+    expect(pick.station.id).toBe("958740");
+    expect(pick.station.name).toBe("Viewbank");
+    expect(pick.station.reason).toBe("nearest");
+  });
+
+  it("keeps Parramatta, outside the harbour circle, on the nearest sane station", () => {
+    const asset = readAsset();
+    if (!asset) return;
+    const pick = siteWindSelection(asset, -33.815, 151.003)!;
+    expect(pick.station.id).not.toBe("947670");
+    expect(pick.station.reason).toBe("nearest");
+    expect(pick.station.skippedCloser.every((s) => s.reason.startsWith("wind record mostly calm"))).toBe(true);
   });
 });

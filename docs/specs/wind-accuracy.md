@@ -29,16 +29,18 @@ Sketch or screenshot:
 
 ## How we'll know it works
 
-- [ ] Pyrmont (−33.86627, 151.18389), 1.5 km cut: the panel names Sydney Airport, its distance (about 8.9 km), the years covered, and why Riverview and Observatory Hill were skipped.
+- [x] Pyrmont (−33.86627, 151.18389), 1.5 km cut: the panel names Sydney Airport, its distance (about 8.9 km), the years covered, and why Riverview and Observatory Hill were skipped.
 - [ ] Pyrmont: the station's record is its longest usable one (Riverview 1997–2015, 19 years, not 2009–2015; the Airport's plain file, not a 15-year window).
 - [ ] Pyrmont: NE, S and W can be picked on the maps next to the seasons, and each shows its own wakes and speeds.
 - [ ] Pyrmont: the bay runs visibly faster than the streets on Wind speed.
-- [ ] Mont Albert North (−37.80458, 145.1065), 1 km cut: still uses Viewbank, and the panel names it.
+- [x] Mont Albert North (−37.80458, 145.1065), 1 km cut: still uses Viewbank, and the panel names it.
 - [ ] Observatory Hill is used or skipped by the calm checks (no more than 30% calm in winter, 35% over the year), never by name.
 
 Note after fix 1 (18 Nov 2026): Observatory Hill's full record (1954–2025, 64 years) passes the calm checks (5.4% calm in winter, 6.7% over the year). Its 2009–2023 file failed them (99.9% calm in winter). Until fix 2, Pyrmont therefore uses Observatory Hill, 2.0 km away, instead of Riverview. Fix 2 still prefers Sydney Airport for harbour sites, so the panel has to say why Observatory Hill was skipped.
 
 Melbourne Regional Office shows the same pattern. Its full record (1954–2015, 54 years) passes the calm checks (11.5% calm in winter), so Melbourne CBD now uses it, 0.9 km away, instead of Olympic Park (2.8 km). The station closed in 2015. 17 stations now pass the calm checks that failed before; none went the other way. The station list grows from 796 to 875, because full-record files were never listed before.
+
+Note after fix 2 (18 Nov 2026): sites within 12 km of Fort Denison count as harbour sites and use Sydney Airport (9.0 km from Pyrmont, 1940–2025, 82 years) when its record passes the calm checks. That covers Pyrmont, the CBD, North Sydney, Balmain, Rozelle and Mosman, but not Parramatta, Penrith or Hornsby. Everywhere else still uses the nearest station that passes the calm checks. For Pyrmont the panel lists the closer stations it skipped: Observatory Hill (2.0 km), Riverview (4.8 km) and Canterbury Park Racecourse (7.9 km), all for "harbour site: Sydney Airport preferred". A station that fails the calm checks is listed as "wind record mostly calm, N% calm in winter".
 
 ## Out of scope
 
