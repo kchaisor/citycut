@@ -169,6 +169,18 @@ function buildingShapes(model: CityModel): BuildingShapes {
   return { path, boxes };
 }
 
+function clampInside(value: number, lo: number, hi: number): number {
+  return lo > hi ? (lo + hi) / 2 : Math.min(hi, Math.max(lo, value));
+}
+
+type CutExtent = { minE: number; minN: number; maxE: number; maxN: number };
+
+function cutExtent(model: CityModel): CutExtent {
+  const w = model.widthM ?? model.sideM;
+  const h = model.heightM ?? model.sideM;
+  return { minE: -w / 2, minN: -h / 2, maxE: w / 2, maxN: h / 2 };
+}
+
 function strokePen(ctx: CanvasRenderingContext2D, path: Path2D, pen: WindPlanPen, scale: number) {
   ctx.globalAlpha = pen.opacity;
   ctx.strokeStyle = pen.colour;
@@ -217,6 +229,7 @@ export function WindPlanOverlay({
   const colourRevision = useColourRevision();
   const [arrow, setArrow] = useState<WindArrowLayout | null>(null);
   const buildings = useMemo(() => buildingShapes(model), [model]);
+  const cut = useMemo(() => cutExtent(model), [model]);
   const { mode, speed, comfort, sector } = plan;
   const arrowLabel = sector != null ? `Wind ${sectorLabel(sector)}` : "";
 
@@ -252,7 +265,7 @@ export function WindPlanOverlay({
     ctx.save();
     worldTransform();
     ctx.beginPath();
-    ctx.rect(originE, originN, gridW, gridH);
+    ctx.rect(cut.minE, cut.minN, cut.maxE - cut.minE, cut.maxN - cut.minN);
     ctx.clip();
 
     if (mode === "speed" && speed) {
@@ -285,10 +298,12 @@ export function WindPlanOverlay({
       for (const area of comfort.unsafeAreas) {
         const extentM = Math.max(area.maxI - area.minI + 1, area.maxJ - area.minJ + 1) * cellM;
         if (extentM * scale >= minPx) continue;
-        const e = originE + (area.sumI / area.cells + 0.5) * cellM;
-        const n = originN + (area.sumJ / area.cells + 0.5) * cellM;
+        const radius = minPx / 2 / scale;
+        const inset = radius + style.unsafeOutline.px / 2 / scale;
+        const e = clampInside(originE + (area.sumI / area.cells + 0.5) * cellM, cut.minE + inset, cut.maxE - inset);
+        const n = clampInside(originN + (area.sumJ / area.cells + 0.5) * cellM, cut.minN + inset, cut.maxN - inset);
         const disc = new Path2D();
-        disc.arc(e, n, minPx / 2 / scale, 0, Math.PI * 2);
+        disc.arc(e, n, radius, 0, Math.PI * 2);
         ctx.fillStyle = getColour("--wind-plan-unsafe");
         ctx.fill(disc);
         ctx.save();
@@ -310,38 +325,30 @@ export function WindPlanOverlay({
     }
     const wind = downwindFromSector(sector);
     const downwind = { x: t.exX * wind.east + t.enX * wind.north, y: t.exY * wind.east + t.enY * wind.north };
+    const toScreen = (e: number, n: number) => ({ x: ox + e * t.exX + n * t.enX, y: oy + e * t.exY + n * t.enY });
+    const map = [toScreen(cut.minE, cut.minN), toScreen(cut.maxE, cut.minN), toScreen(cut.maxE, cut.maxN), toScreen(cut.minE, cut.maxN)];
     ctx.font = ARROW_CHIP_FONT;
     const chipW = Math.ceil(ctx.measureText(arrowLabel).width) + ARROW_CHIP_PAD_PX;
-    const obstacles: ScreenRect[] = [];
+    const panels: ScreenRect[] = [];
     for (const el of document.querySelectorAll<HTMLElement>(HUD_SELECTOR)) {
       const r = el.getBoundingClientRect();
       if (r.width <= 0 || r.height <= 0) continue;
-      obstacles.push({ x0: r.left - rect.left, y0: r.top - rect.top, x1: r.right - rect.left, y1: r.bottom - rect.top });
+      panels.push({ x0: r.left - rect.left, y0: r.top - rect.top, x1: r.right - rect.left, y1: r.bottom - rect.top });
     }
+    const buildingRects: ScreenRect[] = [];
     for (const [minE, minN, maxE, maxN] of buildings.boxes) {
-      const xs = [minE, maxE];
-      const ys = [minN, maxN];
-      let x0 = Infinity;
-      let y0 = Infinity;
-      let x1 = -Infinity;
-      let y1 = -Infinity;
-      for (const e of xs) {
-        for (const n of ys) {
-          const x = ox + e * t.exX + n * t.enX;
-          const y = oy + e * t.exY + n * t.enY;
-          x0 = Math.min(x0, x);
-          x1 = Math.max(x1, x);
-          y0 = Math.min(y0, y);
-          y1 = Math.max(y1, y);
-        }
-      }
+      const corners = [toScreen(minE, minN), toScreen(maxE, minN), toScreen(maxE, maxN), toScreen(minE, maxN)];
+      const x0 = Math.min(...corners.map((p) => p.x));
+      const x1 = Math.max(...corners.map((p) => p.x));
+      const y0 = Math.min(...corners.map((p) => p.y));
+      const y1 = Math.max(...corners.map((p) => p.y));
       if (x1 < 0 || y1 < 0 || x0 > rect.width || y0 > rect.height) continue;
-      obstacles.push({ x0, y0, x1, y1 });
+      buildingRects.push({ x0, y0, x1, y1 });
     }
     const view = { x0: VIEW_INSET_PX, y0: VIEW_INSET_PX, x1: rect.width - VIEW_INSET_PX, y1: rect.height - VIEW_INSET_PX };
-    const next = placeWindArrow({ view, downwind, chipW, chipH: ARROW_CHIP_HEIGHT_PX, obstacles });
+    const next = placeWindArrow({ view, map, downwind, chipW, chipH: ARROW_CHIP_HEIGHT_PX, panels, buildings: buildingRects });
     setArrow((prev) => (sameArrow(prev, next) ? prev : next));
-  }, [store, mode, speed, comfort, sector, buildings, colourRevision, arrowLabel]);
+  }, [store, mode, speed, comfort, sector, buildings, cut, colourRevision, arrowLabel]);
 
   const frame = useRef<number | null>(null);
   const schedule = useCallback(() => {

@@ -5,9 +5,9 @@ export const WIND_ARROW_LENGTH_PX = 44;
 export const WIND_ARROW_HEAD_PX = 10;
 export const WIND_ARROW_CHIP_GAP_PX = 6;
 export const WIND_ARROW_CLEAR_PX = 24;
-export const WIND_ARROW_STEP_PX = 16;
-export const WIND_ARROW_ANGLE_STEP_DEG = 7.5;
-export const WIND_ARROW_MAX_ANGLE_DEG = 90;
+export const WIND_ARROW_STEP_PX = 8;
+export const WIND_ARROW_EDGE_GAP_PX = 4;
+export const WIND_ARROW_MAX_INWARD_PX = 240;
 
 export type WindArrowLayout = {
   tail: ScreenVec;
@@ -20,13 +20,6 @@ export type WindArrowLayout = {
 export function unit(v: ScreenVec): ScreenVec {
   const len = Math.hypot(v.x, v.y) || 1;
   return { x: v.x / len, y: v.y / len };
-}
-
-function rotate(v: ScreenVec, deg: number): ScreenVec {
-  const r = (deg * Math.PI) / 180;
-  const c = Math.cos(r);
-  const s = Math.sin(r);
-  return { x: v.x * c - v.y * s, y: v.x * s + v.y * c };
 }
 
 export function rectsOverlap(a: ScreenRect, b: ScreenRect, gap = 0): boolean {
@@ -42,11 +35,16 @@ export function windArrowRelative(downwind: ScreenVec, chipW: number, chipH: num
   const cy = -d.y * reach;
   const chip = { x0: cx - chipW / 2, y0: cy - chipH / 2, x1: cx + chipW / 2, y1: cy + chipH / 2 };
   const half = WIND_ARROW_HEAD_PX / 2;
+  const back = { x: head.x - d.x * WIND_ARROW_HEAD_PX, y: head.y - d.y * WIND_ARROW_HEAD_PX };
+  const points = [head, ...[tail, back].flatMap((p) => [
+    { x: p.x - d.y * half, y: p.y + d.x * half },
+    { x: p.x + d.y * half, y: p.y - d.x * half },
+  ])];
   const bounds = {
-    x0: Math.min(chip.x0, tail.x - half, head.x - half),
-    y0: Math.min(chip.y0, tail.y - half, head.y - half),
-    x1: Math.max(chip.x1, tail.x + half, head.x + half),
-    y1: Math.max(chip.y1, tail.y + half, head.y + half),
+    x0: Math.min(chip.x0, ...points.map((p) => p.x)),
+    y0: Math.min(chip.y0, ...points.map((p) => p.y)),
+    x1: Math.max(chip.x1, ...points.map((p) => p.x)),
+    y1: Math.max(chip.y1, ...points.map((p) => p.y)),
   };
   return { tail, head, chip, bounds };
 }
@@ -55,43 +53,108 @@ function shift(rect: ScreenRect, by: ScreenVec): ScreenRect {
   return { x0: rect.x0 + by.x, y0: rect.y0 + by.y, x1: rect.x1 + by.x, y1: rect.y1 + by.y };
 }
 
-function edgeDistance(view: ScreenRect, centre: ScreenVec, dir: ScreenVec, box: ScreenRect): number {
-  let t = Infinity;
-  if (dir.x > 1e-9) t = Math.min(t, (view.x1 - box.x1 - centre.x) / dir.x);
-  if (dir.x < -1e-9) t = Math.min(t, (view.x0 - box.x0 - centre.x) / dir.x);
-  if (dir.y > 1e-9) t = Math.min(t, (view.y1 - box.y1 - centre.y) / dir.y);
-  if (dir.y < -1e-9) t = Math.min(t, (view.y0 - box.y0 - centre.y) / dir.y);
-  return Number.isFinite(t) ? Math.max(0, t) : 0;
+function insideView(box: ScreenRect, view: ScreenRect): boolean {
+  return box.x0 >= view.x0 && box.y0 >= view.y0 && box.x1 <= view.x1 && box.y1 <= view.y1;
+}
+
+function cross(a: ScreenVec, b: ScreenVec): number {
+  return a.x * b.y - a.y * b.x;
+}
+
+export type UpwindEdge = { points: ScreenVec[]; lengths: number[]; anchorAt: number };
+
+export function upwindMapEdge(map: readonly ScreenVec[], upwind: ScreenVec): UpwindEdge | null {
+  const n = map.length;
+  if (n < 3) return null;
+  const centre = map.reduce((acc, p) => ({ x: acc.x + p.x / n, y: acc.y + p.y / n }), { x: 0, y: 0 });
+  const u = unit(upwind);
+  const facing: boolean[] = [];
+  let hitEdge = -1;
+  let hitS = 0;
+  let hitT = Infinity;
+  for (let k = 0; k < n; k++) {
+    const a = map[k]!;
+    const b = map[(k + 1) % n]!;
+    const edge = { x: b.x - a.x, y: b.y - a.y };
+    const mid = { x: (a.x + b.x) / 2 - centre.x, y: (a.y + b.y) / 2 - centre.y };
+    let normal = unit({ x: edge.y, y: -edge.x });
+    if (normal.x * mid.x + normal.y * mid.y < 0) normal = { x: -normal.x, y: -normal.y };
+    facing.push(normal.x * u.x + normal.y * u.y > 0.05);
+    const denom = cross(u, edge);
+    if (Math.abs(denom) < 1e-9) continue;
+    const rel = { x: a.x - centre.x, y: a.y - centre.y };
+    const t = cross(rel, edge) / denom;
+    const s = cross(rel, u) / denom;
+    if (t > 0 && s >= -1e-9 && s <= 1 + 1e-9 && t < hitT) {
+      hitT = t;
+      hitEdge = k;
+      hitS = Math.min(1, Math.max(0, s));
+    }
+  }
+  if (hitEdge < 0) return null;
+  let first = hitEdge;
+  let count = 1;
+  facing[hitEdge] = true;
+  while (count < n && facing[(first - 1 + n) % n]) {
+    first = (first - 1 + n) % n;
+    count += 1;
+  }
+  let last = hitEdge;
+  while (count < n && facing[(last + 1) % n] && (last + 1) % n !== first) {
+    last = (last + 1) % n;
+    count += 1;
+  }
+  const points: ScreenVec[] = [map[first]!];
+  const lengths: number[] = [0];
+  let anchorAt = 0;
+  for (let c = 0; c < count; c++) {
+    const k = (first + c) % n;
+    const a = map[k]!;
+    const b = map[(k + 1) % n]!;
+    const len = Math.hypot(b.x - a.x, b.y - a.y);
+    if (k === hitEdge) anchorAt = lengths[lengths.length - 1]! + len * hitS;
+    points.push(b);
+    lengths.push(lengths[lengths.length - 1]! + len);
+  }
+  return { points, lengths, anchorAt };
+}
+
+function pointAlong(edge: UpwindEdge, at: number): ScreenVec {
+  const { points, lengths } = edge;
+  for (let k = 1; k < points.length; k++) {
+    if (at > lengths[k]! && k < points.length - 1) continue;
+    const a = points[k - 1]!;
+    const b = points[k]!;
+    const span = lengths[k]! - lengths[k - 1]!;
+    const t = span > 0 ? Math.min(1, Math.max(0, (at - lengths[k - 1]!) / span)) : 0;
+    return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
+  }
+  return points[0]!;
 }
 
 export function placeWindArrow({
   view,
+  map,
   downwind,
   chipW,
   chipH,
-  obstacles,
+  panels,
+  buildings = [],
   clearPx = WIND_ARROW_CLEAR_PX,
 }: {
   view: ScreenRect;
+  map: readonly ScreenVec[];
   downwind: ScreenVec;
   chipW: number;
   chipH: number;
-  obstacles: readonly ScreenRect[];
+  panels: readonly ScreenRect[];
+  buildings?: readonly ScreenRect[];
   clearPx?: number;
 }): WindArrowLayout {
-  const rel = windArrowRelative(downwind, chipW, chipH);
-  const upwind = unit({ x: -downwind.x, y: -downwind.y });
-  const centre = { x: (view.x0 + view.x1) / 2, y: (view.y0 + view.y1) / 2 };
-  const relCentre = { x: (rel.bounds.x0 + rel.bounds.x1) / 2, y: (rel.bounds.y0 + rel.bounds.y1) / 2 };
-  const box = shift(rel.bounds, { x: -relCentre.x, y: -relCentre.y });
-  const angles = [0];
-  for (let a = WIND_ARROW_ANGLE_STEP_DEG; a <= WIND_ARROW_MAX_ANGLE_DEG; a += WIND_ARROW_ANGLE_STEP_DEG) angles.push(a, -a);
-  const rays = angles.map((a) => {
-    const dir = rotate(upwind, a);
-    return { dir, reach: edgeDistance(view, centre, dir, box) };
-  });
-  const layoutAt = (boxCentre: ScreenVec, clear: boolean): WindArrowLayout => {
-    const anchor = { x: boxCentre.x - relCentre.x, y: boxCentre.y - relCentre.y };
+  const d = unit(downwind);
+  const rel = windArrowRelative(d, chipW, chipH);
+  const layoutAt = (tip: ScreenVec, clear: boolean): WindArrowLayout => {
+    const anchor = { x: tip.x - rel.head.x, y: tip.y - rel.head.y };
     return {
       tail: { x: rel.tail.x + anchor.x, y: rel.tail.y + anchor.y },
       head: { x: rel.head.x + anchor.x, y: rel.head.y + anchor.y },
@@ -100,16 +163,34 @@ export function placeWindArrow({
       clear,
     };
   };
-  const maxSteps = Math.max(...rays.map((r) => Math.floor(r.reach / WIND_ARROW_STEP_PX)));
-  for (let step = 0; step <= maxSteps; step++) {
-    for (const { dir, reach } of rays) {
-      const t = reach - step * WIND_ARROW_STEP_PX;
-      if (t < 0) continue;
-      const at = { x: centre.x + dir.x * t, y: centre.y + dir.y * t };
-      const bounds = shift(box, at);
-      if (obstacles.every((o) => !rectsOverlap(bounds, o, clearPx))) return layoutAt(at, true);
+  const edge = upwindMapEdge(map, { x: -d.x, y: -d.y });
+  if (!edge) {
+    const centre = { x: (view.x0 + view.x1) / 2, y: (view.y0 + view.y1) / 2 };
+    return layoutAt(centre, false);
+  }
+  const total = edge.lengths[edge.lengths.length - 1]!;
+  const slides: number[] = [edge.anchorAt];
+  for (let k = 1; k * WIND_ARROW_STEP_PX <= total; k++) {
+    for (const at of [edge.anchorAt + k * WIND_ARROW_STEP_PX, edge.anchorAt - k * WIND_ARROW_STEP_PX]) {
+      if (at >= 0 && at <= total) slides.push(at);
     }
   }
-  const first = rays[0]!;
-  return layoutAt({ x: centre.x + first.dir.x * first.reach, y: centre.y + first.dir.y * first.reach }, false);
+  const tipAt = (at: number, inward: number): ScreenVec => {
+    const p = pointAlong(edge, at);
+    const offset = inward - WIND_ARROW_EDGE_GAP_PX;
+    return { x: p.x + d.x * offset, y: p.y + d.y * offset };
+  };
+  const clearOf = (box: ScreenRect, rects: readonly ScreenRect[]) => rects.every((r) => !rectsOverlap(box, r, clearPx));
+  for (let inward = 0; inward <= WIND_ARROW_MAX_INWARD_PX; inward += WIND_ARROW_STEP_PX) {
+    let fallback: ScreenVec | null = null;
+    for (const at of slides) {
+      const tip = tipAt(at, inward);
+      const box = shift(rel.bounds, { x: tip.x - rel.head.x, y: tip.y - rel.head.y });
+      if (!insideView(box, view) || !clearOf(box, panels)) continue;
+      if (inward === 0 || clearOf(box, buildings)) return layoutAt(tip, true);
+      fallback ??= tip;
+    }
+    if (fallback) return layoutAt(fallback, true);
+  }
+  return layoutAt(tipAt(edge.anchorAt, 0), false);
 }
