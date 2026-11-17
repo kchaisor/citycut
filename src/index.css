@@ -983,13 +983,16 @@ input[type="range"]::-moz-range-thumb {
   pointer-events: auto;
 }
 .wind-rose-meta-skipped {
-  display: -webkit-box;
   margin-top: 2px;
-  overflow: hidden;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 4;
-  line-clamp: 4;
   pointer-events: auto;
+}
+.wind-rose-meta.wind-rose-meta-skipped {
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 16px;
+}
+.wind-rose-skip-dist {
+  white-space: nowrap;
 }
 .wind-reduced-motion-note {
   margin-top: 6px;
@@ -1980,7 +1983,7 @@ input[type="range"]::-moz-range-thumb {
   bottom: auto;
   left: 14px;
   width: 236px;
-  max-height: calc(100vh - var(--wind-plan-card-top, 214px) - 14px);
+  max-height: calc(100vh - var(--wind-plan-card-top, 214px) - var(--wind-plan-card-bottom, 14px));
   overflow-y: auto;
   box-sizing: border-box;
   padding: 12px;
@@ -2112,8 +2115,7 @@ input[type="range"]::-moz-range-thumb {
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--wind-plan-swatch-edge) calc(var(--wind-plan-swatch-edge-opacity) * 100%), transparent);
 }
 
-.wind-plan-info,
-.wind-plan-velocity {
+.wind-plan-info {
   position: fixed;
   z-index: 6;
   margin: 0;
@@ -2129,30 +2131,21 @@ input[type="range"]::-moz-range-thumb {
   display: grid;
   gap: 2px;
 }
-.wind-plan-velocity {
-  right: var(--wind-plan-legend-right, 14px);
-  bottom: var(--wind-plan-legend-bottom, 86px);
-  width: max-content;
-  padding: 12px 12px 14px;
-}
 .wind-plan-unit {
   text-transform: none;
   letter-spacing: 0;
 }
-.wind-plan-velocity-scale {
-  display: flex;
-  gap: 8px;
-  padding-top: 8px;
-}
 .wind-plan-velocity-bar {
   display: block;
-  width: 14px;
-  height: var(--wind-plan-legend-bar, 200px);
+  width: 100%;
+  height: 8px;
   border-radius: 2px;
 }
 .wind-plan-velocity-ticks {
   position: relative;
-  width: 2ch;
+  display: block;
+  height: 16px;
+  margin-top: 4px;
   font-family: var(--mono);
   font-size: 11px;
   font-weight: 500;
@@ -2162,8 +2155,7 @@ input[type="range"]::-moz-range-thumb {
 }
 .wind-plan-velocity-ticks > span {
   position: absolute;
-  left: 0;
-  transform: translateY(50%);
+  top: 0;
 }
 
 .model .bottom-bar.env-console .wind-plan-switch {

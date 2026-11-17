@@ -93,7 +93,7 @@ describe("windStation", () => {
       { name: "C", distanceKm: 3, reason: "harbour site: Sydney Airport preferred" },
     ];
     expect(formatSkippedCloserLine(pick)).toBe(
-      "Closer: A 1.0 km (wind record mostly calm, 90% calm in winter) · B 2.0 km · C 3.0 km (harbour site: Sydney Airport preferred)",
+      "Closer: A 1.0\u00a0km (wind record mostly calm, 90% calm in winter) · B 2.0\u00a0km · C 3.0\u00a0km (harbour site: Sydney Airport preferred)",
     );
   });
 

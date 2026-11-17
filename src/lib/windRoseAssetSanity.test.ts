@@ -100,7 +100,7 @@ describe("australia TMYx wind asset", () => {
     expect(pick.station.skippedCloser[0]?.name).toBe("Sydney Observatory Hill");
     expect(plainWindCaption(formatStationLine1(pick))).toBe("Sydney Airport · 9.0 km · 2011–2025 (15 yrs)");
     expect(formatSkippedCloserLine(pick)).toBe(
-      "Closer: Sydney Observatory Hill 2.0 km · Riverview Observatory 4.8 km · Canterbury Park Racecourse 7.9 km (harbour site: Sydney Airport preferred)",
+      "Closer: Sydney Observatory Hill 2.0\u00a0km · Riverview Observatory 4.8\u00a0km · Canterbury Park Racecourse 7.9\u00a0km (harbour site: Sydney Airport preferred)",
     );
   });
 

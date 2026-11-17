@@ -5,6 +5,7 @@ import { formatCalmPercent, windRoseCalmCaption } from "../lib/windBins";
 import { analyzeSiteWind } from "../lib/windRoseStats";
 import { windRoseStationLines } from "../lib/windRoseCaptions";
 import { getColour } from "../lib/colours";
+import { WindSkippedCloser } from "./WindSkippedCloser";
 import { WindRoseSvgChart } from "./WindRoseSvgChart";
 import { WindRoseSpeedLegend } from "./WindRoseSpeedLegend";
 import { GroundWindSpeedLegend } from "./GroundWindSpeedLegend";
@@ -47,11 +48,7 @@ export function WindRosePanel({
         <p className="wind-rose-meta wind-rose-meta-source wind-rose-meta-station" title={lines.line1}>
           {lines.line1}
         </p>
-        {lines.skipped && (
-          <p className="wind-rose-meta wind-rose-meta-skipped" title={lines.skipped}>
-            {lines.skipped}
-          </p>
-        )}
+        <WindSkippedCloser selection={selection} className="wind-rose-meta" />
         <p className="wind-rose-meta wind-rose-meta-note">Regional station wind</p>
         <WindPlanLegend plan={plan} />
       </div>
@@ -71,11 +68,7 @@ export function WindRosePanel({
       <p className="wind-rose-meta wind-rose-meta-station" title={lines.line1}>
         {lines.line1}
       </p>
-      {lines.skipped && (
-        <p className="wind-rose-meta wind-rose-meta-skipped" title={lines.skipped}>
-          {lines.skipped}
-        </p>
-      )}
+      <WindSkippedCloser selection={selection} className="wind-rose-meta" />
       <p className="wind-rose-meta wind-rose-meta-source">{lines.line2}</p>
       <p className="wind-rose-meta wind-rose-meta-note">{regionalNote}</p>
     </div>

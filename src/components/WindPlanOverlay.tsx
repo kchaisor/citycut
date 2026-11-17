@@ -16,7 +16,6 @@ import {
 import { windPlanComfortBands, windPlanSpeedContours, type WorldRing } from "../lib/windPlanContours";
 import { windPlanLineStyle, type WindPlanLineStyle, type WindPlanPen } from "../lib/windPlanStyle";
 import { placeWindArrow, type ScreenRect, type WindArrowLayout } from "../lib/windPlanArrow";
-import { WIND_PLAN_HUD_EVENT } from "../lib/windPlanLegendLayout";
 import type { WindPlanState } from "./useWindPlan";
 
 export type WindPlanTransform = { ox: number; oy: number; exX: number; exY: number; enX: number; enY: number };
@@ -391,12 +390,10 @@ export function WindPlanOverlay({
     const observer = typeof ResizeObserver !== "undefined" && host ? new ResizeObserver(schedule) : null;
     if (observer && host) observer.observe(host);
     window.addEventListener("resize", schedule);
-    window.addEventListener(WIND_PLAN_HUD_EVENT, schedule);
     return () => {
       unsubscribe();
       observer?.disconnect();
       window.removeEventListener("resize", schedule);
-      window.removeEventListener(WIND_PLAN_HUD_EVENT, schedule);
       if (frame.current !== null) cancelAnimationFrame(frame.current);
       frame.current = null;
     };

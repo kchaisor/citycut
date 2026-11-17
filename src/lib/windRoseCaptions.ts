@@ -24,14 +24,22 @@ export function formatStationLine1(selection: SiteWindSelection): string {
   return `${name} · ${dist} · ${formatStationYears(selection)}`;
 }
 
-export function formatSkippedCloserLine(selection: SiteWindSelection): string {
+export type SkippedCloserPart = { name: string; distance: string; reason: string | null };
+
+export function skippedCloserParts(selection: SiteWindSelection): SkippedCloserPart[] {
   const skipped = selection.station.skippedCloser;
-  if (!skipped.length) return "";
-  const parts = skipped.map((s, i) => {
-    const label = `${s.name} ${s.distanceKm.toFixed(1)} km`;
-    return skipped[i + 1]?.reason === s.reason ? label : `${label} (${s.reason})`;
-  });
-  return `Closer: ${parts.join(" · ")}`;
+  return skipped.map((s, i) => ({
+    name: s.name,
+    distance: `${s.distanceKm.toFixed(1)}\u00a0km`,
+    reason: skipped[i + 1]?.reason === s.reason ? null : s.reason,
+  }));
+}
+
+export function formatSkippedCloserLine(selection: SiteWindSelection): string {
+  const parts = skippedCloserParts(selection);
+  if (!parts.length) return "";
+  const labels = parts.map((p) => `${p.name} ${p.distance}${p.reason ? ` (${p.reason})` : ""}`);
+  return `Closer: ${labels.join(" · ")}`;
 }
 
 export function windRoseStationCaption(selection: SiteWindSelection, _period: WindPeriodId): string {
@@ -40,12 +48,10 @@ export function windRoseStationCaption(selection: SiteWindSelection, _period: Wi
 
 export function windRoseStationLines(selection: SiteWindSelection): {
   line1: string;
-  skipped: string;
   line2: string;
 } {
   return {
     line1: formatStationLine1(selection),
-    skipped: formatSkippedCloserLine(selection),
     line2: WIND_ROSE_SOURCE.includes("onebuilding") ? windRoseSourceLine2() : selection.asset.source,
   };
 }

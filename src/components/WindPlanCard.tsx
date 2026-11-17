@@ -93,8 +93,8 @@ const COMFORT_SWATCH: Record<(typeof COMFORT_CLASSES)[number], string> = {
   unsafe: "--wind-plan-unsafe",
 };
 
-export function WindPlanLegend({ plan }: { plan: Pick<WindPlanState, "mode"> }) {
-  if (plan.mode === "speed") return null;
+export function WindPlanLegend({ plan }: { plan: Pick<WindPlanState, "mode" | "scaleMaxMs"> }) {
+  if (plan.mode === "speed") return <WindPlanVelocityLegend scaleMaxMs={plan.scaleMaxMs} />;
   return (
     <div className="wind-plan-legend" aria-label="Pedestrian comfort, Lawson">
       <p className="wind-plan-legend-title">Comfort</p>
@@ -137,22 +137,23 @@ export function WindPlanInfo({ plan, period }: { plan: WindPlanState; period: Wi
 export function WindPlanVelocityLegend({ scaleMaxMs }: { scaleMaxMs: number | null }) {
   useColourRevision();
   return (
-    <div className="wind-plan-velocity hud-card" aria-label="Wind speed, metres per second">
+    <div className="wind-plan-legend wind-plan-velocity" aria-label="Wind speed, metres per second">
       <p className="wind-plan-legend-title">
         Velocity <span className="wind-plan-unit">(m/s)</span>
       </p>
-      <div className="wind-plan-velocity-scale">
-        <span className="wind-plan-velocity-bar" aria-hidden="true" style={{ background: windPlanLegendGradient(getColour) }} />
-        <span className="wind-plan-velocity-ticks mono" aria-hidden="true">
-          {scaleMaxMs != null
-            ? windPlanSpeedTicks(scaleMaxMs).map((tick) => (
-                <span key={tick} style={{ bottom: `${(tick / scaleMaxMs) * 100}%` }}>
+      <span className="wind-plan-velocity-bar" aria-hidden="true" style={{ background: windPlanLegendGradient(getColour) }} />
+      <span className="wind-plan-velocity-ticks mono" aria-hidden="true">
+        {scaleMaxMs != null
+          ? windPlanSpeedTicks(scaleMaxMs).map((tick) => {
+              const pct = (tick / scaleMaxMs) * 100;
+              return (
+                <span key={tick} style={{ left: `${pct}%`, transform: `translateX(-${pct}%)` }}>
                   {tick}
                 </span>
-              ))
-            : null}
-        </span>
-      </div>
+              );
+            })
+          : null}
+      </span>
     </div>
   );
 }

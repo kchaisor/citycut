@@ -4,6 +4,7 @@ import type { SiteWindSelection } from "../lib/windRoseData";
 import { analyzeSiteWind } from "../lib/windRoseStats";
 import { windRoseStationLines } from "../lib/windRoseCaptions";
 import { getColour } from "../lib/colours";
+import { WindSkippedCloser } from "./WindSkippedCloser";
 import { WindRoseSvgChart } from "./WindRoseSvgChart";
 import { WindReducedMotionNote } from "./WindReducedMotionNote";
 
@@ -33,11 +34,7 @@ export function WindRoseOverlay({
       <p className="wind-rose-caption wind-rose-meta-station" title={lines.line1}>
         {lines.line1}
       </p>
-      {lines.skipped && (
-        <p className="wind-rose-caption wind-rose-meta-skipped" title={lines.skipped}>
-          {lines.skipped}
-        </p>
-      )}
+      <WindSkippedCloser selection={selection} className="wind-rose-caption" />
       <p className="wind-rose-caption wind-rose-meta-note">Regional station wind, not site wind.</p>
       {streaksPaused && onAnimateAnyway && (
         <WindReducedMotionNote animateAnyway={animateAnyway} onAnimateAnyway={onAnimateAnyway} />
