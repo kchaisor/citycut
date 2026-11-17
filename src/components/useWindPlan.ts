@@ -3,12 +3,13 @@ import type { CityModel } from "../types";
 import { sectorCenterDeg, sectorIndex, sectorLabel, WIND_SECTOR_COUNT, type WindPeriodId } from "../lib/windRose";
 import type { SiteWindSelection } from "../lib/windRoseData";
 import { seasonRecord } from "../lib/windRoseStats";
-import { sectorReferenceSpeedMs, windSeasonWeights, type WindSeasonWeights } from "../lib/windComfort";
+import { windSeasonWeights, type WindSeasonWeights } from "../lib/windComfort";
 import {
   cachedWindPlanComfort,
   cachedWindPlanSpeed,
   createWindPlanComfortJob,
   createWindPlanSpeedJob,
+  windPlanReferenceMs,
   windPlanSpeedKey,
   type WindPlanComfort,
   type WindPlanJob,
@@ -100,7 +101,7 @@ export function useWindPlan({
 
   const sector = override && override.period === period ? override.sector : prevailing;
   const key = siteWind ? seasonKey(siteWind, period) : null;
-  const referenceMs = weights && sector != null ? sectorReferenceSpeedMs(weights, sector) : null;
+  const referenceMs = weights && sector != null ? windPlanReferenceMs(weights, sector) : null;
 
   const stepSector = useCallback(
     (delta: number) => {

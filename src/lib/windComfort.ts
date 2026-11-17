@@ -126,12 +126,13 @@ export function accumulateSectorExceedance(
   ratio: ArrayLike<number>,
   from = 0,
   to = fields.cols * fields.rows,
+  scale = 1,
 ): void {
   const bins = weights.bins.filter((bin) => bin.sector === sector);
   if (bins.length === 0) return;
   const targets = [fields.p4, fields.p6, fields.p10, fields.p15];
   for (let idx = from; idx < to; idx++) {
-    const r = ratio[idx]!;
+    const r = ratio[idx]! * scale;
     if (!(r > 0)) continue;
     for (let t = 0; t < COMFORT_THRESHOLDS_MS.length; t++) {
       const u = COMFORT_THRESHOLDS_MS[t]! / r;

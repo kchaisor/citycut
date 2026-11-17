@@ -17,14 +17,18 @@ The 1024 mock-ups are on the shared computer at `/workspace/wind-plan-mock/v2-sp
 
 ### Wind speed
 - The ground shows a smooth velocity field in m/s: the #232 speed-ratio field for the heading, times the season's reference speed for that direction. Colours use the #232 round 3 CFD ramp (blue sheltered, cyan, green, yellow, red), legend 0–6 m/s.
+- Pedestrian height: the Viewbank TMYx speeds are measured at 10 m in open terrain, so they are brought down to 1.5 m with a power-law profile, suburban exponent α = 0.25 (factor (1.5/10)^0.25 ≈ 0.62), before multiplying by the speed-ratio field. The card's Reference row shows this corrected speed; the console median stays the station value.
+- The map is smoothed for display only (Gaussian, about 6 m) so it reads as flow shaped by buildings, not speckle. Contours use the same smoothed field; comfort classes use the unsmoothed one.
+- Cells near the cut edge are computed with the cut's buildings wrapped round its edges (a periodic boundary), so the edge sees built-up ground upwind and downwind like the rest of the site rather than open land. Nothing outside the cut is drawn.
 - Wakes (low speed) sit on the lee side of each building and move when the season or direction changes. Corners and gaps speed up.
 - Contours only at 1, 2, 3, 4 and 5 m/s: 1px white at 35% opacity.
-- Direction defaults to the season's prevailing direction and can be stepped through the 16 directions on the card. The wind arrow sits at the upwind map edge and rotates with the direction, at least 24px clear of any panel or building: 2px ink shaft, filled head, white label chip ("Wind NNE"), 11px/600.
+- Direction defaults to the season's prevailing direction and can be stepped through the 16 directions on the card. The wind arrow sits at the upwind edge of the map (the cut square on screen: centred on the top edge for N, at the top-right corner for NE), just outside it and pointing in, and follows the camera. It slides along that edge, or steps just inside it, only as far as needed to stay at least 24px clear of any panel (and of buildings when inside the map): 2px ink shaft, filled head, white label chip ("Wind NNE"), 11px/600.
 
 ### Comfort (Lawson LDDC, indicative)
 - For each ground cell, every direction in the season is weighted by its frequency (from the Viewbank TMYx speed bins) and combined with that direction's speed-ratio field to get how often each threshold is exceeded.
+- The station speeds get the same 10 m to 1.5 m pedestrian-height correction as Wind speed (power law, α = 0.25, factor ≈ 0.62) before the thresholds are tested.
 - Criteria: Lawson LDDC as used in the City of London *Wind Microclimate Guidelines* (2019). Comfort uses mean-hourly speeds exceeded no more than 5% of the time: Sitting ≤ 4 m/s, Standing ≤ 6 m/s, Walking ≤ 10 m/s (leisure and business walking merged), Uncomfortable above that. Unsafe: more than 15 m/s for more than 0.022% of the year (about 2 hours).
-- Hard-edged bands drawn as smooth vector contours, no staircase pixels at 1440. Palette: Sitting #DCEBD8, Standing #9FCB94, Walking #F1DE97, Uncomfortable #E8964F, Unsafe #C2362B. Unsafe also gets a 45° hatch (1px #7A1A12 at 6px spacing), a 2px #7A1A12 outline and a minimum drawn size of 12px.
+- Hard-edged bands drawn as smooth vector contours, no staircase pixels at 1440. Palette: Sitting #DCEBD8, Standing #9FCB94, Walking #F1DE97, Uncomfortable #E8964F, Unsafe #C2362B. Unsafe also gets a 45° hatch (1px #7A1A12 at 6px spacing), a 2px #7A1A12 outline and a minimum drawn size of 12px, drawn fully inside the map.
 - The card shows "Unsafe: N areas" or "Unsafe: none". Direction reads "All".
 
 ### Panels and console
@@ -50,7 +54,7 @@ The 1024 mock-ups are on the shared computer at `/workspace/wind-plan-mock/v2-sp
 
 ## Out of scope
 
-- A real CFD or wind-tunnel study, gust (GEM) speeds and height correction beyond the #232 flow model.
+- A real CFD or wind-tunnel study and gust (GEM) speeds.
 - Exporting the plan diagrams to PNG, .3dm or .ai.
 - Changes to the 3D wind streaks from #232.
 - Mobile layouts.
