@@ -105,18 +105,18 @@ describe("wind plan speed field", () => {
 
   it("is slower in the lee of a building than upwind, and flips with the direction", () => {
     const model = oneBuilding();
-    const west = run(createWindPlanSpeedJob(model, "test:annual", weights, WEST));
+    const west = run(createWindPlanSpeedJob(model, "test:annual", windPlanReferenceMs(weights, WEST), WEST));
     const lee = at(west.geometry, west.speedMs, 30, 0);
     const windward = at(west.geometry, west.speedMs, -30, 0);
     expect(lee).toBeLessThan(windward * 0.7);
 
-    const east = run(createWindPlanSpeedJob(model, "test:annual", weights, EAST));
+    const east = run(createWindPlanSpeedJob(model, "test:annual", windPlanReferenceMs(weights, EAST), EAST));
     expect(at(east.geometry, east.speedMs, -30, 0)).toBeLessThan(at(east.geometry, east.speedMs, 30, 0) * 0.7);
   });
 
   it("is in m/s: open ground runs at the direction's reference speed", () => {
     const model = oneBuilding();
-    const west = run(createWindPlanSpeedJob(model, "test:annual", weights, WEST));
+    const west = run(createWindPlanSpeedJob(model, "test:annual", windPlanReferenceMs(weights, WEST), WEST));
     expect(at(west.geometry, west.speedMs, -110, 100)).toBeCloseTo(west.referenceMs, 1);
   });
 
@@ -138,20 +138,20 @@ describe("wind plan speed field", () => {
     expect(at(geometry, ratio, 0, -12)).toBeLessThan(at(geometry, ratio, 0, 12));
 
     const weightsN = windSeasonWeights(season({ [north]: [0.2, 0.3, 0.1, 0, 0] }), WIND_SPEED_BIN_EDGES_MS);
-    const speed = run(createWindPlanSpeedJob(model, "house:annual", weightsN, north));
+    const speed = run(createWindPlanSpeedJob(model, "house:annual", windPlanReferenceMs(weightsN, north), north));
     expect(at(speed.geometry, speed.speedMs, 0, -14)).toBeLessThan(at(speed.geometry, speed.speedMs, 0, 14));
   });
 
   it("caches each season and direction once", () => {
     const model = oneBuilding();
-    const first = run(createWindPlanSpeedJob(model, "test:annual", weights, WEST));
+    const first = run(createWindPlanSpeedJob(model, "test:annual", windPlanReferenceMs(weights, WEST), WEST));
     expect(cachedWindPlanSpeed(model, windPlanSpeedKey("test:annual", WEST))).toBe(first);
-    const again = createWindPlanSpeedJob(model, "test:annual", weights, WEST)!;
+    const again = createWindPlanSpeedJob(model, "test:annual", windPlanReferenceMs(weights, WEST), WEST)!;
     expect(again.result()).toBe(first);
   });
 
   it("has no field for a direction with no wind", () => {
-    expect(createWindPlanSpeedJob(oneBuilding(), "test:annual", weights, 0)).toBeNull();
+    expect(createWindPlanSpeedJob(oneBuilding(), "test:annual", windPlanReferenceMs(weights, 0), 0)).toBeNull();
   });
 });
 
@@ -166,7 +166,7 @@ describe("pedestrian height", () => {
     const weights = windSeasonWeights(season({ [WEST]: [0.2, 0.3, 0.1, 0, 0] }), WIND_SPEED_BIN_EDGES_MS);
     const station = sectorReferenceSpeedMs(weights, WEST)!;
     expect(windPlanReferenceMs(weights, WEST)).toBeCloseTo(station * PEDESTRIAN_HEIGHT_FACTOR, 6);
-    const speed = run(createWindPlanSpeedJob(modelOf(240, []), "height:annual", weights, WEST));
+    const speed = run(createWindPlanSpeedJob(modelOf(240, []), "height:annual", windPlanReferenceMs(weights, WEST), WEST));
     expect(speed.referenceMs).toBeCloseTo(station * PEDESTRIAN_HEIGHT_FACTOR, 6);
     expect(at(speed.geometry, speed.speedMs, 0, 0)).toBeCloseTo(station * PEDESTRIAN_HEIGHT_FACTOR, 4);
   });
@@ -189,7 +189,7 @@ describe("wind plan field edges", () => {
     for (const field of [comfort.fields.p4, comfort.fields.p6, comfort.fields.p10, comfort.fields.p15]) {
       expect(Math.max(...field) - Math.min(...field)).toBeLessThan(1e-6);
     }
-    const speed = run(createWindPlanSpeedJob(model, "open:annual", weights, WEST));
+    const speed = run(createWindPlanSpeedJob(model, "open:annual", windPlanReferenceMs(weights, WEST), WEST));
     expect(Math.max(...speed.speedMs) - Math.min(...speed.speedMs)).toBeLessThan(1e-4);
   });
 

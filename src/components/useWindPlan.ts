@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { CityModel } from "../types";
 import { sectorCenterDeg, sectorIndex, sectorLabel, WIND_SECTOR_COUNT, type WindPeriodId } from "../lib/windRose";
 import type { SiteWindSelection } from "../lib/windRoseData";
+import type { DesignWind, DesignWindId } from "../lib/windDesignWinds";
 import { seasonRecord } from "../lib/windRoseStats";
 import { windSeasonWeights, type WindSeasonWeights } from "../lib/windComfort";
 import {
@@ -21,8 +22,9 @@ declare global {
   interface Window {
     __citycutWindPlan?: {
       readonly mode: WindPlanMode;
-      readonly season: WindPeriodId;
+      readonly season: WindPeriodId | DesignWindId;
       readonly dirDeg: number | null;
+      readonly referenceMs: number | null;
       readonly ready: boolean;
       readonly unsafeAreas: number | null;
     };
@@ -36,6 +38,7 @@ export type WindPlanState = {
   mode: WindPlanMode;
   setMode: (mode: WindPlanMode) => void;
   sector: number | null;
+  designWind: DesignWind | null;
   dirLabel: string;
   stepSector: (delta: number) => void;
   referenceMs: number | null;
@@ -45,7 +48,7 @@ export type WindPlanState = {
   comfort: WindPlanComfort | null;
 };
 
-function seasonKey(siteWind: SiteWindSelection, period: WindPeriodId): string {
+function seasonKey(siteWind: SiteWindSelection, period: WindPeriodId | DesignWindId): string {
   return `${siteWind.station.id}:${period}`;
 }
 
@@ -76,11 +79,13 @@ export function useWindPlan({
   model,
   siteWind,
   period,
+  designWind = null,
   active,
 }: {
   model: CityModel;
   siteWind: SiteWindSelection | null;
   period: WindPeriodId;
+  designWind?: DesignWind | null;
   active: boolean;
 }): WindPlanState {
   const [mode, setMode] = useState<WindPlanMode>("speed");
@@ -99,32 +104,38 @@ export function useWindPlan({
     return record ? sectorIndex(record.prevailingDirDeg) : null;
   }, [siteWind, period]);
 
-  const sector = override && override.period === period ? override.sector : prevailing;
+  const sector = designWind ? designWind.sector : override && override.period === period ? override.sector : prevailing;
   const key = siteWind ? seasonKey(siteWind, period) : null;
-  const referenceMs = weights && sector != null ? windPlanReferenceMs(weights, sector) : null;
+  const speedKey = siteWind && designWind ? seasonKey(siteWind, designWind.id) : key;
+  const referenceMs = designWind
+    ? designWind.referenceMs
+    : weights && sector != null
+      ? windPlanReferenceMs(weights, sector)
+      : null;
 
   const stepSector = useCallback(
     (delta: number) => {
-      if (sector == null) return;
+      if (sector == null || designWind) return;
       const next = (((sector + delta) % WIND_SECTOR_COUNT) + WIND_SECTOR_COUNT) % WIND_SECTOR_COUNT;
       setOverride({ period, sector: next });
     },
-    [sector, period],
+    [sector, period, designWind],
   );
 
-  const speed = active && key && sector != null ? cachedWindPlanSpeed(model, windPlanSpeedKey(key, sector)) : null;
+  const speed =
+    active && speedKey && sector != null ? cachedWindPlanSpeed(model, windPlanSpeedKey(speedKey, sector)) : null;
   const comfort = active && key ? cachedWindPlanComfort(model, key) : null;
 
   useEffect(() => {
-    if (!active || !key || !weights) return;
+    if (!active || !key || !speedKey || !weights) return;
     const jobs: Array<WindPlanJob<unknown>> = [];
-    const speedJob = sector != null ? createWindPlanSpeedJob(model, key, weights, sector) : null;
+    const speedJob = sector != null ? createWindPlanSpeedJob(model, speedKey, referenceMs, sector) : null;
     const comfortJob = createWindPlanComfortJob(model, key, weights);
     const first = mode === "comfort" ? [comfortJob, speedJob] : [speedJob, comfortJob];
     for (const job of first) if (job && !job.result()) jobs.push(job);
     if (jobs.length === 0) return;
     return runJobs(jobs, () => setRevision((r) => r + 1));
-  }, [active, key, weights, sector, mode, model]);
+  }, [active, key, speedKey, weights, sector, referenceMs, mode, model]);
 
   const hasData = weights != null && weights.bins.length > 0;
   const ready = mode === "speed" ? speed != null || (hasData && referenceMs == null) : comfort != null;
@@ -133,21 +144,23 @@ export function useWindPlan({
     if (!active) return;
     window.__citycutWindPlan = {
       mode,
-      season: period,
+      season: designWind ? designWind.id : period,
       dirDeg: mode === "speed" && sector != null ? sectorCenterDeg(sector) : null,
+      referenceMs: mode === "speed" ? referenceMs : null,
       ready,
       unsafeAreas: comfort ? comfort.unsafeAreas.length : null,
     };
     return () => {
       delete window.__citycutWindPlan;
     };
-  }, [active, mode, period, sector, ready, comfort, revision]);
+  }, [active, mode, period, designWind, sector, referenceMs, ready, comfort, revision]);
 
   return {
     active,
     mode,
     setMode,
     sector,
+    designWind,
     dirLabel: mode === "comfort" ? "All" : sector != null ? sectorLabel(sector) : "—",
     stepSector,
     referenceMs,

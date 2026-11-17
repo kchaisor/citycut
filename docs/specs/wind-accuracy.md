@@ -31,7 +31,7 @@ Sketch or screenshot:
 
 - [x] Pyrmont (−33.86627, 151.18389), 1.5 km cut: the panel names Sydney Airport, its distance (about 8.9 km), the years covered, and why Riverview and Observatory Hill were skipped.
 - [x] Pyrmont: the station's record is its longest usable one (Riverview 1997–2015, 19 years, not 2009–2015; the Airport's 2011–2025 file, because its full record looks gappy).
-- [ ] Pyrmont: NE, S and W can be picked on the maps next to the seasons, and each shows its own wakes and speeds.
+- [x] Pyrmont: NE, S and W can be picked on the maps next to the seasons, and each shows its own wakes and speeds.
 - [ ] Pyrmont: the bay runs visibly faster than the streets on Wind speed.
 - [x] Mont Albert North (−37.80458, 145.1065), 1 km cut: still uses Viewbank, and the panel names it.
 - [ ] Observatory Hill is used or skipped by the calm checks (no more than 30% calm in winter, 35% over the year), never by name.
@@ -43,6 +43,8 @@ Melbourne Regional Office shows the same pattern. Its full record (1954–2015, 
 Note after fix 2 (18 Nov 2026): sites within 12 km of Fort Denison count as harbour sites and use Sydney Airport (9.0 km from Pyrmont, 1940–2025, 82 years) when its record passes the calm checks. That covers Pyrmont, the CBD, North Sydney, Balmain, Rozelle and Mosman, but not Parramatta, Penrith or Hornsby. Everywhere else still uses the nearest station that passes the calm checks. For Pyrmont the panel lists the closer stations it skipped: Observatory Hill (2.0 km), Riverview (4.8 km) and Canterbury Park Racecourse (7.9 km), all for "harbour site: Sydney Airport preferred". A station that fails the calm checks is listed as "wind record mostly calm, N% calm in winter".
 
 Note on gappy long records (18 Nov 2026): Sydney Airport's full record (1940–2025) builds its typical months from the 1950s and 60s, which look like 3-hourly observations with the gaps read as calm: 10.8% calm over the year, 16.8% in summer and 20.2% in winter, against 1–3% in every season in each of its 15-year files and in BoM's 3 pm roses. That lowered the speeds (5.1 instead of 5.8 m/s over the year) and turned summer north-east. A longer record is now used only if its calm share, over the year and in every season, is no more than 5 points above the station's most recent dated file, when that file itself passes the calm checks. Otherwise the next longest is tried, and between equal lengths the later one. Sydney Airport now uses 2011–2025 (15 years): 1.6% calm over the year, summer from the south at 6.2 m/s. Riverview (1997–2015) and Observatory Hill (1954–2025, whose recent file is mostly calm) keep their full records, as do Melbourne Regional Office and Viewbank. 155 of 875 stations change record this way.
+
+Note after fix 3 (18 Nov 2026): design winds sit next to the season buttons on the wind console. Sites that use Sydney Airport get the consultants' north-east, south and west (45°, 180°, 270°). Everywhere else gets the three of the eight compass directions whose winds bring the most energy over the year (hours × speed³ within 22.5° either side), at least 67.5° apart. Each design wind's speed is the average station speed of the year's hours within 22.5° of its heading, brought down to walking height the same way as the seasons. Pyrmont: NE 6.2 m/s at the station, 3.9 m/s at walking height, 18% of hours; S 7.5 and 4.6 m/s, 23%; W 5.5 and 3.4 m/s, 22%. Mont Albert North (Viewbank): N, SE and SW. Comfort still uses all winds over the year when a design wind is picked.
 
 ## Out of scope
 

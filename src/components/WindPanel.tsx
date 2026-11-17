@@ -51,7 +51,7 @@ export function WindPanel({
           <select
             value={settings.period}
             disabled={!settings.enabled}
-            onChange={(event) => patch({ period: event.target.value as WindPeriodId })}
+            onChange={(event) => patch({ period: event.target.value as WindPeriodId, designWind: null })}
           >
             {PERIOD_OPTIONS.map((option) => (
               <option key={option.id} value={option.id}>

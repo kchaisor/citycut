@@ -3763,6 +3763,14 @@ body,
     display: none !important;
   }
 
+  .model .bottom-bar.env-console .design-wind-kicker {
+    display: none;
+  }
+
+  .model .bottom-bar.env-console .design-wind-presets .p-pill {
+    padding: 0 4px !important;
+  }
+
   .model[data-env-console="1"] .bottom-bar.env-console {
     left: 12px !important;
     right: auto !important;
@@ -3956,6 +3964,16 @@ body,
   border-radius: 6px !important;
   gap: 2px !important;
   flex-shrink: 0 !important;
+}
+
+.model .bottom-bar.env-console .design-wind-kicker {
+  padding: 0 4px 0 6px;
+  font-size: 9.5px;
+  font-weight: 600;
+  color: var(--ink-3);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .model .bottom-bar.env-console .p-pill {

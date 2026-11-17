@@ -62,9 +62,13 @@ export function powerLawHeightFactor(fromM: number, toM: number, alpha: number):
 
 export const PEDESTRIAN_HEIGHT_FACTOR = powerLawHeightFactor(STATION_HEIGHT_M, PEDESTRIAN_HEIGHT_M, SUBURBAN_PROFILE_ALPHA);
 
+export function pedestrianReferenceMs(stationMs: number): number {
+  return stationMs * PEDESTRIAN_HEIGHT_FACTOR;
+}
+
 export function windPlanReferenceMs(weights: WindSeasonWeights, sector: number): number | null {
   const stationMs = sectorReferenceSpeedMs(weights, sector);
-  return stationMs == null ? null : stationMs * PEDESTRIAN_HEIGHT_FACTOR;
+  return stationMs == null ? null : pedestrianReferenceMs(stationMs);
 }
 
 export type WindPlanMode = "speed" | "comfort";
@@ -329,11 +333,10 @@ export function buildWindPlanRatio(model: CityModel, sector: number): { geometry
 export function createWindPlanSpeedJob(
   model: CityModel,
   seasonKey: string,
-  weights: WindSeasonWeights,
+  referenceMs: number | null,
   sectorIn: number,
 ): WindPlanJob<WindPlanSpeed> | null {
   const sector = groundWindSector(sectorIn);
-  const referenceMs = windPlanReferenceMs(weights, sector);
   if (referenceMs == null) return null;
   const key = windPlanSpeedKey(seasonKey, sector);
   const cache = planCache(model);

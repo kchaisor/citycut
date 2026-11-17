@@ -119,6 +119,7 @@ import { InspectHudProjector, type InspectHudScreen } from "./InspectHudProjecto
 import type { WindPeriodId } from "../lib/windRose";
 import type { SiteWindSelection } from "../lib/windRoseData";
 import { analyzeSiteWind } from "../lib/windRoseStats";
+import { designWindPeriodStats, type DesignWind } from "../lib/windDesignWinds";
 import type { CityModel } from "../types";
 
 export type SceneExporter = {
@@ -2100,12 +2101,14 @@ function WindLayer({
   model,
   siteWind,
   period,
+  designWind,
   enabled,
   animateStreaks,
 }: {
   model: CityModel;
   siteWind: SiteWindSelection | null;
   period: WindPeriodId;
+  designWind: DesignWind | null;
   enabled: boolean;
   animateStreaks: boolean;
 }) {
@@ -2116,7 +2119,8 @@ function WindLayer({
     return () => document.removeEventListener("visibilitychange", onVis);
   }, []);
   if (!enabled) return null;
-  const stats = siteWind ? analyzeSiteWind(siteWind, period) : null;
+  const seasonStats = siteWind ? analyzeSiteWind(siteWind, period) : null;
+  const stats = seasonStats && designWind ? designWindPeriodStats(seasonStats, designWind) : seasonStats;
   return (
     <GroundWindFlow model={model} stats={stats} animate={visible && animateStreaks} />
   );
@@ -2137,6 +2141,7 @@ export function Scene3D({
   windEnabled,
   siteWind,
   windPeriod,
+  windDesignWind = null,
   windAnimateStreaks,
   windPlan = null,
   onExportReady,
@@ -2174,6 +2179,7 @@ export function Scene3D({
   windEnabled: boolean;
   siteWind: SiteWindSelection | null;
   windPeriod: WindPeriodId;
+  windDesignWind?: DesignWind | null;
   windAnimateStreaks: boolean;
   windPlan?: WindPlanState | null;
   onExportReady: (exporter: SceneExporter | null) => void;
@@ -2376,6 +2382,7 @@ export function Scene3D({
         model={windModel ?? model}
         siteWind={siteWind}
         period={windPeriod}
+        designWind={windDesignWind}
         enabled={windEnabled && !windPlanOn}
         animateStreaks={windAnimateStreaks}
       />

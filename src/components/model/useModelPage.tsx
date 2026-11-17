@@ -79,6 +79,7 @@ import { treeTierCounts } from "../../lib/trees";
 
 import { clearPlanShadowCache } from "../../lib/buildingShadows";
 import { useWindPlan } from "../useWindPlan";
+import { designWindsFor, findDesignWind } from "../../lib/windDesignWinds";
 import { windObstacleModel, withImportedOutlines } from "../../lib/windObstacleModel";
 import {
   appendManualHeightCredit,
@@ -1341,10 +1342,13 @@ export function useModelPage({
     () => withImportedOutlines(displayModel, massing.drawingBuildings),
     [displayModel, massing.drawingBuildings],
   );
+  const designWinds = useMemo(() => (siteWind ? designWindsFor(siteWind) : []), [siteWind]);
+  const designWind = findDesignWind(designWinds, windSettings.designWind);
   const windPlan = useWindPlan({
     model: windModel,
     siteWind,
     period: windSettings.period,
+    designWind,
     active: tab === "3d" && view.projection === "plan" && leftOpen === "analysis" && analysisKind === "wind" && siteWind != null,
   });
 
@@ -1361,9 +1365,9 @@ export function useModelPage({
       const record = seasonRecord(siteWind, windSettings.period);
       root.setAttribute(
         "data-ground-wind-deg",
-        String(record?.prevailingDirDeg ?? sectorCenterDeg(consoleWindStats.prevailingSector)),
+        String(designWind?.headingDeg ?? record?.prevailingDirDeg ?? sectorCenterDeg(consoleWindStats.prevailingSector)),
       );
-      root.setAttribute("data-ground-wind-season", windSettings.period);
+      root.setAttribute("data-ground-wind-season", designWind?.id ?? windSettings.period);
     } else {
       root.removeAttribute("data-wind-station");
       root.removeAttribute("data-wind-distance-km");
@@ -1373,7 +1377,7 @@ export function useModelPage({
       root.removeAttribute("data-ground-wind-deg");
       root.removeAttribute("data-ground-wind-season");
     }
-  }, [siteWind, consoleWindStats, windSettings.period]);
+  }, [siteWind, consoleWindStats, windSettings.period, designWind]);
 
   useEffect(() => {
     if (!consolePlaying) return;
@@ -2325,6 +2329,8 @@ export function useModelPage({
     windNote,
     windSettings,
     windPlan,
+    designWinds,
+    designWind,
     siteWind,
     writeStoredShowManualHeights,
   };

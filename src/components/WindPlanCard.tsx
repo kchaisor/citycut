@@ -3,6 +3,7 @@ import { useColourRevision } from "../lib/useColourRevision";
 import { COMFORT_CLASSES, COMFORT_CLASS_LABELS, unsafeAreasLabel } from "../lib/windComfort";
 import { WIND_PLAN_SPEED_MAX_MS, WIND_PLAN_SPEED_TICKS_MS, windPlanLegendGradient } from "../lib/windPlanField";
 import { monthPeriodLabel, type WindPeriodId } from "../lib/windRose";
+import type { DesignWind } from "../lib/windDesignWinds";
 import type { WindPlanState } from "./useWindPlan";
 
 const SEASON_SHORT: Record<string, string> = {
@@ -18,24 +19,31 @@ export function windPlanSeasonLabel(period: WindPeriodId): string {
   return SEASON_SHORT[period] ?? period;
 }
 
+export function designWindValue(wind: DesignWind): string {
+  return `${wind.label} · ${Math.round(wind.sharePct)}% of hours`;
+}
+
 export function windPlanTitle(plan: Pick<WindPlanState, "mode">): string {
   return plan.mode === "comfort" ? "Pedestrian comfort" : "Plan wind";
 }
 
 export function WindPlanRows({ plan, period }: { plan: WindPlanState; period: WindPeriodId }) {
   const speedMode = plan.mode === "speed";
+  const design = speedMode ? plan.designWind : null;
   return (
     <div className="wind-plan-rows" aria-label={windPlanTitle(plan)}>
       <p className="wind-plan-title">{windPlanTitle(plan)}</p>
       <dl className="wind-plan-list">
         <div className="wind-plan-row">
-          <dt>Season</dt>
-          <dd>{windPlanSeasonLabel(period)}</dd>
+          <dt>{design ? "Design wind" : "Season"}</dt>
+          <dd>{design ? designWindValue(design) : windPlanSeasonLabel(period)}</dd>
         </div>
         <div className="wind-plan-row">
           <dt>Direction</dt>
           <dd>
-            {speedMode && plan.sector != null ? (
+            {design ? (
+              <span className="wind-plan-dir mono">{`${design.label} · ${design.headingDeg}°`}</span>
+            ) : speedMode && plan.sector != null ? (
               <span className="wind-plan-stepper">
                 <button type="button" aria-label="Previous wind direction" onClick={() => plan.stepSector(-1)}>
                   ‹
@@ -58,6 +66,7 @@ export function WindPlanRows({ plan, period }: { plan: WindPlanState; period: Wi
         </div>
       </dl>
       <p className="wind-plan-note">Indicative only, not a CFD study</p>
+      {plan.designWind && !speedMode ? <p className="wind-plan-note">Comfort uses all winds (annual)</p> : null}
       {!plan.hasData ? (
         <p className="wind-plan-note">No wind records for this season.</p>
       ) : speedMode && plan.referenceMs == null ? (
@@ -105,6 +114,7 @@ export function windPlanReferenceLabel(referenceMs: number | null): string {
 }
 
 export function WindPlanInfo({ plan, period }: { plan: WindPlanState; period: WindPeriodId }) {
+  const design = plan.mode === "speed" ? plan.designWind : null;
   return (
     <dl className="wind-plan-info hud-card" aria-label="Plan wind conditions">
       <div className="wind-plan-row">
@@ -116,8 +126,8 @@ export function WindPlanInfo({ plan, period }: { plan: WindPlanState; period: Wi
         <dd>{plan.dirLabel}</dd>
       </div>
       <div className="wind-plan-row">
-        <dt>Season</dt>
-        <dd>{windPlanSeasonLabel(period)}</dd>
+        <dt>{design ? "Design wind" : "Season"}</dt>
+        <dd>{design ? `${design.label} · ${Math.round(design.sharePct)}%` : windPlanSeasonLabel(period)}</dd>
       </div>
     </dl>
   );
