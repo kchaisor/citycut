@@ -2124,6 +2124,7 @@ function WindLayer({
 
 export function Scene3D({
   model,
+  windModel,
   uniformBuildings,
   colourBySource,
   showManualEdits,
@@ -2159,6 +2160,7 @@ export function Scene3D({
   quality = "high",
 }: {
   model: CityModel;
+  windModel?: CityModel;
   uniformBuildings: boolean;
   colourBySource: boolean;
   showManualEdits: boolean;
@@ -2369,7 +2371,7 @@ export function Scene3D({
       />
       {onCompassNeedle ? <StudioCompassTracker onNeedle={onCompassNeedle} /> : null}
       <WindLayer
-        model={model}
+        model={windModel ?? model}
         siteWind={siteWind}
         period={windPeriod}
         enabled={windEnabled && !windPlanOn}

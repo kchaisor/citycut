@@ -26,6 +26,7 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
     colourByUse,
     compassNeedleDeg,
     displayModel,
+    windModel,
     drawing,
     drawingModel,
     effectiveSunStudyCasters,
@@ -118,6 +119,7 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
             <SceneBoundary>
               <Scene3D
                 model={displayModel}
+                windModel={windModel}
                 uniformBuildings={!colourByUse && !showSource}
                 colourBySource={showSource}
                 showManualEdits={showManualEdits}

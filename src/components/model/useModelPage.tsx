@@ -79,6 +79,7 @@ import { treeTierCounts } from "../../lib/trees";
 
 import { clearPlanShadowCache } from "../../lib/buildingShadows";
 import { useWindPlan } from "../useWindPlan";
+import { windObstacleModel } from "../../lib/windObstacleModel";
 import {
   appendManualHeightCredit,
   applyHeightOverrides,
@@ -1332,8 +1333,12 @@ export function useModelPage({
     () => (siteWind ? analyzeSiteWind(siteWind, windSettings.period) : null),
     [siteWind, windSettings.period],
   );
+  const windModel = useMemo(
+    () => windObstacleModel(displayModel, massing.drawingBuildings),
+    [displayModel, massing.drawingBuildings],
+  );
   const windPlan = useWindPlan({
-    model: displayModel,
+    model: windModel,
     siteWind,
     period: windSettings.period,
     active: tab === "3d" && view.projection === "plan" && leftOpen === "analysis" && analysisKind === "wind" && siteWind != null,
@@ -2124,6 +2129,7 @@ export function useModelPage({
     defaultExplodedAxoGapM,
     defaultExplodedAxoSettings,
     displayModel,
+    windModel,
     dragReorderAxoLayer,
     draggedAxoLayer,
     drawing,

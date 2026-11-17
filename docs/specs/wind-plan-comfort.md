@@ -22,6 +22,8 @@ The 1024 mock-ups are on the shared computer at `/workspace/wind-plan-mock/v2-sp
 - The map is smoothed for display only (Gaussian, about 6 m) so it reads as flow shaped by buildings, not speckle. Contours use the same smoothed field; comfort classes use the unsmoothed one.
 - Cells near the cut edge are computed with the cut's buildings wrapped round its edges (a periodic boundary), so the edge sees built-up ground upwind and downwind like the rest of the site rather than open land. Nothing outside the cut is drawn.
 - Wakes (low speed) sit on the lee side of each building and move when the season or direction changes. Corners and gaps speed up.
+- Imported models: wind treats every visible imported model as solid and removes map buildings underneath them (any footprint overlap drops the whole map building), plus trees whose crowns overlap them, so they are not counted twice. Moving, hiding or removing an import recomputes the field. The 3D ground-wind flow uses the same obstacle grid. Display of map buildings is unchanged in this pass: the 3D view, plans and exports still draw them under the import.
+- Preference: wind treats imported models as solid and removes map buildings underneath them (Kelvin's yes, 17 Nov 2026).
 - Isolines every 0.25 m/s from 0.25 to 3.75 m/s, uniform 0.75px mid grey (#5A5A5A) at 30% opacity, so they read as a fine mesh, not bold belts.
 - A tall vertical **Velocity (m/s)** legend card sits in the lower-right corner of the map: the plan ramp as a vertical bar, 0 at the bottom and 4 at the top, with 11px Geist Mono ticks 0 1 2 3 4. It stays at least 8px clear of Site Intelligence, the bottom console and the compass at 1024–1440, shortening the bar or moving left of Site Intelligence if that panel runs long.
 - A small info card at the top left of the map, right of the wind-rose card and below the top bar, lists Wind speed (the pedestrian-height reference), Direction and Season. Both cards show on Wind speed only.
@@ -55,6 +57,7 @@ The 1024 mock-ups are on the shared computer at `/workspace/wind-plan-mock/v2-sp
 - [ ] Console shows m/s only in plan wind views, with no DIR readout.
 - [ ] Buildings white with a light ink edge; no tree dots in wind plan views.
 - [ ] At ≤1280 Site Intelligence collapses to its header; zero overlap and gaps of at least 8px at 1024, 1280 and 1440.
+- [ ] Import a block: wind recomputes, the lee calms and the corners speed up; hiding or removing the import restores the previous field.
 - [ ] Switching season, direction or mode feels instant (fields computed once and cached) and never moves the camera.
 - [ ] Tests: lee-side wake (lower behind than upwind, flips with direction), Lawson thresholds, unsafe-area count, frequency weights sum to 1.
 
@@ -62,7 +65,8 @@ The 1024 mock-ups are on the shared computer at `/workspace/wind-plan-mock/v2-sp
 
 - A real CFD or wind-tunnel study and gust (GEM) speeds.
 - Exporting the plan diagrams to PNG, .3dm or .ai.
-- Changes to the 3D wind streaks from #232.
+- Changes to the 3D wind streak renderer from #232. The 3D flow does now use the import-aware obstacle grid.
+- Hiding map buildings under imports in the 3D view, plans or exports.
 - Mobile layouts.
 
 ## Estimated runs
