@@ -1,4 +1,4 @@
-import { areWindSeasonsSane } from "../src/lib/windStationSanity.ts";
+import { areWindSeasonsSane, isCalmConsistentWithRecent } from "../src/lib/windStationSanity.ts";
 
 export const WIND_ROSE_SOURCE = "climate.onebuilding.org TMYx EPW";
 export const CALM_SPEED_KMH = 2;
@@ -161,15 +161,29 @@ export function isFullRecordTmyxZip(name) {
   return FULL_RECORD_TMYX_ZIP.test(name);
 }
 
+export function mostRecentDatedRecord(candidates) {
+  const dated = candidates.filter((c) => DATED_TMYX_ZIP.test(c.zipName));
+  const span = (c) => DATED_TMYX_ZIP.exec(c.zipName).slice(1, 3).map(Number);
+  dated.sort((a, b) => span(b)[1] - span(a)[1] || span(b)[0] - span(a)[0]);
+  return dated[0] ?? null;
+}
+
+export function isUsableRecord(candidate, recent) {
+  if (!candidate.sane) return false;
+  if (!recent?.sane || candidate === recent) return true;
+  return isCalmConsistentWithRecent(candidate.seasons, recent.seasons);
+}
+
 export function chooseLongestUsableRecord(candidates) {
   if (!candidates.length) return null;
+  const recent = mostRecentDatedRecord(candidates);
   const longestFirst = [...candidates].sort(
     (a, b) => (b.years ?? 0) - (a.years ?? 0) || Number(b.periodEnd) - Number(a.periodEnd),
   );
-  return longestFirst.find((c) => c.sane) ?? longestFirst[0];
+  return longestFirst.find((c) => isUsableRecord(c, recent)) ?? longestFirst[0];
 }
 
-export { areWindSeasonsSane };
+export { areWindSeasonsSane, isCalmConsistentWithRecent };
 
 const roundTo = (value, digits) => Number(value.toFixed(digits));
 const roundSignificant = (value, digits) => (value === 0 ? 0 : Number(value.toPrecision(digits)));
