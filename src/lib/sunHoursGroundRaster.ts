@@ -60,27 +60,39 @@ export function rasterizeSunHoursGroundGrid(
   return { href, east: originEast, north: originNorth, widthM, heightM, cellCount };
 }
 
-export function rasterizeSunHoursGroundGridFor3d(
+export type SunHoursGroundImage = { width: number; height: number; data: Uint8ClampedArray };
+
+export function sunHoursGroundImageFor3d(
   grid: SunHoursGroundGrid,
   scaleMaxHours = grid.maxSunHours,
-): HTMLCanvasElement | null {
+): SunHoursGroundImage | null {
   const { cols, rows, sunHours, masked } = grid;
   if (cols <= 0 || rows <= 0 || scaleMaxHours <= 0) return null;
-  const canvas = document.createElement("canvas");
-  canvas.width = cols;
-  canvas.height = rows;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return null;
-  const image = ctx.createImageData(cols, rows);
+  const data = new Uint8ClampedArray(cols * rows * 4);
   for (let row = 0; row < rows; row++) {
     for (let col = 0; col < cols; col++) {
       const index = row * cols + col;
       const canvasRow = rows - 1 - row;
       const px = (canvasRow * cols + col) * 4;
-      const rgba = sunHoursGroundRgba(sunHours[index]!, scaleMaxHours, Boolean(masked[index]));
-      image.data.set(rgba, px);
+      data.set(sunHoursGroundRgba(sunHours[index]!, scaleMaxHours, Boolean(masked[index])), px);
     }
   }
-  ctx.putImageData(image, 0, 0);
+  return { width: cols, height: rows, data };
+}
+
+export function rasterizeSunHoursGroundGridFor3d(
+  grid: SunHoursGroundGrid,
+  scaleMaxHours = grid.maxSunHours,
+): HTMLCanvasElement | null {
+  const image = sunHoursGroundImageFor3d(grid, scaleMaxHours);
+  if (!image) return null;
+  const canvas = document.createElement("canvas");
+  canvas.width = image.width;
+  canvas.height = image.height;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return null;
+  const imageData = ctx.createImageData(image.width, image.height);
+  imageData.data.set(image.data);
+  ctx.putImageData(imageData, 0, 0);
   return canvas;
 }

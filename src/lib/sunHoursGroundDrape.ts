@@ -5,6 +5,8 @@ import type { CityModel } from "../types";
 
 const GROUND_LIFT_M = 0.1;
 
+export const SUN_HOURS_GROUND_TEXTURE_FLIP_Y = true;
+
 function vertexNormal(
   east: number,
   north: number,
@@ -26,29 +28,27 @@ export function buildSunHoursGroundDrapeGeometry(
   liftM = GROUND_LIFT_M,
 ): THREE.BufferGeometry {
   const { cols, rows, cellM, originEast, originNorth } = grid;
-  if (!model.terrain) {
-    const geom = new THREE.PlaneGeometry(model.sideM, model.sideM, cols, rows);
-    geom.rotateX(-Math.PI / 2);
-    geom.translate(0, liftM, 0);
-    return geom;
-  }
+  const terrain = model.terrain;
   const vertCols = cols + 1;
   const vertRows = rows + 1;
   const positions = new Float32Array(vertCols * vertRows * 3);
   const uvs = new Float32Array(vertCols * vertRows * 2);
+  const up = new THREE.Vector3(0, 1, 0);
   for (let row = 0; row < vertRows; row++) {
     for (let col = 0; col < vertCols; col++) {
       const east = originEast + col * cellM;
       const north = originNorth + row * cellM;
-      const normal = vertexNormal(east, north, model.sideM, model.terrain, Math.min(cellM * 0.48, 1.2));
-      const y = terrainMeshHeight(model.terrain, model.sideM, east, north);
+      const normal = terrain
+        ? vertexNormal(east, north, model.sideM, terrain, Math.min(cellM * 0.48, 1.2))
+        : up;
+      const y = terrain ? terrainMeshHeight(terrain, model.sideM, east, north) : 0;
       const lifted = new THREE.Vector3(east, y, -north).addScaledVector(normal, liftM);
       const index = row * vertCols + col;
       positions[index * 3] = lifted.x;
       positions[index * 3 + 1] = lifted.y;
       positions[index * 3 + 2] = lifted.z;
       uvs[index * 2] = col / cols;
-      uvs[index * 2 + 1] = 1 - row / rows;
+      uvs[index * 2 + 1] = SUN_HOURS_GROUND_TEXTURE_FLIP_Y ? row / rows : 1 - row / rows;
     }
   }
   const indices = new Uint32Array(cols * rows * 6);

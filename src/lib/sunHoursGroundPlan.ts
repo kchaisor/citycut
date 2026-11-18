@@ -84,8 +84,8 @@ function canvasLitStepCount(
     if (points.length < 3) return;
     ctx.beginPath();
     points.forEach((point, index) => {
-      const x = ((point[0] - originEast) / cellM - 0.5) + 0.5;
-      const y = rows - 1 - ((point[1] - originNorth) / cellM - 0.5 + 0.5);
+      const x = (point[0] - originEast) / cellM;
+      const y = rows - (point[1] - originNorth) / cellM;
       if (index === 0) ctx.moveTo(x, y);
       else ctx.lineTo(x, y);
     });
@@ -123,9 +123,13 @@ function canvasLitStepCount(
       }
     }
     const data = ctx.getImageData(0, 0, cols, rows).data;
-    for (let index = 0; index < litSteps.length; index++) {
-      if (masked[index]) continue;
-      if (data[index * 4 + 3]! < 128) litSteps[index]! += 1;
+    for (let row = 0; row < rows; row++) {
+      const canvasRow = rows - 1 - row;
+      for (let col = 0; col < cols; col++) {
+        const index = row * cols + col;
+        if (masked[index]) continue;
+        if (data[(canvasRow * cols + col) * 4 + 3]! < 128) litSteps[index]! += 1;
+      }
     }
   }
   void treeMode;

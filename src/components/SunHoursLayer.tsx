@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
-import { buildSunHoursGroundDrapeGeometry } from "../lib/sunHoursGroundDrape";
+import { buildSunHoursGroundDrapeGeometry, SUN_HOURS_GROUND_TEXTURE_FLIP_Y } from "../lib/sunHoursGroundDrape";
 import { rasterizeSunHoursGroundGridFor3d } from "../lib/sunHoursGroundRaster";
 import type { SunHoursDirectOverlay } from "../lib/sunHoursDirectAssess";
 import type { SunHoursGroundGrid } from "../lib/sunHoursGroundPlan";
@@ -61,6 +61,7 @@ export function SunHoursLayer({
     const canvas = rasterizeSunHoursGroundGridFor3d(scaledGrid, scaleMaxHours);
     if (!canvas) return null;
     const tex = new THREE.CanvasTexture(canvas);
+    tex.flipY = SUN_HOURS_GROUND_TEXTURE_FLIP_Y;
     tex.colorSpace = THREE.SRGBColorSpace;
     tex.magFilter = THREE.LinearFilter;
     tex.minFilter = THREE.LinearFilter;
