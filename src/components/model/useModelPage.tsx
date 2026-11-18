@@ -4,9 +4,7 @@ import { sunStudyLayersFor } from "../useSunStudyShadows";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { isEditableTarget } from "../../lib/keyboardTarget";
 import { handleModelKeyDown, type ModelShortcutAction } from "../../lib/modelKeyboard";
-import { createMassingBlock } from "../../lib/massingBlock";
 import { massingBlocksToBuildingFeats } from "../../lib/massingBlockPlan";
-import { readStoredMassingBlocks } from "../../lib/massingBlockStore";
 import { registerModelKeyboardBridge } from "../../lib/modelKeyboardBridge";
 import { viewportIsNarrow } from "../../lib/panelCollapse";
 import * as THREE from "three";import { BUILDING_USES, BUILDING_USE_META, countSourcesGrouped, countUses, uniformBuildingColor } from "../../lib/buildingUse";
@@ -83,12 +81,6 @@ import { treeTierCounts } from "../../lib/trees";
 
 import { clearPlanShadowCache, proposedMassingInModel } from "../../lib/buildingShadows";
 import {
-  facadeOverlayWallQa,
-  primaryProposedMassingBbox,
-  proposedMassingBboxes,
-  proposedMassingObliqueCamera,
-} from "../../lib/facadeSolarQa";
-import {
   appendManualHeightCredit,
   applyHeightOverrides,
   clearAllHeightOverrides,
@@ -111,8 +103,6 @@ import {
 import { countBuildingHeightTiers, LIDAR_NO_DATA_LINE } from "../../lib/lidarTierStatus";
 import { buildCityGroup, disposeObject } from "../../lib/buildCity";
 import { openRing, toLocal } from "../../lib/geo";
-import { sampleTerrain } from "../../lib/terrain";
-import { SURFACE } from "../../lib/surfaceLayers";
 import { interiorPoint, pointInPolygon } from "../../lib/useCascade";
 import type { BuildingFeat, BuildingUse, CityModel } from "../../types";
 import type { InspectHudScreen } from "../InspectHudProjector";
@@ -137,26 +127,19 @@ import {
   type HiddenBuildingStore,
 } from "../../lib/hiddenBuildings";
 import { useImportedMassing } from "../useImportedMassing";
-import { useMassingParcels } from "../useMassingParcels";
-import { useMassingTool } from "../useMassingTool";
+import { useModelPageMassing } from "./useModelPageMassing";
+import { modelPageSolarQa } from "./modelPageSolarQa";
 import { useFacadeSolarAssess } from "../useFacadeSolarAssess";
-import { facadeOverlayCellNormals } from "../../lib/facadeSolarAssess";
 import { facadeSolarPointsForExport, facadeSolarSvgTable } from "../../lib/facadeSolarExport";
 import { useSolarReceptorAssess } from "../useSolarReceptorAssess";
 import { useSunHoursLostPlan } from "../useSunHoursLostPlan";
 import { useSunHoursGround } from "../useSunHoursGround";
-import { countPositiveLossCells, positiveLossCellsInsideFootprints } from "../../lib/sunHoursLostPlan";
-import { countSunHoursGroundCells, footprintMaskedCells } from "../../lib/sunHoursGroundPlan";
-import { sunHoursGroundPaletteEndpointKeys } from "../../lib/sunHoursGround";
-import { ringFromCorners } from "../../lib/solarAccessB43";
 import type { SolarReceptorArea } from "../../lib/solarReceptorAssess";
 import { solarReceptorsForExport } from "../../lib/solarReceptorExport";
-import { defaultParkRuleId, solarRuleDefinition, type ParkSolarRuleId } from "../../lib/solarRuleRegistry";
-import { largestGreenAreaBounds } from "../../lib/solarGreenPick";
+import { defaultParkRuleId, type ParkSolarRuleId } from "../../lib/solarRuleRegistry";
 import {
   loadSolarReceptors,
   nextParkReceptorId,
-  nextReceptorId,
   normalizeReceptorRing,
   saveSolarReceptors,
 } from "../../lib/solarReceptorStore";
@@ -651,180 +634,16 @@ export function useModelPage({
 
   const massing = useImportedMassing(model);
   const [qaProposedMassing, setQaProposedMassing] = useState<BuildingFeat[]>([]);
-  const massingPointAllowedRef = useRef<(east: number, north: number) => boolean>(() => true);
-  const massingDraw = useMassingTool(model, {
-    pointAllowed: (east, north) => massingPointAllowedRef.current(east, north),
-  });
-  const massingParcels = useMassingParcels(model, massingDraw.tool.toolEnabled);
-  massingPointAllowedRef.current = massingParcels.pointAllowed;
-  const [massingCursor, setMassingCursor] = useState({ x: 0, y: 0 });
-  const massingHeightDragFloors = useRef<number>(4);
-  const massingSceneCanvasRef = useRef<HTMLCanvasElement | null>(null);
-  const selectedMassingBlock = useMemo(
-    () => massingDraw.blocks.find((item) => item.id === massingDraw.tool.selectedId) ?? null,
-    [massingDraw.blocks, massingDraw.tool.selectedId],
-  );
-
-  useEffect(() => {
-    const canvas = massingSceneCanvasRef.current;
-    if (!canvas) return;
-    const titleSelect = massingDraw.tool.toolEnabled && !massingDraw.tool.drawArmed;
-    canvas.style.cursor = titleSelect && massingParcels.hoveredParcelId != null ? "pointer" : "";
-  }, [massingDraw.tool.drawArmed, massingDraw.tool.toolEnabled, massingParcels.hoveredParcelId]);
-
-  const massingGroundPointerMove = useCallback(
-    (
-      east: number | null,
-      north: number | null,
-      _clientX: number,
-      _clientY: number,
-      hitBlockId: string | null,
-    ) => {
-      if (!massingDraw.tool.toolEnabled || massingDraw.tool.drawArmed) {
-        massingParcels.setHoveredParcelId(null);
-        return;
-      }
-      if (hitBlockId) {
-        massingParcels.setHoveredParcelId(null);
-        return;
-      }
-      if (east == null || north == null) {
-        massingParcels.setHoveredParcelId(null);
-        return;
-      }
-      massingParcels.setHoveredParcelId(massingParcels.pickAt(east, north));
-    },
-    [massingDraw.tool.drawArmed, massingDraw.tool.toolEnabled, massingParcels],
-  );
-
-  useEffect(() => {
-    if (tab !== "3d") {
-      massingDraw.dispatchTool({ type: "LEAVE_3D_VIEW" });
-    }
-  }, [tab, massingDraw.dispatchTool]);
-
-  useEffect(() => {
-    if (
-      typeof window === "undefined" ||
-      (!qaModeFromSearch(window.location.search) && !(window as Window & { __citycutVerifyHarness?: boolean }).__citycutVerifyHarness)
-    ) {
-      return;
-    }
-    window.__citycutQaMassing = {
-      enableTool: () => massingDraw.setToolEnabled(true),
-      disableTool: () => massingDraw.setToolEnabled(false),
-      armDraw: () => massingDraw.setDrawArmed(true),
-      disarmDraw: () => massingDraw.setDrawArmed(false),
-      qaFocusParcelHover: (parcelId: string) => {
-        const c = massingParcels.samplePointForParcel(parcelId);
-        if (!c) return false;
-        const [east, north] = c;
-        const groundY = model.terrain ? sampleTerrain(model.terrain, east, north, model.sideM) : 0;
-        const y = groundY + SURFACE.rail.lift + 0.35;
-        const z = -north;
-        const p = window.__citycutQa?.projectToScreen({ x: east, y, z });
-        if (!p) return false;
-        const canvas = document.querySelector<HTMLCanvasElement>(".model canvas");
-        if (!canvas) return false;
-        canvas.dispatchEvent(
-          new PointerEvent("pointermove", {
-            bubbles: true,
-            clientX: p.x,
-            clientY: p.y,
-            pointerId: 1,
-            buttons: 0,
-            pointerType: "mouse",
-          }),
-        );
-        return true;
-      },
-      selectParcels: (ids: string[]) => massingParcels.selectParcels(ids),
-      clearParcels: () => massingParcels.clearSelection(),
-      nearestParcelIds: (count: number) => massingParcels.nearestIds(count),
-      getParcelState: () => massingParcels.getSyncState(),
-      sampleInsideBoundary: () => massingParcels.sampleInsideBoundary(),
-      pointInSiteBoundary: (east: number, north: number) => massingParcels.pointAllowed(east, north),
-      qaGroundPress: (east: number, north: number) => massingDraw.pointerDown(east, north, null),
-      qaGroundRelease: () => massingDraw.pointerUp(),
-      qaGroundMove: (east: number, north: number) => massingDraw.pointerMove(east, north),
-      finishDraw: () => massingDraw.finishDraw(),
-      commitPolylineCenterline: (
-        points: [number, number][],
-        partial?: Parameters<typeof createMassingBlock>[2],
-      ) => {
-        if (points.length < 2) return null;
-        const block = createMassingBlock(massingDraw.cutId, points, partial);
-        massingDraw.appendBlock(block);
-        massingDraw.dispatchTool({ type: "SELECT", id: block.id });
-        return block.id;
-      },
-      clearDrawnBlocks: () => massingDraw.setBlocksForQa([]),
-      getToolPhase: () => massingDraw.getToolPhase(),
-      drawArmed: () => massingDraw.isDrawArmed(),
-      simulateDraw: (east0: number, north0: number, east1: number, north1: number) => {
-        massingDraw.setToolEnabled(true);
-        const block = createMassingBlock(massingDraw.cutId, [
-          [east0, north0],
-          [east1, north1],
-        ]);
-        const stored = readStoredMassingBlocks(window.localStorage, massingDraw.cutId);
-        massingDraw.setBlocksForQa([...stored.blocks, block]);
-        massingDraw.dispatchTool({ type: "SELECT", id: block.id });
-        return block.id;
-      },
-      getBlocks: () => readStoredMassingBlocks(window.localStorage, massingDraw.cutId).blocks,
-      selectBlock: (id: string) => {
-        massingDraw.setToolEnabled(true);
-        massingDraw.dispatchTool({ type: "SELECT", id });
-      },
-      setFloors: (floors: number) => {
-        const stored = readStoredMassingBlocks(window.localStorage, massingDraw.cutId);
-        const id = stored.blocks[0]?.id;
-        if (!id) return;
-        massingDraw.dispatchTool({ type: "SELECT", id });
-        massingDraw.updateSelected({ floors });
-      },
-      deleteSelected: () => {
-        const stored = readStoredMassingBlocks(window.localStorage, massingDraw.cutId);
-        const id = stored.blocks[0]?.id;
-        if (id) massingDraw.removeBlock(id);
-        massingDraw.dispatchTool({ type: "DELETE_SELECTED" });
-      },
-      readPersistedCount: () => {
-        const key = `citycut.massingBlocks.${massingDraw.cutId}`;
-        try {
-          const raw = window.localStorage.getItem(key);
-          if (!raw) return 0;
-          const data = JSON.parse(raw) as { blocks?: unknown[] };
-          return Array.isArray(data.blocks) ? data.blocks.length : 0;
-        } catch {
-          return 0;
-        }
-      },
-    };
-    return () => {
-      delete window.__citycutQaMassing;
-    };
-  }, [
-    massingDraw.appendBlock,
-    massingDraw.finishDraw,
-    massingDraw.cutId,
-    massingDraw.dispatchTool,
-    massingDraw.removeBlock,
-    massingDraw.setBlocksForQa,
-    massingDraw.setDrawArmed,
-    massingDraw.setToolEnabled,
-    massingDraw.updateSelected,
-    massingParcels.boundary.length,
-    massingParcels.samplePointForParcel,
-    massingParcels.clearSelection,
-    massingParcels.nearestIds,
-    massingParcels.selectParcels,
-    massingParcels.selectedIds,
-    model.center,
-    model.sideM,
-    model.terrain,
-  ]);
+  const {
+    massingCursor,
+    massingDraw,
+    massingGroundPointerMove,
+    massingHeightDragFloors,
+    massingParcels,
+    massingSceneCanvasRef,
+    selectedMassingBlock,
+    setMassingCursor,
+  } = useModelPageMassing(model, tab);
 
   const qaSummaryRef = useRef({ treeCrowns: 0, buildingCount: 0, roadCount: 0, triangleCount: 0 });
   const qaDisplayBuildingsRef = useRef(model.buildings);
@@ -1109,278 +928,20 @@ export function useModelPage({
         for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]!);
         return btoa(binary);
       },
-      setQaProposedMassingBox(east = 0, north = 0, size = 30, height = 18) {
-        const half = size / 2;
-        setQaProposedMassing([
-          {
-            id: -910001,
-            ring: [
-              [east - half, north - half],
-              [east + half, north - half],
-              [east + half, north + half],
-              [east - half, north + half],
-              [east - half, north - half],
-            ],
-            holes: [],
-            height,
-            use: "unclassified",
-            source: "none",
-            proposedMassing: true,
-            overtureName: "QA proposed massing",
-          },
-        ]);
-        return true;
-      },
-      clearQaProposedMassing() {
-        setQaProposedMassing([]);
-      },
-      setDrawingPlanViewport(east: number, north: number, spanM: number) {
-        const aspect = 1.05;
-        setPlanViewport({
-          x: east - spanM / 2,
-          y: -north - (spanM * aspect) / 2,
-          w: spanM,
-          h: spanM * aspect,
-        });
-        return true;
-      },
-      setSolarPlanMinimal() {
-        setSolar((prev) => ({
-          ...prev,
-          solarAccess: false,
-          sunHoursLost: false,
-          sunHours: false,
-          sunStudy: false,
-          castShadows: true,
-          receptorDraw: false,
-        }));
-        return true;
-      },
-      setSolarStudiesFull() {
-        setSolar((prev) => ({
-          ...prev,
-          solarAccess: true,
-          sunHoursLost: true,
-          sunStudy: true,
-          month: 9,
-          day: 22,
-          castShadows: true,
-          receptorDraw: true,
-        }));
-        return true;
-      },
-      enableSolarAccess() {
-        setSolar((prev) => ({
-          ...prev,
-          solarAccess: true,
-          sunStudy: true,
-          month: 9,
-          day: 22,
-          castShadows: true,
-          receptorDraw: true,
-        }));
-        return true;
-      },
-      addSolarReceptor(east0: number, north0: number, east1: number, north1: number, id?: string) {
-        const ring = ringFromCorners([east0, north0], [east1, north1]);
-        const normalized = normalizeReceptorRing(ring);
-        if (!normalized) return null;
-        const receptorId = id ?? nextReceptorId(solarReceptorsRef.current);
-        setSolarReceptors((current) => [...current, { id: receptorId, ring: normalized, kind: "yard" }]);
-        return receptorId;
-      },
-      enableSolarParkAccess(ruleId?: string) {
-        const resolved = (ruleId ?? solarRef.current.parkRuleId ?? defaultParkRuleId()) as ParkSolarRuleId;
-        const rule = solarRuleDefinition(resolved);
-        setSolar((prev) => ({
-          ...prev,
-          solarParkAccess: true,
-          parkRuleId: resolved,
-          month: rule.month,
-          day: rule.day,
-          castShadows: true,
-          parkReceptorDraw: true,
-        }));
-        return true;
-      },
-      readLargestGreenAreaBounds() {
-        return largestGreenAreaBounds(drawingModelRef.current);
-      },
-      setSolarPlanTime(hour: number, minute = 0) {
-        setSolar((prev) => ({ ...prev, hour, minute, castShadows: true, sunStudy: false }));
-        return true;
-      },
-      addSolarParkFromLargestGreen(id?: string, ruleId?: string) {
-        const bounds = largestGreenAreaBounds(drawingModelRef.current);
-        if (!bounds) return null;
-        const inset = 4;
-        const east0 = bounds.east0 + inset;
-        const north0 = bounds.north0 + inset;
-        const east1 = bounds.east1 - inset;
-        const north1 = bounds.north1 - inset;
-        if (east1 - east0 < 8 || north1 - north0 < 8) return null;
-        const ring = ringFromCorners([east0, north0], [east1, north1]);
-        const normalized = normalizeReceptorRing(ring);
-        if (!normalized) return null;
-        const receptorId = id ?? nextParkReceptorId(solarReceptorsRef.current);
-        const resolvedRule = (ruleId ?? solarRef.current.parkRuleId ?? defaultParkRuleId()) as ParkSolarRuleId;
-        setSolarReceptors((current) => [
-          ...current,
-          { id: receptorId, ring: normalized, kind: "park", ruleId: resolvedRule },
-        ]);
-        return receptorId;
-      },
-      addSolarParkReceptor(east0: number, north0: number, east1: number, north1: number, id?: string, ruleId?: string) {
-        const ring = ringFromCorners([east0, north0], [east1, north1]);
-        const normalized = normalizeReceptorRing(ring);
-        if (!normalized) return null;
-        const receptorId = id ?? nextParkReceptorId(solarReceptorsRef.current);
-        const resolvedRule = (ruleId ?? solarRef.current.parkRuleId ?? defaultParkRuleId()) as ParkSolarRuleId;
-        setSolarReceptors((current) => [
-          ...current,
-          { id: receptorId, ring: normalized, kind: "park", ruleId: resolvedRule },
-        ]);
-        return receptorId;
-      },
-      clearSolarReceptors() {
-        setSolarReceptors([]);
-      },
-      readSolarReceptorAssess() {
-        return solarReceptorAssessRef.current.results;
-      },
-      enableFacadeSolar() {
-        setSolar((prev) => ({
-          ...prev,
-          facadeSolarAccess: true,
-          month: 6,
-          day: 21,
-          hour: 12,
-          castShadows: true,
-        }));
-        return true;
-      },
-      readFacadeSolarAssess() {
-        return facadeSolarAssessRef.current.bundle;
-      },
-      readFacadeOverlayNormals() {
-        const bundle = facadeSolarAssessRef.current.bundle;
-        return bundle ? facadeOverlayCellNormals(bundle) : [];
-      },
-      frameProposedMassingOblique(side: "nw" | "se") {
-        const box = primaryProposedMassingBbox(proposedMassingBboxes(facadeMassingModelRef.current));
-        if (!box || !window.__citycutQa?.setCamera) return false;
-        window.__citycutQa.setCamera(proposedMassingObliqueCamera(box, side));
-        return true;
-      },
-      readFacadeOverlayWallQa() {
-        const bundle = facadeSolarAssessRef.current.bundle;
-        if (!bundle) return null;
-        const target = window.__citycutQa?.getCamera?.()?.target;
-        return facadeOverlayWallQa(bundle, facadeMassingModelRef.current, target ?? undefined);
-      },
-      enableSunHoursLost() {
-        setSolar((prev) => ({
-          ...prev,
-          sunHoursLost: true,
-          sunStudy: true,
-          month: 9,
-          day: 22,
-          castShadows: true,
-        }));
-        return true;
-      },
-      enableTreeShadows() {
-        setSolar((prev) => ({ ...prev, treesCastShadow: true, castShadows: true }));
-        return true;
-      },
-      setTreesCastShadow(on: boolean) {
-        setSolar((prev) => ({ ...prev, treesCastShadow: on, castShadows: true }));
-        return true;
-      },
-      readSunHoursLostPlan() {
-        const { grid } = sunHoursLostPlanRef.current;
-        if (!grid) return { cellCount: 0, maxLoss: 0, southLossCells: 0, footprintInside: 0 };
-        const footprintInside = positiveLossCellsInsideFootprints(drawingModelRef.current, grid).length;
-        return {
-          cellCount: countPositiveLossCells(grid),
-          maxLoss: grid.maxLoss,
-          cellM: grid.cellM,
-          footprintInside,
-        };
-      },
-      enableSunHoursGround() {
-        setSolar((prev) => ({
-          ...prev,
-          sunHours: true,
-          month: 6,
-          day: 21,
-          castShadows: true,
-        }));
-        return true;
-      },
-      readSunHoursTerrainRelief() {
-        const cut = drawingModelRef.current;
-        if (!cut.terrain) return { relief: 0, min: 0, max: 0 };
-        return { relief: cut.terrain.max - cut.terrain.min, min: cut.terrain.min, max: cut.terrain.max };
-      },
-      readSunHoursGround() {
-        const { grid, overlay, scaleMaxHours } = sunHoursGroundRef.current;
-        const endpoints = sunHoursGroundPaletteEndpointKeys();
-        return {
-          enabled: Boolean(solarRef.current.sunHours),
-          month: solarRef.current.month,
-          day: solarRef.current.day,
-          cellM: grid?.cellM ?? 0,
-          cellCount: grid ? countSunHoursGroundCells(grid) : 0,
-          maskedFootprints: grid ? footprintMaskedCells(grid) : 0,
-          maxSunHours: scaleMaxHours || grid?.maxSunHours || 0,
-          surfaceCells: overlay?.cellCount ?? 0,
-          paletteMin: getColour(endpoints.minKey),
-          paletteMax: getColour(endpoints.maxKey),
-        };
-      },
-      frameSunHoursGroundPlan() {
-        if (!window.__citycutQa?.setCamera) return false;
-        const cut = drawingModelRef.current;
-        const side = cut.sideM;
-        const lift = cut.terrain ? (cut.terrain.min + cut.terrain.max) / 2 : 0;
-        const groundY = cut.terrain ? cut.terrain.min : 0;
-        const altitude = Math.max(side * 0.9, 120);
-        window.__citycutQa.setCamera({
-          eye: { x: 0, y: groundY + altitude, z: 0 },
-          target: { x: 0, y: lift, z: 0 },
-        });
-        return true;
-      },
-      frameSunHoursGroundOblique() {
-        if (!window.__citycutQa?.setCamera) return false;
-        const cut = drawingModelRef.current;
-        const side = cut.sideM;
-        const groundY = cut.terrain ? cut.terrain.min : 0;
-        const lift = cut.terrain ? (cut.terrain.min + cut.terrain.max) / 2 : 0;
-        const span = side * 0.55;
-        window.__citycutQa.setCamera({
-          eye: { x: -span, y: groundY + span * 0.55, z: span * 0.75 },
-          target: { x: 0, y: lift, z: 0 },
-        });
-        return true;
-      },
-      frameSunHoursTerrainEdge() {
-        if (!window.__citycutQa?.setCamera) return false;
-        const cut = drawingModelRef.current;
-        const side = cut.sideM;
-        const groundY = cut.terrain ? cut.terrain.min : 0;
-        const relief = cut.terrain ? cut.terrain.max - cut.terrain.min : 0;
-        const westEdge = -side * 0.5 + side * 0.06;
-        const southEdge = -side * 0.42;
-        const slopeY = groundY + relief * 0.35;
-        const span = side * 0.34;
-        window.__citycutQa.setCamera({
-          eye: { x: westEdge - span * 0.95, y: slopeY + span * 0.62, z: southEdge + span * 0.45 },
-          target: { x: westEdge + span * 0.18, y: slopeY + relief * 0.08, z: southEdge - span * 0.06 },
-        });
-        return true;
-      },
+      ...modelPageSolarQa({
+        setQaProposedMassing,
+        setPlanViewport,
+        setSolar,
+        setSolarReceptors,
+        solarRef,
+        solarReceptorsRef,
+        solarReceptorAssessRef,
+        facadeSolarAssessRef,
+        facadeMassingModelRef,
+        drawingModelRef,
+        sunHoursLostPlanRef,
+        sunHoursGroundRef,
+      }),
       setSectionKnifeActive(active: boolean) {
         setSectionKnifeTool((tool) => ({ ...tool, active }));
       },

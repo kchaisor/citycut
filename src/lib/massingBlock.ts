@@ -1,5 +1,5 @@
 import { polylineLength } from "./geo";
-import { pointInSiteFrame, type SiteFrameShape } from "./siteFrame";
+import { frameGroundSize, pointInSiteFrame, type FrameGroundSize, type SiteFrameShape } from "./siteFrame";
 import type { Pt, Ring } from "../types";
 
 export const MASSING_DEFAULT_WIDTH_M = 14;
@@ -300,10 +300,11 @@ export function footprintInsideCut(
   sideM: number,
   frameShape: SiteFrameShape,
   epsilon = 0.05,
+  size: FrameGroundSize = frameGroundSize(sideM),
 ): boolean {
   for (let i = 0; i < ring.length - 1; i++) {
     const p = ring[i]!;
-    if (!pointInSiteFrame(p, sideM, frameShape)) return false;
+    if (!pointInSiteFrame(p, sideM, frameShape, size)) return false;
     if (frameShape === "circle") continue;
     const half = sideM / 2;
     if (Math.abs(p[0]) > half - epsilon || Math.abs(p[1]) > half - epsilon) {

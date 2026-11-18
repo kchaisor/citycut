@@ -20,7 +20,7 @@ import { planPaths, svgPolyline, svgRings } from "../lib/svgPlan";
 import { getColour } from "../lib/colours";
 import { themeColor } from "../lib/themeColor";
 import { useColourRevision } from "../lib/useColourRevision";
-import type { CityModel, Pt } from "../types";
+import type { CityModel } from "../types";
 import type { SectionKnifeToolState } from "../lib/sectionKnife/state";
 import { SectionKnifePlanMarkers } from "./SectionKnifePlanMarkers";
 import { HeliodonPlanOverlay } from "./HeliodonPlanOverlay";
@@ -29,19 +29,15 @@ import { NSW_PLAN_LABEL_SHARE, nswPlanHasDrawableContent, nswPlanItems } from ".
 import { readNswPlanStyle } from "../lib/nswPlanStyle";
 import {
   importedPlanShadowRings,
-  planShadowSplitRings,
   proposedMassingInModel,
-  shadowRingsFromMulti,
   type PlanShadowInput,
 } from "../lib/buildingShadows";
-import { planTreeShadowMulti } from "../lib/solarTreePlanShadow";
 import type { HeliodonDiagramInput } from "../lib/heliodonDiagram";
 import { createThrottledViewportSink } from "../lib/planViewportThrottle";
 import { modelFrameSize } from "../lib/modelFrame";
 import { planViewportExtentRect, type PlanViewport } from "../lib/planViewport";
 import {
   SINGLE_SHADOW_OPACITY,
-  SUN_STUDY_SHADOW_ADDED_OPACITY,
   SUN_STUDY_SHADOW_OPACITY,
   SUN_STUDY_TREE_OPACITY,
   estimatedHeightLabels,
@@ -53,15 +49,22 @@ import {
 } from "../lib/sunStudyPlan";
 import { heliodonLabelFontMetres } from "../lib/heliodonDiagram";
 import { useSunStudyShadows } from "./useSunStudyShadows";
-import { rasterizePlanShadowRings, rasterizeSunStudyLayers } from "../lib/sunStudyShadowRaster";
 import { SunHoursGroundPlanOverlay } from "./SunHoursGroundPlanOverlay";
 import { SunHoursRoofPlanOverlay } from "./SunHoursRoofPlanOverlay";
 import type { SunHoursGroundRaster } from "../lib/sunHoursGroundRaster";
 import { SunHoursLostPlanOverlay } from "./SunHoursLostPlanOverlay";
 import type { SunHoursGroundGrid } from "../lib/sunHoursGroundPlan";
 import type { SunHoursLostGrid } from "../lib/sunHoursLostPlan";
-import { ringFromCorners } from "../lib/solarAccessB43";
-import { isParkAssessRow, type SolarAssessRow, type SolarReceptorArea } from "../lib/solarReceptorAssess";
+import type { SolarAssessRow, SolarReceptorArea } from "../lib/solarReceptorAssess";
+import {
+  ADDED_SHADOW_HATCH_FILL,
+  PlanAddedShadowDefs,
+  PlanSolarReceptorLayer,
+  planPointFromClient,
+  usePlanReceptorDraw,
+  usePlanSolarReceptors,
+} from "./PlanSolarReceptorLayer";
+import { usePlanShadowOverlays } from "./usePlanShadowOverlays";
 import type { Ring } from "../types";
 
 const NO_SELECTION: readonly number[] = [];
@@ -152,8 +155,6 @@ export function DrawingPlan({
 }) {
   const svgRef = useRef<SVGSVGElement>(null);
   const drag = useRef<{ px: number; py: number; view: PlanViewport } | null>(null);
-  const receptorDrag = useRef<{ a: Ring[number]; b: Ring[number]; moved: boolean } | null>(null);
-  const [receptorPreview, setReceptorPreview] = useState<Ring | null>(null);
   const figure = kind === "figure-ground";
   const colourTick = useColourRevision();
   const style = useMemo(() => lineStyle ?? readDrawingStyle(), [lineStyle, colourTick]);
@@ -326,94 +327,28 @@ export function DrawingPlan({
   const studyShadowFill = getColour("--sun-study-shadow");
   const studyShadowAddedFill = getColour("--sun-study-shadow-added");
   const studyIsolateCasters = sunStudySelected.length > 0;
-  const treeCrownShadowFill = getColour("--sun-study-tree-shadow");
   const upperStroke = useMemo(() => importedMassingUpperStrokeStyle(style), [style]);
   const studySunFill = getColour("--sun-study-sun");
   const muted = Boolean(study) && sunStudyMuted;
   const mutedFill = (key: Parameters<typeof getColour>[0], normal: string) => (muted ? getColour(key) : normal);
   const annotationInk = figure ? figureFill : getColour("--sun-compass-label");
   const splitShadow = proposedMassingInModel(casterModel);
-  const receptorPassFill = getColour("--solar-receptor-pass");
-  const receptorFailFill = getColour("--solar-receptor-fail");
-  const receptorWarnFill = getColour("--solar-receptor-warn");
-  const receptorOutline = getColour("--solar-receptor-outline");
-  const receptorPreviewFill = getColour("--solar-receptor-preview");
-  const receptorResultById = useMemo(
-    () => new Map(solarReceptorResults.map((row) => [row.id, row])),
-    [solarReceptorResults],
-  );
-  const parkPlanOverlays = useMemo(() => {
-    return solarReceptors
-      .filter((receptor) => (receptor.kind ?? "yard") === "park")
-      .map((receptor) => {
-        const row = receptorResultById.get(receptor.id);
-        const hatch = row && isParkAssessRow(row) ? row.addedShadowRings : [];
-        let sumE = 0;
-        let sumN = 0;
-        const count = Math.max(1, receptor.ring.length - 1);
-        for (let index = 0; index < count; index++) {
-          const [east, north] = receptor.ring[index]!;
-          sumE += east;
-          sumN += north;
-        }
-        return {
-          id: receptor.id,
-          ring: receptor.ring,
-          hatch,
-          labelX: sumE / count,
-          labelY: sumN / count,
-        };
-      });
-  }, [solarReceptors, receptorResultById]);
+  const receptorLayer = usePlanSolarReceptors(solarReceptors, solarReceptorResults);
+  const receptorDrawing = usePlanReceptorDraw(svgRef);
 
-  function planPointFromClient(clientX: number, clientY: number, planView: PlanViewport): Pt {
-    const svg = svgRef.current;
-    if (!svg) return [0, 0];
-    const ctm = svg.getScreenCTM?.();
-    if (ctm) {
-      const local = new DOMPoint(clientX, clientY).matrixTransform(ctm.inverse());
-      return [local.x, -local.y];
-    }
-    const rect = svg.getBoundingClientRect();
-    const x = planView.x + ((clientX - rect.left) / rect.width) * planView.w;
-    const y = planView.y + ((clientY - rect.top) / rect.height) * planView.h;
-    return [x, -y];
-  }
 
-  function receptorFill(tone: "pass" | "fail" | "warn" | undefined): string {
-    if (tone === "fail") return receptorFailFill;
-    if (tone === "warn") return receptorWarnFill;
-    return receptorPassFill;
-  }
-  const shadowSplit = useMemo(() => {
-    if (!castShadows || !shadowInput || figure || study) return { existing: [], added: [] };
-    return planShadowSplitRings(casterModel, shadowInput, true, "off");
-  }, [castShadows, figure, casterModel, shadowInput, study]);
-  const scrubbedTreeCrownShadows = useMemo(() => {
-    if (!treesCastShadow || !castShadows || !shadowInput || figure) return [];
-    const trees = model.trees ?? [];
-    if (trees.length === 0) return [];
-    return shadowRingsFromMulti(planTreeShadowMulti(model, shadowInput, trees));
-  }, [treesCastShadow, castShadows, shadowInput, figure, model]);
-  const studyShadowRasters = useMemo(() => {
-    if (!study || studyIsolateCasters || studyShadows.layers.length === 0) return [];
-    const layers = splitShadow
-      ? studyShadows.layers.map((layer) => ({ ...layer, addedRings: [] as typeof layer.addedRings }))
-      : studyShadows.layers;
-    return rasterizeSunStudyLayers(layers, model.sideM);
-  }, [study, studyIsolateCasters, splitShadow, studyShadows.layers, model.sideM]);
-  const studyScrubAddedRings = useMemo(() => {
-    if (!study || studyIsolateCasters || !splitShadow || !shadowInput) return [];
-    const layer = studyShadows.layers.find((entry) => entry.hour === shadowInput.hour);
-    return layer?.addedRings ?? [];
-  }, [study, studyIsolateCasters, splitShadow, shadowInput, studyShadows.layers]);
-  const treeCrownShadowRaster = useMemo(
-    () =>
-      scrubbedTreeCrownShadows.length > 0
-        ? rasterizePlanShadowRings(scrubbedTreeCrownShadows, model.sideM, treeCrownShadowFill, 0.68)
-        : null,
-    [scrubbedTreeCrownShadows, model.sideM, treeCrownShadowFill],
-  );
+  const { shadowSplit, studyShadowRasters, studyScrubAddedRings, treeCrownShadowRaster } = usePlanShadowOverlays({
+    model,
+    casterModel,
+    shadowInput,
+    castShadows,
+    figure,
+    study,
+    studyLayers: studyShadows.layers,
+    isolateCasters: studyIsolateCasters,
+    splitShadow,
+    treesCastShadow,
+  });
   const addedHatchSize = Math.max(3.5, model.sideM * 0.008);
   const importedShadowReady = useMemo(() => {
     if (!shadowInput) return false;
@@ -530,21 +465,14 @@ export function DrawingPlan({
         window.getSelection?.()?.removeAllRanges?.();
         event.currentTarget.setPointerCapture?.(event.pointerId);
         if (receptorDraw && onReceptorCommit) {
-          const at = planPointFromClient(event.clientX, event.clientY, view);
-          receptorDrag.current = { a: at, b: at, moved: false };
-          setReceptorPreview(ringFromCorners(at, at));
+          receptorDrawing.begin(event.clientX, event.clientY, view);
           return;
         }
         drag.current = { px: event.clientX, py: event.clientY, view };
       }}
       onPointerMove={(event) => {
-        const draw = receptorDrag.current;
-        if (draw && onReceptorCommit) {
+        if (onReceptorCommit && receptorDrawing.move(event.clientX, event.clientY, view)) {
           event.preventDefault();
-          const at = planPointFromClient(event.clientX, event.clientY, view);
-          draw.b = at;
-          draw.moved = true;
-          setReceptorPreview(ringFromCorners(draw.a, draw.b));
           return;
         }
         const start = drag.current;
@@ -560,24 +488,13 @@ export function DrawingPlan({
         else setInternalView(next);
       }}
       onPointerUp={(event) => {
-        const draw = receptorDrag.current;
-        if (draw && onReceptorCommit) {
-          receptorDrag.current = null;
-          const ring = ringFromCorners(draw.a, draw.b);
-          setReceptorPreview(null);
-          const minE = Math.min(draw.a[0], draw.b[0]);
-          const maxE = Math.max(draw.a[0], draw.b[0]);
-          const minN = Math.min(draw.a[1], draw.b[1]);
-          const maxN = Math.max(draw.a[1], draw.b[1]);
-          if (maxE - minE >= 2 && maxN - minN >= 2) onReceptorCommit(ring);
-          return;
-        }
+        if (onReceptorCommit && receptorDrawing.end(onReceptorCommit)) return;
         const start = drag.current;
         drag.current = null;
         const svg = svgRef.current;
         if (!start || !svg || !study || !onSunStudyPick) return;
         if (!isClick(event.clientX - start.px, event.clientY - start.py)) return;
-        const local = planPointFromClient(event.clientX, event.clientY, start.view);
+        const local = planPointFromClient(svg, event.clientX, event.clientY, start.view);
         if (onViewportChange) onViewportChange(start.view);
         else setInternalView(start.view);
         const hit = pickBuilding(model.buildings, local);
@@ -585,46 +502,8 @@ export function DrawingPlan({
       }}
     >
       <rect x={view.x} y={view.y} width={view.w} height={view.h} fill={canvas} />
-      {(splitShadow || parkPlanOverlays.some((overlay) => overlay.hatch.length > 0)) && (
-        <defs>
-          <pattern
-            id="sun-study-added-hatch"
-            patternUnits="userSpaceOnUse"
-            width={addedHatchSize}
-            height={addedHatchSize}
-            patternTransform="rotate(45)"
-          >
-            <rect
-              width={addedHatchSize}
-              height={addedHatchSize}
-              fill={studyShadowAddedFill}
-              fillOpacity={SUN_STUDY_SHADOW_ADDED_OPACITY * 0.62}
-            />
-            <line
-              x1={0}
-              y1={0}
-              x2={0}
-              y2={addedHatchSize}
-              stroke={studyShadowAddedFill}
-              strokeWidth={addedHatchSize * 0.38}
-            />
-            <line
-              x1={addedHatchSize * 0.45}
-              y1={0}
-              x2={addedHatchSize * 0.45}
-              y2={addedHatchSize}
-              stroke={studyShadowAddedFill}
-              strokeWidth={addedHatchSize * 0.22}
-            />
-          </pattern>
-          {parkPlanOverlays.map((overlay) =>
-            overlay.hatch.length > 0 ? (
-              <clipPath key={`park-clip-${overlay.id}`} id={`solar-park-clip-${overlay.id}`}>
-                <path d={svgRings([overlay.ring])} fillRule="evenodd" />
-              </clipPath>
-            ) : null,
-          )}
-        </defs>
+      {(splitShadow || receptorLayer.hasParkHatch) && (
+        <PlanAddedShadowDefs hatchSize={addedHatchSize} parkOverlays={receptorLayer.parkOverlays} />
       )}
       <rect
         data-cut-frame="1"
@@ -735,7 +614,7 @@ export function DrawingPlan({
                       key={`a${index}`}
                       data-shadow-added
                       d={svgRings(rings)}
-                      fill="url(#sun-study-added-hatch)"
+                      fill={ADDED_SHADOW_HATCH_FILL}
                       fillRule="evenodd"
                       stroke="none"
                     />
@@ -760,7 +639,7 @@ export function DrawingPlan({
                 key={`sscrub-a${index}`}
                 data-shadow-added
                 d={svgRings(rings)}
-                fill="url(#sun-study-added-hatch)"
+                fill={ADDED_SHADOW_HATCH_FILL}
                 fillRule="evenodd"
                 stroke="none"
               />
@@ -781,7 +660,7 @@ export function DrawingPlan({
                 key={`sha${index}`}
                 data-shadow-added
                 d={svgRings(rings)}
-                fill={splitShadow ? "url(#sun-study-added-hatch)" : studyShadowAddedFill}
+                fill={splitShadow ? ADDED_SHADOW_HATCH_FILL : studyShadowAddedFill}
                 fillOpacity={splitShadow ? 1 : SINGLE_SHADOW_OPACITY}
                 fillRule="evenodd"
                 stroke="none"
@@ -874,88 +753,15 @@ export function DrawingPlan({
               />
             ))}
             {sunHoursLostGrid && <SunHoursLostPlanOverlay grid={sunHoursLostGrid} />}
-            {parkPlanOverlays.map((overlay) =>
-              overlay.hatch.length > 0 ? (
-                <g
-                  key={`park-hatch-${overlay.id}`}
-                  clipPath={`url(#solar-park-clip-${overlay.id})`}
-                  data-solar-park-added-shadow={overlay.id}
-                >
-                  {overlay.hatch.map((rings, index) => (
-                    <path
-                      key={index}
-                      d={svgRings(rings)}
-                      fill="url(#sun-study-added-hatch)"
-                      fillRule="evenodd"
-                      stroke={studyShadowAddedFill}
-                      strokeWidth={Math.max(0.35, addedHatchSize * 0.16)}
-                      strokeLinejoin="round"
-                    />
-                  ))}
-                </g>
-              ) : null,
-            )}
-            {solarReceptors.map((receptor) => {
-              const row = receptorResultById.get(receptor.id);
-              const isPark = (receptor.kind ?? "yard") === "park";
-              let sumE = 0;
-              let sumN = 0;
-              const labelCount = Math.max(1, receptor.ring.length - 1);
-              for (let index = 0; index < labelCount; index++) {
-                const [east, north] = receptor.ring[index]!;
-                sumE += east;
-                sumN += north;
-              }
-              return (
-                <g key={`sr${receptor.id}`} data-solar-receptor-group={receptor.id}>
-                  <path
-                    data-solar-receptor-overlay={receptor.id}
-                    data-solar-park-receptor={isPark ? receptor.id : undefined}
-                    data-solar-receptor-status={row?.statusTone ?? "pass"}
-                    d={svgRings([receptor.ring])}
-                    fill={receptorFill(row?.statusTone)}
-                    fillOpacity={isPark ? 0.35 : 0.52}
-                    fillRule="evenodd"
-                    stroke={receptorOutline}
-                    strokeWidth={screenPx(isPark ? 0.6 : 0.35)}
-                    strokeDasharray={isPark ? "7 4" : undefined}
-                    vectorEffect="non-scaling-stroke"
-                  />
-                  {isPark && (
-                    <text
-                      data-solar-park-label={receptor.id}
-                      x={sumE / labelCount}
-                      y={-(sumN / labelCount)}
-                      textAnchor="middle"
-                      dominantBaseline="central"
-                      fontSize={Math.max(model.sideM * 0.018, 3.2)}
-                      fontWeight={700}
-                      letterSpacing="0.06em"
-                      fill={receptorOutline}
-                      fontFamily="Geist, Helvetica, Arial, sans-serif"
-                      stroke={canvas}
-                      strokeWidth={screenPx(0.2)}
-                      paintOrder="stroke"
-                    >
-                      {receptor.id.replace(/-/g, " ").toUpperCase()}
-                    </text>
-                  )}
-                </g>
-              );
-            })}
-            {receptorPreview && (
-              <path
-                data-solar-receptor-preview
-                d={svgRings([receptorPreview])}
-                fill={receptorPreviewFill}
-                fillOpacity={0.35}
-                fillRule="evenodd"
-                stroke={receptorOutline}
-                strokeWidth={screenPx(0.35)}
-                strokeDasharray="4 3"
-                vectorEffect="non-scaling-stroke"
-              />
-            )}
+            <PlanSolarReceptorLayer
+              receptors={solarReceptors}
+              resultById={receptorLayer.resultById}
+              parkOverlays={receptorLayer.parkOverlays}
+              preview={receptorDrawing.preview}
+              hatchSize={addedHatchSize}
+              canvas={canvas}
+              labelSizeM={Math.max(model.sideM * 0.018, 3.2)}
+            />
             {nswItems && nswStyle && <NswPlanLabels items={nswItems} style={nswStyle} sizeM={model.sideM * NSW_PLAN_LABEL_SHARE} />}
             {sectionKnife?.active ? (
               <SectionKnifePlanMarkers
