@@ -1985,9 +1985,13 @@ input[type="range"]::-moz-range-thumb {
 .wind-rose-picker[data-hovering] .wind-rose-petal:not(.is-hovered) {
   opacity: 0.45;
 }
+.wind-rose-picker-svg:has(.wind-rose-petal:hover) .wind-rose-petal:not(:hover) {
+  opacity: 0.45;
+}
 .wind-rose-petal-band {
   fill-opacity: 0.95;
 }
+.wind-rose-petal:hover .wind-rose-petal-band,
 .wind-rose-petal.is-hovered .wind-rose-petal-band {
   fill-opacity: 1;
 }
@@ -1999,14 +2003,34 @@ input[type="range"]::-moz-range-thumb {
   stroke: var(--ink);
   stroke-width: 1px;
 }
+.wind-rose-petal:hover .wind-rose-petal-outline,
 .wind-rose-petal.is-hovered .wind-rose-petal-outline {
   stroke: var(--ink);
   stroke-width: 1.5px;
 }
-.wind-rose-selected-arc {
-  fill: var(--accent);
+.wind-rose-selected-arc-edge {
+  fill: none;
   stroke: var(--ink);
-  stroke-width: 1px;
+  stroke-width: 6px;
+  stroke-linecap: butt;
+  pointer-events: none;
+}
+.wind-rose-selected-arc {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 4px;
+  stroke-linecap: butt;
+  pointer-events: none;
+}
+.wind-rose-picker-svg text,
+.wind-rose-guide-label {
+  pointer-events: none;
+}
+.wind-rose-guide-plate {
+  fill: var(--wind-rose-card-surface);
+}
+.wind-rose-guide-label text {
+  fill: var(--muted-text);
 }
 .wind-rose-hit {
   fill: transparent;
@@ -2015,8 +2039,8 @@ input[type="range"]::-moz-range-thumb {
   cursor: pointer;
 }
 .wind-rose-tip {
-  position: absolute;
-  z-index: 2;
+  position: fixed;
+  z-index: 40;
   padding: 2px 6px;
   border-radius: 4px;
   background: var(--bg-elev);
@@ -2028,10 +2052,6 @@ input[type="range"]::-moz-range-thumb {
   line-height: 16px;
   white-space: nowrap;
   pointer-events: none;
-  transform: translate(var(--wind-rose-tip-shift, -50%), calc(-100% - 6px));
-}
-.wind-rose-tip.is-below {
-  transform: translate(var(--wind-rose-tip-shift, -50%), 6px);
 }
 @media (prefers-reduced-motion: reduce) {
   .wind-rose-petal {
@@ -2040,6 +2060,22 @@ input[type="range"]::-moz-range-thumb {
 }
 .wind-rose-panel.is-plan .wind-rose-meta-source {
   margin-top: 8px;
+}
+.wind-rose-panel.is-plan .wind-rose-meta {
+  font-size: 11px;
+  color: var(--muted-text);
+}
+.wind-rose-nearby {
+  margin-top: 2px;
+  pointer-events: auto;
+}
+.wind-rose-nearby summary {
+  cursor: pointer;
+  width: max-content;
+}
+.wind-rose-nearby-list {
+  margin: 2px 0 0;
+  padding: 0 0 0 12px;
 }
 .wind-plan-title,
 .wind-plan-legend-title {

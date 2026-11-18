@@ -43,6 +43,14 @@ The 1024 mock-ups are on the shared computer at `/workspace/wind-plan-mock/v2-sp
 - Keyboard: the rose takes focus (tab stop, not hidden from assistive tech) and shows a 2px ink focus ring with a 2px offset. Left and Right step the analysed direction one sector at once (and leave a design wind, as a click does). Enter selects the hovered sector, or confirms the selected one.
 - Hover, selected and hit-target styles are class names (`wind-rose-petal`, `is-hovered`, `is-selected`, `wind-rose-hit`, `wind-rose-selected-arc`, `wind-rose-tip`) so they can be restyled later.
 
+### Rose polish (Kelvin and Designbot review, 19 Nov 2026)
+These replace the hover tooltip, selected mark and guide-label details above where they differ.
+- Hover dimming must be obvious: while the pointer is over any sector the other 15 petals sit at opacity 0.45 (120ms ease-out, no transition under reduced motion) and come back when the pointer leaves the rose. Each sector's hit target lives inside that sector's petal group, so the dimming works from CSS `:hover` and from the `is-hovered` / `data-hovering` state (kept for tests and keyboard). Labels and the selected arc never take the pointer.
+- Selected mark: a circular arc stroke centred on the outer ring (radius R), exactly 22.5° (sector centre ± 11.25°), 4px, butt caps, accent yellow, with a 1px ink edge all round (a 6px ink arc under it, 1px longer at each end). Not a filled tab with radial sides. The bold selected label sits at R+14 along the sector bearing, centred, N/E/S/W included.
+- The 33% and 66% guide labels sit on the rose's least-used bearing, worked out again for each period, at the matching guide-ring radii: 9px, muted text, on a 2px card-surface plate so they read over the guides (a plate, not a text outline).
+- Tooltip: pinned outside the ring, 8px past R along the sector bearing, growing away from the rose. It keeps clear of the N/E/S/W labels and flips to the other side if it would run off the screen. Copy follows the map: on the active design wind's own sector it shows the design-wind figures (`NE · 18% of hours · 3.9 m/s`); otherwise the period comes first (`NE · Annual · 7% of hours · 4.1 m/s`). The word "median" is not used: the speed is the walking-height reference the map uses, not a median.
+- In the Plan wind card the station block under Calm is 11px muted text, and the closer stations sit behind a "Nearby stations" disclosure, closed by default, listing each station with its unbreakable distance (`7.9 km`). The rose outside plan views keeps its plain "Closer:" line.
+
 ### Comfort (Lawson LDDC, indicative)
 - For each ground cell, every direction in the season is weighted by its frequency (from the Viewbank TMYx speed bins) and combined with that direction's speed-ratio field to get how often each threshold is exceeded.
 - The station speeds get the same 10 m to 1.5 m pedestrian-height correction as Wind speed (power law, α = 0.25, factor ≈ 0.62) before the thresholds are tested.
@@ -67,7 +75,7 @@ The 1024 mock-ups are on the shared computer at `/workspace/wind-plan-mock/v2-sp
 - [ ] No wind arrow or "Wind from X" chip on the map in any plan wind view.
 - [ ] The same complete site always shows the same scale top; one fast cell does not lift it from 8 to 10.
 - [ ] Clicking any of the 16 rose sectors (empty ones too) sets the direction; clicking while a design wind is active switches to that direction for the current season. Left/Right on the focused rose step it; Enter confirms. Direction reads e.g. `NE · 45°`.
-- [ ] Rose hover: 1.5px ink outline, others at 45%, pinned 11px tooltip with share of hours and walking-height speed. Selected: 4px yellow arc with ink edge and a bold label.
+- [ ] Rose hover: 1.5px ink outline, others visibly at 45%, 11px tooltip pinned outside the ring with share of hours and walking-height speed (period first unless it is the active design wind; no "median"). Selected: 4px yellow arc on the ring with an ink edge and a bold label at R+14. 33%/66% labels on the quietest bearing. Closer stations behind "Nearby stations".
 - [ ] Comfort: five Lawson bands with clean edges at 1440 and the listed palette; Unsafe hatched and outlined, at least 12px; the card reads "Unsafe: N areas" or "Unsafe: none"; Direction reads "All".
 - [ ] Plan rows sit inside the wind-rose card; in Comfort the card shows the Lawson swatches and no speed bar.
 - [ ] The "Closer:" line reads each distance whole ("7.9 km", never "79 km") and wraps between stations.

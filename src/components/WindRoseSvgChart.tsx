@@ -1,4 +1,5 @@
-import { useState, type KeyboardEvent } from "react";
+import { useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
+import { createPortal } from "react-dom";
 import { getColour } from "../lib/colours";
 import { useColourRevision } from "../lib/useColourRevision";
 import { sectorCenterDeg, sectorLabel, WIND_SECTOR_COUNT, type WindPeriodStats } from "../lib/windRose";
@@ -10,7 +11,10 @@ import {
   windRoseGuideLabelPositions,
   windRosePetalOuterRadii,
   windRoseSectorPoint,
+  windRoseSelectedArcPaths,
   windRoseStackedWedges,
+  windRoseTipBox,
+  WIND_ROSE_SELECTED_LABEL_GAP_PX,
   type WindRoseChartLayout,
 } from "../lib/windRoseChart";
 
@@ -23,6 +27,11 @@ export type WindRosePicker = {
 
 const VIEW_SIZE = 240;
 const SELECTED_ARC_PX = 4;
+const SELECTED_ARC_EDGE_PX = 1;
+const HIT_R_PAD_PX = SELECTED_ARC_PX / 2 + SELECTED_ARC_EDGE_PX;
+const GUIDE_LABEL_PX = 9;
+const GUIDE_PLATE_PAD_PX = 2;
+const TIP_VIEWPORT_MARGIN_PX = 8;
 const CARDINALS = [
   { key: "n", label: "N", sector: 0, colour: "--wind-rose-n-label" },
   { key: "e", label: "E", sector: 4, colour: "--wind-rose-h-label" },
@@ -45,10 +54,11 @@ export function WindRoseSvgChart({
 }) {
   useColourRevision();
   const [hovered, setHovered] = useState<number | null>(null);
+  const svgRef = useRef<SVGSVGElement>(null);
   const layout = DEFAULT_WIND_ROSE_LAYOUT;
   const wedges = windRoseStackedWedges(stats, layout);
   const cardinals = windRoseCardinalPositions(layout);
-  const guides = windRoseGuideLabelPositions(layout);
+  const guides = windRoseGuideLabelPositions(stats, layout);
   const ringStroke = getColour("--wind-rose-ring");
   const guideStroke = getColour("--wind-rose-guide");
   const selected = picker?.selected ?? null;
@@ -75,12 +85,20 @@ export function WindRoseSvgChart({
   const labels = (
     <>
       <circle cx={layout.cx} cy={layout.cy} r={layout.hubR} fill={hubFill} />
-      {guides.map((g) => (
-        <text key={g.pct} x={g.x + 6} y={g.y - 4} fontSize={10} fill={guideStroke} fontFamily="var(--mono)">
-          {g.pct}%
-        </text>
-      ))}
-      {CARDINALS.map((c) => (
+      {guides.map((g) => {
+        const text = `${g.pct}%`;
+        const w = text.length * GUIDE_LABEL_PX * 0.6 + GUIDE_PLATE_PAD_PX * 2;
+        const h = GUIDE_LABEL_PX + GUIDE_PLATE_PAD_PX * 2;
+        return (
+          <g key={g.pct} className="wind-rose-guide-label" data-sector={g.sector}>
+            <rect x={g.x - w / 2} y={g.y - h / 2} width={w} height={h} rx={2} className="wind-rose-guide-plate" />
+            <text x={g.x} y={g.y} textAnchor="middle" dominantBaseline="central" fontSize={GUIDE_LABEL_PX} fontFamily="var(--mono)">
+              {text}
+            </text>
+          </g>
+        );
+      })}
+      {CARDINALS.filter((c) => c.sector !== selected).map((c) => (
         <text
           key={c.key}
           x={cardinals[c.key].x}
@@ -88,9 +106,9 @@ export function WindRoseSvgChart({
           textAnchor="middle"
           dominantBaseline="middle"
           fontSize={11}
-          fontWeight={selected === c.sector ? 800 : 600}
+          fontWeight={600}
           fill={getColour(c.colour)}
-          className={selected === c.sector ? "wind-rose-label is-selected" : undefined}
+          className="wind-rose-label"
         >
           {c.label}
         </text>
@@ -124,8 +142,13 @@ export function WindRoseSvgChart({
   const valueText = selected != null ? `${sectorLabel(selected)} · ${sectorCenterDeg(selected)}°` : undefined;
 
   return (
-    <div className="wind-rose-picker" data-hovering={active != null ? "true" : undefined}>
+    <div
+      className="wind-rose-picker"
+      data-hovering={active != null ? "true" : undefined}
+      onPointerLeave={() => setHovered(null)}
+    >
       <svg
+        ref={svgRef}
         viewBox={`0 0 ${VIEW_SIZE} ${VIEW_SIZE}`}
         tabIndex={0}
         role="slider"
@@ -137,7 +160,6 @@ export function WindRoseSvgChart({
         aria-valuetext={valueText}
         className={className ? `${className} wind-rose-picker-svg` : "wind-rose-picker-svg"}
         onKeyDown={onKeyDown}
-        onPointerLeave={() => setHovered(null)}
         onBlur={() => setHovered(null)}
       >
         {rings}
@@ -146,6 +168,9 @@ export function WindRoseSvgChart({
             key={sector}
             className={petalClass(sector, active, selected)}
             data-sector={sector}
+            onPointerEnter={() => setHovered(sector)}
+            onPointerLeave={() => setHovered((h) => (h === sector ? null : h))}
+            onClick={() => picker.onSelect(sector)}
           >
             {wedges
               .filter((w) => w.sector === sector)
@@ -159,22 +184,17 @@ export function WindRoseSvgChart({
                 vectorEffect="non-scaling-stroke"
               />
             ) : null}
+            <path
+              className="wind-rose-hit"
+              data-sector={sector}
+              d={annularSectorPath(layout.cx, layout.cy, 0, layout.outerR + HIT_R_PAD_PX, sectorCenterDeg(sector))}
+            />
           </g>
         ))}
         {labels}
         {selected != null ? <SelectedSector layout={layout} sector={selected} /> : null}
-        {SECTORS.map((sector) => (
-          <path
-            key={sector}
-            className="wind-rose-hit"
-            data-sector={sector}
-            d={annularSectorPath(layout.cx, layout.cy, 0, layout.outerR + SELECTED_ARC_PX / 2, sectorCenterDeg(sector))}
-            onPointerEnter={() => setHovered(sector)}
-            onClick={() => picker.onSelect(sector)}
-          />
-        ))}
       </svg>
-      {active != null ? <WindRoseTip layout={layout} sector={active} text={picker.tip(active)} /> : null}
+      {active != null ? <WindRoseTip svg={svgRef.current} layout={layout} sector={active} text={picker.tip(active)} /> : null}
     </div>
   );
 }
@@ -187,51 +207,66 @@ function petalClass(sector: number, hovered: number | null, selected: number | n
 }
 
 function SelectedSector({ layout, sector }: { layout: WindRoseChartLayout; sector: number }) {
-  const label = sectorLabel(sector);
-  const isCardinal = CARDINALS.some((c) => c.sector === sector);
-  const at = windRoseSectorPoint(layout, sector, layout.labelR);
+  const cardinal = CARDINALS.find((c) => c.sector === sector);
+  const at = windRoseSectorPoint(layout, sector, layout.outerR + WIND_ROSE_SELECTED_LABEL_GAP_PX);
+  const arc = windRoseSelectedArcPaths(layout, sector, SELECTED_ARC_EDGE_PX);
   return (
     <>
-      <path
-        className="wind-rose-selected-arc"
-        d={annularSectorPath(
-          layout.cx,
-          layout.cy,
-          layout.outerR - SELECTED_ARC_PX / 2,
-          layout.outerR + SELECTED_ARC_PX / 2,
-          sectorCenterDeg(sector),
-        )}
-        vectorEffect="non-scaling-stroke"
-      />
-      {isCardinal ? null : (
-        <text
-          x={at.x}
-          y={at.y}
-          textAnchor="middle"
-          dominantBaseline="middle"
-          fontSize={11}
-          fontWeight={800}
-          fill={getColour("--wind-rose-n-label")}
-          className="wind-rose-label is-selected"
-        >
-          {label}
-        </text>
-      )}
+      <path className="wind-rose-selected-arc-edge" d={arc.edge} />
+      <path className="wind-rose-selected-arc" d={arc.mark} />
+      <text
+        x={at.x}
+        y={at.y}
+        textAnchor="middle"
+        dominantBaseline="middle"
+        fontSize={11}
+        fontWeight={800}
+        fill={getColour(cardinal?.colour ?? "--wind-rose-n-label")}
+        className="wind-rose-label is-selected"
+      >
+        {sectorLabel(sector)}
+      </text>
     </>
   );
 }
 
-function WindRoseTip({ layout, sector, text }: { layout: WindRoseChartLayout; sector: number; text: string }) {
-  const at = windRoseSectorPoint(layout, sector, layout.outerR);
-  const xPct = (at.x / VIEW_SIZE) * 100;
-  const yPct = (at.y / VIEW_SIZE) * 100;
-  return (
+function WindRoseTip({
+  svg,
+  layout,
+  sector,
+  text,
+}: {
+  svg: SVGSVGElement | null;
+  layout: WindRoseChartLayout;
+  sector: number;
+  text: string;
+}) {
+  const ref = useRef<HTMLSpanElement>(null);
+  const [pos, setPos] = useState<{ left: number; top: number; flipped: boolean } | null>(null);
+  useLayoutEffect(() => {
+    const tip = ref.current;
+    if (!svg || !tip) return;
+    const rect = svg.getBoundingClientRect();
+    const scale = rect.width > 0 ? rect.width / VIEW_SIZE : 1;
+    const w = tip.offsetWidth / scale;
+    const h = tip.offsetHeight / scale;
+    const fits = (box: { x: number; y: number }) => {
+      const left = rect.left + box.x * scale;
+      return left >= TIP_VIEWPORT_MARGIN_PX && left + w * scale <= window.innerWidth - TIP_VIEWPORT_MARGIN_PX;
+    };
+    const box = windRoseTipBox(layout, sector, w, h, fits);
+    setPos({ left: rect.left + box.x * scale, top: rect.top + box.y * scale, flipped: box.flipped });
+  }, [svg, layout, sector, text]);
+  return createPortal(
     <span
-      className={at.y < layout.cy ? "wind-rose-tip is-above" : "wind-rose-tip is-below"}
+      ref={ref}
+      className={pos?.flipped ? "wind-rose-tip is-flipped" : "wind-rose-tip"}
       role="tooltip"
-      style={{ left: `${xPct}%`, top: `${yPct}%`, ["--wind-rose-tip-shift" as string]: `-${xPct}%` }}
+      data-sector={sector}
+      style={pos ? { left: `${pos.left}px`, top: `${pos.top}px` } : { visibility: "hidden" }}
     >
       {text}
-    </span>
+    </span>,
+    document.body,
   );
 }

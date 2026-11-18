@@ -81,9 +81,14 @@ describe("WindRosePanel plan legend", () => {
     expect(ticks(renderCard(stubPlan("speed", null)).container)).toEqual([]);
   });
 
-  it("keeps each closer-station distance as one unbreakable unit", () => {
+  it("tucks the closer stations behind a closed Nearby stations disclosure, distances unbroken", () => {
     const { container } = renderCard(stubPlan("speed", 8));
-    const line = container.querySelector<HTMLElement>(".wind-rose-meta-skipped")!;
+    expect(container.querySelector(".wind-rose-meta-skipped")).toBeNull();
+    const line = container.querySelector<HTMLDetailsElement>("details.wind-rose-nearby")!;
+    expect(line.open).toBe(false);
+    expect(line.querySelector("summary")?.textContent).toBe("Nearby stations");
+    expect(line.textContent).not.toContain("Closer:");
+    expect(line.querySelectorAll(".wind-rose-nearby-list li")).toHaveLength(3);
     const text = line.textContent ?? "";
     expect(text).toContain("Canterbury Park Racecourse 7.9 km");
     expect(text).not.toMatch(/\b79 km/);
@@ -94,6 +99,8 @@ describe("WindRosePanel plan legend", () => {
     );
     const css = readFileSync(path.join(process.cwd(), "src/index.css"), "utf8");
     expect(css).toMatch(/\.wind-rose-skip-dist \{\s*white-space: nowrap;/);
+    expect(css).toMatch(/\.wind-rose-panel\.is-plan \.wind-rose-meta \{\s*font-size: 11px;\s*color: var\(--muted-text\);/);
+    expect(css).toMatch(/\.wind-rose-nearby \{[^}]*pointer-events: auto;/);
     expect(css).not.toMatch(/\.wind-rose-meta-skipped \{[^}]*line-clamp/);
   });
 

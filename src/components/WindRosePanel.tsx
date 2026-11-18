@@ -6,11 +6,11 @@ import { analyzeSiteWind } from "../lib/windRoseStats";
 import { windRoseStationLines } from "../lib/windRoseCaptions";
 import { windRoseSectorSharePct, windRoseSectorTip } from "../lib/windRoseChart";
 import { getColour } from "../lib/colours";
-import { WindSkippedCloser } from "./WindSkippedCloser";
+import { WindNearbyStations, WindSkippedCloser } from "./WindSkippedCloser";
 import { WindRoseSvgChart, type WindRosePicker } from "./WindRoseSvgChart";
 import { WindRoseSpeedLegend } from "./WindRoseSpeedLegend";
 import { GroundWindSpeedLegend } from "./GroundWindSpeedLegend";
-import { WindPlanLegend, WindPlanRows } from "./WindPlanCard";
+import { WindPlanLegend, WindPlanRows, windPlanSeasonLabel } from "./WindPlanCard";
 import type { WindPlanState } from "./useWindPlan";
 
 export function WindRosePanel({
@@ -37,9 +37,28 @@ export function WindRosePanel({
       selected: plan.sector,
       onSelect: plan.selectSector,
       onStep: plan.stepSector,
-      tip: (sector) => windRoseSectorTip(sector, windRoseSectorSharePct(stats, sector), plan.sectorReferenceMs(sector)),
+      tip: (sector) => {
+        const design = plan.designWind;
+        if (design && design.sector === sector) return windRoseSectorTip(sector, design.sharePct, design.referenceMs);
+        return windRoseSectorTip(
+          sector,
+          windRoseSectorSharePct(stats, sector),
+          plan.sectorReferenceMs(sector),
+          windPlanSeasonLabel(period),
+        );
+      },
     };
-  }, [plan?.active, plan?.mode, plan?.sector, plan?.selectSector, plan?.stepSector, plan?.sectorReferenceMs, stats]);
+  }, [
+    plan?.active,
+    plan?.mode,
+    plan?.sector,
+    plan?.selectSector,
+    plan?.stepSector,
+    plan?.sectorReferenceMs,
+    plan?.designWind,
+    stats,
+    period,
+  ]);
 
   if (!stats) {
     return <p className="field-note">Wind data is not available for this period.</p>;
@@ -59,7 +78,7 @@ export function WindRosePanel({
         <p className="wind-rose-meta wind-rose-meta-source wind-rose-meta-station" title={lines.line1}>
           {lines.line1}
         </p>
-        <WindSkippedCloser selection={selection} className="wind-rose-meta" />
+        <WindNearbyStations selection={selection} className="wind-rose-meta" />
         <p className="wind-rose-meta wind-rose-meta-note">Regional station wind</p>
         <WindPlanLegend plan={plan} />
       </div>

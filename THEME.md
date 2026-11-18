@@ -290,7 +290,7 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--wind-rose` | `#3d5a73` | On-screen wind rose overlay and Wind export layer. |
 | `--wind-rose-card-surface` | `#fffcf8` | Wind analysis card background and rose hub disc. |
 | `--wind-rose-ring` | `#c9d2da` | Wind rose outer ring stroke. |
-| `--wind-rose-guide` | `#c9d2da` | Wind rose frequency guide rings and % labels. |
+| `--wind-rose-guide` | `#c9d2da` | Wind rose frequency guide rings. |
 | `--wind-rose-n-label` | `#111111` | Wind rose north label. |
 | `--wind-rose-h-label` | `#5f5f5f` | Wind rose E/S/W labels. |
 | `--wind-calm-caption` | `#1f2a33` | Calm caption under the on-card wind rose. |

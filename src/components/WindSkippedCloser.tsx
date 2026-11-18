@@ -1,6 +1,15 @@
 import { Fragment } from "react";
 import type { SiteWindSelection } from "../lib/windRoseData";
-import { formatSkippedCloserLine, plainWindCaption, skippedCloserParts } from "../lib/windRoseCaptions";
+import { formatSkippedCloserLine, plainWindCaption, skippedCloserParts, type SkippedCloserPart } from "../lib/windRoseCaptions";
+
+function CloserStation({ part }: { part: SkippedCloserPart }) {
+  return (
+    <span className="wind-rose-skip">
+      {part.name} <span className="wind-rose-skip-dist">{part.distance}</span>
+      {part.reason ? ` (${part.reason})` : null}
+    </span>
+  );
+}
 
 export function WindSkippedCloser({ selection, className }: { selection: SiteWindSelection; className: string }) {
   const parts = skippedCloserParts(selection);
@@ -11,12 +20,26 @@ export function WindSkippedCloser({ selection, className }: { selection: SiteWin
       {parts.map((part, i) => (
         <Fragment key={part.name}>
           {i > 0 ? " · " : null}
-          <span className="wind-rose-skip">
-            {part.name} <span className="wind-rose-skip-dist">{part.distance}</span>
-            {part.reason ? ` (${part.reason})` : null}
-          </span>
+          <CloserStation part={part} />
         </Fragment>
       ))}
     </p>
+  );
+}
+
+export function WindNearbyStations({ selection, className }: { selection: SiteWindSelection; className: string }) {
+  const parts = skippedCloserParts(selection);
+  if (!parts.length) return null;
+  return (
+    <details className={`${className} wind-rose-nearby`} title={plainWindCaption(formatSkippedCloserLine(selection))}>
+      <summary>Nearby stations</summary>
+      <ul className="wind-rose-nearby-list">
+        {parts.map((part) => (
+          <li key={part.name}>
+            <CloserStation part={part} />
+          </li>
+        ))}
+      </ul>
+    </details>
   );
 }

@@ -7,7 +7,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { CityModel } from "../types";
 import { designWindsFor, findDesignWind } from "../lib/windDesignWinds";
 import { sectorLabel, type WindPeriodStats } from "../lib/windRose";
-import { windRoseSectorSharePct, windRoseSectorTip } from "../lib/windRoseChart";
+import {
+  DEFAULT_WIND_ROSE_LAYOUT,
+  windRoseSectorPoint,
+  windRoseSectorSharePct,
+  windRoseSectorTip,
+} from "../lib/windRoseChart";
 import type { SiteWindSelection, WindRoseAsset } from "../lib/windRoseData";
 import { analyzeSiteWind } from "../lib/windRoseStats";
 import { DEFAULT_WIND_SETTINGS, withDesignWind } from "../lib/windState";
@@ -71,6 +76,12 @@ function hit(sector: number): SVGPathElement {
   return document.querySelector<SVGPathElement>(`.wind-rose-hit[data-sector="${sector}"]`)!;
 }
 
+function computedOpacity(el: Element): string {
+  // happy-dom keeps an element's computed style cached across ancestor attribute changes; re-inserting it clears that.
+  el.parentNode!.insertBefore(el, el.nextSibling);
+  return getComputedStyle(el).opacity;
+}
+
 function rose(): SVGSVGElement {
   return document.querySelector<SVGSVGElement>(".wind-rose-picker-svg")!;
 }
@@ -102,6 +113,68 @@ describe("plan wind rose picker", () => {
     expect(bold?.textContent).toBe("SSW");
     expect(bold?.getAttribute("font-weight")).toBe("800");
     expect(document.querySelector(".wind-rose-selected-arc")).toBeTruthy();
+  });
+
+  it("draws the selected mark as a 22.5° arc on the ring with the bold label at R+14", () => {
+    render(<Harness selection={pyrmont} />);
+    act(() => {
+      fireEvent.click(hit(2));
+    });
+    const { cx, cy, outerR } = DEFAULT_WIND_ROSE_LAYOUT;
+    const d = document.querySelector(".wind-rose-selected-arc")!.getAttribute("d")!;
+    expect(d).toMatch(new RegExp(`^M [\\d.]+ [\\d.]+ A ${outerR} ${outerR} 0 0 1 [\\d.]+ [\\d.]+$`));
+    expect(d).not.toContain("L");
+    expect(d).not.toContain("Z");
+    const nums = d.match(/-?[\d.]+/g)!.map(Number);
+    const ends = [
+      [nums[0]!, nums[1]!],
+      [nums[7]!, nums[8]!],
+    ];
+    for (const [x, y] of ends) expect(Math.hypot(x! - cx, y! - cy)).toBeCloseTo(outerR, 6);
+    const bearing = ([x, y]: number[]) => (Math.atan2(x! - cx, cy - y!) * 180) / Math.PI;
+    expect(bearing(ends[0]!)).toBeCloseTo(45 - 11.25, 6);
+    expect(bearing(ends[1]!)).toBeCloseTo(45 + 11.25, 6);
+    const edge = document.querySelector(".wind-rose-selected-arc-edge")!.getAttribute("d")!;
+    expect(edge).toContain(`A ${outerR} ${outerR} 0 0 1`);
+    expect(edge).not.toBe(d);
+    const label = document.querySelector<SVGTextElement>(".wind-rose-label.is-selected")!;
+    expect(label.textContent).toBe("NE");
+    const at = windRoseSectorPoint(DEFAULT_WIND_ROSE_LAYOUT, 2, outerR + 14);
+    expect(Number(label.getAttribute("x"))).toBeCloseTo(at.x, 6);
+    expect(Number(label.getAttribute("y"))).toBeCloseTo(at.y, 6);
+    expect(label.getAttribute("text-anchor")).toBe("middle");
+    act(() => {
+      fireEvent.click(hit(4));
+    });
+    const east = document.querySelectorAll(".wind-rose-label.is-selected");
+    expect(east).toHaveLength(1);
+    expect(east[0]!.textContent).toBe("E");
+    expect(Number(east[0]!.getAttribute("x"))).toBeCloseTo(cx + outerR + 14, 6);
+    expect([...document.querySelectorAll(".wind-rose-label")].filter((el) => el.textContent === "E")).toHaveLength(1);
+  });
+
+  it("dims the other petals to 0.45 while a sector is hovered and restores them on leave", () => {
+    const style = document.createElement("style");
+    style.textContent = readFileSync(path.join(process.cwd(), "src/index.css"), "utf8");
+    document.head.appendChild(style);
+    render(<Harness selection={pyrmont} />);
+    const petal = (s: number) => document.querySelector<SVGGElement>(`.wind-rose-petal[data-sector="${s}"]`)!;
+    expect(petal(2).contains(hit(2))).toBe(true);
+    expect(computedOpacity(petal(7))).toBe("1");
+    act(() => {
+      fireEvent.pointerOver(hit(2));
+      fireEvent.pointerEnter(hit(2));
+    });
+    expect(computedOpacity(petal(2))).toBe("1");
+    for (const s of [0, 7, 9, 15]) expect(computedOpacity(petal(s))).toBe("0.45");
+    act(() => {
+      fireEvent.pointerOut(hit(2));
+      fireEvent.pointerLeave(document.querySelector(".wind-rose-picker")!);
+    });
+    expect(document.querySelector(".wind-rose-picker")?.getAttribute("data-hovering")).toBeNull();
+    for (const s of [0, 2, 7]) expect(computedOpacity(petal(s))).toBe("1");
+    expect(document.querySelector(".wind-rose-tip")).toBeNull();
+    style.remove();
   });
 
   it("leaves a design wind for that direction in the current period when a petal is clicked", () => {
@@ -147,7 +220,8 @@ describe("plan wind rose picker", () => {
     });
     const stats = analyzeSiteWind(pyrmont, "annual")!;
     const tip = document.querySelector(".wind-rose-tip");
-    expect(tip?.textContent).toMatch(/^NE · \d+% of hours · \d+\.\d m\/s median$/);
+    expect(tip?.textContent).toMatch(/^NE · Annual · \d+% of hours · \d+\.\d m\/s$/);
+    expect(tip?.textContent).not.toContain("median");
     expect(tip?.textContent).toContain(`${Math.round(windRoseSectorSharePct(stats, 2))}% of hours`);
     expect(document.querySelector(".wind-rose-picker")?.getAttribute("data-hovering")).toBe("true");
     expect(document.querySelector('.wind-rose-petal[data-sector="2"]')?.classList.contains("is-hovered")).toBe(true);
@@ -155,6 +229,23 @@ describe("plan wind rose picker", () => {
       fireEvent.keyDown(rose(), { key: "Enter" });
     });
     expect(directionText()).toBe("NE · 45°");
+  });
+
+  it("uses the design wind's figures in the tooltip for its own sector, period figures elsewhere", () => {
+    render(<Harness selection={pyrmont} initialDesign="design-s" />);
+    const design = findDesignWind(designWindsFor(pyrmont), "design-s")!;
+    act(() => {
+      fireEvent.pointerOver(hit(design.sector));
+      fireEvent.pointerEnter(hit(design.sector));
+    });
+    expect(document.querySelector(".wind-rose-tip")?.textContent).toBe(
+      `${sectorLabel(design.sector)} · ${Math.round(design.sharePct)}% of hours · ${design.referenceMs.toFixed(1)} m/s`,
+    );
+    act(() => {
+      fireEvent.pointerOver(hit(2));
+      fireEvent.pointerEnter(hit(2));
+    });
+    expect(document.querySelector(".wind-rose-tip")?.textContent).toMatch(/^NE · Annual · \d+% of hours · \d+\.\d m\/s$/);
   });
 
   it("keeps Comfort on all directions with no clickable rose", () => {
@@ -207,7 +298,8 @@ describe("wind rose hit targets", () => {
     expect(document.querySelectorAll('.wind-rose-petal[data-sector="5"] .wind-rose-petal-band')).toHaveLength(0);
     const empty = hit(5);
     expect(empty.getAttribute("d")).toMatch(/^M 120 128 /);
-    expect(empty.getAttribute("d")).toContain("A 90 90");
+    expect(empty.getAttribute("d")).toContain("A 91 91");
+    expect(document.querySelector('.wind-rose-petal[data-sector="5"]')?.contains(empty)).toBe(true);
     act(() => {
       fireEvent.click(empty);
     });
@@ -263,8 +355,11 @@ describe("plan wind overlay", () => {
     expect(css).not.toContain(".wind-plan-info");
     expect(css).toMatch(/\.wind-rose-petal \{\s*opacity: 1;\s*transition: opacity 120ms ease-out;/);
     expect(css).toMatch(/\.wind-rose-picker\[data-hovering\] \.wind-rose-petal:not\(\.is-hovered\) \{\s*opacity: 0\.45;/);
+    expect(css).toMatch(/\.wind-rose-picker-svg:has\(\.wind-rose-petal:hover\) \.wind-rose-petal:not\(:hover\) \{\s*opacity: 0\.45;/);
     expect(css).toMatch(/\.wind-rose-petal\.is-hovered \.wind-rose-petal-outline \{\s*stroke: var\(--ink\);\s*stroke-width: 1\.5px;/);
-    expect(css).toMatch(/\.wind-rose-selected-arc \{\s*fill: var\(--accent\);\s*stroke: var\(--ink\);\s*stroke-width: 1px;/);
+    expect(css).toMatch(/\.wind-rose-selected-arc-edge \{\s*fill: none;\s*stroke: var\(--ink\);\s*stroke-width: 6px;\s*stroke-linecap: butt;/);
+    expect(css).toMatch(/\.wind-rose-selected-arc \{\s*fill: none;\s*stroke: var\(--accent\);\s*stroke-width: 4px;\s*stroke-linecap: butt;/);
+    expect(css).toMatch(/\.wind-rose-tip \{[^}]*pointer-events: none;/);
     expect(css).toMatch(/\.wind-rose-picker-svg:focus-visible \{\s*outline: 2px solid var\(--ink\);\s*outline-offset: 2px;/);
     expect(css).toMatch(/prefers-reduced-motion: reduce\) \{\s*\.wind-rose-petal \{\s*transition: none;/);
   });
