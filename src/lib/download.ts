@@ -54,6 +54,8 @@ function downloadBytes(filename: string, bytes: Uint8Array, type: string) {
   downloadBlob(filename, new Blob([copy], { type }));
 }
 
+import type { SolarReceptorExport } from "./aiPlan";
+
 export type RhinoDownloadOptions = {
   heliodon?: HeliodonGroundExportOptions | null;
   shadows?: PlanShadowInput | null;
@@ -64,6 +66,9 @@ export type RhinoDownloadOptions = {
   hideTrees?: boolean;
   importedMassing?: import("./rhinoExport").ImportedMassingExport[] | null;
   buildingsAsMesh?: boolean;
+  sunStudy?: SitePlanExportOptions["sunStudy"];
+  solarReceptors?: SolarReceptorExport[] | null;
+  facadeSolarPoints?: import("./facadeSolarExport").FacadePointExport[] | null;
 };
 
 export async function downloadSectionDrawing(

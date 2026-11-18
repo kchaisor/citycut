@@ -26,6 +26,8 @@ export function ModelPageSidebarLeftB({ vm }: { vm: import("./useModelPage").Mod
     leftOpen,
     massing,
     model,
+    addParkFromArea,
+    parkGreenAreas,
     planScaleOptions,
     save3dm,
     saveExplodedAxoAi,
@@ -40,8 +42,13 @@ export function ModelPageSidebarLeftB({ vm }: { vm: import("./useModelPage").Mod
     setAnalysisKind,
     setBuildingsAsMesh,
     setFigureScale,
+    setSolarReceptors,
     setSunStudySelected,
     solar,
+    solarReceptorAssess,
+    solarReceptors,
+    sunHoursGround,
+    sunHoursLostPlan,
     sunStudyProgress,
     sunStudySelected,
     tab,
@@ -84,6 +91,22 @@ export function ModelPageSidebarLeftB({ vm }: { vm: import("./useModelPage").Mod
                   site={{ lat: model.center.lat, lon: model.center.lon }}
                   selectedCount={sunStudySelected.length}
                   onClearSelection={() => setSunStudySelected([])}
+                  canMarkReceptors={tab === "drawing" && drawing === "site"}
+                  receptorCount={solarReceptors.filter((receptor) => (receptor.kind ?? "yard") !== "park").length}
+                  parkReceptorCount={solarReceptors.filter((receptor) => receptor.kind === "park").length}
+                  receptorAssess={solarReceptorAssess.results}
+                  receptorAssessPending={solarReceptorAssess.pending}
+                  sunHoursLostPending={sunHoursLostPlan.pending}
+                  sunHoursGroundPending={sunHoursGround.pending || sunHoursGround.pendingSurfaces}
+                  sunHoursGroundMaxHours={sunHoursGround.scaleMaxHours || sunHoursGround.grid?.maxSunHours || 0}
+                  parkGreenAreas={parkGreenAreas}
+                  onAddParkFromArea={addParkFromArea}
+                  onClearReceptors={() =>
+                    setSolarReceptors((current) => current.filter((receptor) => receptor.kind === "park"))
+                  }
+                  onClearParkReceptors={() =>
+                    setSolarReceptors((current) => current.filter((receptor) => (receptor.kind ?? "yard") !== "park"))
+                  }
                 />
               </div>
               <div hidden={analysisKind !== "wind"}>

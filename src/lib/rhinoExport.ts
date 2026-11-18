@@ -9,7 +9,21 @@ import { colourRgb, type ColourKey } from "./colours";
 import { CRS_NOTE, mgaCrs, projectLocal, projectLonLat } from "./crs";
 import { readDrawingStyle } from "./drawingStyle";
 import { figureGround, figureGroundDatum } from "./figureGround";
-import { planShadowRings, type PlanShadowInput } from "./buildingShadows";
+import { isProposedMassingBuilding, planShadowRings, type PlanShadowInput } from "./buildingShadows";
+import {
+  normalizeSunStudyExportLayer,
+  type SitePlanExportOptions,
+  type SunStudyExportLayer,
+  type SolarReceptorExport,
+} from "./aiPlan";
+import {
+  addedShadowLayerName,
+  existingShadowLayerName,
+  receptorLayerName,
+} from "./solarStudyLayers";
+import { solarReceptorExportFill } from "./solarReceptorExport";
+import type { FacadePointExport } from "./facadeSolarExport";
+import { openRing } from "./geo";
 import { buildHeliodonGroundOverlay, type HeliodonGroundExportOptions } from "./heliodonDiagram";
 import { comBuildingHeightCreditLine } from "./comBuildingHeightCredit";
 import { comTreesCreditLine } from "./comTreesCredit";
@@ -826,6 +840,123 @@ function addHeliodonPlan(
   for (const line of overlay.hourLines) addPolyline(line, "Hour line");
 }
 
+function addPlanPolygonRings(
+  rhino: Rhino,
+  doc: InstanceType<Rhino["File3dm"]>,
+  layers: Map<string, number>,
+  materials: Map<string, number>,
+  model: CityModel,
+  zone: number,
+  layerName: string,
+  multi: Pt[][][],
+  colorKey: ColourKey,
+  objectName: string,
+  zOverride?: number,
+) {
+  if (multi.length === 0) return;
+  const z = zOverride ?? (model.terrain ? model.terrain.min : 0);
+  const layerIndex = ensureLayer(rhino, doc, layers, materials, layerName, colourRgb(colorKey));
+  let index = 0;
+  for (const polygon of multi) {
+    for (const ring of polygon) {
+      if (ring.length < 3) continue;
+      const points = ring.map(([east, north]) => {
+        const [easting, northing] = projectLocal([east, north], model.center, zone);
+        return [easting, northing, z];
+      });
+      points.push(points[0]!);
+      const attributes = new rhino.ObjectAttributes();
+      attributes.name = `${objectName} ${index}`;
+      index += 1;
+      attributes.layerIndex = layerIndex;
+      applyByLayerAttributes(rhino, attributes);
+      doc.objects().addPolyline(points, attributes);
+      release(attributes);
+    }
+  }
+}
+
+function addSunStudyPlanShadows(
+  rhino: Rhino,
+  doc: InstanceType<Rhino["File3dm"]>,
+  layers: Map<string, number>,
+  materials: Map<string, number>,
+  model: CityModel,
+  zone: number,
+  studyLayers: SunStudyExportLayer[],
+) {
+  for (const layer of studyLayers) {
+    const minute = layer.minute ?? 0;
+    if (layer.existingRings.length > 0) {
+      addPlanPolygonRings(
+        rhino,
+        doc,
+        layers,
+        materials,
+        model,
+        zone,
+        existingShadowLayerName(layer.hour, minute),
+        layer.existingRings,
+        "--sun-study-shadow",
+        existingShadowLayerName(layer.hour, minute),
+      );
+    }
+    if (layer.addedRings.length > 0) {
+      addPlanPolygonRings(
+        rhino,
+        doc,
+        layers,
+        materials,
+        model,
+        zone,
+        addedShadowLayerName(layer.hour, minute),
+        layer.addedRings,
+        "--sun-study-shadow-added",
+        addedShadowLayerName(layer.hour, minute),
+      );
+    }
+  }
+}
+
+function addSolarReceptorPlan(
+  rhino: Rhino,
+  doc: InstanceType<Rhino["File3dm"]>,
+  layers: Map<string, number>,
+  materials: Map<string, number>,
+  model: CityModel,
+  zone: number,
+  receptors: SolarReceptorExport[],
+) {
+  for (const receptor of receptors) {
+    addPlanPolygonRings(
+      rhino,
+      doc,
+      layers,
+      materials,
+      model,
+      zone,
+      receptor.layerName ?? receptorLayerName(receptor.id, receptor.statusTone),
+      [[openRing(receptor.ring)]],
+      solarReceptorExportFill(receptor.statusTone),
+      receptor.layerName ?? receptorLayerName(receptor.id, receptor.statusTone),
+    );
+  }
+}
+
+function addProposedMassingFootprints(
+  rhino: Rhino,
+  doc: InstanceType<Rhino["File3dm"]>,
+  layers: Map<string, number>,
+  materials: Map<string, number>,
+  model: CityModel,
+  zone: number,
+) {
+  const footprints = model.buildings
+    .filter(isProposedMassingBuilding)
+    .map((building) => [openRing(building.ring)]);
+  addPlanPolygonRings(rhino, doc, layers, materials, model, zone, "Proposed massing", footprints, "--imported-massing", "Proposed massing");
+}
+
 function addPlanShadows(
   rhino: Rhino,
   doc: InstanceType<Rhino["File3dm"]>,
@@ -865,6 +996,9 @@ export type CityModelTo3dmOptions = {
   uniformBuildings?: boolean;
   colourBySource?: boolean;
   wind?: { table: WindRoseTable; period: WindPeriodId } | null;
+  sunStudy?: SitePlanExportOptions["sunStudy"];
+  solarReceptors?: SolarReceptorExport[] | null;
+  facadeSolarPoints?: FacadePointExport[] | null;
   hideTrees?: boolean;
   importedMassing?: ImportedMassingExport[] | null;
   /**
@@ -878,6 +1012,42 @@ export type CityModelTo3dmOptions = {
 export type ImportedMassingExport = Pick<ImportedMassing, "name" | "positions" | "indices" | "placement" | "colour">;
 
 export const IMPORTED_MASSING_LAYER = "Imported massing";
+export const FACADE_SOLAR_LAYER = "Facade hours (ADG proxy)";
+
+function addFacadeSolarPoints(
+  rhino: Rhino,
+  doc: InstanceType<Rhino["File3dm"]>,
+  layers: Map<string, number>,
+  materials: Map<string, number>,
+  model: CityModel,
+  zone: number,
+  points: readonly FacadePointExport[],
+) {
+  if (points.length === 0) return;
+  const half = 0.35;
+  for (const point of points) {
+    const ring: Pt[] = [
+      [point.east - half, point.north - half],
+      [point.east + half, point.north - half],
+      [point.east + half, point.north + half],
+      [point.east - half, point.north + half],
+      [point.east - half, point.north - half],
+    ];
+    addPlanPolygonRings(
+      rhino,
+      doc,
+      layers,
+      materials,
+      model,
+      zone,
+      FACADE_SOLAR_LAYER,
+      [[ring]],
+      point.colourKey,
+      `${point.hours.toFixed(1)} h facade`,
+      point.yM,
+    );
+  }
+}
 
 /** Imported models straight from their placement to MGA, so an MGA-placed model round-trips exactly. */
 function addImportedMassing(
@@ -931,6 +1101,9 @@ function normalize3dmOptions(
     "shadows" in options ||
     "uniformBuildings" in options ||
     "wind" in options ||
+    "sunStudy" in options ||
+    "solarReceptors" in options ||
+    "facadeSolarPoints" in options ||
     "hideTrees" in options ||
     "importedMassing" in options ||
     "buildingsAsMesh" in options ||
@@ -997,6 +1170,9 @@ export async function cityModelTo3dm(
     uniformBuildings,
     colourBySource,
     wind,
+    sunStudy,
+    solarReceptors,
+    facadeSolarPoints,
     hideTrees,
     importedMassing,
     buildingsAsMesh,
@@ -1031,6 +1207,20 @@ export async function cityModelTo3dm(
     addContours(rhino, doc, layers, materials, model, crsZone);
     if (heliodon) addHeliodonPlan(rhino, doc, layers, materials, model, crsZone, heliodon);
     if (shadows) addPlanShadows(rhino, doc, layers, materials, model, crsZone, shadows, Boolean(castShadows));
+    if (sunStudy?.layers?.length) {
+      addSunStudyPlanShadows(
+        rhino,
+        doc,
+        layers,
+        materials,
+        model,
+        crsZone,
+        sunStudy.layers.map(normalizeSunStudyExportLayer),
+      );
+    }
+    if (solarReceptors?.length) addSolarReceptorPlan(rhino, doc, layers, materials, model, crsZone, solarReceptors);
+    if (facadeSolarPoints?.length) addFacadeSolarPoints(rhino, doc, layers, materials, model, crsZone, facadeSolarPoints);
+    addProposedMassingFootprints(rhino, doc, layers, materials, model, crsZone);
     if (wind?.table) addWindRose(rhino, doc, layers, materials, model, crsZone, wind.table, wind.period);
     if (importedMassing?.length) addImportedMassing(rhino, doc, layers, materials, importedMassing);
 

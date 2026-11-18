@@ -1,8 +1,10 @@
-import { sunStudyCasterModel, sunStudyShadowCasters, SunStudyDate } from "../../lib/sunStudyPlan";
+import { sunStudyCasterModel, sunStudyMutedOn, sunStudyShadowCasters, SunStudyDate } from "../../lib/sunStudyPlan";
 
 import { sunStudyLayersFor } from "../useSunStudyShadows";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { isEditableTarget } from "../../lib/keyboardTarget";
 import { handleModelKeyDown, type ModelShortcutAction } from "../../lib/modelKeyboard";
+import { massingBlocksToBuildingFeats } from "../../lib/massingBlockPlan";
 import { registerModelKeyboardBridge } from "../../lib/modelKeyboardBridge";
 import { viewportIsNarrow } from "../../lib/panelCollapse";
 import * as THREE from "three";import { BUILDING_USES, BUILDING_USE_META, countSourcesGrouped, countUses, uniformBuildingColor } from "../../lib/buildingUse";
@@ -26,8 +28,8 @@ import {
   downloadIsometricAi,
   downloadIsometricSvg,
   downloadSiteAi,
+  svgFilename,
   downloadSite3dm,
-  downloadSiteSvg,
   downloadSectionDrawing,
   downloadFigureSvg,
   downloadSunStudyZip,
@@ -77,7 +79,7 @@ import { capturePresetFromSearch } from "../../lib/captureQuery";import { qaMode
 import { writeStoredView, writeViewSearch, ViewMemory } from "../../lib/viewMemory";
 import { treeTierCounts } from "../../lib/trees";
 
-import { clearPlanShadowCache } from "../../lib/buildingShadows";
+import { clearPlanShadowCache, proposedMassingInModel } from "../../lib/buildingShadows";
 import {
   appendManualHeightCredit,
   applyHeightOverrides,
@@ -102,7 +104,7 @@ import { countBuildingHeightTiers, LIDAR_NO_DATA_LINE } from "../../lib/lidarTie
 import { buildCityGroup, disposeObject } from "../../lib/buildCity";
 import { openRing, toLocal } from "../../lib/geo";
 import { interiorPoint, pointInPolygon } from "../../lib/useCascade";
-import type { BuildingUse, CityModel } from "../../types";
+import type { BuildingFeat, BuildingUse, CityModel } from "../../types";
 import type { InspectHudScreen } from "../InspectHudProjector";
 import {
   clampInspectHudPosition,
@@ -124,7 +126,24 @@ import {
   writeStoredHiddenBuildings,
   type HiddenBuildingStore,
 } from "../../lib/hiddenBuildings";
-import { useImportedMassing } from "../useImportedMassing";import { DrawingKind } from "../DrawingPlan";
+import { useImportedMassing } from "../useImportedMassing";
+import { useModelPageMassing } from "./useModelPageMassing";
+import { modelPageSolarQa } from "./modelPageSolarQa";
+import { useFacadeSolarAssess } from "../useFacadeSolarAssess";
+import { facadeSolarPointsForExport, facadeSolarSvgTable } from "../../lib/facadeSolarExport";
+import { useSolarReceptorAssess } from "../useSolarReceptorAssess";
+import { useSunHoursLostPlan } from "../useSunHoursLostPlan";
+import { useSunHoursGround } from "../useSunHoursGround";
+import type { SolarReceptorArea } from "../../lib/solarReceptorAssess";
+import { solarReceptorsForExport } from "../../lib/solarReceptorExport";
+import { defaultParkRuleId, type ParkSolarRuleId } from "../../lib/solarRuleRegistry";
+import {
+  loadSolarReceptors,
+  nextParkReceptorId,
+  normalizeReceptorRing,
+  saveSolarReceptors,
+} from "../../lib/solarReceptorStore";
+import { DrawingKind } from "../DrawingPlan";
 
 import { isometricDrawingBounds } from "../../lib/isometricDrawing";import { SidebarItem } from "../Sidebar";
 import { SceneExporter } from "../Scene3D";
@@ -151,11 +170,7 @@ import { useWindStreakMotion } from "../../lib/windStreakMotion";
 import type { SitePlanExportOptions } from "../../lib/aiPlan";
 import type { PlanShadowInput } from "../../lib/buildingShadows";
 import type { HeliodonDiagramExportOptions, HeliodonGroundExportOptions } from "../../lib/heliodonDiagram";
-import {
-  readStoredHeliodonRadiusFactor,
-  resolveHeliodonRadiusFactor,
-  writeStoredHeliodonRadiusFactor,
-} from "../../lib/heliodonRadius";
+import { writeStoredHeliodonRadiusFactor } from "../../lib/heliodonRadius";
 import type { SolarViewSettings } from "../SolarHeliodon";
 import {
   isLayer3dVisible,
@@ -169,6 +184,8 @@ import { readStoredRenderQuality, writeStoredRenderQuality, type RenderQuality }
 
 import { shouldShowIntroBridgePill } from "./shouldShowIntroBridgePill";
 import { loadView } from "./loadModelView";
+import { initialSolarSettings } from "./initialSolarSettings";
+import { SOLAR_SLIDER_END_MIN, SOLAR_SLIDER_START_MIN, clampSolarSliderMinutes } from "../../lib/solarSlider";
 import {
   SECTION_ICONS,
   iconProps,
@@ -354,27 +371,32 @@ export function useModelPage({
   const [windTable, setWindTable] = useState<WindRoseTable | null>(null);
   const [windNote, setWindNote] = useState<string | null>(null);
   const windMotion = useWindStreakMotion();
-  const [solar, setSolar] = useState<SolarViewSettings>(() => ({
-    showPath: capturePresetFromSearch(window.location.search).solarPath,
-    castShadows: false,
-    radiusFactor: resolveHeliodonRadiusFactor(
-      readStoredHeliodonRadiusFactor(window.localStorage),
-      window.location.search,
-    ),
-    year: 2026,
-    month: 9,
-    day: 22,
-    hour: 15,
-    minute: 0,
-  }));
+  const [solar, setSolar] = useState<SolarViewSettings>(() =>
+    initialSolarSettings(window.location.search, window.localStorage),
+  );
 
   function commitSolar(next: SolarViewSettings) {
     writeStoredHeliodonRadiusFactor(window.localStorage, next.radiusFactor);
     setSolar(next);
   }
+  const solarRef = useRef(solar);
+  solarRef.current = solar;
 
   const [sunStudySelected, setSunStudySelected] = useState<number[]>([]);
   useEffect(() => setSunStudySelected((prev) => (prev.length === 0 ? prev : [])), [model]);
+  const [solarReceptors, setSolarReceptors] = useState<SolarReceptorArea[]>(() => loadSolarReceptors(model.center));
+  useEffect(() => {
+    setSolarReceptors(loadSolarReceptors(model.center));
+  }, [model.center.lat, model.center.lon]);
+  useEffect(() => {
+    saveSolarReceptors(model.center, solarReceptors);
+  }, [model.center, solarReceptors]);
+  const solarReceptorsRef = useRef(solarReceptors);
+  solarReceptorsRef.current = solarReceptors;
+  const solarReceptorAssessRef = useRef<{ results: import("../../lib/solarReceptorAssess").SolarAssessRow[]; pending: boolean }>({
+    results: [],
+    pending: false,
+  });
   const sunStudyDate = useMemo<SunStudyDate | null>(
     () =>
       solar.sunStudy
@@ -406,6 +428,11 @@ export function useModelPage({
     };
   }
 
+  function solarReceptorsExport() {
+    if (solarReceptors.length === 0 || (!solar.solarAccess && !solar.solarParkAccess)) return null;
+    return solarReceptorsForExport(solarReceptors, solarReceptorAssess.results);
+  }
+
   function heliodonPlanDiagramBase(): HeliodonDiagramExportOptions {
     return {
       ...planShadowInput(),
@@ -433,10 +460,13 @@ export function useModelPage({
       colourBySource: showSource,
       highlightManual: showManualEdits && overrideResult.manualCount > 0,
       sunStudyDate: solar.sunStudy ? sunStudyDate : null,
+      sunStudyMuted: solar.sunStudy ? sunStudyMutedOn(solar.sunStudy, solar.sunStudyMuted) : undefined,
+      sunStudySelected: solar.sunStudy ? sunStudySelected : undefined,
       wind:
         windSettings.enabled && windTable
           ? { table: windTable, period: windSettings.period }
           : null,
+      solarReceptors: solarReceptorsExport(),
     };
   }
 
@@ -592,9 +622,22 @@ export function useModelPage({
   const [compassNeedleDeg, setCompassNeedleDeg] = useState(0);
 
   const massing = useImportedMassing(model);
+  const [qaProposedMassing, setQaProposedMassing] = useState<BuildingFeat[]>([]);
+  const {
+    massingCursor,
+    massingDraw,
+    massingGroundPointerMove,
+    massingHeightDragFloors,
+    massingParcels,
+    massingSceneCanvasRef,
+    selectedMassingBlock,
+    setMassingCursor,
+  } = useModelPageMassing(model, tab);
 
   const qaSummaryRef = useRef({ treeCrowns: 0, buildingCount: 0, roadCount: 0, triangleCount: 0 });
   const qaDisplayBuildingsRef = useRef(model.buildings);
+  const facadeMassingModelRef = useRef(model);
+  const drawingModelRef = useRef(model);
   const heightPerfRef = useRef<{ modelOpenMs: number; firstRenderMs: number | null; comAppliedMs: number | null }>(
     { modelOpenMs: performance.now(), firstRenderMs: null, comAppliedMs: null },
   );
@@ -874,6 +917,20 @@ export function useModelPage({
         for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]!);
         return btoa(binary);
       },
+      ...modelPageSolarQa({
+        setQaProposedMassing,
+        setPlanViewport,
+        setSolar,
+        setSolarReceptors,
+        solarRef,
+        solarReceptorsRef,
+        solarReceptorAssessRef,
+        facadeSolarAssessRef,
+        facadeMassingModelRef,
+        drawingModelRef,
+        sunHoursLostPlanRef,
+        sunHoursGroundRef,
+      }),
       setSectionKnifeActive(active: boolean) {
         setSectionKnifeTool((tool) => ({ ...tool, active }));
       },
@@ -1035,6 +1092,17 @@ export function useModelPage({
     }),
     [model, overrideResult, visibleBuildings, comHeightsMeasuredOn],
   );
+  const sceneBoundaryResetKey = useMemo(
+    () =>
+      `${displayModel.center.lat.toFixed(5)},${displayModel.center.lon.toFixed(5)},${displayModel.sideM},${displayModel.buildings.length},${displayModel.trees.length}`,
+    [
+      displayModel.buildings.length,
+      displayModel.center.lat,
+      displayModel.center.lon,
+      displayModel.sideM,
+      displayModel.trees.length,
+    ],
+  );
   const walk = useWalkViewshed(model, displayModel);
   const walkRipple = useWalkRipple(model, displayModel);
   const [walkRippleToast, setWalkRippleToast] = useState<string | null>(null);
@@ -1047,6 +1115,23 @@ export function useModelPage({
   }, [walkRipple.modeLabel, walkRipple.status]);
   const walkAt = useWalkPlayback(walk);
 
+  const drawnMassingBuildings = useMemo(
+    () => massingBlocksToBuildingFeats(massingDraw.blocks),
+    [massingDraw.blocks],
+  );
+  const facadeMassingModel = useMemo(
+    () => ({
+      ...displayModel,
+      buildings: [
+        ...displayModel.buildings,
+        ...massing.drawingBuildings,
+        ...drawnMassingBuildings,
+        ...qaProposedMassing,
+      ],
+    }),
+    [displayModel, massing.drawingBuildings, drawnMassingBuildings, qaProposedMassing],
+  );
+
   const drawingModel = useMemo(() => {
     const buildingsVisible = isLayer3dVisible(view3dDisplay, "buildings");
     const treesVisible = isLayer3dVisible(view3dDisplay, "trees");
@@ -1057,9 +1142,12 @@ export function useModelPage({
     const waterVisible = isLayer3dVisible(view3dDisplay, "water");
     const contoursVisible = isLayer3dVisible(view3dDisplay, "contours");
     const baseBuildings = buildingsVisible
-      ? massing.drawingBuildings.length
-        ? [...displayModel.buildings, ...massing.drawingBuildings]
-        : displayModel.buildings
+      ? [
+          ...displayModel.buildings,
+          ...massing.drawingBuildings,
+          ...drawnMassingBuildings,
+          ...qaProposedMassing,
+        ]
       : [];
     return {
       ...displayModel,
@@ -1080,11 +1168,85 @@ export function useModelPage({
       contourLayer: contoursVisible ? displayModel.contourLayer : undefined,
       contours: contoursVisible ? displayModel.contours : false,
     };
-  }, [displayModel, massing.drawingBuildings, massing.drawingUpperLevels, view3dDisplay]);
+  }, [
+    displayModel,
+    drawnMassingBuildings,
+    massing.drawingBuildings,
+    massing.drawingUpperLevels,
+    qaProposedMassing,
+    view3dDisplay,
+  ]);
+  drawingModelRef.current = drawingModel;
+
+  const visibleSolarReceptors = useMemo(() => {
+    const out: SolarReceptorArea[] = [];
+    if (solar.solarAccess) out.push(...solarReceptors.filter((receptor) => (receptor.kind ?? "yard") !== "park"));
+    if (solar.solarParkAccess) out.push(...solarReceptors.filter((receptor) => receptor.kind === "park"));
+    return out;
+  }, [solar.solarAccess, solar.solarParkAccess, solarReceptors]);
+  const solarAssessEnabled = Boolean(
+    (solar.solarAccess || solar.solarParkAccess) && visibleSolarReceptors.length > 0,
+  );
+  const parkGreenAreas = useMemo(
+    () =>
+      displayModel.areas
+        .filter((area) => area.kind === "green")
+        .map((area, index) => ({ areaId: area.id, label: `Open space ${area.id || index + 1}` })),
+    [displayModel.areas],
+  );
+  const addParkFromArea = useCallback(
+    (areaId: number) => {
+      const area = displayModel.areas.find((item) => item.id === areaId && item.kind === "green");
+      if (!area) return;
+      const normalized = normalizeReceptorRing(area.ring, 8);
+      if (!normalized) return;
+      const receptorId = nextParkReceptorId(solarReceptorsRef.current);
+      const ruleId = (solarRef.current.parkRuleId ?? defaultParkRuleId()) as ParkSolarRuleId;
+      setSolarReceptors((current) => [
+        ...current,
+        { id: receptorId, ring: normalized, kind: "park", ruleId, label: `area-${areaId}` },
+      ]);
+    },
+    [displayModel.areas],
+  );
+  const facadeSolarEnabled = Boolean(solar.facadeSolarAccess && proposedMassingInModel(facadeMassingModel));
+  const facadeSolarAssess = useFacadeSolarAssess(facadeMassingModel, solar.year, facadeSolarEnabled);
+  const facadeSolarAssessRef = useRef(facadeSolarAssess);
+  facadeSolarAssessRef.current = facadeSolarAssess;
+  const solarReceptorAssess = useSolarReceptorAssess(
+    drawingModel,
+    visibleSolarReceptors,
+    solar.year,
+    solarAssessEnabled,
+  );
+  solarReceptorAssessRef.current = solarReceptorAssess;
+  const sunHoursLostPlan = useSunHoursLostPlan(
+    drawingModel,
+    solar.year,
+    Boolean(solar.sunHoursLost && tab === "drawing" && drawing === "site"),
+    solar.treesCastShadow ? "proposed-only" : "off",
+  );
+  const sunHoursLostPlanRef = useRef(sunHoursLostPlan);
+  sunHoursLostPlanRef.current = sunHoursLostPlan;
+  const sunHoursGroundModel = tab === "drawing" ? drawingModel : displayModel;
+  const sunHoursGround = useSunHoursGround(
+    sunHoursGroundModel,
+    solar.year,
+    solar.month,
+    solar.day,
+    Boolean(solar.sunHours),
+    solar.treesCastShadow ? "proposed-only" : "off",
+  );
+  const sunHoursGroundRef = useRef(sunHoursGround);
+  sunHoursGroundRef.current = sunHoursGround;
 
   useEffect(() => {
     qaDisplayBuildingsRef.current = displayModel.buildings;
   }, [displayModel.buildings]);
+
+  useEffect(() => {
+    facadeMassingModelRef.current = facadeMassingModel;
+  }, [facadeMassingModel]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1333,14 +1495,12 @@ export function useModelPage({
     if (!consolePlaying) return;
     let raf = 0;
     let last = performance.now();
-    let minutesFloat = solar.hour * 60 + solar.minute;
-    const minM = consoleDaylight.sunrise;
-    const maxM = consoleDaylight.sunset;
+    let minutesFloat = clampSolarSliderMinutes(solar.hour * 60 + solar.minute);
     const step = (now: number) => {
       const dt = Math.min(0.1, (now - last) / 1000);
       last = now;
       minutesFloat += dt * 72;
-      if (minutesFloat > maxM) minutesFloat = minM;
+      if (minutesFloat > SOLAR_SLIDER_END_MIN) minutesFloat = SOLAR_SLIDER_START_MIN;
       const rounded = Math.round(minutesFloat);
       const hour = Math.floor(rounded / 60);
       const minute = rounded % 60;
@@ -1349,7 +1509,7 @@ export function useModelPage({
     };
     raf = requestAnimationFrame(step);
     return () => cancelAnimationFrame(raf);
-  }, [consolePlaying, consoleDaylight.sunrise, consoleDaylight.sunset]);
+  }, [consolePlaying]);
 
   function selectSection(id: string) {
     if (id === "solar" || id === "wind" || id === "view") setAnalysisKind(id);
@@ -1379,6 +1539,27 @@ export function useModelPage({
   useEffect(() => {
     if (viewportIsNarrow()) return;
     function onKeyDown(event: KeyboardEvent) {
+      if (massingDraw.tool.toolEnabled && !commandBarOpen && !isEditableTarget(event.target)) {
+        if (event.key === "Escape") {
+          event.preventDefault();
+          massingDraw.dispatchTool({ type: "CANCEL" });
+          return;
+        }
+        if (
+          (event.key === "Enter" || event.key === "NumpadEnter") &&
+          massingDraw.tool.drawArmed &&
+          (massingDraw.tool.phase === "drawing" || massingDraw.tool.phase === "drawingPreview")
+        ) {
+          event.preventDefault();
+          massingDraw.finishDraw();
+          return;
+        }
+        if ((event.key === "Delete" || event.key === "Backspace") && massingDraw.tool.selectedId) {
+          event.preventDefault();
+          massingDraw.deleteSelected();
+          return;
+        }
+      }
       const result = handleModelKeyDown({
         key: event.key,
         metaKey: event.metaKey,
@@ -1396,7 +1577,7 @@ export function useModelPage({
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [applyShortcut, commandBarOpen, shortcutCheatsheetOpen]);
+  }, [applyShortcut, commandBarOpen, massingDraw, shortcutCheatsheetOpen]);
 
   function retryComHeights() {
     setComFootprintFetchError(null);
@@ -1470,6 +1651,11 @@ export function useModelPage({
           windSettings.enabled && windTable
             ? { table: windTable, period: windSettings.period }
             : null,
+        sunStudy: solar.sunStudy ? await sunStudyExportLayers() : null,
+        solarReceptors: solarReceptorsExport(),
+        facadeSolarPoints: facadeSolarEnabled
+          ? facadeSolarPointsForExport(facadeSolarAssess.bundle)
+          : null,
         hideTrees: view3dDisplay.hideTrees,
         importedMassing: massing.forExport.length ? massing.forExport : null,
         buildingsAsMesh,
@@ -1484,7 +1670,15 @@ export function useModelPage({
   async function sunStudyExportLayers(): Promise<SitePlanExportOptions["sunStudy"]> {
     if (!sunStudyDate) return null;
     const casters = sunStudyCasterModel(drawingModel, effectiveSunStudyCasters, sunStudySelected);
-    return { layers: await sunStudyLayersFor(casters, sunStudyDate) };
+    const layers = await sunStudyLayersFor(casters, sunStudyDate);
+    return {
+      layers: layers.map((layer) => ({
+        hour: layer.hour,
+        minute: 0,
+        existingRings: layer.rings,
+        addedRings: layer.addedRings,
+      })),
+    };
   }
 
   const qaPlanBridgeRef = useRef<{
@@ -1625,10 +1819,16 @@ export function useModelPage({
     setExportError(null);
     setBusy("svg-site");
     try {
-      await downloadSiteSvg(drawingModel, figureScale, lineStyles, {
+      const facadeTable = facadeSolarEnabled
+        ? facadeSolarSvgTable(facadeSolarAssess.bundle)
+        : "";
+      const { sitePlanSvg } = await import("../../lib/aiPlan");
+      let svg = await sitePlanSvg(drawingModel, figureScale, lineStyles, {
         ...sitePlanExportOptions(),
         sunStudy: await sunStudyExportLayers(),
       });
+      if (facadeTable) svg = svg.replace("</svg>", `${facadeTable}</svg>`);
+      downloadBlob(svgFilename(drawingModel, "site", figureScale), new Blob([svg], { type: "image/svg+xml" }));
     } catch {
       setExportError("The site plan SVG could not be written.");
     } finally {
@@ -1684,6 +1884,8 @@ export function useModelPage({
     setSunStudyProgress("0 of 7");
     try {
       const date = { year: solar.year, month: solar.month, day: solar.day };
+      const study = await sunStudyExportLayers();
+      const byHour = new Map((study?.layers ?? []).map((layer) => [layer.hour, layer]));
       const problem = await downloadSunStudyZip(
         drawingModel,
         figureScale,
@@ -1691,8 +1893,8 @@ export function useModelPage({
         (hour) => ({
           ...sitePlanExportOptions(),
           heliodon: null,
-          shadows: { ...planShadowInput(), hour, minute: 0 },
-          castShadows: true,
+          shadows: null,
+          sunStudy: byHour.has(hour) ? { layers: [byHour.get(hour)!] } : { layers: [] },
         }),
         date,
         (done, total) => setSunStudyProgress(`${done} of ${total}`),
@@ -2053,9 +2255,11 @@ export function useModelPage({
   }, [tab]);
 
   return {
+    addParkFromArea,
     analysisKind,
     annotatedAppliedBuildings,
     applyShortcut,
+    AXO_LAYER_LABELS,
     axoSettings,
     baseBuildings,
     buildingsAsMesh,
@@ -2072,8 +2276,8 @@ export function useModelPage({
     comHeightsMeasuredOn,
     comHeightsStatus,
     comHeightsStatusNote,
-    comMeasuredHeightCount,
     commandBarOpen,
+    comMeasuredHeightCount,
     commitRenderQuality,
     commitSolar,
     commitView,
@@ -2087,12 +2291,12 @@ export function useModelPage({
     crs,
     cutDimLabel,
     dataSources,
-    dispatchSidebar,
     defaultExplodedAxoGapM,
     defaultExplodedAxoSettings,
+    dispatchSidebar,
     displayModel,
-    dragReorderAxoLayer,
     draggedAxoLayer,
+    dragReorderAxoLayer,
     drawing,
     drawingModel,
     drawingViewportsInitializedRef,
@@ -2104,6 +2308,8 @@ export function useModelPage({
     exportHeightEdits,
     exportRef,
     exportSectionDrawing,
+    facadeSolarAssess,
+    facadeSolarEnabled,
     fallbackBuildings,
     figureFit,
     figureScale,
@@ -2131,7 +2337,6 @@ export function useModelPage({
     introWebglReadyRef,
     isoDrawingViewport,
     isometricDrawingBounds,
-    AXO_LAYER_LABELS,
     items,
     layerBits,
     leftOpen,
@@ -2139,6 +2344,12 @@ export function useModelPage({
     lidarTierNote,
     lineStyles,
     massing,
+    massingCursor,
+    massingDraw,
+    massingGroundPointerMove,
+    massingHeightDragFloors,
+    massingParcels,
+    massingSceneCanvasRef,
     model,
     modelRootRef,
     onExportReady,
@@ -2147,24 +2358,25 @@ export function useModelPage({
     onScale,
     onSectionKnifePoseChange,
     overrideResult,
+    parkGreenAreas,
     persistHidden,
     persistOverrides,
     pickBuildingUseColour,
+    pickedBuilding,
+    pickedTree,
     planHeliodonForSiteExport,
     planScaleOptions,
     planShadowInput,
     planViewport,
-    pickedBuilding,
-    pickedTree,
     planWidth,
     presentBuildingUses,
     qaDisplayBuildingsRef,
     qaPlanBridgeRef,
     qaSummaryRef,
+    referenceExplodedAxoSettings,
     renderQuality,
     resetAllHeights,
     resetBuildingHeight,
-    referenceExplodedAxoSettings,
     resetSceneLayerColours,
     retryComHeights,
     rightItems,
@@ -2183,10 +2395,12 @@ export function useModelPage({
     saveSiteAi,
     saveSiteSvg,
     saveSunStudyAi,
+    sceneBoundaryResetKey,
     sceneLayerRows,
     sceneSelection,
     sectionIds,
     sectionKnifeTool,
+    selectedMassingBlock,
     selectForHide,
     selectSection,
     setAnalysisKind,
@@ -2215,6 +2429,7 @@ export function useModelPage({
     setInspectHudScreen,
     setIsoDrawingViewport,
     setLineStyles,
+    setMassingCursor,
     setPlanViewport,
     setPlanWidth,
     setRenderQuality,
@@ -2226,6 +2441,7 @@ export function useModelPage({
     setSidebarCollapsed,
     setSnapId,
     setSolar,
+    setSolarReceptors,
     setSunStudyProgress,
     setSunStudySelected,
     setTab,
@@ -2250,8 +2466,13 @@ export function useModelPage({
     sitePlanExportOptions,
     snapId,
     solar,
+    solarAssessEnabled,
+    solarReceptorAssess,
+    solarReceptors,
     sourceCounts,
     sourcesLoaded,
+    sunHoursGround,
+    sunHoursLostPlan,
     sunStudyDate,
     sunStudyExportLayers,
     sunStudyProgress,
@@ -2268,6 +2489,7 @@ export function useModelPage({
     viewAnalysisOpen,
     viewportModelKeyRef,
     visibleBuildings,
+    visibleSolarReceptors,
     walk,
     walkAt,
     walkDrawing,

@@ -34,6 +34,7 @@ The name is `--background`. The value is `#EBEBEB`.
 | `--panel-border` | The line around panels, cards, and inputs. | `#C8C8C8` |
 | `--text` | Main text, icons, and the Create model button. | `#1A1916` |
 | `--muted-text` | Notes, credits, and other secondary text. | `#6E685E` |
+| `--sun-hours-direct-dock-footnote` | Compact Direct Sun Hours dock legend footnote. | `#5F5F5F` |
 | `--font-sans` | The font for buttons, labels, and ordinary text. | `"Geist", -apple-system, BlinkMacSystemFont, sans-serif` |
 | `--font-mono` | The font for numbers and data, such as stats and coordinates. | `"Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace` |
 | `--font-serif` | The font for the large “Your model is ready” title. Despite the name, it is Geist; a later change renames it `--sans`. | `"Geist", "Iowan Old Style", Georgia, serif` |
@@ -140,6 +141,15 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--switch-knob` | `#000000` | Knob of every sidebar switch, on and off, so an off switch reads on its pale `--control-off` track. On = `--accent` track, knob right. |
 | `--site-building-edge` | `#3D3010` | Darker outline on site-building massing in the 3D viewport so they read against retail (`--use-retail`) and civic (`--use-civic`) yellows. |
 | `--site-boundary` | `#D7263D` | Searched-property parcel boundary on the site plan, the 3D ground line, Rhino `Site::Boundary`, and Illustrator/PDF Site boundary layer. |
+| `--parcel-outline` | `#D4A85C` | Default cadastre strokes on the 3D ground while Massing is on (world-unit lines). |
+| `--parcel-outline-casing` | `#C8C2BA` | Muted stroke behind default parcel outlines for separation from terrain. |
+| `--parcel-fill-base` | `#E1B157` | Very light default tint on parcel titles (low alpha in mesh). |
+| `--parcel-outline-hover` | `#F4CA55` | Brighter stroke on the title under the pointer (title-select mode). |
+| `--parcel-fill-hover` | `#F4CA55` | Brighter fill on hover (title-select mode). |
+| `--parcel-outline-selected` | `#FFD966` | Selected property title outlines in Massing mode. |
+| `--parcel-boundary-active` | `#FFFFFF` | Combined site boundary outline from one or more selected titles. |
+| `--parcel-fill-selected` | `#E1B157` | Semi-transparent fill on selected titles (3D terrain). |
+| `--parcel-fill-boundary` | `#C89F3D` | Semi-transparent fill inside the combined site boundary. |
 | `--use-residential` | `#E06C75` | Residential footprints, legend swatch, 3D massing, and the Residential Rhino layer. |
 | `--use-commercial` | `#61AFEF` | Commercial footprints, legend swatch, 3D massing, and the Commercial Rhino layer. |
 | `--use-retail` | `#E5C07B` | Retail footprints, legend swatch, 3D massing, and the Retail Rhino layer. |
@@ -216,7 +226,8 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--heliodon-dial-disc` | `#e8e2d8` | Faint ground disc under the heliodon dial at about 35% opacity (screen only). |
 | `--shadow-fill` | `#4a5a70` | Site-plan building shadows on the site plan (20% opacity). |
 | `--sun-study-sun` | `#fff500` | Sun study: hourly sun icons (9am–3pm) on the selected-date path of the site plan sun diagram. Same size as the current-time sun, which hides while the study is on. |
-| `--sun-study-shadow` | `#4a5a70` | Sun study: one site plan shadow layer per hour (9am–3pm), each at 20% opacity. |
+| `--sun-study-shadow` | `#4a5a70` | Sun study: existing context shadow per hour (9am–3pm), each at 20% opacity. |
+| `--sun-study-shadow-added` | `#E1B157` | Sun study: proposal-only added shadow per hour, hatched at about 55% opacity. |
 | `--sun-study-block` | `#f4f4f2` | Sun study muted base plan (on by default with the sun study; toggle off in the Sun panel): blocks. |
 | `--sun-study-green` | `#eeeeec` | Sun study muted base plan (on by default with the sun study; toggle off in the Sun panel): parks and green space. |
 | `--sun-study-water` | `#e6e8ea` | Sun study muted base plan (on by default with the sun study; toggle off in the Sun panel): water. |
@@ -225,6 +236,29 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--sun-study-path-edge` | `#d4d4d0` | Sun study muted base plan (on by default with the sun study; toggle off in the Sun panel): footpath edge. |
 | `--sun-study-building` | `#ffffff` | Sun study muted base plan (on by default with the sun study; toggle off in the Sun panel): buildings (the site building keeps its own colour). |
 | `--sun-study-tree` | `#b8e0b0` | Tree crowns in the sun study muted base plan, at 50% opacity. Pastel green so trees stay visible under the hourly shadows. |
+| `--sun-study-tree-shadow` | `#b0b8c4` | Tree crown ground shadows on the site plan when **Trees cast shadow** is on (visual only; compliance ignores trees). |
+| `--solar-receptor-pass` | `#9fd89f` | B4-3 solar receptor overlay when existing and proposed pass. |
+| `--solar-receptor-fail` | `#e8a4a4` | B4-3 solar receptor overlay when the proposal causes failure. |
+| `--solar-receptor-warn` | `#f0d59a` | B4-3 solar receptor overlay when already non-compliant. |
+| `--solar-receptor-outline` | `#2e4a2e` | Outline for marked solar receptor areas on the site plan. |
+| `--solar-receptor-preview` | `#6b8f71` | Preview fill while drawing a solar receptor on the site plan. |
+| `--sun-hours-lost-0` | `#ffffff` | Hours-lost heatmap legend swatch for zero loss (not drawn on plan). |
+| `--sun-hours-lost-1` | `#fff7c2` | Hours-lost heatmap up to 1 h. |
+| `--sun-hours-lost-2` | `#ffd27a` | Hours-lost heatmap 1–2 h. |
+| `--sun-hours-lost-3` | `#ff9a4a` | Hours-lost heatmap 2–3 h. |
+| `--sun-hours-lost-4` | `#e85c3a` | Hours-lost heatmap 3–4 h. |
+| `--sun-hours-lost-5plus` | `#8b2e1a` | Hours-lost heatmap 5+ h. |
+| `--sun-hours-direct-0` | `#313695` | Direct sun hours 0 h (blue). |
+| `--sun-hours-direct-15` | `#4575b4` | Direct sun hours low blue. |
+| `--sun-hours-direct-30` | `#a5006a` | Direct sun hours purple. |
+| `--sun-hours-direct-50` | `#d73027` | Direct sun hours red mid. |
+| `--sun-hours-direct-70` | `#f46d43` | Direct sun hours orange. |
+| `--sun-hours-direct-90` | `#fdae61` | Direct sun hours light orange. |
+| `--sun-hours-direct-max` | `#fee825` | Direct sun hours max (yellow). |
+| `--facade-hours-ok` | `#3d8f5a` | 3D facade sample meets ADG threshold hours. |
+| `--facade-hours-warn` | `#e8a820` | 3D facade sample just below threshold. |
+| `--facade-hours-low` | `#e07030` | 3D facade sample low direct-sun hours. |
+| `--facade-hours-none` | `#8b3a45` | 3D facade sample with no counted direct sun. |
 | `--axo-water` | `#7eb8da` | Exploded axo floodplain / water layer. |
 | `--axo-road` | `#e8883a` | Exploded axo roads layer. |
 | `--axo-green` | `#8fbc8f` | Exploded axo green spaces layer. |

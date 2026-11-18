@@ -45,6 +45,14 @@ export type SolarViewSettings = {
   sunStudyMuted?: boolean;
   sunStudyCasters?: "all" | "selected";
   sunHours?: boolean;
+  solarAccess?: boolean;
+  receptorDraw?: boolean;
+  solarParkAccess?: boolean;
+  parkRuleId?: string;
+  parkReceptorDraw?: boolean;
+  sunHoursLost?: boolean;
+  treesCastShadow?: boolean;
+  facadeSolarAccess?: boolean;
 };
 
 const OVERLAY_ORDER = 1000;

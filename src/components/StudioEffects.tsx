@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Component, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import { EffectComposer, N8AO, SMAA, ToneMapping } from "@react-three/postprocessing";
 import { ToneMappingMode } from "postprocessing";
@@ -67,6 +67,23 @@ export function useCameraMoving(): { readonly current: boolean } {
     moving.current = still.current < REST_FRAMES;
   });
   return moving;
+}
+
+class PostFxBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+
+  static getDerivedStateFromError(): { failed: boolean } {
+    return { failed: true };
+  }
+
+  componentDidCatch(error: unknown) {
+    console.error("[CityCut 3D] postprocessing disabled after error", error);
+  }
+
+  render() {
+    if (this.state.failed) return null;
+    return this.props.children;
+  }
 }
 
 function StudioComposer({
@@ -177,7 +194,14 @@ export function StudioEffects({
     <>
       {showShadow ? <PlinthContactShadow frame={frame} plinthBottomY={plinthBottomY} colourTick={colourTick} /> : null}
       {studioPostEnabled() ? (
-        <StudioComposer quality={quality} noToneMapping={noToneMapping} sideM={sideM} primaryView={primaryView} />
+        <PostFxBoundary>
+          <StudioComposer
+            quality={quality}
+            noToneMapping={noToneMapping}
+            sideM={sideM}
+            primaryView={primaryView}
+          />
+        </PostFxBoundary>
       ) : null}
     </>
   );

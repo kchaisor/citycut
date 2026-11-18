@@ -67,8 +67,8 @@ describe("export tiles", () => {
 
   it("says the site plan .ai and .svg carry hourly layers while the sun study is on", () => {
     const on = byId({ ...base, tab: "drawing", drawing: "site", sunStudy: true });
-    expect(on.ai.description).toContain("one layer per hour 9am–3pm");
-    expect(on.svg.description).toContain("one layer per hour 9am–3pm");
+    expect(on.ai.description).toContain("Existing shadow and Added shadow layers per hour 9am–3pm");
+    expect(on.svg.description).toContain("Existing shadow and Added shadow layers per hour 9am–3pm");
     expect(byId({ ...base, tab: "drawing", drawing: "site" }).ai.description).not.toContain("per hour");
     expect(byId({ ...base, tab: "drawing", drawing: "figure-ground", sunStudy: true }).ai.description).not.toContain("per hour");
   });

@@ -7,7 +7,16 @@ import {
   HELIODON_RADIUS_FACTOR_MIN,
   heliodonRadiusM,
 } from "../lib/heliodonRadius";
+import { RESCODE_B43_STEP_MINUTES } from "../lib/solarAccessB43";
+import { SUN_HOURS_LOST_CELL_M } from "../lib/sunHoursLost";
+import { SUN_HOURS_GROUND_CELL_M } from "../lib/sunHoursGround";
+import { SunHoursGroundLegendList } from "./SunHoursGroundLegendList";
+import { SunHoursLostLegendList } from "./SunHoursLostLegendList";
+import { SUN_STUDY_SHADOW_ADDED_OPACITY, SUN_STUDY_SHADOW_OPACITY } from "../lib/sunStudyPlan";
+import { PARK_NO_ADDITIONAL_TOLERANCE_M2, PARK_SOLAR_RULE_IDS, defaultParkRuleId, solarRuleDefinition } from "../lib/solarRuleRegistry";
+import type { SolarAssessRow } from "../lib/solarReceptorAssess";
 import type { SolarViewSettings } from "./SolarHeliodon";
+import { SolarAssessResultsList } from "./SolarAssessResultsList";
 import { SunStudyPlayer } from "./SunStudyPlayer";
 
 const SOLAR_LEGEND: { key: ColourKey; label: string; dash?: string }[] = [
@@ -24,6 +33,18 @@ export function SolarPanel({
   site,
   selectedCount = 0,
   onClearSelection,
+  canMarkReceptors = false,
+  receptorCount = 0,
+  receptorAssess = [],
+  receptorAssessPending = false,
+  onClearReceptors,
+  sunHoursLostPending = false,
+  sunHoursGroundPending = false,
+  sunHoursGroundMaxHours = 0,
+  parkGreenAreas = [],
+  onAddParkFromArea,
+  parkReceptorCount = 0,
+  onClearParkReceptors,
 }: {
   settings: SolarViewSettings;
   onChange: (next: SolarViewSettings) => void;
@@ -32,6 +53,18 @@ export function SolarPanel({
   site?: { lat: number; lon: number };
   selectedCount?: number;
   onClearSelection?: () => void;
+  canMarkReceptors?: boolean;
+  receptorCount?: number;
+  receptorAssess?: SolarAssessRow[];
+  receptorAssessPending?: boolean;
+  onClearReceptors?: () => void;
+  sunHoursLostPending?: boolean;
+  sunHoursGroundPending?: boolean;
+  sunHoursGroundMaxHours?: number;
+  parkGreenAreas?: { areaId: number; label: string }[];
+  onAddParkFromArea?: (areaId: number) => void;
+  parkReceptorCount?: number;
+  onClearParkReceptors?: () => void;
 }) {
   const [open, setOpen] = useState(true);
   useColourRevision();
@@ -60,6 +93,16 @@ export function SolarPanel({
         </button>
       )}
       <div id={panelId} className="solar-panel-body" hidden={!embedded && !open}>
+        <ol className="solar-access-guide" data-solar-access-guide aria-label="Solar access workflow">
+          <li>Open <strong>Analysis</strong> (left rail), then the <strong>Drawing</strong> tab.</li>
+          <li>Draw proposed <strong>massing</strong> on 3D or plan first (shadows need a proposal).</li>
+          <li>Turn on <strong>B4-3</strong>, tick <strong>Mark receptor areas</strong>, drag yard rectangles on the site plan.</li>
+          <li>Optional: <strong>Park / public realm</strong> — pick a rule, add from green areas or draw a park receptor; gold hatch shows added shadow on the park.</li>
+          <li>Optional: <strong>Ground sun-hours heatmap</strong> (full daylight, site-wide). Separate from hours-lost impact.</li>
+          <li>Optional: <strong>Hours lost heatmap</strong> (22 Sep, needs massing). Results stack in the plan dock.</li>
+          <li>Optional: <strong>Sun study</strong> (9am–3pm layers). <strong>Trees cast shadow</strong> is visual only (compliance ignores trees).</li>
+          <li><strong>Quick export SVG</strong> in Drawing downloads shadow, receptor, and park layers.</li>
+        </ol>
         {site && (
           <SunStudyPlayer
             settings={settings}
@@ -96,6 +139,215 @@ export function SolarPanel({
         <label className="check-field">
           <input
             type="checkbox"
+            checked={Boolean(settings.solarAccess)}
+            onChange={(event) => {
+              const on = event.target.checked;
+              patch({
+                solarAccess: on,
+                sunStudy: on ? true : settings.sunStudy,
+                month: on ? 9 : settings.month,
+                day: on ? 22 : settings.day,
+                castShadows: on ? true : settings.castShadows,
+              });
+            }}
+          />
+          B4-3 / A4-3 overshadowing (22 Sep)
+        </label>
+        {settings.solarAccess && (
+          <p className="field-note">
+            Assessed at {RESCODE_B43_STEP_MINUTES}-minute steps, 9am–3pm ({settings.year}). Indicative only — councils may count fences and trees differently.
+          </p>
+        )}
+        {settings.solarAccess && canMarkReceptors && (
+          <label className="check-field">
+            <input
+              type="checkbox"
+              checked={Boolean(settings.receptorDraw)}
+              onChange={(event) => patch({ receptorDraw: event.target.checked })}
+            />
+            Mark receptor areas on site plan
+          </label>
+        )}
+        {settings.solarAccess && receptorCount > 0 && (
+          <p className="field-note" data-solar-receptor-summary>
+            {receptorAssessPending
+              ? `Computing ${receptorCount} receptor${receptorCount === 1 ? "" : "s"}…`
+              : `${receptorCount} receptor area${receptorCount === 1 ? "" : "s"} marked.`}
+            {onClearReceptors && (
+              <>
+                {" "}
+                <button type="button" className="link-button" onClick={onClearReceptors}>
+                  Clear
+                </button>
+              </>
+            )}
+          </p>
+        )}
+        {settings.solarAccess && receptorAssess.some((row) => row.assessKind === "b43") && (
+          <SolarAssessResultsList rows={receptorAssess.filter((row) => row.assessKind === "b43")} />
+        )}
+        <label className="check-field">
+          <input
+            type="checkbox"
+            checked={Boolean(settings.solarParkAccess)}
+            onChange={(event) => {
+              const on = event.target.checked;
+              patch({
+                solarParkAccess: on,
+                parkRuleId: settings.parkRuleId ?? defaultParkRuleId(),
+                castShadows: on ? true : settings.castShadows,
+              });
+            }}
+          />
+          Parks / public realm (no additional shadow)
+        </label>
+        {settings.solarParkAccess && (
+          <>
+            <label className="field-note" htmlFor={`${panelId}-park-rule`}>
+              Test rule
+            </label>
+            <select
+              id={`${panelId}-park-rule`}
+              className="mono"
+              value={settings.parkRuleId ?? defaultParkRuleId()}
+              onChange={(event) => patch({ parkRuleId: event.target.value })}
+            >
+              {PARK_SOLAR_RULE_IDS.map((ruleId) => {
+                const rule = solarRuleDefinition(ruleId);
+                return (
+                  <option key={ruleId} value={ruleId}>
+                    {rule.label} — {rule.statusNote}
+                  </option>
+                );
+              })}
+            </select>
+            <p className="field-note">
+              Pass when max added shadow ≤ {PARK_NO_ADDITIONAL_TOLERANCE_M2} m² per step ({settings.year}). Indicative only.
+            </p>
+            {canMarkReceptors && (
+              <label className="check-field">
+                <input
+                  type="checkbox"
+                  checked={Boolean(settings.parkReceptorDraw)}
+                  onChange={(event) => patch({ parkReceptorDraw: event.target.checked })}
+                />
+                Draw park test area on site plan
+              </label>
+            )}
+            {parkGreenAreas.length > 0 && onAddParkFromArea && (
+              <ul className="solar-park-pick-list" data-solar-park-pick-list>
+                {parkGreenAreas.map((area) => (
+                  <li key={area.areaId}>
+                    <button type="button" className="link-button" onClick={() => onAddParkFromArea(area.areaId)}>
+                      Add park from map: {area.label}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {parkReceptorCount > 0 && (
+              <p className="field-note" data-solar-park-receptor-summary>
+                {receptorAssessPending
+                  ? `Computing ${parkReceptorCount} park test${parkReceptorCount === 1 ? "" : "s"}…`
+                  : `${parkReceptorCount} park test area${parkReceptorCount === 1 ? "" : "s"}.`}
+                {onClearParkReceptors && (
+                  <>
+                    {" "}
+                    <button type="button" className="link-button" onClick={onClearParkReceptors}>
+                      Clear parks
+                    </button>
+                  </>
+                )}
+              </p>
+            )}
+            {receptorAssess.some((row) => row.assessKind === "park") && (
+              <SolarAssessResultsList rows={receptorAssess.filter((row) => row.assessKind === "park")} />
+            )}
+          </>
+        )}
+        <label className="check-field">
+          <input
+            type="checkbox"
+            checked={Boolean(settings.treesCastShadow)}
+            onChange={(event) => patch({ treesCastShadow: event.target.checked, castShadows: true })}
+          />
+          Trees cast shadow (visual only)
+        </label>
+        <label className="check-field">
+          <input
+            type="checkbox"
+            data-sun-hours-ground-toggle
+            checked={Boolean(settings.sunHours)}
+            onChange={(event) => {
+              const on = event.target.checked;
+              patch({
+                sunHours: on,
+                month: on ? 6 : settings.month,
+                day: on ? 21 : settings.day,
+                castShadows: on ? true : settings.castShadows,
+              });
+            }}
+          />
+          Direct Sun Hours (ground, roofs, walls)
+        </label>
+        {settings.sunHours && (
+          <SunHoursGroundLegendList
+            maxHours={sunHoursGroundMaxHours}
+            pending={sunHoursGroundPending}
+          />
+        )}
+        {settings.sunHours && (
+          <p className="field-note" data-sun-hours-ground-panel-note>
+            Full sunrise–sunset at 15-minute steps · {SUN_HOURS_GROUND_CELL_M} m site grid · uses Solar study date (default 21 Jun winter).
+          </p>
+        )}
+        <label className="check-field">
+          <input
+            type="checkbox"
+            checked={Boolean(settings.facadeSolarAccess)}
+            onChange={(event) =>
+              patch({
+                facadeSolarAccess: event.target.checked,
+                month: 6,
+                day: 21,
+                hour: 12,
+                castShadows: true,
+              })
+            }
+          />
+          Facade hours — NSW ADG 4A-1 unit proxy (21 Jun, 3D)
+        </label>
+        {canMarkReceptors && (
+          <label className="check-field">
+            <input
+              type="checkbox"
+              checked={Boolean(settings.sunHoursLost)}
+              onChange={(event) => {
+                const on = event.target.checked;
+                patch({
+                  sunHoursLost: on,
+                  sunStudy: on ? true : settings.sunStudy,
+                  month: on ? 9 : settings.month,
+                  day: on ? 22 : settings.day,
+                  castShadows: on ? true : settings.castShadows,
+                });
+              }}
+            />
+            Hours lost heatmap (proposal)
+          </label>
+        )}
+        {settings.sunHoursLost && (
+          <>
+            <p className="field-note" data-sun-hours-lost-note>
+              22 Sep 9am–3pm at 15-minute steps · {SUN_HOURS_LOST_CELL_M} m cells around proposed massing.
+              {sunHoursLostPending ? " Computing…" : ""}
+            </p>
+            <SunHoursLostLegendList includesTrees={Boolean(settings.treesCastShadow)} />
+          </>
+        )}
+        <label className="check-field">
+          <input
+            type="checkbox"
             checked={Boolean(settings.sunStudy)}
             onChange={(event) => patch({ sunStudy: event.target.checked })}
           />
@@ -110,6 +362,28 @@ export function SolarPanel({
             />
             Muted base plan
           </label>
+        )}
+        {settings.sunStudy && (
+          <ul className="solar-legend" aria-label="Shadow legend">
+            <li>
+              <svg className="solar-legend-swatch" viewBox="0 0 24 12" aria-hidden>
+                <rect x="0" y="0" width="24" height="12" fill={getColour("--sun-study-shadow")} fillOpacity={SUN_STUDY_SHADOW_OPACITY} />
+              </svg>
+              Existing shadow
+            </li>
+            <li>
+              <svg className="solar-legend-swatch" viewBox="0 0 24 12" aria-hidden>
+                <defs>
+                  <pattern id="solar-legend-added-hatch" patternUnits="userSpaceOnUse" width="4" height="4" patternTransform="rotate(45)">
+                    <rect width="4" height="4" fill={getColour("--sun-study-shadow-added")} fillOpacity={SUN_STUDY_SHADOW_ADDED_OPACITY * 0.35} />
+                    <line x1="0" y1="0" x2="0" y2="4" stroke={getColour("--sun-study-shadow-added")} strokeWidth="0.6" />
+                  </pattern>
+                </defs>
+                <rect x="0" y="0" width="24" height="12" fill="url(#solar-legend-added-hatch)" />
+              </svg>
+              Added by proposal
+            </li>
+          </ul>
         )}
         {settings.sunStudy && (
           <div className="field sun-study-casters">

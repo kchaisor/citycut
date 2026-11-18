@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
+import { safeMergeGeometries } from "./safeMergeGeometries";
 import { getColour } from "./colours";
 import { matteStandardMaterial } from "./matteMaterial";
 import type { TreeFeat } from "../types";
@@ -145,10 +145,8 @@ export function buildTreeGroup(
     for (const b of sortedBuckets) {
       const tGeos = bucketTrunks.get(b) ?? [];
       const cGeos = bucketCrowns.get(b) ?? [];
-      const mergedTrunks = mergeGeometries(tGeos, false);
-      const mergedCrowns = mergeGeometries(cGeos, false);
-      tGeos.forEach((geometry) => geometry.dispose());
-      cGeos.forEach((geometry) => geometry.dispose());
+      const mergedTrunks = safeMergeGeometries(tGeos, false);
+      const mergedCrowns = safeMergeGeometries(cGeos, false);
       const sub = new THREE.Group();
       sub.name = "TreesBucket";
       sub.userData.introTreeBucket = b;
@@ -156,11 +154,18 @@ export function buildTreeGroup(
       if (mergedTrunks) {
         const tmMesh = new THREE.Mesh(mergedTrunks, trunkMaterial);
         sub.add(tmMesh);
+      } else {
+        for (const geometry of tGeos) sub.add(new THREE.Mesh(geometry, trunkMaterial));
       }
       if (mergedCrowns) {
         mergedCrowns.computeVertexNormals();
         const cmMesh = new THREE.Mesh(mergedCrowns, crownMaterial);
         sub.add(cmMesh);
+      } else {
+        for (const geometry of cGeos) {
+          geometry.computeVertexNormals();
+          sub.add(new THREE.Mesh(geometry, crownMaterial));
+        }
       }
       if (sub.children.length > 0) group.add(sub);
     }
@@ -195,18 +200,23 @@ export function buildTreeGroup(
 
   const group = new THREE.Group();
   group.name = "Trees";
-  const mergedTrunks = mergeGeometries(trunkGeometries, false);
-  const mergedCrowns = mergeGeometries(crownGeometries, false);
-  trunkGeometries.forEach((geometry) => geometry.dispose());
-  crownGeometries.forEach((geometry) => geometry.dispose());
+  const mergedTrunks = safeMergeGeometries(trunkGeometries, false);
+  const mergedCrowns = safeMergeGeometries(crownGeometries, false);
   if (mergedTrunks) {
     const tmMesh = new THREE.Mesh(mergedTrunks, trunkMaterial);
     group.add(tmMesh);
+  } else {
+    for (const geometry of trunkGeometries) group.add(new THREE.Mesh(geometry, trunkMaterial));
   }
   if (mergedCrowns) {
     mergedCrowns.computeVertexNormals();
     const cmMesh = new THREE.Mesh(mergedCrowns, crownMaterial);
     group.add(cmMesh);
+  } else {
+    for (const geometry of crownGeometries) {
+      geometry.computeVertexNormals();
+      group.add(new THREE.Mesh(geometry, crownMaterial));
+    }
   }
   return group.children.length > 0 ? group : null;
 }

@@ -7,6 +7,7 @@ import { SectionKnifeToolPanel } from "../SectionKnifeToolPanel";
 import { contourDrawerLabel } from "../../lib/vicmapContours";
 import { drawingMassingCount } from "../../lib/massingFootprint";
 import { CORNER_LABEL } from "./modelPageConstants";
+import { MassingToolPanel } from "../MassingToolPanel";
 
 export function ModelPageSidebarLeftA({ vm }: { vm: import("./useModelPage").ModelPageViewModel }) {
   const {
@@ -30,10 +31,12 @@ export function ModelPageSidebarLeftA({ vm }: { vm: import("./useModelPage").Mod
     isometricDrawingBounds,
     leftOpen,
     lineStyles,
+    massingDraw,
     model,
     planScaleOptions,
     planWidth,
     referenceExplodedAxoSettings,
+    selectedMassingBlock,
     resetSceneLayerColours,
     sceneLayerRows,
     sectionKnifeTool,
@@ -56,6 +59,19 @@ export function ModelPageSidebarLeftA({ vm }: { vm: import("./useModelPage").Mod
   return (
     <>
             <div className="drawer-section" hidden={leftOpen !== "drawing"}>
+              {tab === "3d" && massingDraw.tool.toolEnabled && (
+                <MassingToolPanel
+                  block={selectedMassingBlock}
+                  onFloors={(floors) => massingDraw.updateSelected({ floors })}
+                  onWidth={(width_m) => massingDraw.updateSelected({ width_m })}
+                  onFlip={() =>
+                    selectedMassingBlock &&
+                    massingDraw.updateSelected({ flipped: !selectedMassingBlock.flipped })
+                  }
+                  onDelete={() => massingDraw.deleteSelected()}
+                  onDuplicate={() => massingDraw.duplicateSelected()}
+                />
+              )}
               {tab === "3d" && (
                 <div className="projection-block outliner-body">
                   <section className="sidebar-group outliner-section" aria-label="View modes">

@@ -21,7 +21,36 @@ declare global {
   interface Window {
     __citycutQa?: QaCameraBridge;
     __citycutQaSite?: QaSiteSnapshot;
-    /** QA only: programmatic height-edit pick for screenshots. */
+    __citycutQaMassing?: {
+      enableTool: () => void;
+      disableTool: () => void;
+      armDraw: () => void;
+      disarmDraw: () => void;
+      simulateDraw: (east0: number, north0: number, east1: number, north1: number) => string | null;
+      getBlocks: () => import("./massingBlock").MassingBlock[];
+      selectBlock: (id: string) => void;
+      setFloors: (floors: number) => void;
+      deleteSelected: () => void;
+      readPersistedCount: () => number;
+      selectParcels: (ids: string[]) => void;
+      clearParcels: () => void;
+      qaFocusParcelHover: (parcelId: string) => boolean;
+      nearestParcelIds: (count: number) => string[];
+      getParcelState: () => { selectedIds: string[]; boundaryPolygons: number };
+      sampleInsideBoundary: () => [number, number] | null;
+      pointInSiteBoundary: (east: number, north: number) => boolean;
+      qaGroundPress: (east: number, north: number) => void;
+      qaGroundRelease: () => void;
+      qaGroundMove: (east: number, north: number) => void;
+      finishDraw: () => import("./massingBlock").MassingBlock | null;
+      commitPolylineCenterline: (
+        points: [number, number][],
+        partial?: { width_m?: number; floors?: number; floorHeight_m?: number; flipped?: boolean },
+      ) => string | null;
+      clearDrawnBlocks?: () => void;
+      getToolPhase: () => string;
+      drawArmed: () => boolean;
+    };
     __citycutSectionExportAudit?: () => { ok: boolean; layers: string[]; svg?: string };
     __citycutQaModel?: {
       openMidriseHeightEdit: () => number | null;
@@ -50,6 +79,63 @@ declare global {
         firstRenderMs: number | null;
       }>;
       captureViewportPng?: () => Promise<string | null>;
+      setQaProposedMassingBox?: (east?: number, north?: number, size?: number, height?: number) => boolean;
+      clearQaProposedMassing?: () => void;
+      setDrawingPlanViewport?: (east: number, north: number, spanM: number) => boolean;
+      setSolarPlanMinimal?: () => boolean;
+      setSolarStudiesFull?: () => boolean;
+      enableSolarAccess?: () => boolean;
+      addSolarReceptor?: (
+        east0: number,
+        north0: number,
+        east1: number,
+        north1: number,
+        id?: string,
+      ) => string | null;
+      clearSolarReceptors?: () => void;
+      readSolarReceptorAssess?: () => import("./solarReceptorAssess").SolarAssessRow[];
+      enableSolarParkAccess?: (ruleId?: string) => boolean;
+      addSolarParkReceptor?: (
+        east0: number,
+        north0: number,
+        east1: number,
+        north1: number,
+        id?: string,
+        ruleId?: string,
+      ) => string | null;
+      readLargestGreenAreaBounds?: () => {
+        east0: number;
+        north0: number;
+        east1: number;
+        north1: number;
+      } | null;
+      addSolarParkFromLargestGreen?: (id?: string, ruleId?: string) => string | null;
+      setSolarPlanTime?: (hour: number, minute?: number) => boolean;
+      enableSunHoursLost?: () => boolean;
+      enableTreeShadows?: () => boolean;
+      setTreesCastShadow?: (on: boolean) => boolean;
+      readSunHoursLostPlan?: () => { cellCount: number; maxLoss: number; cellM?: number };
+      enableSunHoursGround?: () => boolean;
+      readSunHoursGround?: () => {
+        enabled: boolean;
+        month: number;
+        day: number;
+        cellM: number;
+        cellCount: number;
+        maskedFootprints: number;
+        maxSunHours: number;
+        paletteMin: string;
+        paletteMax: string;
+      };
+      frameSunHoursGroundPlan?: () => boolean;
+      frameSunHoursGroundOblique?: () => boolean;
+      frameSunHoursTerrainEdge?: () => boolean;
+      readSunHoursTerrainRelief?: () => { relief: number; min: number; max: number };
+      enableFacadeSolar?: () => boolean;
+      readFacadeSolarAssess?: () => import("./facadeSolarTypes").FacadeAssessBundle | null;
+      readFacadeOverlayNormals?: () => import("./facadeSolarAssess").FacadeOverlayCellNormal[];
+      frameProposedMassingOblique?: (side: "nw" | "se") => boolean;
+      readFacadeOverlayWallQa?: () => import("./facadeSolarQa").FacadeOverlayWallQa | null;
       setSectionKnifeActive?: (active: boolean) => void;
       setSectionKnifePose?: (pose: import("./sectionKnife/plane").SectionKnifePose) => void;
       auditSectionExport?: () => { ok: boolean; layers: string[] };

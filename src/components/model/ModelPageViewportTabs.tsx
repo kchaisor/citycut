@@ -10,8 +10,13 @@ import { StudioCompass } from "../StudioCompass";
 import { studioCompassVisible } from "../../lib/studioCompass";
 import { sceneSelectionBuildingId } from "../../lib/sceneInspectPick";
 import { qaHideHeightPopoverFromSearch } from "../../lib/qaCameraBridge";
-import { sunStudyMutedOn, toggleSelection } from "../../lib/sunStudyPlan";
 import { SceneBoundary } from "../SceneBoundary";
+import { FacadeSolarLegend } from "../FacadeSolarLegend";
+import { FacadeSolarResultsCard } from "../FacadeSolarResultsCard";
+import { MassingToolHud } from "../MassingToolHud";
+import { SunHoursGroundLegendList } from "../SunHoursGroundLegendList";
+import { ModelPageMassingToolLayer } from "./ModelPageMassingToolLayer";
+import { ModelPageSitePlan } from "./ModelPageSitePlan";
 import { WindRoseOverlay } from "../WindRoseOverlay";import { ViewLegend } from "../ViewPanel";
 
 import { SectionKnifeElevationPanel } from "../SectionKnifeElevationPanel";import { WalkRippleLegend } from "../WalkRipplePanel";
@@ -21,6 +26,7 @@ import { shouldShowIntroBridgePill } from "./shouldShowIntroBridgePill";
 
 export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").ModelPageViewModel }) {
   const {
+    analysisKind,
     axoSettings,
     cameraMemory,
     colourByUse,
@@ -28,8 +34,9 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
     displayModel,
     drawing,
     drawingModel,
-    effectiveSunStudyCasters,
     explodedViewport,
+    facadeSolarAssess,
+    facadeSolarEnabled,
     figureScale,
     fitCounter,
     hiddenMatch,
@@ -41,6 +48,8 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
     isoDrawingViewport,
     lineStyles,
     massing,
+    massingCursor,
+    massingDraw,
     model,
     onExportReady,
     onScale,
@@ -57,6 +66,7 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
     resetBuildingHeight,
     rippleAnalysisOpen,
     saveBuildingHeight,
+    sceneBoundaryResetKey,
     sceneSelection,
     sectionKnifeTool,
     selectForHide,
@@ -68,14 +78,11 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
     setIsoDrawingViewport,
     setPlanViewport,
     setSceneSelection,
-    setSolar,
-    setSunStudySelected,
     showManualEdits,
     showSource,
     snapId,
     solar,
-    sunStudyDate,
-    sunStudySelected,
+    sunHoursGround,
     tab,
     view,
     view3dDisplay,
@@ -114,7 +121,7 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
                 {line}
               </p>
             ))}
-            <SceneBoundary>
+            <SceneBoundary resetKey={sceneBoundaryResetKey}>
               <Scene3D
                 model={displayModel}
                 uniformBuildings={!colourByUse && !showSource}
@@ -164,15 +171,40 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
                 walkRippleArrivals={rippleAnalysisOpen ? walkRipple.buildingArrivals : null}
                 walkRipplePlaying={rippleAnalysisOpen && walkRipple.ripplePlaying}
                 onScenePoint={
-                  walkRipple.placing
-                    ? (east, north) => walkRipple.placePoint(east, north)
-                    : walkDrawing
-                      ? walk.addPoint
-                      : massing.onScenePoint
+                  massingDraw.tool.toolEnabled
+                    ? null
+                    : walkRipple.placing
+                      ? (east, north) => walkRipple.placePoint(east, north)
+                      : walkDrawing
+                        ? walk.addPoint
+                        : massing.onScenePoint
                 }
+                orbitLocked={massingDraw.orbitLocked}
+                massingToolLayer={massingDraw.tool.toolEnabled ? <ModelPageMassingToolLayer vm={vm} /> : null}
                 sectionKnife={sectionKnifeTool}
                 onSectionKnifePoseChange={onSectionKnifePoseChange}
                 quality={renderQuality}
+                facadeSolarBundle={facadeSolarEnabled ? facadeSolarAssess.bundle : null}
+                drawnMassingBlocksForFacade={
+                  facadeSolarEnabled && !massingDraw.tool.toolEnabled ? massingDraw.blocks : null
+                }
+                sunHoursGroundGrid={solar.sunHours ? sunHoursGround.grid : null}
+                sunHoursDirectOverlay={solar.sunHours ? sunHoursGround.overlay : null}
+                sunHoursScaleMax={solar.sunHours ? sunHoursGround.scaleMaxHours : 0}
+                solarAnalysisActive={analysisKind === "solar"}
+              />
+              <MassingToolHud
+                visible={
+                  massingDraw.tool.toolEnabled &&
+                  massingDraw.tool.drawArmed &&
+                  (massingDraw.tool.phase === "drawing" || massingDraw.tool.phase === "drawingPreview") &&
+                  massingDraw.previewMetrics != null
+                }
+                widthM={massingDraw.previewMetrics?.widthM ?? 0}
+                lengthM={massingDraw.previewMetrics?.lengthM ?? 0}
+                boundaryM={massingDraw.previewMetrics?.boundaryM ?? 0}
+                x={massingCursor.x}
+                y={massingCursor.y}
               />
               {tab === "3d" && sectionKnifeTool.active && (
                 <SectionKnifeElevationPanel model={displayModel} tool={sectionKnifeTool} />
@@ -183,6 +215,26 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
                 <p className="walk-ripple-toast" role="status">
                   {walkRippleToast}
                 </p>
+              ) : null}
+              {tab === "3d" && solar.facadeSolarAccess && (
+                <div className="facade-solar-dock-stack" data-facade-solar-dock-stack>
+                  <FacadeSolarLegend compact />
+                  <FacadeSolarResultsCard
+                    summary={facadeSolarAssess.bundle?.facade ?? null}
+                    pending={facadeSolarAssess.pending}
+                  />
+                </div>
+              )}
+              {tab === "3d" && solar.sunHours && sunHoursGround.grid ? (
+                <div className="sun-hours-direct-dock-stack">
+                  <div className="plan-solar-legend-dock hud-card" data-sun-hours-ground-legend-dock>
+                    <SunHoursGroundLegendList
+                      compact
+                      maxHours={sunHoursGround.scaleMaxHours || sunHoursGround.grid.maxSunHours}
+                      pending={sunHoursGround.pending || sunHoursGround.pendingSurfaces}
+                    />
+                  </div>
+                </div>
               ) : null}
               {tab === "3d" && studioCompassVisible(view.projection, view.freeRotate) && (
                 <StudioCompass needleDeg={compassNeedleDeg} />
@@ -267,6 +319,8 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
                 onViewportChange={setIsoDrawingViewport}
                 fitCounter={fitCounter}
               />
+            ) : drawing === "site" ? (
+              <ModelPageSitePlan vm={vm} />
             ) : (
               <DrawingPlan
                 model={drawingModel}
@@ -278,20 +332,6 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
                 heliodon={planHeliodonForSiteExport()}
                 castShadows={solar.castShadows}
                 shadowInput={planShadowInput()}
-                sunStudy={sunStudyDate}
-                sunStudyMuted={sunStudyMutedOn(solar.sunStudy, solar.sunStudyMuted)}
-                sunStudyCasters={effectiveSunStudyCasters}
-                sunStudySelected={sunStudySelected}
-                onSunStudyPick={(id) =>
-                  setSunStudySelected((current) => {
-                    const next = toggleSelection(current, id);
-                    setSolar((prev) => ({
-                      ...prev,
-                      sunStudyCasters: next.length > 0 ? "selected" : "all",
-                    }));
-                    return next;
-                  })
-                }
                 uniformBuildings={!colourByUse && !showSource}
                 colourBySource={showSource}
                 highlightManual={showManualEdits && overrideResult.manualCount > 0}

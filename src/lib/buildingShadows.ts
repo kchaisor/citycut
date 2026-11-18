@@ -1,12 +1,27 @@
 import type { MultiPolygon, Pair, Polygon } from "./safePolygonClip";
-import { clipIntersection as intersection, clipUnion as union } from "./safePolygonClip";
+import {
+  clipDifference as difference,
+  clipIntersection as intersection,
+  clipUnion as union,
+} from "./safePolygonClip";
 import { openRing } from "./geo";
 import { outline } from "./siteFrame";
 import { siteFrameFromModel } from "./modelFrame";
 import { sunAtMelbourneLocal, type SolarSample } from "./solar";
 import { buildingHeightsFingerprint } from "./heightOverrides";
 import { footprintBase, sampleTerrain } from "./terrain";
-import type { BuildingFeat, CityModel, Pt, Ring } from "../types";
+import { planTreeShadowMulti } from "./solarTreePlanShadow";
+import type { BuildingFeat, CityModel, Pt, Ring, TreeFeat } from "../types";
+
+export type PlanShadowTreeMode = "off" | "both" | "proposed-only";
+
+export function isProposedMassingBuilding(building: BuildingFeat): boolean {
+  return Boolean(building.importedMassing || building.proposedMassing);
+}
+
+export function proposedMassingInModel(model: CityModel): boolean {
+  return model.buildings.some(isProposedMassingBuilding);
+}
 
 export type PlanShadowInput = {
   lat: number;
@@ -234,6 +249,62 @@ function safeUnion(merged: MultiPolygon, shadow: MultiPolygon): MultiPolygon {
   return merged;
 }
 
+function safeDifference(subject: MultiPolygon, clip: MultiPolygon): MultiPolygon {
+  if (subject.length === 0) return [];
+  if (clip.length === 0) return subject;
+  for (const snap of [0, 1e-3, 1e-2]) {
+    try {
+      return snap === 0 ? difference(subject, clip) : difference(snapMulti(subject, snap), snapMulti(clip, snap));
+    } catch {
+    }
+  }
+  return subject;
+}
+
+function clipShadowToFrame(merged: MultiPolygon, model: CityModel): MultiPolygon {
+  if (merged.length === 0) return [];
+  const frame = framePolygon(model);
+  try {
+    return intersection(merged, frame);
+  } catch {
+    return intersection(snapMulti(merged, 1e-2), frame);
+  }
+}
+
+function planShadowMultiForBuildings(
+  model: CityModel,
+  input: PlanShadowInput,
+  buildings: BuildingFeat[],
+): MultiPolygon {
+  if (buildings.length === 0) return [];
+  const sample = sunAtMelbourneLocal(
+    input.lat,
+    input.lon,
+    input.year,
+    input.month,
+    input.day,
+    input.hour,
+    input.minute,
+  );
+  if (!sample.aboveHorizon) return [];
+  const field = model.terrain;
+  const ground: Ground | null = field ? (east, north) => sampleTerrain(field, east, north, model.sideM) : null;
+  const terrainKey = field ? `${field.cols}x${field.rows}:${field.min}:${field.max}:${model.sideM}` : "";
+  let merged: MultiPolygon = [];
+  for (const building of buildings) {
+    if (building.importedMassingSkipShadow) continue;
+    const offset = planShadowOffset(sample, building.height);
+    if (!offset) continue;
+    const topZ = ground
+      ? (building.importedTopZ ?? footprintBase(field!, building.ring, model.sideM) + building.height)
+      : 0;
+    const shadow = cachedBuildingShadow(building, sample, offset, ground ? { ground, topZ, key: terrainKey } : undefined);
+    if (!shadow || shadow.length === 0) continue;
+    merged = merged.length === 0 ? shadow : safeUnion(merged, shadow);
+  }
+  return clipShadowToFrame(merged, model);
+}
+
 function unionCacheLookup(model: CityModel, input: PlanShadowInput, castShadows: boolean): string {
   return [
     castShadows ? 1 : 0,
@@ -250,6 +321,50 @@ function unionCacheLookup(model: CityModel, input: PlanShadowInput, castShadows:
   ].join("|");
 }
 
+export type PlanShadowSplitRings = {
+  existing: Ring[][];
+  added: Ring[][];
+};
+
+function shadowWithTrees(
+  model: CityModel,
+  input: PlanShadowInput,
+  buildings: readonly BuildingFeat[],
+  trees: readonly TreeFeat[],
+): MultiPolygon {
+  const built = buildings.length > 0 ? planShadowMultiForBuildings(model, input, [...buildings]) : [];
+  const treeMulti = trees.length > 0 ? planTreeShadowMulti(model, input, trees) : [];
+  if (built.length === 0) return treeMulti;
+  if (treeMulti.length === 0) return built;
+  return safeUnion(built, treeMulti);
+}
+
+export function planShadowSplitRings(
+  model: CityModel,
+  input: PlanShadowInput,
+  castShadows: boolean,
+  treeMode: PlanShadowTreeMode = "off",
+): PlanShadowSplitRings {
+  if (!castShadows) return { existing: [], added: [] };
+  const trees = model.trees ?? [];
+  const treeExisting = treeMode === "both" ? trees : [];
+  const treeProposed = treeMode === "off" ? [] : trees;
+  if (model.buildings.length === 0 && treeProposed.length === 0) return { existing: [], added: [] };
+  const context = model.buildings.filter((building) => !isProposedMassingBuilding(building));
+  const proposed = model.buildings.filter(isProposedMassingBuilding);
+  const full = shadowWithTrees(model, input, model.buildings, treeMode === "proposed-only" ? trees : treeProposed);
+  if (proposed.length === 0) {
+  const existingMulti = shadowWithTrees(model, input, model.buildings, treeExisting);
+    return { existing: shadowRingsFromMulti(existingMulti), added: [] };
+  }
+  const contextOnly = shadowWithTrees(model, input, context, treeExisting);
+  const addedMulti = safeDifference(full, contextOnly);
+  return {
+    existing: shadowRingsFromMulti(contextOnly),
+    added: shadowRingsFromMulti(addedMulti),
+  };
+}
+
 export function planShadowRings(
   model: CityModel,
   input: PlanShadowInput,
@@ -260,40 +375,8 @@ export function planShadowRings(
   unionCacheKey = cacheKey;
   unionCache = [];
   if (!castShadows || model.buildings.length === 0) return unionCache;
-
-  const sample = sunAtMelbourneLocal(
-    input.lat,
-    input.lon,
-    input.year,
-    input.month,
-    input.day,
-    input.hour,
-    input.minute,
-  );
-  if (!sample.aboveHorizon) return unionCache;
-
-  const field = model.terrain;
-  const ground: Ground | null = field ? (east, north) => sampleTerrain(field, east, north, model.sideM) : null;
-  const terrainKey = field ? `${field.cols}x${field.rows}:${field.min}:${field.max}:${model.sideM}` : "";
-  let merged: MultiPolygon = [];
-  for (const building of model.buildings) {
-    if (building.importedMassingSkipShadow) continue;
-    const offset = planShadowOffset(sample, building.height);
-    if (!offset) continue;
-    const topZ = ground
-      ? (building.importedTopZ ?? footprintBase(field!, building.ring, model.sideM) + building.height)
-      : 0;
-    const shadow = cachedBuildingShadow(building, sample, offset, ground ? { ground, topZ, key: terrainKey } : undefined);
-    if (!shadow || shadow.length === 0) continue;
-    merged = merged.length === 0 ? shadow : safeUnion(merged, shadow);
-  }
+  const merged = planShadowMultiForBuildings(model, input, model.buildings);
   if (merged.length === 0) return unionCache;
-  const frame = framePolygon(model);
-  try {
-    merged = intersection(merged, frame);
-  } catch {
-    merged = intersection(snapMulti(merged, 1e-2), frame);
-  }
   unionCache = shadowRingsFromMulti(merged);
   return unionCache;
 }

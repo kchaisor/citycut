@@ -55,7 +55,7 @@ export type PlanPaths = {
   pathUnionMs: number;
   rails: Pt[][];
   trams: Pt[][];
-  buildings: { rings: Pt[][]; fill: string; site: boolean; imported?: boolean }[];
+  buildings: { id: number; rings: Pt[][]; fill: string; site: boolean; imported?: boolean; proposed?: boolean }[];
   trees: { east: number; north: number; r: number }[];
   contours: Pt[][];
   contourIndex: boolean[];
@@ -205,18 +205,17 @@ export function planPaths(
     colourBySource: false,
   };
   const highlightManual = Boolean(planOptions.highlightManual);
-  const buildings = model.buildings
-    .map((building) => {
-      if (building.importedMassingShadowCaster) return null;
-      const rings = clipRings(building.ring, building.holes, model.sideM, frameShape, frameSize);
-      if (!rings) return null;
-      const site = isSiteBuilding(model, building.id);
-      const fill = planBuildingFill(model, building, colourMode, highlightManual);
-      return building.importedMassing ? { rings, fill, site: false, imported: true } : { rings, fill, site };
-    })
-    .filter(
-      (building): building is { rings: Pt[][]; fill: string; site: boolean; imported?: boolean } => building !== null,
-    );
+  const buildings: PlanPaths["buildings"] = [];
+  for (const building of model.buildings) {
+    if (building.importedMassingShadowCaster) continue;
+    const rings = clipRings(building.ring, building.holes, model.sideM, frameShape, frameSize);
+    if (!rings) continue;
+    const site = isSiteBuilding(model, building.id);
+    const fill = planBuildingFill(model, building, colourMode, highlightManual);
+    if (building.importedMassing) buildings.push({ id: building.id, rings, fill, site: false, imported: true });
+    else if (building.proposedMassing) buildings.push({ id: building.id, rings, fill, site: false, proposed: true });
+    else buildings.push({ id: building.id, rings, fill, site });
+  }
 
   let pathFill: MultiPolygon = footpaths.polygons;
   if (pathFilletM > 0 && carriageway.polygons.length > 0) {

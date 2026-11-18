@@ -113,6 +113,19 @@ export function placeNswLabels(nsw: NswLayers, sizeM: number, sideM: number): { 
   return { labels: placed.map((item) => item.label), dropped: total - placed.length };
 }
 
+export function nswPlanHasDrawableContent(items: NswPlanItems): boolean {
+  return (
+    items.zoning.length > 0 ||
+    items.corridors.length > 0 ||
+    items.lots.length > 0 ||
+    items.easements.length > 0 ||
+    items.heritage.length > 0 ||
+    items.centrelines.length > 0 ||
+    items.labels.length > 0 ||
+    items.records.length > 0
+  );
+}
+
 export function nswPlanItems(model: Pick<CityModel, "nsw" | "sideM">, hatchM = 4, labelSizeM = model.sideM * NSW_PLAN_LABEL_SHARE): NswPlanItems | null {
   const nsw: NswLayers | null | undefined = model.nsw;
   if (!nsw) return null;

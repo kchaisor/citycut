@@ -12,6 +12,7 @@ import {
   type ShadowStandardId,
 } from "../lib/solar";
 import type { SolarViewSettings } from "./SolarHeliodon";
+import { SOLAR_SLIDER_WINDOW, clampSolarSliderMinutes } from "../lib/solarSlider";
 
 const SPEEDS = [0.5, 1, 2, 4] as const;
 
@@ -53,7 +54,7 @@ export function SunStudyPlayer({
   const standard = standardId ? SHADOW_STANDARDS[standardId] : null;
   const window_ = standard
     ? { sunrise: standard.hours[0]! * 60, sunset: standard.hours[standard.hours.length - 1]! * 60 }
-    : daylight;
+    : SOLAR_SLIDER_WINDOW;
   const minutes = settings.hour * 60 + settings.minute;
   const keyDate = standard ? null : SUN_STUDY_DATES.find((d) => settings.month === d.month && settings.day === d.day) ?? null;
   const stepHours: readonly number[] | null = standard ? standard.hours : keyDate ? KEY_DATE_HOURS : null;
@@ -62,9 +63,7 @@ export function SunStudyPlayer({
     const typed = editing === null ? null : parseClock(editing);
     setEditing(null);
     if (typed === null) return;
-    const lo = window_?.sunrise ?? 0;
-    const hi = window_?.sunset ?? 1439;
-    const v = Math.min(hi, Math.max(lo, typed));
+    const v = Math.min(window_.sunset, Math.max(window_.sunrise, typed));
     fraction.current = v;
     patch({ hour: Math.floor(v / 60), minute: v % 60 });
   };
@@ -79,23 +78,21 @@ export function SunStudyPlayer({
       const sid = standardRef.current;
       const w = sid
         ? { sunrise: SHADOW_STANDARDS[sid].hours[0]! * 60, sunset: SHADOW_STANDARDS[sid].hours[SHADOW_STANDARDS[sid].hours.length - 1]! * 60 }
-        : daylightWindowMinutes(lat, lon, s.year, s.month, s.day);
+        : SOLAR_SLIDER_WINDOW;
       const dt = Math.min(0.1, (now - last) / 1000);
       last = now;
-      if (w) {
-        fraction.current = sweepMinute(fraction.current, dt, hps, w);
-        const whole = Math.floor(fraction.current);
-        if (whole !== s.hour * 60 + s.minute) {
-          const next = { ...latest.current.settings, castShadows: true, hour: Math.floor(whole / 60), minute: whole % 60 };
-          latest.current.settings = next;
-          commit(next);
-        }
+      fraction.current = sweepMinute(fraction.current, dt, hps, w);
+      const whole = Math.floor(fraction.current);
+      if (whole !== s.hour * 60 + s.minute) {
+        const next = { ...latest.current.settings, castShadows: true, hour: Math.floor(whole / 60), minute: whole % 60 };
+        latest.current.settings = next;
+        commit(next);
       }
       frame = requestAnimationFrame(tick);
     };
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
-  }, [playing, lat, lon]);
+  }, [playing]);
 
   const patch = (partial: Partial<SolarViewSettings>) => {
     const next = { ...latest.current.settings, ...partial };
@@ -130,8 +127,7 @@ export function SunStudyPlayer({
               aria-label={d.label}
               className={on ? "sun-study-card on" : "sun-study-card"}
               onClick={() => {
-                const w = daylightWindowMinutes(lat, lon, settings.year, d.month, d.day);
-                const clamped = w ? Math.min(w.sunset, Math.max(w.sunrise, minutes)) : minutes;
+                const clamped = clampSolarSliderMinutes(minutes);
                 fraction.current = clamped;
                 setStandardId(null);
                 patch({ month: d.month, day: d.day, hour: Math.floor(clamped / 60), minute: clamped % 60 });
@@ -204,10 +200,10 @@ export function SunStudyPlayer({
           className="sun-study-scrub"
           type="range"
           aria-label="Time of day"
-          min={window_?.sunrise ?? 0}
-          max={window_?.sunset ?? 1439}
+          min={window_.sunrise}
+          max={window_.sunset}
           step={1}
-          value={Math.min(window_?.sunset ?? 1439, Math.max(window_?.sunrise ?? 0, minutes))}
+          value={Math.min(window_.sunset, Math.max(window_.sunrise, minutes))}
           onChange={(event) => {
             const v = Number(event.target.value);
             fraction.current = v;
@@ -241,7 +237,7 @@ export function SunStudyPlayer({
       </div>
       <div className="sun-study-row sun-study-foot">
         <span className="sun-study-window">
-          {standard && window_
+          {standard
             ? `Test window ${clock(window_.sunrise)}–${clock(window_.sunset)}`
             : daylight
               ? `Sunrise ${clock(daylight.sunrise)} · Sunset ${clock(daylight.sunset)}`

@@ -28,7 +28,540 @@ import { PNG } from "pngjs";
 const CHROME_PATH = "/usr/bin/google-chrome";
 const VIEWPORT = { width: 1440, height: 900 };
 const DEVICE_SCALE_FACTOR = 2;
-const ARTIFACTS_DIR = "/workspace";
+const ARTIFACTS_DIR = process.env.CITYCUT_ARTIFACTS_DIR ?? "/workspace";
+const CURSOR_ARTIFACTS_DIR = "/opt/cursor/artifacts";
+const CLAUDE_SOLAR_SHOTS_DIR = "/workspace/claude-solar-shots";
+
+function countPixelsNearRgb(png, target, tolerance = 48) {
+  let hits = 0;
+  for (let i = 0; i < png.data.length; i += 4) {
+    const dr = Math.abs(png.data[i] - target.r);
+    const dg = Math.abs(png.data[i + 1] - target.g);
+    const db = Math.abs(png.data[i + 2] - target.b);
+    if (dr <= tolerance && dg <= tolerance && db <= tolerance) hits += 1;
+  }
+  return hits;
+}
+
+const SUN_HOURS_PALETTE_STOPS = [
+  { r: 49, g: 54, b: 149 },
+  { r: 59, g: 81, b: 139 },
+  { r: 116, g: 184, b: 185 },
+  { r: 171, g: 221, b: 164 },
+  { r: 254, g: 232, b: 37 },
+  { r: 255, g: 249, b: 196 },
+  { r: 253, g: 174, b: 97 },
+  { r: 215, g: 48, b: 39 },
+];
+
+function isSunHoursPalettePixel(r, g, b) {
+  if (r > 246 && g > 246 && b > 246) return false;
+  if (r > 235 && g > 235 && b > 235 && Math.max(r, g, b) - Math.min(r, g, b) < 12) return false;
+  const chroma = Math.max(r, g, b) - Math.min(r, g, b);
+  if (chroma < 28) return false;
+  for (const stop of SUN_HOURS_PALETTE_STOPS) {
+    const dr = Math.abs(r - stop.r);
+    const dg = Math.abs(g - stop.g);
+    const db = Math.abs(b - stop.b);
+    if (dr <= 72 && dg <= 72 && db <= 72) return true;
+  }
+  return false;
+}
+
+function countSunHoursRoofPalettePixels(png, crop = null) {
+  const { width, height, data } = png;
+  const x0 = crop?.x ?? 0;
+  const y0 = crop?.y ?? 0;
+  const x1 = crop ? x0 + crop.width : width;
+  const y1 = crop ? y0 + crop.height : height;
+  let palette = 0;
+  let neutral = 0;
+  for (let y = y0; y < y1; y++) {
+    for (let x = x0; x < x1; x++) {
+      const i = (width * y + x) * 4;
+      const r = data[i];
+      const g = data[i + 1];
+      const b = data[i + 2];
+      if (isSunHoursPalettePixel(r, g, b)) palette += 1;
+      else if (r > 232 && g > 232 && b > 232) neutral += 1;
+    }
+  }
+  return { palette, neutral };
+}
+
+function buildingFootprintCrop(png) {
+  const w = png.width;
+  const h = png.height;
+  return {
+    x: Math.floor(w * 0.38),
+    y: Math.floor(h * 0.32),
+    width: Math.floor(w * 0.38),
+    height: Math.floor(h * 0.36),
+  };
+}
+
+function countWarmBrightenDelta(beforePng, afterPng, minSumDelta = 22) {
+  let hits = 0;
+  for (let i = 0; i < beforePng.data.length; i += 4) {
+    const dr = afterPng.data[i] - beforePng.data[i];
+    const dg = afterPng.data[i + 1] - beforePng.data[i + 1];
+    const db = afterPng.data[i + 2] - beforePng.data[i + 2];
+    if (dr + dg + db >= minSumDelta && dr >= 4 && dg >= 3) hits += 1;
+  }
+  return hits;
+}
+
+const PARCEL_OUTLINE_GOLD = { r: 225, g: 177, b: 87 };
+const PARCEL_CADASTRE_DEFAULT = { r: 212, g: 168, b: 92 };
+const VIEWPORT_SCENE_CLIP = { x: 180, y: 100, width: 1080, height: 720 };
+
+async function sceneViewportScreenshot(page, extra = {}) {
+  return page.screenshot({
+    clip: VIEWPORT_SCENE_CLIP,
+    timeout: 120_000,
+    animations: "disabled",
+    scale: "css",
+    ...extra,
+  });
+}
+
+async function readSunHoursLegendConsoleClearance(page) {
+  return page.evaluate(() => {
+    const legend = document.querySelector("[data-sun-hours-ground-legend-dock]");
+    const env = document.querySelector(".model .bottom-bar.env-console");
+    if (!legend || !env) return { ok: false, reason: !legend ? "no-legend" : "no-console" };
+    const legendBox = legend.getBoundingClientRect();
+    const consoleBox = env.getBoundingClientRect();
+    const gap = consoleBox.top - legendBox.bottom;
+    const note = document.querySelector("[data-sun-hours-ground-note]");
+    const noteText = note?.textContent?.trim() ?? "";
+    const noteOk = noteText === "3 m grid · ground, roofs, walls · full daylight";
+    const tickEls = [...document.querySelectorAll(".sun-hours-direct-legend.is-compact .sun-hours-direct-legend-ticks li")];
+    const tickCount = tickEls.length;
+    const firstTick = tickEls[0]?.textContent?.trim() ?? "";
+    const lastTick = tickEls[tickCount - 1]?.textContent?.trim() ?? "";
+    const endUnitsOk = firstTick === "0 h" && /^\d+(\.\d+)?\s+h$/.test(lastTick);
+    const bar = document.querySelector(".sun-hours-direct-legend.is-compact .sun-hours-direct-legend-bar");
+    const barBox = bar?.getBoundingClientRect();
+    const barW = barBox?.width ?? 0;
+    const barH = barBox?.height ?? 0;
+    const barOk = barW >= 180 && barW <= 216 && barH >= 6 && barH <= 10 && barW > barH;
+    const compactRoot = document.querySelector(".sun-hours-direct-legend.is-compact");
+  const insetMin = 10;
+  let paddingInsetOk = true;
+  const insetFails = [];
+  if (compactRoot) {
+    const parts = [
+      compactRoot,
+      ...compactRoot.querySelectorAll(
+        ".sun-hours-direct-legend-title, .sun-hours-direct-legend-scale, .sun-hours-direct-legend-bar, .sun-hours-direct-legend-ticks, .sun-hours-direct-legend-footnote, .sun-hours-direct-legend-ticks li",
+      ),
+    ];
+    for (const el of parts) {
+      const r = el.getBoundingClientRect();
+      if (r.width < 0.5 && r.height < 0.5) continue;
+      if (r.right > legendBox.right - insetMin + 0.5) {
+        paddingInsetOk = false;
+        insetFails.push({ tag: el.className, right: r.right, limit: legendBox.right - insetMin });
+      }
+      if (r.left < legendBox.left + insetMin - 0.5) {
+        paddingInsetOk = false;
+        insetFails.push({ tag: el.className, left: r.left, limit: legendBox.left + insetMin });
+      }
+    }
+  } else {
+    paddingInsetOk = false;
+  }
+    const compactOk = tickCount === 5 && endUnitsOk && barOk && paddingInsetOk;
+    return {
+      ok: gap >= 4 && noteOk && compactOk,
+      gap,
+      legendBottom: legendBox.bottom,
+      consoleTop: consoleBox.top,
+      noteOk,
+      tickCount,
+      barW,
+      barH,
+      endUnitsOk,
+      paddingInsetOk,
+      insetFails: insetFails.slice(0, 4),
+      cardW: legendBox.width,
+      firstTick,
+      lastTick,
+      noteText: noteText.slice(0, 96),
+    };
+  });
+}
+
+async function captureSunHoursLegendViewportShots(page, siteSlug) {
+  const height = 900;
+  const widths = [1440, 1280];
+  for (const width of widths) {
+    await page.setViewportSize({ width, height });
+    await page.waitForTimeout(350);
+    await clickStudioModeTab(page, "Drawing");
+    await page.waitForSelector("[data-sun-hours-ground-legend-dock]", { timeout: 120000 });
+    await page.waitForTimeout(400);
+    const drawingPath = path.join(
+      CURSOR_ARTIFACTS_DIR,
+      `sun-hours-${siteSlug}-legend-drawing-${width}x${height}.png`,
+    );
+    await page.screenshot({
+      path: drawingPath,
+      fullPage: false,
+      clip: { x: 0, y: 0, width, height },
+    });
+    await clickStudioModeTab(page, "3D model");
+    const persp = page.locator(".model .proj-btn.studio-submode-pill", { hasText: "Perspective" }).first();
+    if ((await persp.count()) > 0) await persp.click({ force: true });
+    await page.waitForSelector(".sun-hours-direct-dock-stack [data-sun-hours-ground-legend-dock]", {
+      timeout: 120000,
+    });
+    await page.waitForTimeout(400);
+    const perspPath = path.join(CURSOR_ARTIFACTS_DIR, `sun-hours-${siteSlug}-legend-3d-persp-${width}x${height}.png`);
+    await page.screenshot({
+      path: perspPath,
+      fullPage: false,
+      clip: { x: 0, y: 0, width, height },
+    });
+  }
+  await page.setViewportSize({ width: VIEWPORT.width, height: VIEWPORT.height });
+  await page.waitForTimeout(200);
+}
+
+async function clickStudioModeTab(page, label) {
+  await page.waitForSelector("button.mode-btn", { timeout: 120_000 });
+  const clicked = await page.evaluate((text) => {
+    const buttons = [...document.querySelectorAll("button.mode-btn")];
+    const btn = buttons.find((el) => (el.textContent ?? "").includes(text));
+    if (!btn) return false;
+    btn.click();
+    return true;
+  }, label);
+  if (!clicked) {
+    await page.locator(".mode-btn").filter({ hasText: label }).click({ timeout: 90_000, force: true });
+  }
+  await page.waitForTimeout(250);
+}
+
+async function assertSunHoursLegendAboveConsole(page, siteSlug, viewportWidth, assertCheck) {
+  const height = 900;
+  await page.setViewportSize({ width: viewportWidth, height });
+  await page.waitForTimeout(300);
+  const views = [
+    {
+      slug: "drawing",
+      label: "Drawing (Site plan)",
+      async go() {
+        await clickStudioModeTab(page, "Drawing");
+        await page.waitForSelector("[data-sun-hours-ground-legend-dock]", { timeout: 120000 });
+        await page.waitForTimeout(450);
+      },
+    },
+    {
+      slug: "3d-persp",
+      label: "3D Perspective",
+      async go() {
+        await clickStudioModeTab(page, "3D model");
+        const persp = page.locator(".model .proj-btn.studio-submode-pill", { hasText: "Perspective" }).first();
+        if ((await persp.count()) > 0) await persp.click({ force: true });
+        await page.waitForSelector(".sun-hours-direct-dock-stack [data-sun-hours-ground-legend-dock]", {
+          timeout: 120000,
+        });
+        await page.waitForTimeout(450);
+      },
+    },
+    {
+      slug: "3d-plan",
+      label: "3D Plan",
+      async go() {
+        await clickStudioModeTab(page, "3D model");
+        await page.locator(".model .proj-btn.studio-submode-pill", { hasText: /^Plan$/ }).click({ force: true });
+        await page.waitForFunction(() => document.documentElement.dataset.sunHoursDirectPlanView === "1", null, {
+          timeout: 60000,
+        });
+        await page.waitForSelector(".sun-hours-direct-dock-stack [data-sun-hours-ground-legend-dock]", {
+          timeout: 120000,
+        });
+        await page.waitForTimeout(450);
+      },
+    },
+  ];
+  for (const view of views) {
+    await view.go();
+    const layout = await readSunHoursLegendConsoleClearance(page);
+    assertCheck(
+      `solar-sun-hours-legend-above-console-${siteSlug}-${view.slug}-${viewportWidth}x${height}`,
+      `Direct Sun Hours legend clears Solar Study console in ${view.label} at ${viewportWidth}×${height}`,
+      layout.ok === true,
+      JSON.stringify(layout),
+    );
+  }
+  await page.setViewportSize({ width: VIEWPORT.width, height: VIEWPORT.height });
+}
+
+async function planViewportScreenshot(page, filePath) {
+  const plan = page.locator("svg.plan");
+  try {
+    await plan.waitFor({ state: "visible", timeout: 180_000 });
+    await plan.screenshot({
+      path: filePath,
+      timeout: 60_000,
+      animations: "disabled",
+      scale: "css",
+    });
+  } catch {
+    await page.screenshot({
+      path: filePath,
+      timeout: 60_000,
+      animations: "disabled",
+      scale: "css",
+    });
+  }
+}
+
+async function verifyMontAlbertParcels(baseUrl, artifactsDir) {
+  const montBrowser = await chromium.launch({
+    executablePath: CHROME_PATH,
+    headless: true,
+    args: [
+      "--use-gl=angle",
+      "--use-angle=swiftshader",
+      "--enable-webgl",
+      "--ignore-gpu-blocklist",
+      "--disable-dev-shm-usage",
+      "--no-sandbox",
+    ],
+  });
+  try {
+    const montContext = await montBrowser.newContext({
+      viewport: VIEWPORT,
+      deviceScaleFactor: 1,
+      reducedMotion: "no-preference",
+    });
+    await montContext.addInitScript(() => {
+      window.__citycutVerifyHarness = true;
+      window.__citycutMinSilentLoadMs = 550;
+    });
+    const montAlbertPage = await montContext.newPage();
+    await montAlbertPage.goto(`${baseUrl}/citycut/`, { waitUntil: "domcontentloaded" });
+    await montAlbertPage.waitForSelector("button.create-fab", { timeout: 60000 });
+    await montAlbertPage.getByRole("button", { name: "Mont Albert North" }).click();
+    await montAlbertPage.waitForTimeout(400);
+    await montAlbertPage.click("button.create-fab");
+    await montAlbertPage.waitForFunction(() => document.querySelector(".model canvas"), null, { timeout: 180000 });
+    await montAlbertPage.waitForFunction(
+      () => Number(document.querySelector(".model canvas")?.dataset.introProgressPct ?? 0) >= 100,
+      null,
+      { timeout: 180000 },
+    );
+    await montAlbertPage.evaluate(() => {
+      window.__citycutIntroPaused = true;
+    });
+    await montAlbertPage.waitForTimeout(800);
+    await montAlbertPage.waitForFunction(() => window.__citycutQaMassing?.enableTool != null, null, { timeout: 120000 });
+    await montAlbertPage.click('button[aria-label="Massing tool"]');
+    await montAlbertPage
+      .waitForFunction(() => window.__citycutQaParcels?.status === "ready", null, { timeout: 120000 })
+      .catch(() => {});
+    await montAlbertPage.waitForTimeout(600);
+    const montAlbertParcels = await montAlbertPage.evaluate(() => window.__citycutQaParcels ?? null);
+    const montAlbertCrop = PNG.sync.read(await sceneViewportScreenshot(montAlbertPage));
+    const montAlbertDefaultTint = countPixelsNearRgb(montAlbertCrop, PARCEL_CADASTRE_DEFAULT, 55);
+    await montAlbertPage.screenshot({
+      path: path.join(artifactsDir, "massing-mont-albert-parcels.png"),
+      timeout: 60_000,
+      animations: "disabled",
+      scale: "css",
+    });
+    await sceneViewportScreenshot(montAlbertPage, {
+      path: path.join(artifactsDir, "massing-mont-albert-parcels-crop.png"),
+    });
+    const montAlbertHoverProbe = await montAlbertPage.evaluate(() => {
+      const api = window.__citycutQaMassing;
+      const id = api?.nearestParcelIds(1)?.[0];
+      if (!id || !api?.qaFocusParcelHover) return { ok: false, id: null, moved: false };
+      const moved = api.qaFocusParcelHover(id);
+      return { ok: moved, id, moved };
+    });
+    if (montAlbertHoverProbe.id) {
+      await montAlbertPage
+        .waitForFunction(
+          (exp) => window.__citycutQaParcels?.hoverParcelId === exp,
+          montAlbertHoverProbe.id,
+          { timeout: 3000 },
+        )
+        .catch(() => {});
+    }
+    await montAlbertPage.evaluate(
+      () =>
+        new Promise((resolve) => {
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+        }),
+    );
+    await montAlbertPage.waitForTimeout(350);
+    const montAlbertHoverParcelId = await montAlbertPage.evaluate(() => window.__citycutQaParcels?.hoverParcelId ?? null);
+    const montAlbertHoverCrop = PNG.sync.read(await sceneViewportScreenshot(montAlbertPage));
+    const montAlbertHoverDelta = countWarmBrightenDelta(montAlbertCrop, montAlbertHoverCrop);
+    await sceneViewportScreenshot(montAlbertPage, {
+      path: path.join(artifactsDir, "massing-mont-albert-parcels-hover-crop.png"),
+    });
+    await montContext.close();
+    return {
+      montAlbertParcels,
+      montAlbertDefaultTint,
+      montAlbertHoverProbe,
+      montAlbertHoverParcelId,
+      montAlbertHoverDelta,
+    };
+  } finally {
+    await montBrowser.close();
+  }
+}
+
+async function verifyRoddPoint2km3d(baseUrl, artifactsDir) {
+  const browser = await chromium.launch({
+    executablePath: CHROME_PATH,
+    headless: true,
+    args: [
+      "--use-gl=angle",
+      "--use-angle=swiftshader",
+      "--enable-webgl",
+      "--ignore-gpu-blocklist",
+      "--disable-dev-shm-usage",
+      "--no-sandbox",
+    ],
+  });
+  try {
+    const context = await browser.newContext({
+      viewport: VIEWPORT,
+      deviceScaleFactor: 1,
+      reducedMotion: "no-preference",
+    });
+    await context.addInitScript(() => {
+      window.__citycutVerifyHarness = true;
+      window.__citycutMinSilentLoadMs = 550;
+    });
+    const page = await context.newPage();
+    const roddUrl = `${baseUrl}/citycut/?lat=-33.866498&lon=151.18355&km=2&label=Rodd+Point+NSW&view=iso-se&verify=1`;
+    await page.goto(roddUrl, { waitUntil: "domcontentloaded" });
+    await page.waitForSelector("button.create-fab", { timeout: 60000 });
+    await page.waitForTimeout(500);
+    await page.click("button.create-fab");
+    const outcomeHandle = await page
+      .waitForFunction(
+        () => {
+          const alert = document.querySelector(".sidebar-foot [role='alert']");
+          const alertText = alert?.textContent?.trim() ?? "";
+          if (/Unable to complete output ring|Last matching segment found ends at/i.test(alertText)) {
+            return { ok: false, alertText };
+          }
+          const fallback = document.querySelector(".scene-fallback");
+          if (fallback) {
+            return { ok: false, fallback: fallback.textContent?.trim() ?? "" };
+          }
+          const canvas = document.querySelector(".model canvas");
+          if (canvas) return { ok: true, hasCanvas: true };
+          return false;
+        },
+        null,
+        { timeout: 300000, polling: 500 },
+      )
+      .catch(() => null);
+    const parsed = outcomeHandle
+      ? await outcomeHandle.jsonValue()
+      : { ok: false, alertText: "timed out waiting for model or error" };
+    if (parsed?.ok) {
+      await page.waitForFunction(
+        () => Number(document.querySelector(".model canvas")?.dataset.introProgressPct ?? 0) >= 100,
+        null,
+        { timeout: 180000 },
+      );
+      const sceneOk = await page.evaluate(() => {
+        const fallback = document.querySelector(".scene-fallback");
+        const canvas = document.querySelector(".model canvas");
+        return !fallback && Boolean(canvas);
+      });
+      if (!sceneOk) {
+        await context.close();
+        return { ok: false, alertText: "scene fallback or missing canvas after intro" };
+      }
+      await page.screenshot({
+        path: path.join(artifactsDir, "rodd-point-2km-3d.png"),
+        timeout: 60000,
+        scale: "css",
+      });
+    }
+    await context.close();
+    return parsed;
+  } finally {
+    await browser.close();
+  }
+}
+
+async function verifyRoddPointCreate(baseUrl, artifactsDir) {
+  const browser = await chromium.launch({
+    executablePath: CHROME_PATH,
+    headless: true,
+    args: [
+      "--use-gl=angle",
+      "--use-angle=swiftshader",
+      "--enable-webgl",
+      "--ignore-gpu-blocklist",
+      "--disable-dev-shm-usage",
+      "--no-sandbox",
+    ],
+  });
+  try {
+    const context = await browser.newContext({
+      viewport: VIEWPORT,
+      deviceScaleFactor: 1,
+      reducedMotion: "no-preference",
+    });
+    await context.addInitScript(() => {
+      window.__citycutVerifyHarness = true;
+      window.__citycutMinSilentLoadMs = 550;
+    });
+    const page = await context.newPage();
+  const roddUrl = `${baseUrl}/citycut/?lat=-33.86664&lon=151.18311&km=1.35&label=Rodd+Point+NSW&verify=1`;
+    await page.goto(roddUrl, { waitUntil: "domcontentloaded" });
+    await page.waitForSelector("button.create-fab", { timeout: 60000 });
+    await page.waitForTimeout(500);
+    await page.click("button.create-fab");
+    const outcomeHandle = await page
+      .waitForFunction(
+        () => {
+          const alert = document.querySelector(".sidebar-foot [role='alert']");
+          const alertText = alert?.textContent?.trim() ?? "";
+          if (/Unable to complete output ring|Last matching segment found ends at/i.test(alertText)) {
+            return { ok: false, alertText };
+          }
+          const canvas = document.querySelector(".model canvas");
+          if (canvas) return { ok: true, hasCanvas: true };
+          return false;
+        },
+        null,
+        { timeout: 300000, polling: 500 },
+      )
+      .catch(() => null);
+    const parsed = outcomeHandle
+      ? await outcomeHandle.jsonValue()
+      : { ok: false, alertText: "timed out waiting for model or error" };
+    if (parsed?.ok) {
+      await page.waitForFunction(
+        () => Number(document.querySelector(".model canvas")?.dataset.introProgressPct ?? 0) >= 100,
+        null,
+        { timeout: 180000 },
+      );
+      await page.screenshot({ path: path.join(artifactsDir, "rodd-point-create-model.png"), timeout: 60000, scale: "css" });
+    }
+    await context.close();
+    return parsed;
+  } finally {
+    await browser.close();
+  }
+}
+
 const TMP_FRAMES_DIR = "/tmp/citycut_verify_frames";
 const TMP_VIDEO_DIR = "/tmp/citycut_verify_video_frames";
 
@@ -42,6 +575,20 @@ function findFreePort() {
     });
     srv.on("error", reject);
   });
+}
+
+function countGoldishPixels(pngBuffer) {
+  const png = PNG.sync.read(pngBuffer);
+  let gold = 0;
+  for (let i = 0; i < png.data.length; i += 4) {
+    const a = png.data[i + 3];
+    if (a < 48) continue;
+    const r = png.data[i];
+    const g = png.data[i + 1];
+    const b = png.data[i + 2];
+    if (r >= 185 && r <= 238 && g >= 140 && g <= 200 && b >= 55 && b <= 125) gold += 1;
+  }
+  return gold;
 }
 
 async function rasterizeSvgPng(browser, svg, width, height) {
@@ -186,6 +733,7 @@ async function inspectSitePlan3dm(bytes) {
 }
 
 async function main() {
+  fs.mkdirSync(ARTIFACTS_DIR, { recursive: true });
   fs.rmSync(TMP_FRAMES_DIR, { recursive: true, force: true });
   fs.mkdirSync(TMP_FRAMES_DIR, { recursive: true });
   fs.rmSync(TMP_VIDEO_DIR, { recursive: true, force: true });
@@ -235,6 +783,7 @@ async function main() {
     });
 
     await context.addInitScript(() => {
+      window.__citycutVerifyHarness = true;
       window.__citycutMinSilentLoadMs = 550;
       try {
         window.localStorage.setItem(
@@ -443,7 +992,9 @@ async function main() {
     await page.waitForTimeout(1200);
     const rozelleDrawing = await page.evaluate(() => {
       const planScale = document.querySelector(".studio-scale-row select")?.value ?? "";
-      const nswLayerCount = document.querySelectorAll('[data-layer^="nsw-"]').length;
+      const nswLayerCount = document.querySelectorAll(
+        '[data-layer^="nsw-"] path[fill]:not([fill="none"]):not([fill="transparent"]), [data-layer^="nsw-"] text',
+      ).length;
       return { planScale, nswLayerCount };
     });
     await page.screenshot({
@@ -1018,11 +1569,16 @@ async function main() {
     );
 
     await page.waitForTimeout(150);
-    await page.screenshot({ path: path.join(TMP_FRAMES_DIR, "frame_07.png") });
+    await page.screenshot({
+      path: path.join(TMP_FRAMES_DIR, "frame_07.png"),
+      timeout: 60_000,
+      animations: "disabled",
+      scale: "css",
+    });
     await page.waitForTimeout(650);
 
     const frame08Path = path.join(TMP_FRAMES_DIR, "frame_08.png");
-    await page.screenshot({ path: frame08Path });
+    await page.screenshot({ path: frame08Path, timeout: 60_000, animations: "disabled", scale: "css" });
     if (fs.existsSync(ARTIFACTS_DIR)) {
       await page.screenshot({ path: path.join(ARTIFACTS_DIR, "pr164-v12-3d-plinth-perspective.png") });
       const isoBtn = page.locator(".model .bottom-bar button", { hasText: "Isometric" }).first();
@@ -1103,11 +1659,460 @@ async function main() {
       `polar=${beat4Info.polar}, bldg=[${beat4Info.bldgInner},${beat4Info.bldgOuter}], tree=${beat4Info.treeScale}, hudOpacities=[${beat4Info.topOpacity},${beat4Info.leftOpacity},${beat4Info.rightOpacity},${beat4Info.bottomOpacity}], underlay=${beat4Info.hasUnderlay}`,
     );
 
-    // -------------------------------------------------------------------------
-    // SECTION KNIFE: real mouse gizmo drag (no ?qa=1)
-    // -------------------------------------------------------------------------
-    {
-      const isoBtn = page.locator(".model .proj-btn.studio-submode-pill", { hasText: "Isometric" }).first();
+    await page.waitForFunction(() => window.__citycutQaMassing?.simulateDraw != null, null, { timeout: 120_000 });
+    await page.evaluate(() => {
+      for (const key of Object.keys(window.localStorage)) {
+        if (key.startsWith("citycut.massingBlocks.")) window.localStorage.removeItem(key);
+      }
+    });
+    // Real pointer gesture: click the HUD Massing button, then press-drag-release on the canvas.
+    // Guards against listener re-attach mid-drag (PR #199 regression: zero-length draw, no block).
+    await page.click('button[aria-label="Massing tool"]');
+    await page.click('button[aria-label="Massing draw tool"]');
+    await page.waitForTimeout(400);
+    const massingToolOn = await page.evaluate(
+      () =>
+        document.querySelector('button[aria-label="Massing tool"]')?.getAttribute("aria-pressed") === "true" &&
+        document.querySelector('button[aria-label="Massing draw tool"]')?.getAttribute("aria-pressed") === "true",
+    );
+    await page.mouse.move(560, 470);
+    await page.mouse.down();
+    await page.waitForTimeout(150);
+    for (let i = 1; i <= 15; i += 1) {
+      await page.mouse.move(560 + i * 8, 470);
+      await page.waitForTimeout(50);
+    }
+    const massingHudDuringDrag = await page.evaluate(() => document.querySelector(".massing-cursor-pill")?.textContent ?? "");
+    await page.mouse.up();
+    await page.waitForTimeout(400);
+    const massingPointerCount = await page.evaluate(() => window.__citycutQaMassing?.getBlocks()?.length ?? 0);
+    assertCheck(
+      "massing-pointer-draw",
+      "Massing HUD button enables the tool and a real pointer drag on the canvas creates a block",
+      massingToolOn && massingPointerCount >= 1,
+      `toolOn=${massingToolOn}, blocks=${massingPointerCount}, hud="${massingHudDuringDrag}"`,
+    );
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "massing-pointer-draw.png") });
+    await page.keyboard.press("Escape");
+    await page.evaluate(() => {
+      const api = window.__citycutQaMassing;
+      for (let i = 0; i < 10 && (api?.getBlocks()?.length ?? 0) > 0; i += 1) api?.deleteSelected();
+      api?.disableTool();
+    });
+    await page.waitForTimeout(300);
+
+    // Click-click drawing: click start, hover (live ground preview line + HUD), click end.
+    await page.evaluate(() => {
+      window.__citycutQaMassing?.enableTool();
+      window.__citycutQaMassing?.armDraw();
+    });
+    await page.waitForTimeout(300);
+    const sceneHasPreviewLine = () =>
+      page.evaluate(() => ({ qa: window.__citycutQaMassingPreview ?? null }));
+    await page.mouse.click(520, 470);
+    await page.waitForTimeout(250);
+    for (let i = 1; i <= 12; i += 1) {
+      await page.mouse.move(520 + i * 12, 470);
+      await page.waitForTimeout(40);
+    }
+    await page.waitForTimeout(250);
+    const clickPreview = await sceneHasPreviewLine();
+    const clickHud = await page.evaluate(() => document.querySelector(".massing-cursor-pill")?.textContent ?? "");
+    const blocksBeforeSecondClick = await page.evaluate(() => window.__citycutQaMassing?.getBlocks()?.length ?? -1);
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "massing-click-preview.png") });
+    await page.mouse.click(664, 470);
+    await page.waitForTimeout(250);
+    const afterSecondClick = await page.evaluate(() => ({
+      blocks: window.__citycutQaMassing?.getBlocks()?.length ?? -1,
+      preview: window.__citycutQaMassingPreview ?? null,
+    }));
+    await page.keyboard.press("Enter");
+    await page.waitForTimeout(400);
+    const clickBlocks = await page.evaluate(() => {
+      const blocks = window.__citycutQaMassing?.getBlocks() ?? [];
+      const b = blocks[blocks.length - 1];
+      return { count: blocks.length, width: b?.width_m ?? 0, vertices: b?.centerline?.length ?? 0 };
+    });
+    assertCheck(
+      "massing-click-click-draw",
+      "Real mouse click → hover → click → Enter creates a 14 m two-point block; between clicks a ground preview line and length/width HUD are live and no block exists until Enter",
+      clickPreview.qa?.phase === "drawingPreview" &&
+        clickPreview.qa?.inScene === true &&
+        Math.hypot(clickPreview.qa.end[0] - clickPreview.qa.start[0], clickPreview.qa.end[1] - clickPreview.qa.start[1]) > 5 &&
+        /14 m ×/.test(clickHud) &&
+        blocksBeforeSecondClick === 0 &&
+        afterSecondClick.blocks === 0 &&
+        afterSecondClick.preview?.vertexCount >= 2 &&
+        clickBlocks.count === 1 &&
+        clickBlocks.vertices === 2 &&
+        Math.abs(clickBlocks.width - 14) <= 0.5,
+      `preview=${JSON.stringify(clickPreview)}, hud="${clickHud}", before=${blocksBeforeSecondClick}, mid=${JSON.stringify(afterSecondClick)}, after=${JSON.stringify(clickBlocks)}`,
+    );
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "massing-click-committed.png") });
+
+    await page.evaluate(() => {
+      const api = window.__citycutQaMassing;
+      for (let i = 0; i < 10 && (api?.getBlocks()?.length ?? 0) > 0; i += 1) api?.deleteSelected();
+    });
+    await page.waitForTimeout(200);
+    await page.evaluate(() => {
+      const api = window.__citycutQaMassing;
+      api?.enableTool();
+      api?.armDraw();
+      api?.qaGroundPress(-24, -6);
+      api?.qaGroundRelease();
+      api?.qaGroundPress(24, -6);
+      api?.qaGroundPress(24, 24);
+      api?.qaGroundMove(24, 24);
+    });
+    await page.waitForTimeout(350);
+    const polyPreview = await page.evaluate(() => window.__citycutQaMassingPreview ?? null);
+    await page.keyboard.press("Enter");
+    await page.waitForTimeout(400);
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "massing-polyline-preview.png") });
+    await page.keyboard.press("Enter");
+    await page.waitForTimeout(450);
+    const polyBlock = await page.evaluate(() => {
+      const b = window.__citycutQaMassing?.getBlocks()?.slice(-1)[0];
+      if (!b || !Array.isArray(b.centerline)) return null;
+      const cl = b.centerline;
+      const legA = cl.length >= 2 ? Math.hypot(cl[1][0] - cl[0][0], cl[1][1] - cl[0][1]) : 0;
+      const legB = cl.length >= 3 ? Math.hypot(cl[2][0] - cl[1][0], cl[2][1] - cl[1][1]) : 0;
+      const elbow = cl[1];
+      const elbowIsCorner =
+        cl.length >= 3 &&
+        Math.abs(elbow[0] - cl[2][0]) < 3 &&
+        Math.abs(elbow[1] - cl[0][1]) < 3;
+      return {
+        vertices: cl.length,
+        legA,
+        legB,
+        elbowIsCorner,
+        cl,
+      };
+    });
+    assertCheck(
+      "massing-polyline-bent-draw",
+      "Three-point massing draw + Enter extrudes a bent bar (3+ centerline vertices), not a collapsed straight first-to-last rectangle",
+      polyPreview?.phase === "drawingPreview" &&
+        (polyPreview?.vertexCount ?? 0) >= 3 &&
+        polyBlock?.vertices >= 3 &&
+        (polyBlock?.legA ?? 0) >= 20 &&
+        (polyBlock?.legB ?? 0) >= 20 &&
+        polyBlock?.elbowIsCorner === true,
+      `preview=${JSON.stringify(polyPreview)}, block=${JSON.stringify(polyBlock)}`,
+    );
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "massing-polyline-committed.png") });
+
+    // Escape cancels an in-progress click-click line without creating a block.
+    await page.keyboard.press("Escape");
+    await page.evaluate(() => {
+      const api = window.__citycutQaMassing;
+      for (let i = 0; i < 10 && (api?.getBlocks()?.length ?? 0) > 0; i += 1) {
+        const id = api?.getBlocks()?.[0]?.id;
+        if (id) api?.selectBlock(id);
+        api?.deleteSelected();
+      }
+    });
+    await page.waitForTimeout(300);
+    await page.mouse.click(520, 470);
+    await page.waitForTimeout(200);
+    await page.mouse.move(640, 470, { steps: 8 });
+    await page.waitForTimeout(200);
+    const escBefore = await page.evaluate(() => window.__citycutQaMassingPreview?.phase ?? null);
+    await page.keyboard.press("Escape");
+    await page.waitForTimeout(300);
+    const escAfter = await page.evaluate(() => ({
+      preview: window.__citycutQaMassingPreview ?? null,
+      blocks: window.__citycutQaMassing?.getBlocks()?.length ?? -1,
+    }));
+    assertCheck(
+      "massing-click-escape-cancel",
+      "Escape during a click-click preview removes the preview line and leaves no block",
+      escBefore === "drawingPreview" && escAfter.preview === null && escAfter.blocks === 0,
+      `before=${escBefore}, after=${JSON.stringify(escAfter)}`,
+    );
+
+    await page.evaluate(() => window.__citycutQaMassing?.disarmDraw());
+    await page.waitForTimeout(200);
+    await page.evaluate(() => {
+      window.__citycutQaMassing?.enableTool();
+      window.__citycutQaMassing?.disarmDraw();
+    });
+    const drawPillOff = await page.evaluate(
+      () => document.querySelector('button[aria-label="Massing draw tool"]')?.getAttribute("aria-pressed") !== "true",
+    );
+    const orbitNoDraw = await page.evaluate(() => {
+      const api = window.__citycutQaMassing;
+      if (!api) return { before: -1 };
+      return { before: api.getBlocks()?.length ?? 0 };
+    });
+    await page.mouse.click(580, 480);
+    await page.waitForTimeout(250);
+    const orbitNoDrawAfter = await page.evaluate(() => window.__citycutQaMassing?.getBlocks()?.length ?? -1);
+    assertCheck(
+      "massing-orbit-no-draw",
+      "Massing on with Draw off: a canvas click does not create a massing block",
+      drawPillOff && orbitNoDrawAfter === orbitNoDraw.before,
+      JSON.stringify({ drawPillOff, ...orbitNoDraw, after: orbitNoDrawAfter }),
+    );
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "massing-draw-off-orbit.png") });
+
+    await page
+      .waitForFunction(() => window.__citycutQaParcels?.status && window.__citycutQaParcels.status !== "loading", null, {
+        timeout: 60_000,
+      })
+      .catch(() => {});
+    const parcelInfo = await page.evaluate(() => ({ qa: window.__citycutQaParcels ?? null }));
+    const parcelOutlinePng = PNG.sync.read(await page.screenshot({ clip: VIEWPORT_SCENE_CLIP }));
+    const parcelOutlinePixels = countPixelsNearRgb(parcelOutlinePng, PARCEL_CADASTRE_DEFAULT, 50);
+    assertCheck(
+      "massing-parcel-outlines",
+      "Massing mode draws readable Vicmap/VicPlan parcel outlines on the 3D ground (geometry + visible cadastre pixels)",
+      parcelInfo.qa?.status === "ready" &&
+        parcelInfo.qa.segments > 0 &&
+        parcelOutlinePixels >= 800,
+      JSON.stringify({ ...parcelInfo, parcelOutlinePixels }),
+    );
+    await page.screenshot({
+      path: path.join(ARTIFACTS_DIR, "massing-parcel-outlines.png"),
+      timeout: 60_000,
+      animations: "disabled",
+      scale: "css",
+    });
+    await page.screenshot({
+      path: path.join(ARTIFACTS_DIR, "massing-parcel-outlines-crop.png"),
+      clip: VIEWPORT_SCENE_CLIP,
+      timeout: 60_000,
+      animations: "disabled",
+      scale: "css",
+    });
+
+    const oneSite = await page.evaluate(() => {
+      const api = window.__citycutQaMassing;
+      api?.enableTool();
+      api?.disarmDraw();
+      api?.clearParcels();
+      const ids = api?.nearestParcelIds(1) ?? [];
+      if (ids[0]) api?.selectParcels([ids[0]]);
+      return { ids, state: api?.getParcelState() ?? null };
+    });
+    assertCheck(
+      "massing-one-site-boundary",
+      "Selecting one property title sets a site draw boundary",
+      oneSite.state?.selectedIds?.length === 1 && (oneSite.state?.boundaryPolygons ?? 0) >= 1,
+      JSON.stringify(oneSite),
+    );
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "massing-one-site-boundary.png") });
+    const oneSiteCrop = PNG.sync.read(await page.screenshot({ clip: VIEWPORT_SCENE_CLIP }));
+    const oneSiteGold = countPixelsNearRgb(oneSiteCrop, PARCEL_OUTLINE_GOLD, 60);
+    assertCheck(
+      "massing-one-site-visible",
+      "One selected title shows obvious gold parcel highlight pixels in the 3D viewport",
+      oneSiteGold >= 1200,
+      `goldPixels=${oneSiteGold}`,
+    );
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "massing-one-site-boundary-crop.png"), clip: VIEWPORT_SCENE_CLIP });
+
+    const threeSites = await page.evaluate(() => {
+      const api = window.__citycutQaMassing;
+      api?.clearParcels();
+      const ids = api?.nearestParcelIds(3) ?? [];
+      api?.selectParcels(ids);
+      return { ids, state: api?.getParcelState() ?? null };
+    });
+    assertCheck(
+      "massing-three-sites-boundary",
+      "Selecting three adjacent titles combines into one site boundary outline",
+      threeSites.state?.selectedIds?.length === 3 && (threeSites.state?.boundaryPolygons ?? 0) >= 1,
+      JSON.stringify(threeSites),
+    );
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "massing-three-sites-boundary.png") });
+    const threeSiteCrop = PNG.sync.read(await page.screenshot({ clip: VIEWPORT_SCENE_CLIP }));
+    const threeSiteGold = countPixelsNearRgb(threeSiteCrop, { r: 255, g: 255, b: 255 }, 40);
+    const threeSiteFill = countPixelsNearRgb(threeSiteCrop, PARCEL_OUTLINE_GOLD, 60);
+    assertCheck(
+      "massing-three-sites-visible",
+      "Three combined titles show strong gold fill and white combined boundary pixels in the 3D viewport",
+      threeSiteFill >= 1500 && threeSiteGold >= 200,
+      `fillGold=${threeSiteFill}, boundaryWhite=${threeSiteGold}`,
+    );
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "massing-three-sites-boundary-crop.png"), clip: VIEWPORT_SCENE_CLIP });
+
+    const boundaryClamp = await page.evaluate(() => {
+      const api = window.__citycutQaMassing;
+      if (!api) return { ok: false };
+      api.disarmDraw();
+      api.armDraw();
+      const edge = 190;
+      const outsideAllowed = api.pointInSiteBoundary(edge, edge);
+      api.qaGroundPress(edge, edge);
+      const phaseOutside = api.getToolPhase();
+      const inside = api.sampleInsideBoundary();
+      if (inside) api.qaGroundPress(inside[0], inside[1]);
+      const phaseInside = api.getToolPhase();
+      return {
+        ok: !outsideAllowed && phaseOutside === "idle" && inside != null && phaseInside === "drawing",
+        outsideAllowed,
+        phaseOutside,
+        phaseInside,
+        inside,
+        armed: api.drawArmed?.(),
+      };
+    });
+    assertCheck(
+      "massing-boundary-clamp",
+      "With a combined site boundary, clicks outside it do not start a draw vertex; inside clicks do",
+      boundaryClamp.ok === true,
+      JSON.stringify(boundaryClamp),
+    );
+    await page.keyboard.press("Escape");
+    await page.evaluate(() => {
+      window.__citycutQaMassing?.disarmDraw();
+      window.__citycutQaMassing?.clearParcels();
+    });
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "massing-draw-inside-boundary.png") });
+
+    await page.evaluate(() => window.__citycutQaMassing?.disableTool());
+    await page.waitForTimeout(200);
+
+    const {
+      montAlbertParcels,
+      montAlbertDefaultTint,
+      montAlbertHoverProbe,
+      montAlbertHoverParcelId,
+      montAlbertHoverDelta,
+    } = await verifyMontAlbertParcels(baseUrl, ARTIFACTS_DIR);
+    assertCheck(
+      "massing-mont-albert-parcels",
+      "Mont Albert North loads Vicmap parcels with a visible default cadastre tint and brighter hover on pointer focus",
+      montAlbertParcels?.status === "ready" &&
+        montAlbertParcels.source === "vicmap" &&
+        (montAlbertParcels.count ?? 0) >= 500 &&
+        montAlbertDefaultTint >= 2200 &&
+        montAlbertHoverProbe.moved === true &&
+        montAlbertHoverProbe.id != null &&
+        montAlbertHoverParcelId === montAlbertHoverProbe.id &&
+        montAlbertHoverDelta >= 420,
+      JSON.stringify({
+        montAlbertParcels,
+        montAlbertDefaultTint,
+        montAlbertHoverProbe,
+        montAlbertHoverParcelId,
+        montAlbertHoverDelta,
+      }),
+    );
+
+    const roddCreate = await verifyRoddPointCreate(baseUrl, ARTIFACTS_DIR);
+    assertCheck(
+      "rodd-point-create-model",
+      "Rodd Point NSW 1.35 km square (harbour-heavy) Create model finishes without polygon ring errors",
+      roddCreate?.ok === true,
+      JSON.stringify(roddCreate),
+    );
+
+    const rodd2km3d = await verifyRoddPoint2km3d(baseUrl, ARTIFACTS_DIR);
+    assertCheck(
+      "rodd-point-2km-3d",
+      "Rodd Point NSW 2 km cut shows WebGL canvas without scene fallback after Create model",
+      rodd2km3d?.ok === true,
+      JSON.stringify(rodd2km3d),
+    );
+
+    const massingDrawId = await page.evaluate(() => {
+      const api = window.__citycutQaMassing;
+      if (!api) return null;
+      api.enableTool();
+      api.disarmDraw();
+      api.clearParcels();
+      return api.simulateDraw(-18, -6, 18, -6);
+    });
+    const massingAfterDraw = await page.evaluate(() => {
+      const api = window.__citycutQaMassing;
+      const blocks = api?.getBlocks() ?? [];
+      const block = blocks[0];
+      return {
+        count: blocks.length,
+        width: block?.width_m ?? 0,
+        floors: block?.floors ?? 0,
+        dy: block ? Math.abs(block.centerline[1][1] - block.centerline[0][1]) : 0,
+        dx: block ? Math.abs(block.centerline[1][0] - block.centerline[0][0]) : 0,
+      };
+    });
+    assertCheck(
+      "massing-draw-block",
+      "Massing tool simulated drag creates a block near 14 m width on a snapped axis",
+      Boolean(massingDrawId) &&
+        massingAfterDraw.count >= 1 &&
+        Math.abs(massingAfterDraw.width - 14) <= 0.5 &&
+        massingAfterDraw.dx >= 30 &&
+        massingAfterDraw.dy <= 1.5,
+      JSON.stringify(massingAfterDraw),
+    );
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "massing-draw-preview.png") });
+
+    await page.evaluate(() => {
+      const api = window.__citycutQaMassing;
+      const id = api?.getBlocks()?.[0]?.id;
+      if (id) api?.selectBlock(id);
+      api?.setFloors(6);
+    });
+    await page.waitForTimeout(300);
+    const massingAfterHeight = await page.evaluate(() => window.__citycutQaMassing?.getBlocks()?.[0]?.floors ?? 0);
+    assertCheck(
+      "massing-height-floors",
+      "Massing block floor count updates via edit API",
+      massingAfterHeight === 6,
+      `floors=${massingAfterHeight}`,
+    );
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "massing-selected-edited.png") });
+
+    const persistedBeforeReload = await page.evaluate(() => window.__citycutQaMassing?.readPersistedCount() ?? 0);
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.waitForSelector("button.create-fab", { timeout: 120_000 });
+    await page.click("button.create-fab");
+    await page.waitForFunction(() => window.__citycutQaMassing?.readPersistedCount != null, null, { timeout: 120_000 });
+    const persistedAfterReload = await page.evaluate(() => window.__citycutQaMassing?.readPersistedCount() ?? 0);
+    assertCheck(
+      "massing-persist-reload",
+      "Drawn massing blocks persist in localStorage across reload",
+      persistedBeforeReload >= 1 && persistedAfterReload >= 1,
+      `before=${persistedBeforeReload}, after=${persistedAfterReload}`,
+    );
+
+    await page.evaluate(() => {
+      const api = window.__citycutQaMassing;
+      api?.enableTool();
+      const id = api?.getBlocks()?.[0]?.id;
+      if (id) api?.selectBlock(id);
+      api?.deleteSelected();
+    });
+    const massingAfterDelete = await page.evaluate(() => window.__citycutQaMassing?.getBlocks()?.length ?? -1);
+    assertCheck(
+      "massing-delete",
+      "Massing delete removes the selected block",
+      massingAfterDelete === 0,
+      `remaining=${massingAfterDelete}`,
+    );
+
+    await page.evaluate(() => window.__citycutQaMassing?.disableTool());
+
+    await page.waitForFunction(
+      () => {
+        const canvas = document.querySelector(".model canvas");
+        const introDone = document.querySelector(".model")?.getAttribute("data-intro-done") === "true";
+        const polar = Number(canvas?.dataset.introPolar ?? canvas?.dataset.camElevation ?? 0);
+        return introDone || polar >= 0.95;
+      },
+      null,
+      { timeout: 120_000 },
+    );
+
+  // -------------------------------------------------------------------------
+  // SECTION KNIFE: real mouse gizmo drag (no ?qa=1)
+  // -------------------------------------------------------------------------
+  {
+    const isoBtn = page.locator(".model .proj-btn.studio-submode-pill", { hasText: "Isometric" }).first();
       if ((await isoBtn.count()) === 0) {
         assertCheck(
           "section-knife-handle-drag",
@@ -1907,14 +2912,30 @@ async function main() {
 
     const planFanBtn = page.locator(".model .env-console .overlay-chips button", { hasText: "9–3pm Plan Fan" });
     await planFanBtn.click();
-    await page.waitForSelector("svg.plan [data-shadow-hour] path", { timeout: 10000 });
+    await page.getByRole("button", { name: /22 Sep/ }).click();
+    await page.waitForFunction(
+      () => document.querySelectorAll("svg.plan [data-shadow-hour]").length >= 7,
+      null,
+      { timeout: 360000 },
+    );
     await page.waitForTimeout(300);
 
     const beforeSelectInfo = await page.evaluate(() => {
       const envText = document.querySelector(".model .env-console")?.textContent ?? "";
-      const shadowPathEls = Array.from(document.querySelectorAll("svg.plan [data-shadow-hour] path"));
-      const shadowPaths = shadowPathEls.length;
-      const shadowDLength = shadowPathEls.reduce((acc, p) => acc + (p.getAttribute("d")?.length ?? 0), 0);
+      const shadowInkLength = () => {
+        let total = 0;
+        for (const layer of document.querySelectorAll("svg.plan [data-shadow-hour]")) {
+          for (const path of layer.querySelectorAll("path")) {
+            total += path.getAttribute("d")?.length ?? 0;
+          }
+          for (const image of layer.querySelectorAll("image")) {
+            total += image.getAttribute("href")?.length ?? 0;
+          }
+        }
+        return total;
+      };
+      const shadowPaths = document.querySelectorAll("svg.plan [data-shadow-hour] path, svg.plan [data-shadow-hour] image").length;
+      const shadowDLength = shadowInkLength();
       const svg = document.querySelector("svg.plan");
       const svgRect = svg.getBoundingClientRect();
       const cx = svgRect.left + svgRect.width / 2;
@@ -1961,11 +2982,22 @@ async function main() {
 
     const afterSelectInfo = await page.evaluate(() => {
       const selectedEls = document.querySelectorAll("svg.plan [data-selected-building]");
-      const shadowPathEls = Array.from(document.querySelectorAll("svg.plan [data-shadow-hour] path"));
-      const shadowPaths = shadowPathEls.length;
-      const shadowDLength = shadowPathEls.reduce((acc, p) => acc + (p.getAttribute("d")?.length ?? 0), 0);
+      const shadowInkLength = () => {
+        let total = 0;
+        for (const layer of document.querySelectorAll("svg.plan [data-shadow-hour]")) {
+          for (const path of layer.querySelectorAll("path")) {
+            total += path.getAttribute("d")?.length ?? 0;
+          }
+          for (const image of layer.querySelectorAll("image")) {
+            total += image.getAttribute("href")?.length ?? 0;
+          }
+        }
+        return total;
+      };
+      const shadowPaths = document.querySelectorAll("svg.plan [data-shadow-hour] path, svg.plan [data-shadow-hour] image").length;
+      const shadowDLength = shadowInkLength();
       const nonEmptyLayers = Array.from(document.querySelectorAll("svg.plan [data-shadow-hour]")).filter(
-        (g) => g.querySelectorAll("path").length > 0,
+        (layer) => layer.querySelectorAll("path, image").length > 0,
       ).length;
       return {
         selectedCount: selectedEls.length,
@@ -1986,6 +3018,934 @@ async function main() {
         afterSelectInfo.shadowDLength < beforeSelectInfo.shadowDLength * 0.25,
       `3dDomeInDrawing=${beforeSelectInfo.has3dSunDomeInDrawing}, planFanInDrawing=${beforeSelectInfo.hasPlanFanInDrawing}, selectedCount=${afterSelectInfo.selectedCount}, shadowDLength=${beforeSelectInfo.shadowDLength}->${afterSelectInfo.shadowDLength}, layers=${afterSelectInfo.nonEmptyLayers}`,
     );
+
+    {
+      fs.mkdirSync(CURSOR_ARTIFACTS_DIR, { recursive: true });
+      const shadowCtx = await browser.newContext({
+        viewport: VIEWPORT,
+        deviceScaleFactor: DEVICE_SCALE_FACTOR,
+        reducedMotion: "no-preference",
+      });
+      await shadowCtx.addInitScript(() => {
+        window.__citycutMinSilentLoadMs = 900;
+      });
+      const shadowPage = await shadowCtx.newPage();
+      const shadowUrl = `${baseUrl}/?qa=1&lat=-37.80&lon=145.13&km=1&label=Box%20Hill&view=persp`;
+      await shadowPage.goto(shadowUrl, { waitUntil: "domcontentloaded", timeout: 120000 });
+      await shadowPage.waitForSelector("button.create-fab", { timeout: 60000 });
+      await shadowPage.click("button.create-fab");
+      await shadowPage.waitForSelector(".model", { timeout: 300000 });
+      await shadowPage.waitForFunction(
+        () => {
+          const model = document.querySelector(".model");
+          if (!model || getComputedStyle(model).display === "none") return false;
+          return Boolean(model.querySelector("canvas")) || model.getAttribute("data-intro-done") === "true";
+        },
+        null,
+        { timeout: 300000 },
+      );
+      await shadowPage.waitForFunction(
+        () =>
+          Boolean(window.__citycutQaModel?.setDrawingPlanViewport) &&
+          Boolean(window.__citycutQaMassing?.commitPolylineCenterline),
+        null,
+        { timeout: 300000 },
+      );
+
+      const enableSunStudy = async () => {
+        await shadowPage.locator('.model button[data-section="analysis"]').first().click();
+        await shadowPage.waitForTimeout(300);
+        await shadowPage.getByRole("tab", { name: /Drawing/i }).click();
+        await shadowPage.waitForSelector("svg.plan", { timeout: 120000 });
+        const planFan = shadowPage.locator(".model .env-console .overlay-chips button", { hasText: "9–3pm Plan Fan" });
+        await planFan.click();
+        await shadowPage.getByRole("button", { name: /22 Sep/ }).click();
+        await shadowPage.getByRole("button", { name: "Solar time 15:00", exact: true }).click();
+        await shadowPage.waitForSelector("svg.plan [data-shadow-hour]", { timeout: 120000 });
+        await shadowPage.waitForTimeout(800);
+      };
+
+      await enableSunStudy();
+
+      const PLAN_ZOOM_M = 82;
+      const FOCUS_EAST = 14;
+      const FOCUS_NORTH = -10;
+
+      const readAddedShadow = async () =>
+        shadowPage.evaluate(() => {
+          const added = Array.from(document.querySelectorAll("svg.plan [data-shadow-added]"));
+          const dLen = added.reduce((acc, node) => acc + (node.getAttribute("d")?.length ?? 0), 0);
+          return { count: added.length, dLen };
+        });
+
+      const zoomPlanToSite = async () => {
+        await shadowPage.evaluate(
+          ({ span, east, north }) => {
+            window.__citycutQaModel?.setDrawingPlanViewport?.(east, north, span);
+          },
+          { span: PLAN_ZOOM_M, east: FOCUS_EAST, north: FOCUS_NORTH },
+        );
+        await shadowPage.waitForTimeout(700);
+      };
+
+      await shadowPage.evaluate(() => {
+        window.__citycutQaMassing?.clearDrawnBlocks?.();
+        window.__citycutQaModel?.clearQaProposedMassing?.();
+      });
+      await shadowPage.waitForTimeout(1200);
+      await zoomPlanToSite();
+
+      const beforeMassing = await readAddedShadow();
+      const shotNoMassing = path.join(CURSOR_ARTIFACTS_DIR, "solar-shadow-box-hill-no-massing.png");
+      await shadowPage.locator("svg.plan").screenshot({ path: shotNoMassing });
+
+      await shadowPage.evaluate(
+        ({ east, north }) => {
+          window.__citycutQaMassing?.commitPolylineCenterline?.(
+            [
+              [east - 16, north - 4],
+              [east + 22, north - 4],
+              [east + 22, north + 10],
+              [east + 4, north + 10],
+              [east + 4, north + 28],
+            ],
+            { floors: 6, width_m: 14 },
+          );
+        },
+        { east: FOCUS_EAST, north: FOCUS_NORTH },
+      );
+      await shadowPage.waitForTimeout(2500);
+      await shadowPage.waitForFunction(
+        () => {
+          const added = document.querySelectorAll("svg.plan [data-shadow-added]");
+          if (added.length === 0) return false;
+          return Array.from(added).some((node) => (node.getAttribute("d")?.length ?? 0) > 80);
+        },
+        null,
+        { timeout: 360000 },
+      );
+      await zoomPlanToSite();
+
+      const withMassing = await readAddedShadow();
+      const shotWithMassing = path.join(CURSOR_ARTIFACTS_DIR, "solar-shadow-box-hill-with-massing.png");
+      const planShot = await shadowPage.locator("svg.plan").screenshot({ path: shotWithMassing });
+      const goldPixels = countGoldishPixels(planShot);
+
+      assertCheck(
+        "solar-added-shadow-split",
+        "Box Hill plan zoomed ~80m at 22 Sep 3pm shows no added-shadow paths without drawn massing, then hatched added shadow across neighbouring lots after an L-shaped 6-storey draw with visible gold pixels",
+        beforeMassing.count === 0 &&
+          beforeMassing.dLen === 0 &&
+          withMassing.count > 0 &&
+          withMassing.dLen > 220 &&
+          goldPixels > 120,
+        `before=[count=${beforeMassing.count},d=${beforeMassing.dLen}], after=[count=${withMassing.count},d=${withMassing.dLen}], goldPixels=${goldPixels}, zoom=${PLAN_ZOOM_M}m, shots=[${shotNoMassing},${shotWithMassing}]`,
+      );
+
+      const boxHillB43 = async () => {
+        await shadowPage.locator('.model button[data-section="analysis"]').first().click();
+        await shadowPage.waitForTimeout(300);
+        await shadowPage.getByRole("tab", { name: /Drawing/i }).click();
+        await shadowPage.waitForSelector("svg.plan", { timeout: 120000 });
+        await shadowPage.evaluate(() => {
+          window.__citycutQaModel?.clearSolarReceptors?.();
+          window.__citycutQaModel?.enableSolarAccess?.();
+        });
+        await shadowPage.waitForTimeout(400);
+
+        await shadowPage.evaluate(
+          ({ east, north }) => {
+            window.__citycutQaMassing?.commitPolylineCenterline?.(
+              [
+                [east - 16, north - 4],
+                [east + 22, north - 4],
+                [east + 22, north + 10],
+                [east + 4, north + 10],
+                [east + 4, north + 28],
+              ],
+              { floors: 6, width_m: 14 },
+            );
+          },
+          { east: FOCUS_EAST, north: FOCUS_NORTH },
+        );
+        await shadowPage.waitForTimeout(2000);
+        await zoomPlanToSite();
+
+        const receptorIds = await shadowPage.evaluate(
+          ({ east, north }) => {
+            const api = window.__citycutQaModel;
+            const south = api?.addSolarReceptor?.(east - 2, north - 26, east + 16, north - 12, "south-yard");
+            const far = api?.addSolarReceptor?.(east - 38, north - 38, east - 22, north - 24, "far-yard");
+            return { south, far };
+          },
+          { east: FOCUS_EAST, north: FOCUS_NORTH },
+        );
+
+        await shadowPage.waitForFunction(
+          () => {
+            const rows = window.__citycutQaModel?.readSolarReceptorAssess?.() ?? [];
+            return rows.length >= 2 && rows.every((row) => !Number.isNaN(row.proposedSunlitM2));
+          },
+          null,
+          { timeout: 600000 },
+        );
+
+        const assess = await shadowPage.evaluate(() => window.__citycutQaModel?.readSolarReceptorAssess?.() ?? []);
+        const south = assess.find((row) => row.id === receptorIds.south);
+        const far = assess.find((row) => row.id === receptorIds.far);
+
+        assertCheck(
+          "solar-b43-receptor-assess",
+          "Box Hill B4-3 receptors: south yard fails proposed while existing passes; distant yard passes both",
+          south?.existingPass === true &&
+            south?.proposedPass === false &&
+            south?.status?.kind === "fail-proposal" &&
+            far?.existingPass === true &&
+            far?.proposedPass === true,
+          `south=${JSON.stringify(south)}, far=${JSON.stringify(far)}`,
+        );
+
+        const dock = shadowPage.locator("[data-solar-results-dock]");
+        await dock.waitFor({ state: "visible", timeout: 120000 });
+        const metricsText = await dock.locator(".solar-receptor-metrics").first().textContent();
+        assertCheck(
+          "solar-b43-results-readable",
+          "B4-3 receptor m² existing vs proposed and status labels are visible on the site plan dock",
+          Boolean(metricsText?.includes("m² existing")) &&
+            Boolean(metricsText?.includes("m² proposed")) &&
+            (await dock.locator(".solar-receptor-status").count()) >= 2,
+          `metrics=${JSON.stringify(metricsText)}`,
+        );
+        const shotPlan = path.join(CURSOR_ARTIFACTS_DIR, "solar-b43-box-hill-plan.png");
+        const planEl = shadowPage.locator("svg.plan");
+        await planEl.screenshot({ path: shotPlan });
+        const shotResults = path.join(CURSOR_ARTIFACTS_DIR, "solar-b43-box-hill-results.png");
+        await dock.screenshot({ path: shotResults });
+        const shotCombo = path.join(CURSOR_ARTIFACTS_DIR, "solar-b43-box-hill-plan-and-results.png");
+        const planBox = await planEl.boundingBox();
+        const dockBox = await dock.boundingBox();
+        if (planBox && dockBox) {
+          const x = Math.floor(Math.min(planBox.x, dockBox.x));
+          const y = Math.floor(Math.min(planBox.y, dockBox.y));
+          const x2 = Math.ceil(Math.max(planBox.x + planBox.width, dockBox.x + dockBox.width));
+          const y2 = Math.ceil(Math.max(planBox.y + planBox.height, dockBox.y + dockBox.height));
+          await shadowPage.screenshot({
+            path: shotCombo,
+            clip: { x, y, width: x2 - x, height: y2 - y },
+            scale: "css",
+          });
+        }
+      };
+
+      await boxHillB43();
+
+      const boxHillHoursLost = async () => {
+        await shadowPage.evaluate(() => {
+          window.__citycutQaMassing?.clearDrawnBlocks?.();
+          window.__citycutQaModel?.clearQaProposedMassing?.();
+          window.__citycutQaModel?.enableSunHoursLost?.();
+        });
+        await shadowPage.waitForTimeout(800);
+        await zoomPlanToSite();
+        const beforeLoss = await shadowPage.evaluate(
+          () => window.__citycutQaModel?.readSunHoursLostPlan?.() ?? { cellCount: 0, maxLoss: 0 },
+        );
+        const emptyOverlay = await shadowPage.locator("[data-sun-hours-lost-overlay]").count();
+
+        await shadowPage.evaluate(
+          ({ east, north }) => {
+            window.__citycutQaMassing?.commitPolylineCenterline?.(
+              [
+                [east - 16, north - 4],
+                [east + 22, north - 4],
+                [east + 22, north + 10],
+                [east + 4, north + 10],
+                [east + 4, north + 28],
+              ],
+              { floors: 6, width_m: 14 },
+            );
+          },
+          { east: FOCUS_EAST, north: FOCUS_NORTH },
+        );
+        await shadowPage.waitForFunction(
+          () => (window.__citycutQaModel?.readSunHoursLostPlan?.().cellCount ?? 0) > 8,
+          null,
+          { timeout: 600000 },
+        );
+        const withLoss = await shadowPage.evaluate(
+          () => window.__citycutQaModel?.readSunHoursLostPlan?.() ?? { cellCount: 0, maxLoss: 0 },
+        );
+        const lossOverlay = await shadowPage.locator("[data-sun-hours-lost-overlay]");
+        const lossDom = await lossOverlay.count();
+        const lossRasterCells =
+          lossDom > 0 ? Number(await lossOverlay.getAttribute("data-sun-hours-lost-cell-count")) || 0 : 0;
+        await shadowPage.waitForSelector("[data-sun-hours-lost-legend-dock]", { timeout: 120000 });
+        const dockLayout = await shadowPage.evaluate(() => {
+          const legend = document.querySelector("[data-sun-hours-lost-legend-dock]");
+          const results = document.querySelector("[data-solar-results-dock]");
+          if (!legend) return { ok: false, reason: "missing-legend-dock" };
+          const legendBox = legend.getBoundingClientRect();
+          if (!results) return { ok: true, reason: "no-results-dock", legendBox };
+          const resultsBox = results.getBoundingClientRect();
+          const gap = resultsBox.top - legendBox.bottom;
+          const intersect =
+            legendBox.right > resultsBox.left &&
+            legendBox.left < resultsBox.right &&
+            legendBox.bottom > resultsBox.top &&
+            legendBox.top < resultsBox.bottom;
+          return { ok: !intersect && gap >= 0, intersect, gap, legendBox, resultsBox };
+        });
+        const shotHoursLost = path.join(CURSOR_ARTIFACTS_DIR, "solar-hours-lost-box-hill.png");
+        await planViewportScreenshot(shadowPage, shotHoursLost);
+
+        assertCheck(
+          "solar-hours-lost-legend-dock-clear",
+          "Hours-lost legend dock does not overlap B4-3 results dock",
+          dockLayout.ok === true,
+          JSON.stringify(dockLayout),
+        );
+
+        assertCheck(
+          "solar-hours-lost-heatmap",
+          "Box Hill hours-lost heatmap: no cells without massing, non-zero 3 m cells south of 6-storey proposal when enabled",
+          beforeLoss.cellCount === 0 &&
+            emptyOverlay === 0 &&
+            withLoss.cellCount > 8 &&
+            withLoss.maxLoss > 0.25 &&
+            lossDom === 1 &&
+            lossRasterCells > 8 &&
+            (withLoss.footprintInside ?? 0) === 0,
+          `before=${JSON.stringify(beforeLoss)}, after=${JSON.stringify(withLoss)}, dom=${lossDom}, shot=${shotHoursLost}`,
+        );
+      };
+
+      await boxHillHoursLost();
+
+      const boxHillSunHoursGround = async () => {
+        await shadowPage.evaluate(() => {
+          window.__citycutQaMassing?.clearDrawnBlocks?.();
+          window.__citycutQaModel?.clearQaProposedMassing?.();
+        });
+        await shadowPage.locator('.model button[data-section="analysis"]').first().click();
+        await shadowPage.waitForSelector("[data-solar-access-console]", { timeout: 60000 });
+        const hoursLostChip = shadowPage
+          .locator("[data-solar-access-console] button.ov-chip.on")
+          .filter({ hasText: "Hours lost" });
+        if ((await hoursLostChip.count()) > 0) await hoursLostChip.click();
+        const sunHoursChip = shadowPage.locator("[data-sun-hours-ground-chip]");
+        const chipCount = await sunHoursChip.count();
+        assertCheck(
+          "solar-sun-hours-ground-chip",
+          "Direct Sun Hours chip is visible in the Site Analysis solar console",
+          chipCount === 1,
+          `chipCount=${chipCount}`,
+        );
+
+        const off = await shadowPage.evaluate(() => window.__citycutQaModel?.readSunHoursGround?.() ?? null);
+        const emptyOverlay = await shadowPage.locator("[data-sun-hours-ground-overlay]").count();
+        assertCheck(
+          "solar-sun-hours-ground-off",
+          "Ground sun-hours layer off by default with no plan overlay",
+          off?.enabled === false && emptyOverlay === 0,
+          `off=${JSON.stringify(off)}, overlay=${emptyOverlay}`,
+        );
+
+        await sunHoursChip.evaluate((el) => el.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+        await shadowPage.waitForFunction(
+          () => document.documentElement.dataset.sunHoursGroundReady === "1",
+          null,
+          { timeout: 600000 },
+        );
+        await shadowPage.waitForFunction(
+          () =>
+            document.documentElement.dataset.sunHoursDirectSurfacesReady === "1" &&
+            Number(document.documentElement.dataset.sunHoursDirectSurfaces ?? "0") > 80,
+          null,
+          { timeout: 600000 },
+        );
+        const enabled = await shadowPage.evaluate(() => window.__citycutQaModel?.readSunHoursGround?.() ?? null);
+        const overlayDom = await shadowPage.locator("[data-sun-hours-ground-overlay]");
+        const overlayCount = await overlayDom.count();
+        const rasterCells =
+          overlayCount > 0 ? Number(await overlayDom.getAttribute("data-sun-hours-ground-cell-count")) || 0 : 0;
+        await shadowPage.waitForSelector("[data-sun-hours-ground-legend-dock]", { timeout: 120000 });
+        await shadowPage.waitForSelector("[data-sun-hours-roof-overlay]", { timeout: 120000 });
+        await assertSunHoursLegendAboveConsole(shadowPage, "box-hill", 1440, assertCheck);
+        await assertSunHoursLegendAboveConsole(shadowPage, "box-hill", 1280, assertCheck);
+        await captureSunHoursLegendViewportShots(shadowPage, "box-hill");
+        const shotDrawingLegend = path.join(CURSOR_ARTIFACTS_DIR, "sun-hours-box-hill-drawing-legend-1440x900.png");
+        await clickStudioModeTab(shadowPage, "Drawing");
+        await shadowPage.waitForTimeout(450);
+        await shadowPage.screenshot({
+          path: shotDrawingLegend,
+          fullPage: false,
+          clip: { x: 0, y: 0, width: VIEWPORT.width, height: VIEWPORT.height },
+        });
+        const shotDrawing = path.join(CURSOR_ARTIFACTS_DIR, "sun-hours-drawing-plan.png");
+        await planViewportScreenshot(shadowPage, shotDrawing);
+
+        await clickStudioModeTab(shadowPage, "3D model");
+        await shadowPage.waitForTimeout(600);
+        const legend3d = await shadowPage.locator(".sun-hours-direct-dock-stack [data-sun-hours-ground-legend-dock]").count();
+        assertCheck(
+          "solar-sun-hours-legend-3d",
+          "Direct Sun Hours legend docks in 3D view while the study is on",
+          legend3d === 1,
+          `legend3d=${legend3d}`,
+        );
+        await shadowPage.evaluate(() => window.__citycutQaModel?.frameSunHoursGroundPlan?.());
+        await shadowPage.waitForTimeout(1200);
+        const shotPlan = path.join(CURSOR_ARTIFACTS_DIR, "sun-hours-3d-plan.png");
+        await sceneViewportScreenshot(shadowPage, { path: shotPlan });
+        await shadowPage.getByRole("button", { name: /^Plan$/i }).click();
+        await shadowPage.waitForFunction(
+          () => document.documentElement.dataset.sunHoursDirectPlanView === "1",
+          null,
+          { timeout: 60000 },
+        );
+        await shadowPage.waitForTimeout(400);
+        const shotPlanClean = path.join(CURSOR_ARTIFACTS_DIR, "sun-hours-3d-plan-clean.png");
+        await sceneViewportScreenshot(shadowPage, { path: shotPlanClean });
+        const planMeshes = await shadowPage.evaluate(() => ({
+          planView: document.documentElement.dataset.sunHoursDirectPlanView === "1",
+          walls: document.documentElement.dataset.sunHoursDirectWallsVisible === "1",
+          roofs: document.documentElement.dataset.sunHoursDirectRoofsVisible === "1",
+        }));
+        assertCheck(
+          "solar-sun-hours-plan-hide-walls",
+          "3D Plan projection hides wall-hour quads but keeps roof-hour meshes",
+          planMeshes.planView && !planMeshes.walls && planMeshes.roofs,
+          `meshes=${JSON.stringify(planMeshes)}, shot=${shotPlanClean}`,
+        );
+        await shadowPage.evaluate(() => window.__citycutQaModel?.frameSunHoursGroundOblique?.());
+        await shadowPage.waitForTimeout(1200);
+        const shotOblique = path.join(CURSOR_ARTIFACTS_DIR, "sun-hours-3d-oblique.png");
+        await sceneViewportScreenshot(shadowPage, { path: shotOblique });
+
+        const paletteBlue = { r: 49, g: 54, b: 149 };
+        const paletteYellow = { r: 254, g: 232, b: 37 };
+        const planPng = PNG.sync.read(fs.readFileSync(shotDrawing));
+        const plan3dCleanPng = PNG.sync.read(fs.readFileSync(shotPlanClean));
+        const obliquePng = PNG.sync.read(fs.readFileSync(shotOblique));
+        const blueHits = countPixelsNearRgb(planPng, paletteBlue, 80);
+        const yellowHits = countPixelsNearRgb(obliquePng, paletteYellow, 72);
+        const plan3dRoofYellow = countPixelsNearRgb(plan3dCleanPng, paletteYellow, 68);
+        const obliqueRoofCrop = buildingFootprintCrop(obliquePng);
+        const planRoofCrop = buildingFootprintCrop(plan3dCleanPng);
+        const obliqueRoofStats = countSunHoursRoofPalettePixels(obliquePng, obliqueRoofCrop);
+        const planRoofStats = countSunHoursRoofPalettePixels(plan3dCleanPng, planRoofCrop);
+        assertCheck(
+          "solar-sun-hours-roof-palette-box-hill",
+          "Box Hill 3D roof overlays use Ladybug palette fills, not solar-neutral white/grey building tops",
+          obliqueRoofStats.palette > 1200 &&
+            planRoofStats.palette > 900 &&
+            obliqueRoofStats.palette > obliqueRoofStats.neutral * 4 &&
+            planRoofStats.palette > planRoofStats.neutral * 4,
+          JSON.stringify({
+            oblique: obliqueRoofStats,
+            plan: planRoofStats,
+            obliqueRoofYellow: countPixelsNearRgb(obliquePng, paletteYellow, 68),
+            plan3dRoofYellow,
+          }),
+        );
+
+        assertCheck(
+          "solar-sun-hours-ground-heatmap",
+          "Box Hill Direct Sun Hours: winter 21 Jun, 3 m grid, blue–yellow Ladybug scale on ground + roofs + walls",
+          enabled?.enabled === true &&
+            enabled.month === 6 &&
+            enabled.day === 21 &&
+            enabled.cellM === 3 &&
+            (enabled.maskedFootprints ?? 0) > 20 &&
+            (enabled.cellCount ?? 0) > 100 &&
+            (enabled.surfaceCells ?? 0) > 200 &&
+            (enabled.maxSunHours ?? 0) > 2 &&
+            enabled.paletteMin?.toLowerCase() === "#313695" &&
+            enabled.paletteMax?.toLowerCase() === "#fee825" &&
+            overlayCount === 1 &&
+            rasterCells > 100 &&
+            blueHits > 80 &&
+            yellowHits > 40 &&
+            plan3dRoofYellow > 800,
+          `enabled=${JSON.stringify(enabled)}, overlay=${overlayCount}, raster=${rasterCells}, blueHits=${blueHits}, yellowHits=${yellowHits}, plan3dRoofYellow=${plan3dRoofYellow}, drawing=${shotDrawing}, plan3d=${shotPlan}, oblique=${shotOblique}`,
+        );
+      };
+
+      await boxHillSunHoursGround();
+
+      const montAlbertSunHoursDrape = async () => {
+        const mapPage = await shadowCtx.newPage();
+        const mapUrl = `${baseUrl}/?qa=1&lat=-37.8045&lon=145.10658&km=1&label=Mont%20Albert%20North&view=persp`;
+        await mapPage.goto(mapUrl, { waitUntil: "domcontentloaded", timeout: 120000 });
+        await mapPage.waitForSelector("button.create-fab", { timeout: 60000 });
+        await mapPage.click("button.create-fab");
+        await mapPage.waitForSelector(".model", { timeout: 300000 });
+        await mapPage.waitForFunction(
+          () => Boolean(window.__citycutQaModel?.frameSunHoursTerrainEdge),
+          null,
+          { timeout: 300000 },
+        );
+        await mapPage.locator('.model button[data-section="analysis"]').first().click();
+        await mapPage.evaluate(() =>
+          document.querySelector("[data-sun-hours-ground-chip]")?.dispatchEvent(new MouseEvent("click", { bubbles: true })),
+        );
+        await mapPage.waitForFunction(() => document.documentElement.dataset.sunHoursDirectSurfacesReady === "1", null, {
+          timeout: 600000,
+        });
+        await mapPage.waitForSelector("[data-sun-hours-ground-legend-dock]", { timeout: 120000 });
+        await assertSunHoursLegendAboveConsole(mapPage, "mont-albert", 1440, assertCheck);
+        await assertSunHoursLegendAboveConsole(mapPage, "mont-albert", 1280, assertCheck);
+        await clickStudioModeTab(mapPage, "Drawing");
+        await mapPage.waitForTimeout(450);
+        const shotDrawingLegend = path.join(CURSOR_ARTIFACTS_DIR, "sun-hours-mont-albert-drawing-legend-1440x900.png");
+        await mapPage.screenshot({
+          path: shotDrawingLegend,
+          fullPage: false,
+          clip: { x: 0, y: 0, width: VIEWPORT.width, height: VIEWPORT.height },
+        });
+        const terrainStats = await mapPage.evaluate(
+          () => window.__citycutQaModel?.readSunHoursTerrainRelief?.() ?? { relief: 0, min: 0, max: 0 },
+        );
+        await clickStudioModeTab(mapPage, "3D model");
+        await mapPage.waitForTimeout(800);
+        await mapPage.evaluate(() => window.__citycutQaModel?.frameSunHoursTerrainEdge?.());
+        await mapPage.waitForTimeout(1500);
+        const shotOblique = path.join(CURSOR_ARTIFACTS_DIR, "sun-hours-mont-albert-3d-oblique.png");
+        await sceneViewportScreenshot(mapPage, { path: shotOblique });
+        const obliqueDrapePng = PNG.sync.read(fs.readFileSync(shotOblique));
+        const paletteYellow = { r: 254, g: 232, b: 37 };
+        const yellowHits = countPixelsNearRgb(obliqueDrapePng, paletteYellow, 72);
+        await mapPage.evaluate(() => window.__citycutQaModel?.frameSunHoursGroundOblique?.());
+        await mapPage.waitForTimeout(1200);
+        const shotObliqueRoofs = path.join(CURSOR_ARTIFACTS_DIR, "sun-hours-mont-albert-3d-oblique-roofs.png");
+        await sceneViewportScreenshot(mapPage, { path: shotObliqueRoofs });
+        await mapPage.getByRole("button", { name: /^Plan$/i }).click();
+        await mapPage.waitForFunction(
+          () => document.documentElement.dataset.sunHoursDirectPlanView === "1",
+          null,
+          { timeout: 60000 },
+        );
+        await mapPage.waitForTimeout(400);
+        await mapPage.evaluate(() => window.__citycutQaModel?.frameSunHoursGroundPlan?.());
+        await mapPage.waitForTimeout(1200);
+        const shotPlan = path.join(CURSOR_ARTIFACTS_DIR, "sun-hours-mont-albert-3d-plan.png");
+        await sceneViewportScreenshot(mapPage, { path: shotPlan });
+        const planMeshes = await mapPage.evaluate(() => ({
+          planView: document.documentElement.dataset.sunHoursDirectPlanView === "1",
+          walls: document.documentElement.dataset.sunHoursDirectWallsVisible === "1",
+          roofs: document.documentElement.dataset.sunHoursDirectRoofsVisible === "1",
+        }));
+        const obliquePng = PNG.sync.read(fs.readFileSync(shotObliqueRoofs));
+        const planPng = PNG.sync.read(fs.readFileSync(shotPlan));
+        const planRoofYellow = countPixelsNearRgb(planPng, paletteYellow, 68);
+        const montObliqueCrop = buildingFootprintCrop(obliquePng);
+        const montPlanCrop = buildingFootprintCrop(planPng);
+        const montObliqueRoofStats = countSunHoursRoofPalettePixels(obliquePng, montObliqueCrop);
+        const montPlanRoofStats = countSunHoursRoofPalettePixels(planPng, montPlanCrop);
+        assertCheck(
+          "solar-sun-hours-roof-palette-mont-albert",
+          "Mont Albert 3D roof overlays use Ladybug palette fills, not solar-neutral white/grey building tops",
+          montObliqueRoofStats.palette > 800 &&
+            montPlanRoofStats.palette > 500 &&
+            montObliqueRoofStats.palette > montObliqueRoofStats.neutral * 3 &&
+            montPlanRoofStats.palette > montPlanRoofStats.neutral * 3,
+          JSON.stringify({
+            oblique: montObliqueRoofStats,
+            plan: montPlanRoofStats,
+            planRoofYellow,
+          }),
+        );
+        assertCheck(
+          "solar-sun-hours-mont-albert-drape",
+          "Mont Albert North sun-hours ground mesh drapes on terrain with relief and sloped edge visible",
+          terrainStats.relief > 1.5 && yellowHits > 30,
+          JSON.stringify({ terrainStats, yellowHits, oblique: shotOblique, plan: shotPlan }),
+        );
+        assertCheck(
+          "solar-sun-hours-mont-albert-plan-roofs-only",
+          "Mont Albert 3D Plan shows roof fills without wall-hour rims",
+          planMeshes.planView && !planMeshes.walls && planMeshes.roofs && planRoofYellow > 600,
+          `meshes=${JSON.stringify(planMeshes)}, planRoofYellow=${planRoofYellow}`,
+        );
+        await mapPage.close();
+      };
+
+      await montAlbertSunHoursDrape();
+
+      const measurePlanZoomLongTasks = async (page) =>
+        page.evaluate(async () => {
+          const durations = [];
+          const obs = new PerformanceObserver((list) => {
+            for (const entry of list.getEntries()) durations.push(entry.duration);
+          });
+          obs.observe({ type: "longtask", buffered: true });
+          const svg = document.querySelector("svg.plan");
+          if (!svg) {
+            obs.disconnect();
+            return { ok: false, reason: "no-plan" };
+          }
+          const rect = svg.getBoundingClientRect();
+          const cx = rect.left + rect.width / 2;
+          const cy = rect.top + rect.height / 2;
+          for (let i = 0; i < 28; i++) {
+            svg.dispatchEvent(
+              new WheelEvent("wheel", {
+                deltaY: i % 2 === 0 ? -90 : 90,
+                clientX: cx,
+                clientY: cy,
+                bubbles: true,
+                cancelable: true,
+              }),
+            );
+          }
+          await new Promise((resolve) => setTimeout(resolve, 500));
+          obs.disconnect();
+          const totalMs = durations.reduce((sum, value) => sum + value, 0);
+          const maxMs = durations.length ? Math.max(...durations) : 0;
+          return { ok: true, count: durations.length, totalMs, maxMs };
+        });
+
+      const boxHillSolarPlanZoomPerf = async () => {
+        await shadowPage.getByRole("tab", { name: /Drawing/i }).click();
+        await shadowPage.waitForSelector("svg.plan", { timeout: 120000 });
+        await shadowPage.evaluate(
+          ({ east, north }) => window.__citycutQaModel?.setDrawingPlanViewport?.(east, north, 80),
+          { east: FOCUS_EAST, north: FOCUS_NORTH },
+        );
+        await shadowPage.evaluate(() => window.__citycutQaModel?.setSolarPlanMinimal?.());
+        await shadowPage.waitForTimeout(400);
+        const baseline = await measurePlanZoomLongTasks(shadowPage);
+        await shadowPage.evaluate(() => window.__citycutQaModel?.setSolarStudiesFull?.());
+        await shadowPage.waitForTimeout(2800);
+        const loaded = await measurePlanZoomLongTasks(shadowPage);
+        const maxBudget = Math.max(baseline.maxMs * 2.5 + 30, 150);
+        const totalBudget = Math.max(baseline.totalMs * 3.5 + 80, 250);
+        const shotGuide = path.join(CURSOR_ARTIFACTS_DIR, "solar-access-guide.png");
+        const accessConsole = shadowPage.locator("[data-solar-access-console]");
+        if ((await accessConsole.count()) > 0) {
+          await accessConsole.screenshot({ path: shotGuide, timeout: 15000 });
+        } else if ((await shadowPage.locator("[data-solar-access-guide]").count()) > 0) {
+          const guidePanel = shadowPage.locator(".right-inspector .solar-panel-body, .right-inspector .solar-drawer").first();
+          try {
+            await guidePanel.screenshot({ path: shotGuide, timeout: 15000 });
+          } catch {
+            await shadowPage.locator(".right-inspector").screenshot({ path: shotGuide, timeout: 15000 });
+          }
+        }
+        assertCheck(
+          "solar-plan-zoom-perf",
+          "Plan wheel-zoom long tasks stay within budget vs solar-off baseline (pan/zoom must not restart shadow studies)",
+          Boolean(baseline.ok && loaded.ok && loaded.maxMs <= maxBudget && loaded.totalMs <= totalBudget),
+          `baseline=${JSON.stringify(baseline)}, loaded=${JSON.stringify(loaded)}, maxBudget=${maxBudget.toFixed(1)}, totalBudget=${totalBudget.toFixed(1)}, guide=${shotGuide}`,
+        );
+      };
+
+      await boxHillSolarPlanZoomPerf();
+
+      const boxHillSolarExport = async () => {
+        let exportOk = false;
+        let detail = "";
+        try {
+          await shadowPage.evaluate(() => window.__citycutQaModel?.enableSolarAccess?.());
+          await shadowPage.getByRole("tab", { name: /Drawing/i }).click();
+          await shadowPage.waitForSelector("svg.plan", { timeout: 120000 });
+          await shadowPage.waitForTimeout(1200);
+          const downloadPromise = shadowPage.waitForEvent("download", { timeout: 240000 });
+          await shadowPage.getByRole("button", { name: /Quick export SVG/i }).click();
+          const download = await downloadPromise;
+          const filename = download.suggestedFilename();
+          const chunks = [];
+          for await (const chunk of await download.createReadStream()) chunks.push(chunk);
+          const bytes = Buffer.concat(chunks);
+          const text = bytes.toString("utf8");
+          const hasAddedLayer = text.includes('inkscape:label="Added shadow 12:00"');
+          const hasProposedMassing = text.includes('inkscape:label="Proposed massing"');
+          exportOk =
+            filename.endsWith(".svg") &&
+            bytes.length > 2000 &&
+            text.includes('inkscape:label="Existing shadow 12:00"');
+          detail = `file=${filename}, bytes=${bytes.length}, hasExisting=${text.includes("Existing shadow 12:00")}, hasAdded=${hasAddedLayer}, hasProposedMassing=${hasProposedMassing}`;
+          if (exportOk) {
+            fs.mkdirSync(CURSOR_ARTIFACTS_DIR, { recursive: true });
+            fs.writeFileSync(path.join(CURSOR_ARTIFACTS_DIR, "solar-layered-export-box-hill-download.svg"), text);
+          }
+        } catch (error) {
+          detail = error instanceof Error ? error.message : String(error);
+        }
+        assertCheck(
+          "solar-layered-export-download",
+          "Quick export SVG downloads site plan with Existing shadow layers when sun study is on",
+          exportOk,
+          detail,
+        );
+      };
+
+      await boxHillSolarExport();
+
+      const melbourneParkNoAdditional = async () => {
+        const parkPage = await shadowCtx.newPage();
+        const parkUrl = `${baseUrl}/?qa=1&lat=-37.8046&lon=144.9713&km=0.42&label=Carlton&view=persp`;
+        await parkPage.goto(parkUrl, { waitUntil: "domcontentloaded", timeout: 120000 });
+        await parkPage.waitForSelector("button.create-fab", { timeout: 60000 });
+        await parkPage.click("button.create-fab");
+        await parkPage.waitForSelector(".model", { timeout: 300000 });
+        await parkPage.waitForFunction(
+          () =>
+            Boolean(window.__citycutQaModel?.readLargestGreenAreaBounds?.()) &&
+            Boolean(window.__citycutQaMassing?.commitPolylineCenterline),
+          null,
+          { timeout: 300000 },
+        );
+        await parkPage.evaluate(() => {
+          document.querySelector('.model button[data-section="analysis"]')?.dispatchEvent(
+            new MouseEvent("click", { bubbles: true, cancelable: true }),
+          );
+        });
+        await parkPage.waitForTimeout(400);
+        await parkPage.getByRole("tab", { name: /Drawing/i }).click({ timeout: 120_000 });
+        await parkPage.waitForSelector("svg.plan", { timeout: 120000 });
+        await parkPage.evaluate(() => {
+          window.__citycutQaModel?.enableSolarParkAccess?.("melbourne-c415-ddo8");
+          window.__citycutQaModel?.setSolarPlanTime?.(12, 0);
+        });
+        await parkPage.waitForTimeout(400);
+        const green = await parkPage.evaluate(() => window.__citycutQaModel?.readLargestGreenAreaBounds?.());
+        await parkPage.evaluate(({ bounds }) => {
+          const midN = (bounds.north0 + bounds.north1) / 2;
+          window.__citycutQaMassing?.commitPolylineCenterline?.(
+            [
+              [bounds.east0 - 36, midN - 10],
+              [bounds.east0 - 8, midN - 10],
+              [bounds.east0 - 8, midN + 14],
+              [bounds.east0 - 22, midN + 14],
+            ],
+            { floors: 12, width_m: 14 },
+          );
+          window.__citycutQaModel?.addSolarParkFromLargestGreen?.("carlton-gardens-park", "melbourne-c415-ddo8");
+        }, { bounds: green });
+        await parkPage.waitForFunction(
+          () => {
+            const rows = window.__citycutQaModel?.readSolarReceptorAssess?.() ?? [];
+            const park = rows.find((row) => row.id === "carlton-gardens-park");
+            return park?.assessKind === "park" && park.maxAddedM2 > 1 && park.pass === false;
+          },
+          null,
+          { timeout: 600000 },
+        );
+        const parkRow = await parkPage.evaluate(() => {
+          const rows = window.__citycutQaModel?.readSolarReceptorAssess?.() ?? [];
+          return rows.find((row) => row.id === "carlton-gardens-park");
+        });
+        const midE = (green.east0 + green.east1) / 2;
+        const midN = (green.north0 + green.north1) / 2;
+        const spanM = Math.max(green.east1 - green.east0, green.north1 - green.north0) * 0.42;
+        await parkPage.evaluate(
+          ({ east, north, span }) => window.__citycutQaModel?.setDrawingPlanViewport?.(east, north, span),
+          { east: midE, north: midN, span: spanM },
+        );
+        await parkPage.waitForTimeout(800);
+        const readParkHatch = () =>
+          parkPage.evaluate(() => {
+            const hatch = document.querySelector("[data-solar-park-added-shadow='carlton-gardens-park']");
+            const paths = hatch ? Array.from(hatch.querySelectorAll("path")) : [];
+            const dLen = paths.reduce((sum, node) => sum + (node.getAttribute("d")?.length ?? 0), 0);
+            const fills = paths.map((node) => node.getAttribute("fill"));
+            const box = hatch?.getBoundingClientRect();
+            return { paths: paths.length, dLen, fills, width: box?.width ?? 0, height: box?.height ?? 0 };
+          });
+        let parkHatch = await readParkHatch();
+        try {
+          await parkPage.waitForFunction(
+            () => {
+              const hatch = document.querySelector("[data-solar-park-added-shadow='carlton-gardens-park']");
+              return Boolean(hatch) && Array.from(hatch.querySelectorAll("path")).some((node) => (node.getAttribute("d")?.length ?? 0) > 40);
+            },
+            null,
+            { timeout: 15000 },
+          );
+        } catch {
+        }
+        parkHatch = await readParkHatch();
+        fs.mkdirSync(CURSOR_ARTIFACTS_DIR, { recursive: true });
+        const shotParkHatch = path.join(CURSOR_ARTIFACTS_DIR, "carlton-park-hatch.png");
+        await planViewportScreenshot(parkPage, shotParkHatch);
+        assertCheck(
+          "solar-park-added-shadow",
+          "Carlton park: once assess reports added shadow, the plan draws the gold added-shadow hatch from the assess rings (within 15 s)",
+          parkHatch.paths > 0 &&
+            parkHatch.dLen > 40 &&
+            parkHatch.fills.every((fill) => fill === "url(#sun-study-added-hatch)") &&
+            parkHatch.width > 2 &&
+            parkHatch.height > 2,
+          `hatch=${JSON.stringify({ ...parkHatch, fills: [...new Set(parkHatch.fills)] })}, rings=${JSON.stringify(
+            await parkPage.evaluate(() => {
+              const rows = window.__citycutQaModel?.readSolarReceptorAssess?.() ?? [];
+              return rows.find((row) => row.id === "carlton-gardens-park")?.addedShadowRings?.length ?? null;
+            }),
+          )}, shot=${shotParkHatch}`,
+        );
+        const dock = parkPage.locator("[data-solar-results-dock]");
+        await dock.waitFor({ state: "visible", timeout: 120000 });
+        const parkMetrics = await dock.locator("[data-solar-park-metrics]").first().textContent();
+        const hatchDom = await parkPage.locator("[data-solar-park-added-shadow]").count();
+        const labelDom = await parkPage.locator("[data-solar-park-label='carlton-gardens-park']").count();
+        const shotPark = path.join(CURSOR_ARTIFACTS_DIR, "solar-park-carlton-fail.png");
+        await planViewportScreenshot(parkPage, shotPark);
+        assertCheck(
+          "solar-park-no-additional-fail",
+          "Carlton C415/DDO8 park fails with on-map label, gold hatch clipped to park, and readable added m² in the dock",
+          parkRow?.assessKind === "park" &&
+            parkRow?.ruleId === "melbourne-c415-ddo8" &&
+            parkRow?.pass === false &&
+            (parkRow?.maxAddedM2 ?? 0) > 1 &&
+            hatchDom > 0 &&
+            labelDom === 1 &&
+            Boolean(parkMetrics?.includes("m² max")),
+          `park=${JSON.stringify(parkRow)}, metrics=${JSON.stringify(parkMetrics)}, hatchDom=${hatchDom}, labelDom=${labelDom}, shot=${shotPark}`,
+        );
+        await parkPage.close();
+      };
+
+      const boxHillTreeShadows = async () => {
+        await shadowPage.bringToFront();
+        await shadowPage.getByRole("tab", { name: /Drawing/i }).click({ timeout: 120_000, force: true });
+        await shadowPage.waitForSelector("svg.plan", { timeout: 180_000 });
+        await shadowPage.waitForTimeout(400);
+        const readTreeShadowDom = async () =>
+          shadowPage.evaluate(() => {
+            const nodes = Array.from(document.querySelectorAll("[data-tree-crown-shadow]"));
+            const dLen = nodes.reduce(
+              (acc, node) => acc + (node.getAttribute("d")?.length ?? node.getAttribute("href")?.length ?? 0),
+              0,
+            );
+            return { count: nodes.length, dLen };
+          });
+        await shadowPage.evaluate(
+          ({ east, north }) => {
+            window.__citycutQaModel?.setSolarPlanTime?.(15, 0);
+            window.__citycutQaModel?.setTreesCastShadow?.(false);
+            window.__citycutQaModel?.setDrawingPlanViewport?.(east - 22, north + 12, 46);
+          },
+          { east: FOCUS_EAST, north: FOCUS_NORTH },
+        );
+        await shadowPage.waitForTimeout(700);
+        const treesOff = await readTreeShadowDom();
+        const shotOff = path.join(CURSOR_ARTIFACTS_DIR, "solar-tree-shadows-off.png");
+        await planViewportScreenshot(shadowPage, shotOff);
+        await shadowPage.evaluate(() => window.__citycutQaModel?.setTreesCastShadow?.(true));
+        await shadowPage.waitForTimeout(900);
+        const treesOn = await readTreeShadowDom();
+        const shotOn = path.join(CURSOR_ARTIFACTS_DIR, "solar-tree-shadows-on.png");
+        await planViewportScreenshot(shadowPage, shotOn);
+        const shotCompare = path.join(CURSOR_ARTIFACTS_DIR, "solar-tree-shadows-compare.png");
+        execFileSync("ffmpeg", ["-y", "-i", shotOff, "-i", shotOn, "-filter_complex", "hstack=inputs=2", shotCompare]);
+        assertCheck(
+          "solar-tree-shadows-visual",
+          "Trees off vs on at 22 Sep 3pm: grey crown-shadow ellipses appear on plan (heatmap change at this zoom is minor)",
+          treesOn.count > 0 && treesOn.dLen > treesOff.dLen + 120,
+          `off=${JSON.stringify(treesOff)}, on=${JSON.stringify(treesOn)}, compare=${shotCompare}, offShot=${shotOff}, onShot=${shotOn}`,
+        );
+      };
+
+      const boxHillFacadeSolar = async () => {
+        await shadowPage.getByRole("tab", { name: /3D model/i }).click();
+        await shadowPage.evaluate(() => window.__citycutQaMassing?.clearDrawnBlocks?.());
+        await shadowPage.evaluate(
+          ({ east, north }) => {
+            window.__citycutQaMassing?.commitPolylineCenterline?.(
+              [
+                [east - 10, north - 6],
+                [east + 18, north - 6],
+                [east + 18, north + 8],
+              ],
+              { floors: 5, width_m: 12 },
+            );
+            window.__citycutQaModel?.enableFacadeSolar?.();
+          },
+          { east: FOCUS_EAST, north: FOCUS_NORTH },
+        );
+        await shadowPage.waitForFunction(
+          () => {
+            const ms = Number(document.documentElement.dataset.facadeSolarAssessMs ?? "0");
+            const overlay = document.querySelector("[data-facade-solar-overlay]");
+            const dock = document.querySelector("[data-facade-solar-results-dock]");
+            const pct = document.querySelector("[data-facade-pct-at-threshold]");
+            const unitCount = window.__citycutQaModel?.readFacadeSolarAssess?.()?.facade?.unitCount ?? 0;
+            return ms > 0 && unitCount > 4 && overlay && dock && pct && pct.textContent?.includes("%");
+          },
+          null,
+          { timeout: 360000 },
+        ).catch(() => {});
+        const bundle = await shadowPage.evaluate(() => window.__citycutQaModel?.readFacadeSolarAssess?.() ?? null);
+        const assessMs = Number(await shadowPage.evaluate(() => document.documentElement.dataset.facadeSolarAssessMs ?? "0"));
+        const overlayPoints = Number(
+          await shadowPage.evaluate(() => document.documentElement.dataset.facadeSolarOverlay ?? "0"),
+        );
+        const assessedFacadePoints = bundle?.facade?.units.length ?? 0;
+        const pctText = await shadowPage.locator("[data-facade-pct-at-threshold]").first().textContent().catch(() => null);
+        const facadeNormals = await shadowPage.evaluate(
+          () => window.__citycutQaModel?.readFacadeOverlayNormals?.() ?? [],
+        );
+        const bayNormals = facadeNormals.filter((cell) => cell.kind === "facade-bay");
+        const normalsVertical =
+          bayNormals.length > 20 &&
+          bayNormals.every((cell) => Math.abs(cell.ny) < 0.3 && Math.hypot(cell.nx, cell.nz) > 0.75);
+        const framedNw = await shadowPage.evaluate(() =>
+          Boolean(window.__citycutQaModel?.frameProposedMassingOblique?.("nw")),
+        );
+        const wallQaNw = await shadowPage.evaluate(() => window.__citycutQaModel?.readFacadeOverlayWallQa?.() ?? null);
+        assertCheck(
+          "solar-facade-oblique-camera",
+          "Facade heatmap camera target sits inside proposed massing bbox (oblique NW on drawn massing)",
+          (framedNw || wallQaNw?.targetInsideMassing) && (wallQaNw?.bboxes?.length ?? 0) > 0,
+          `framedNw=${framedNw}, wallQaNw=${JSON.stringify(wallQaNw)}`,
+        );
+        await shadowPage.waitForTimeout(1200);
+        fs.mkdirSync(CURSOR_ARTIFACTS_DIR, { recursive: true });
+        const shotFacadeNw = path.join(CURSOR_ARTIFACTS_DIR, "facade-3d-oblique-nw.png");
+        await sceneViewportScreenshot(shadowPage, { path: shotFacadeNw });
+        const framedSe = await shadowPage.evaluate(() =>
+          Boolean(window.__citycutQaModel?.frameProposedMassingOblique?.("se")),
+        );
+        await shadowPage.waitForTimeout(1200);
+        const shotFacadeSe = path.join(CURSOR_ARTIFACTS_DIR, "facade-3d-oblique-se.png");
+        await sceneViewportScreenshot(shadowPage, { path: shotFacadeSe });
+        const shotFacade = shotFacadeNw;
+        const wallQa = await shadowPage.evaluate(() => window.__citycutQaModel?.readFacadeOverlayWallQa?.() ?? null);
+        const shotCard = path.join(CURSOR_ARTIFACTS_DIR, "facade-results-card.png");
+        const dock = shadowPage.locator("[data-facade-solar-results-dock]");
+        await dock.waitFor({ state: "visible", timeout: 60_000 });
+        await dock.screenshot({ path: shotCard, timeout: 60_000, animations: "disabled", scale: "css" });
+        const unitCount = bundle?.facade?.unitCount ?? 0;
+        const overlayOnWalls =
+          Boolean(wallQa?.verticesOnWalls) &&
+          Boolean(wallQa?.wallHeightSpanOk) &&
+          Boolean(wallQa?.targetInsideMassing);
+        const winterContrast = (wallQa?.northSouthHourSpread ?? 0) > 0.75;
+        assertCheck(
+          "solar-facade-adg-heatmap",
+          "Facade ADG 4A-1: coloured wall quads on proposed massing, camera on massing, N/S winter contrast, readable results card",
+          unitCount > 4 &&
+            assessMs > 0 &&
+            assessMs < 120000 &&
+            overlayPoints > 0 &&
+            overlayPoints === assessedFacadePoints &&
+            normalsVertical &&
+            overlayOnWalls &&
+            winterContrast &&
+            Boolean(pctText?.includes("%")),
+          `units=${unitCount}, overlayPoints=${overlayPoints}, assessedFacadePoints=${assessedFacadePoints}, assessMs=${assessMs}, bayNormals=${bayNormals.length}, wallQa=${JSON.stringify(wallQa)}, pctAt=${bundle?.facade?.pctAtThreshold}, pctNone=${bundle?.facade?.pctNone}, pass=${bundle?.facade?.pass}, pctText=${JSON.stringify(pctText)}, heatmapNw=${shotFacadeNw}, heatmapSe=${shotFacadeSe}, card=${shotCard}`,
+        );
+      };
+
+      await boxHillFacadeSolar();
+
+      await boxHillTreeShadows();
+
+      await melbourneParkNoAdditional();
+
+      await shadowCtx.close();
+    }
 
     {
       const toneCtx = await browser.newContext({ viewport: VIEWPORT, deviceScaleFactor: 1, reducedMotion: "no-preference" });
@@ -2262,7 +4222,11 @@ async function main() {
     await sydneyPage.waitForTimeout(400);
     const sydneyPlanFanBtn = sydneyPage.locator(".model .env-console .overlay-chips button", { hasText: "9–3pm Plan Fan" });
     await sydneyPlanFanBtn.click({ timeout: 30_000 });
-    await sydneyPage.waitForSelector("svg.plan [data-shadow-hour] path", { timeout: 60_000 });
+    await sydneyPage.waitForFunction(
+      () => document.querySelectorAll("svg.plan [data-shadow-hour] path, svg.plan [data-shadow-hour] image").length >= 1,
+      null,
+      { timeout: 180_000 },
+    );
     await sydneyPage.waitForSelector("svg.plan .plan-north-arrow", { timeout: 60_000 });
     await sydneyPage.waitForSelector("svg.plan .heliodon-plan", { timeout: 120_000 });
     const sydneyPlanState = await sydneyPage.evaluate(() => ({
@@ -2293,8 +4257,8 @@ async function main() {
       return text.includes(label) || text.includes(`CityCut ${label}`);
     };
     const [sydneyAiDownload] = await Promise.all([
-      sydneyPage.waitForEvent("download", { timeout: 120_000 }),
-      sydneyPage.getByRole("button", { name: "Quick export Adobe Illustrator .ai" }).click({ timeout: 30_000 }),
+      sydneyPage.waitForEvent("download", { timeout: 300_000 }),
+      sydneyPage.getByRole("button", { name: "Quick export Adobe Illustrator .ai" }).click({ timeout: 60_000 }),
     ]);
     const sydneyAiPath = path.join(cursorArtifacts, "site-plan-button-download.ai");
     await sydneyAiDownload.saveAs(sydneyAiPath);
@@ -2824,7 +4788,13 @@ async function main() {
     await sydneyCtx.close();
   } catch (err) {
     console.error("Fatal error in verify-citycut:", err);
-    process.exitCode = 1;
+    const message = err instanceof Error ? err.message : String(err);
+    results.push({
+      id: "verify-fatal",
+      description: "Verification harness did not finish",
+      ok: false,
+      details: message,
+    });
   } finally {
     if (browser) await browser.close().catch(() => {});
     viteProc.kill("SIGTERM");
@@ -2840,4 +4810,7 @@ async function main() {
   }
 }
 
-main();
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
+import { safeMergeGeometries } from "./safeMergeGeometries";
 import { getColour } from "./colours";
 import { drawingSheetColor } from "./drawingSheet";
 import { SURFACE } from "./surfaceLayers";
@@ -46,11 +46,8 @@ function edgesForMesh(mesh: THREE.Mesh): THREE.BufferGeometry | null {
 function mergeEdgeGeometries(parts: THREE.BufferGeometry[]): THREE.BufferGeometry | null {
   if (parts.length === 0) return null;
   if (parts.length === 1) return parts[0];
-  const merged = mergeGeometries(parts, false);
-  if (merged) {
-    for (const part of parts) part.dispose();
-    return merged;
-  }
+  const merged = safeMergeGeometries(parts, false);
+  if (merged) return merged;
   let count = 0;
   for (const part of parts) count += part.getAttribute("position").count;
   const array = new Float32Array(count * 3);

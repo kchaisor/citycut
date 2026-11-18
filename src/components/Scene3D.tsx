@@ -8,6 +8,7 @@ import {
   useRef,
   useState,
   type MutableRefObject,
+  type ReactNode,
   type RefObject,
 } from "react";
 import * as THREE from "three";
@@ -84,7 +85,6 @@ import {
   applyPrimaryViewportTint,
   snapshotPrimaryViewportColors,
   applyCanvasRoadTint,
-  primaryViewportLighting,
 } from "../lib/primaryViewport";
 import { applyWhiteCardGroundTint, snapshotWhiteCardTerrainColors } from "../lib/whiteCardViewport";
 import { studioNorthNeedleDeg } from "../lib/studioCompass";
@@ -99,8 +99,11 @@ import {
   perspectiveClipFar,
 } from "../lib/perspectiveViewportFit";
 import { heliodonRadiusM } from "../lib/heliodonRadius";
-import { sunStudyViewportLighting } from "../lib/sunStudyViewport";
+import { studioSceneLighting } from "../lib/sunStudyViewport";
+import { applySolarGreyscale } from "../lib/solarGreyscale";
 import { SunHoursLayer } from "./SunHoursLayer";
+import type { SunHoursDirectOverlay } from "../lib/sunHoursDirectAssess";
+import type { SunHoursGroundGrid } from "../lib/sunHoursGroundPlan";
 import { SectionKnifeScene } from "./SectionKnifeScene";
 import { selectedKnife, type SectionKnifeToolState } from "../lib/sectionKnife/state";
 import type { SectionKnifePose } from "../lib/sectionKnife/plane";
@@ -109,9 +112,11 @@ import {
   type SectionKnifeGizmoInteraction,
 } from "../lib/sectionKnife/gizmoHit";
 import type { WalkRippleBuildingTint } from "../lib/walkRippleBuildingTint";
-
-const SUN_HOURS_HEATMAP_ENABLED = false;
 import { SolarHeliodon, SolarLight, useMelbourneSunSample, type SolarViewSettings } from "./SolarHeliodon";
+import { DrawnMassingBlocksVisual } from "./DrawnMassingBlocksVisual";
+import { FacadeSolarPointsLayer } from "./FacadeSolarPointsLayer";
+import type { MassingBlock } from "../lib/massingBlock";
+import type { FacadeAssessBundle } from "../lib/facadeSolarTypes";
 import { GroundWindFlow } from "./GroundWindFlow";
 import { InspectHudProjector, type InspectHudScreen } from "./InspectHudProjector";
 import { analyzeWindPeriod, type WindPeriodId, type WindRoseTable } from "../lib/windRose";
@@ -503,7 +508,10 @@ function City({
   colourBySource,
   highlightManual,
   solarDiagramOn,
+  directSunHoursOn,
   solarNeutralFill,
+  solarGreyscale,
+  solarShadowsActive,
   heightEditBuildingId,
   selectedBuildingIds,
   display,
@@ -524,7 +532,10 @@ function City({
   colourBySource: boolean;
   highlightManual: boolean;
   solarDiagramOn: boolean;
+  directSunHoursOn: boolean;
   solarNeutralFill: string;
+  solarGreyscale: boolean;
+  solarShadowsActive: boolean;
   heightEditBuildingId: number | null;
   selectedBuildingIds?: readonly number[];
   display: View3dDisplaySettings;
@@ -574,7 +585,10 @@ function City({
       edges.name = "GroundEdge";
       city.add(edges);
     }
-    addBuildingEdges(city);
+    try {
+      addBuildingEdges(city);
+    } catch {
+    }
     if (introStagger) {
       const cutW = model.widthM ?? model.sideM;
       const cutH = model.heightM ?? model.sideM;
@@ -889,7 +903,7 @@ function City({
     snapshotPrimaryViewportColors(group, colourMode);
     snapshotWhiteCardTerrainColors(group);
     applySunStudySurfaceTint(group, false);
-    applyBuildingSolarNeutral(group, false, solarNeutralFill);
+    applyBuildingSolarNeutral(group, solarDiagramOn || directSunHoursOn, solarNeutralFill);
     applyPrimaryViewportTint(group, display.primaryView);
     if (display.primaryView) {
       applyWhiteCardGroundTint(group, false);
@@ -903,8 +917,21 @@ function City({
       applyCanvasRoadTint(group, "off");
       applyWhiteCardGroundTint(group, false);
     }
+    if (solarShadowsActive) applyCanvasRoadTint(group, "off");
+    applySolarGreyscale(group, solarGreyscale);
     invalidate();
-  }, [group, colourMode, solarDiagramOn, solarNeutralFill, colourTick, display.primaryView, invalidate]);
+  }, [
+    group,
+    colourMode,
+    solarDiagramOn,
+    directSunHoursOn,
+    solarNeutralFill,
+    solarGreyscale,
+    solarShadowsActive,
+    colourTick,
+    display.primaryView,
+    invalidate,
+  ]);
   const buildingsVisible = isLayer3dVisible(display, "buildings");
   const roadsVisible = isLayer3dVisible(display, "roads");
   const footpathsVisible = isLayer3dVisible(display, "footpaths");
@@ -1666,7 +1693,10 @@ function QaCameraBridgeRegister({
   const size = useThree((state) => state.size);
   const invalidate = useThree((state) => state.invalidate);
   useLayoutEffect(() => {
-    if (!qaModeFromSearch(window.location.search) || !active) {
+    const qaUi =
+      qaModeFromSearch(window.location.search) ||
+      Boolean((window as Window & { __citycutVerifyHarness?: boolean }).__citycutVerifyHarness);
+    if (!qaUi || !active) {
       registerQaCameraBridge(null);
       return;
     }
@@ -1867,6 +1897,7 @@ export function Cameras({
   gizmoOrbitLock = false,
   frameWidthM,
   frameHeightM,
+  orbitLocked = false,
 }: {
   side: number;
   lift: number;
@@ -1888,6 +1919,7 @@ export function Cameras({
   gizmoOrbitLock?: boolean;
   frameWidthM: number;
   frameHeightM: number;
+  orbitLocked?: boolean;
 }) {
   const perspRef = useRef<THREE.PerspectiveCamera>(null);
   const orthoRef = useRef<THREE.OrthographicCamera>(null);
@@ -2027,7 +2059,7 @@ export function Cameras({
             ref={perspControls}
             camera={persp}
             makeDefault={!orthoView}
-            enabled={!orthoView && !gizmoOrbitLock}
+            enabled={!orthoView && !gizmoOrbitLock && !orbitLocked}
             enableDamping
             dampingFactor={0.08}
             maxPolarAngle={Math.PI / 2.02}
@@ -2042,7 +2074,7 @@ export function Cameras({
             ref={orthoControls}
             camera={ortho}
             makeDefault={orthoView}
-            enabled={orthoView && !gizmoOrbitLock}
+            enabled={orthoView && !gizmoOrbitLock && !orbitLocked}
             enableDamping
             dampingFactor={0.08}
             enableRotate={iso && freeRotate}
@@ -2144,10 +2176,18 @@ export function Scene3D({
   walkRippleArrivals = null,
   walkRipplePlaying = false,
   onScenePoint = null,
+  massingToolLayer = null,
+  orbitLocked = false,
   sectionKnife = null,
   onSectionKnifePoseChange = undefined,
   onCompassNeedle = undefined,
   quality = "high",
+  facadeSolarBundle = null,
+  drawnMassingBlocksForFacade = null,
+  sunHoursGroundGrid = null,
+  sunHoursDirectOverlay = null,
+  sunHoursScaleMax = 0,
+  solarAnalysisActive = false,
 }: {
   model: CityModel;
   uniformBuildings: boolean;
@@ -2178,10 +2218,18 @@ export function Scene3D({
   walkRippleArrivals?: Map<number, number> | null;
   walkRipplePlaying?: boolean;
   onScenePoint?: ((east: number, north: number, up: number) => void) | null;
+  massingToolLayer?: ReactNode;
+  orbitLocked?: boolean;
   sectionKnife?: SectionKnifeToolState | null;
   onSectionKnifePoseChange?: (pose: SectionKnifePose) => void;
   onCompassNeedle?: (deg: number) => void;
   quality?: RenderQuality;
+  facadeSolarBundle?: FacadeAssessBundle | null;
+  drawnMassingBlocksForFacade?: readonly MassingBlock[] | null;
+  sunHoursGroundGrid?: SunHoursGroundGrid | null;
+  sunHoursDirectOverlay?: SunHoursDirectOverlay | null;
+  sunHoursScaleMax?: number;
+  solarAnalysisActive?: boolean;
 }) {
   const boundsRef = useRef<Aabb | null>(null);
   const onBounds = useCallback((bounds: Aabb) => {
@@ -2225,16 +2273,14 @@ export function Scene3D({
     setGlContextLost(false);
     setGlEpoch((value) => value + 1);
   }, []);
-  const viewportLight = sunStudyViewportLighting({
-    showPath: solar.showPath && !display.primaryView,
+  const { fillKeyLight, fillAmbient, fillHemi, sunIntensity, noToneMapping } = studioSceneLighting({
+    primaryView: display.primaryView,
+    showPath: solar.showPath,
     castShadows: solar.castShadows,
+    solarAnalysisActive,
+    sunAboveHorizon: sunSample.aboveHorizon,
   });
-  const primaryLight = primaryViewportLighting(display.primaryView);
-  const fillKeyLight = display.primaryView ? primaryLight.fillKeyLight : viewportLight.fillKeyLight;
-  const fillAmbient = display.primaryView ? primaryLight.fillAmbient : viewportLight.fillAmbient;
-  const fillHemi = display.primaryView ? primaryLight.fillHemi : viewportLight.fillHemi;
-  const { sunIntensity, noToneMapping: sunStudyNoToneMapping } = viewportLight;
-  const noToneMapping = sunStudyNoToneMapping || display.primaryView;
+  const solarShadowsActive = solarAnalysisActive && solar.castShadows && sunSample.aboveHorizon;
   const heliodonRadius = heliodonRadiusM(model.sideM, solar.radiusFactor);
   const shadowTargetY = groundY;
   const siteTopY = useMemo(() => {
@@ -2312,20 +2358,30 @@ export function Scene3D({
         targetY={shadowTargetY}
         topY={siteTopY}
       />
-      {SUN_HOURS_HEATMAP_ENABLED && solar.sunHours && (
-        <SunHoursLayer model={model} year={solar.year} month={solar.month} day={solar.day} groundY={groundY} />
-      )}
+      {solar.sunHours && sunHoursGroundGrid ? (
+        <SunHoursLayer
+          grid={sunHoursGroundGrid}
+          overlay={null}
+          scaleMaxHours={sunHoursScaleMax || sunHoursGroundGrid.maxSunHours}
+          model={model}
+          planView={projection === "plan"}
+          groundOnly
+        />
+      ) : null}
       <City
         model={model}
         uniformBuildings={uniformBuildings}
         colourBySource={colourBySource}
         highlightManual={showManualEdits && model.manualHeightEditCount !== undefined && model.manualHeightEditCount > 0}
         solarDiagramOn={solar.showPath}
+        directSunHoursOn={Boolean(solar.sunHours && sunHoursDirectOverlay)}
         solarNeutralFill={solarNeutralFill}
+        solarGreyscale={solarAnalysisActive}
+        solarShadowsActive={solarShadowsActive}
         onBounds={onBounds}
         onSceneInspectPick={onSceneInspectPick}
         onClearSceneInspect={onClearSceneInspect}
-        pickBuildings={model.layers.buildings && !onScenePoint}
+        pickBuildings={model.layers.buildings && !onScenePoint && !massingToolLayer}
         onScenePoint={onScenePoint}
         heightEditBuildingId={heightEditBuildingId}
         selectedBuildingIds={selectedBuildingIds}
@@ -2337,10 +2393,27 @@ export function Scene3D({
         walkRippleTint={walkRippleTint}
         walkRippleArrivals={walkRippleArrivals}
       />
+      {solar.sunHours && sunHoursGroundGrid && sunHoursDirectOverlay ? (
+        <SunHoursLayer
+          grid={sunHoursGroundGrid}
+          overlay={sunHoursDirectOverlay}
+          scaleMaxHours={sunHoursScaleMax || sunHoursGroundGrid.maxSunHours}
+          model={model}
+          planView={projection === "plan"}
+          surfacesOnly
+        />
+      ) : null}
       {importedMassing ? <primitive object={importedMassing} /> : null}
       {walkLayer ? <primitive object={walkLayer} /> : null}
       {walkRippleLayer ? <primitive object={walkRippleLayer} /> : null}
       {onScenePoint ? <ScenePointLayer onScenePoint={onScenePoint} /> : null}
+      {massingToolLayer}
+      {solar.facadeSolarAccess && drawnMassingBlocksForFacade && drawnMassingBlocksForFacade.length > 0 ? (
+        <DrawnMassingBlocksVisual model={model} blocks={drawnMassingBlocksForFacade} />
+      ) : null}
+      {solar.facadeSolarAccess && facadeSolarBundle ? (
+        <FacadeSolarPointsLayer bundle={facadeSolarBundle} />
+      ) : null}
       <SolarHeliodon
         lat={model.center.lat}
         lon={model.center.lon}
@@ -2382,7 +2455,7 @@ export function Scene3D({
         lon={model.center.lon}
         cameraMemory={cameraMemory}
         introEnabled
-        gizmoOrbitLock={sectionKnifeGizmoInteraction.orbitLock}
+        gizmoOrbitLock={sectionKnifeGizmoInteraction.orbitLock || orbitLocked}
       />
       </Canvas>
     </div>
