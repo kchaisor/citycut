@@ -86,3 +86,18 @@ describe("colour fallbacks", () => {
     }
   });
 });
+
+describe("plan wind comfort palette", () => {
+  it("uses the five Lawson colours sampled from Kelvin's reference", () => {
+    expect(getColour("--wind-plan-sitting").toLowerCase()).toBe("#bdf8da");
+    expect(getColour("--wind-plan-standing").toLowerCase()).toBe("#6adca0");
+    expect(getColour("--wind-plan-strolling").toLowerCase()).toBe("#f8d404");
+    expect(getColour("--wind-plan-walking").toLowerCase()).toBe("#faa902");
+    expect(getColour("--wind-plan-uncomfortable").toLowerCase()).toBe("#f44333");
+  });
+
+  it("keeps speed-map buildings white and comfort-map buildings light grey", () => {
+    expect(getColour("--wind-plan-building").toLowerCase()).toBe("#ffffff");
+    expect(getColour("--wind-plan-comfort-building").toLowerCase()).toBe("#c5c5c5");
+  });
+});

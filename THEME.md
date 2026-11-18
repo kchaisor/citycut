@@ -307,12 +307,17 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--wind-plan-speed-brisk` | `#b5e35c` | Plan Wind speed map: 2.8 m/s, green-yellow. |
 | `--wind-plan-speed-strong` | `#f3dc3c` | Plan Wind speed map: 3.5 m/s, yellow. |
 | `--wind-plan-speed-fast` | `#ec6a2e` | Plan Wind speed map: 4 m/s and above, orange-red (top of the Velocity legend). |
-| `--wind-plan-sitting` | `#dcebd8` | Plan wind comfort map (Plan view, Wind Rose, Comfort): Lawson sitting band, and its card swatch. |
-| `--wind-plan-standing` | `#9fcb94` | Plan wind comfort map: Lawson standing band. |
-| `--wind-plan-walking` | `#f1de97` | Plan wind comfort map: Lawson walking band (leisure and business walking merged). |
-| `--wind-plan-uncomfortable` | `#e8964f` | Plan wind comfort map: uncomfortable band. |
-| `--wind-plan-unsafe` | `#c2362b` | Plan wind comfort map: unsafe areas (also hatched and outlined, see `--wind-plan-unsafe-stroke`). |
-| `--wind-plan-building` | `#ffffff` | Plan wind maps: building footprints drawn over the wind diagram. |
+| `--wind-plan-sitting` | `#bdf8da` | Plan wind comfort map (Plan view, Wind Rose, Comfort): Lawson sitting band (4 m/s exceeded ≤ 5%), and its legend swatch. Sampled from Kelvin's Lawson reference, 19 Nov 2026. |
+| `--wind-plan-standing` | `#6adca0` | Plan wind comfort map: Lawson standing band (6 m/s). |
+| `--wind-plan-strolling` | `#f8d404` | Plan wind comfort map: Lawson strolling band (8 m/s). |
+| `--wind-plan-walking` | `#faa902` | Plan wind comfort map: Lawson walking band (10 m/s). |
+| `--wind-plan-uncomfortable` | `#f44333` | Plan wind comfort map: uncomfortable band. Unsafe has no fill of its own; unsafe patches keep their band colour and gain the hatch and outline (`--wind-plan-unsafe-stroke`). |
+| `--wind-plan-building` | `#ffffff` | Plan Wind speed map: building footprints drawn over the wind diagram. |
+| `--wind-plan-comfort-building` | `#c5c5c5` | Plan Comfort map: light-grey building footprints, inside and outside the site. |
+| `--wind-plan-basemap` | `#f3f3f3` | Plan Comfort map: muted grey ground inside the cut and outside the site clip. |
+| `--wind-plan-road` | `#e3e3e3` | Plan Comfort map: roads on the muted base map. |
+| `--wind-plan-water` | `#dfe7ed` | Plan Comfort map: soft grey-blue water on the muted base map. |
+| `--wind-plan-green` | `#e8ebe6` | Plan Comfort map: green space on the muted base map. |
 | `--wind-band-0` | `#9ec5e8` | Wind console swatch: 2–10 km/h. |
 | `--wind-band-1` | `#5b9bd5` | Wind console swatch: 10–20 km/h. |
 | `--wind-band-2` | `#2f6fd6` | Wind console swatch: 20–30 km/h. |

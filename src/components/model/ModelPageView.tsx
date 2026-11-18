@@ -1,7 +1,7 @@
 import { useLayoutEffect } from "react";
 import { ShortcutCheatsheet } from "../ShortcutCheatsheet";
 import { WindRosePanel } from "../WindRosePanel";
-import { WindPlanInfo, WindPlanVelocityLegend } from "../WindPlanCard";
+import { WindPlanComfortLegend, WindPlanInfo, WindPlanVelocityLegend } from "../WindPlanCard";
 import {
   placeWindPlanLegend,
   WIND_PLAN_HUD_EVENT,
@@ -35,7 +35,9 @@ export function ModelPageView({ vm }: { vm: ModelPageViewModel }) {
   useWindPlanCardTop(windPlan.active);
   const windCardOn = leftOpen === "analysis" && tab !== "satellite" && analysisKind === "wind" && siteWind != null;
   const speedHudOn = windCardOn && windPlan.active && windPlan.mode === "speed";
-  useWindPlanLegendPlacement(speedHudOn);
+  const comfortHudOn = windCardOn && windPlan.active && windPlan.mode === "comfort";
+  useWindPlanLegendPlacement(speedHudOn, ".model .wind-plan-velocity");
+  useWindPlanLegendPlacement(comfortHudOn, ".model .wind-plan-comfort");
 
   return (
     <div
@@ -74,6 +76,7 @@ export function ModelPageView({ vm }: { vm: ModelPageViewModel }) {
             <WindPlanVelocityLegend />
           </>
         ) : null}
+        {comfortHudOn ? <WindPlanComfortLegend /> : null}
         <ModelPageViewportFooter vm={vm} />
       </div>
       <ShortcutCheatsheet open={shortcutCheatsheetOpen} onClose={() => setShortcutCheatsheetOpen(false)} />
@@ -110,13 +113,13 @@ function rectOf(selector: string) {
   return r.width > 0 && r.height > 0 ? { left: r.left, top: r.top, right: r.right, bottom: r.bottom } : null;
 }
 
-function useWindPlanLegendPlacement(active: boolean) {
+function useWindPlanLegendPlacement(active: boolean, cardSelector: string) {
   useLayoutEffect(() => {
     if (!active || typeof document === "undefined") return;
     const root = document.documentElement;
-    const card = document.querySelector<HTMLElement>(".model .wind-plan-velocity");
-    const bar = card?.querySelector<HTMLElement>(".wind-plan-velocity-bar");
-    if (!card || !bar) return;
+    const card = document.querySelector<HTMLElement>(cardSelector);
+    const bar = card?.querySelector<HTMLElement>(".wind-plan-velocity-bar") ?? null;
+    if (!card) return;
     const watched = [".model .right-inspector", ".model .bottom-bar.env-console", ".model .studio-compass", ".model .left-tool-rail"];
     const sync = () => {
       const rail = rectOf(".model .left-tool-rail");
@@ -125,12 +128,12 @@ function useWindPlanLegendPlacement(active: boolean) {
         viewW: window.innerWidth,
         viewH: window.innerHeight,
         cardW: card.offsetWidth,
-        chromeH: card.offsetHeight - bar.offsetHeight,
+        chromeH: card.offsetHeight - (bar?.offsetHeight ?? 0),
         inset: WIND_PLAN_HUD_INSET_PX,
         gap: WIND_PLAN_HUD_GAP_PX,
         topLimit: rail ? rail.top : WIND_PLAN_HUD_INSET_PX,
-        barMax: WIND_PLAN_LEGEND_BAR_MAX_PX,
-        barMin: WIND_PLAN_LEGEND_BAR_MIN_PX,
+        barMax: bar ? WIND_PLAN_LEGEND_BAR_MAX_PX : 0,
+        barMin: bar ? WIND_PLAN_LEGEND_BAR_MIN_PX : 0,
         inspector: rectOf(".model .right-inspector"),
         floors,
       });
@@ -154,5 +157,5 @@ function useWindPlanLegendPlacement(active: boolean) {
       root.style.removeProperty("--wind-plan-legend-bar");
       window.dispatchEvent(new Event(WIND_PLAN_HUD_EVENT));
     };
-  }, [active]);
+  }, [active, cardSelector]);
 }

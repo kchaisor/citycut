@@ -8,7 +8,7 @@ import { getColour } from "../lib/colours";
 import { WindRoseSvgChart } from "./WindRoseSvgChart";
 import { WindRoseSpeedLegend } from "./WindRoseSpeedLegend";
 import { GroundWindSpeedLegend } from "./GroundWindSpeedLegend";
-import { WindPlanLegend, WindPlanRows } from "./WindPlanCard";
+import { WindPlanRows } from "./WindPlanCard";
 import type { WindPlanState } from "./useWindPlan";
 import { readableWindStationName } from "../lib/windStationNames";
 
@@ -47,7 +47,6 @@ export function WindRosePanel({
         />
         <p className="wind-rose-calm-caption">{calmCaption}</p>
         <p className="wind-rose-meta wind-rose-meta-source">{station} · Regional station wind</p>
-        <WindPlanLegend plan={plan} />
       </div>
     );
   }

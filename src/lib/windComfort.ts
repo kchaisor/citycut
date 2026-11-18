@@ -4,35 +4,49 @@ import type { WindRoseSeasonRecord } from "./windRoseData";
 // Lawson LDDC criteria as set out in City of London Corporation, "Wind Microclimate Guidelines for
 // Developments in the City of London" (2019): comfort uses the mean-hourly speed exceeded no more
 // than 5% of the time; safety flags more than 15 m/s for more than 0.022% of the year (about 2 hours).
+// Strolling is the 8 m/s leisure-walking band of the original LDDC criteria.
 export const LAWSON_EXCEEDANCE = 0.05;
 export const LAWSON_SITTING_MS = 4;
 export const LAWSON_STANDING_MS = 6;
+export const LAWSON_STROLLING_MS = 8;
 export const LAWSON_WALKING_MS = 10;
 export const LAWSON_UNSAFE_MS = 15;
 export const LAWSON_UNSAFE_EXCEEDANCE = 0.00022;
 
-export const COMFORT_THRESHOLDS_MS = [LAWSON_SITTING_MS, LAWSON_STANDING_MS, LAWSON_WALKING_MS, LAWSON_UNSAFE_MS] as const;
+export const COMFORT_THRESHOLDS_MS = [
+  LAWSON_SITTING_MS,
+  LAWSON_STANDING_MS,
+  LAWSON_STROLLING_MS,
+  LAWSON_WALKING_MS,
+  LAWSON_UNSAFE_MS,
+] as const;
 
-export const COMFORT_CLASSES = ["sitting", "standing", "walking", "uncomfortable", "unsafe"] as const;
+export const COMFORT_CLASSES = ["sitting", "standing", "strolling", "walking", "uncomfortable"] as const;
 export type ComfortClass = (typeof COMFORT_CLASSES)[number];
 
 export const COMFORT_CLASS_LABELS: Record<ComfortClass, string> = {
   sitting: "Sitting",
   standing: "Standing",
+  strolling: "Strolling",
   walking: "Walking",
   uncomfortable: "Uncomfortable",
-  unsafe: "Unsafe",
 };
 
-export type ComfortExceedance = { p4: number; p6: number; p10: number; p15: number };
+export type ComfortExceedance = { p4: number; p6: number; p8: number; p10: number; p15: number };
 
-export function lawsonClass({ p4, p6, p10, p15 }: ComfortExceedance): ComfortClass {
-  if (p15 > LAWSON_UNSAFE_EXCEEDANCE) return "unsafe";
+export function lawsonClass({ p4, p6, p8, p10 }: Pick<ComfortExceedance, "p4" | "p6" | "p8" | "p10">): ComfortClass {
   if (p4 <= LAWSON_EXCEEDANCE) return "sitting";
   if (p6 <= LAWSON_EXCEEDANCE) return "standing";
+  if (p8 <= LAWSON_EXCEEDANCE) return "strolling";
   if (p10 <= LAWSON_EXCEEDANCE) return "walking";
   return "uncomfortable";
 }
+
+export function isUnsafe({ p15 }: Pick<ComfortExceedance, "p15">): boolean {
+  return p15 > LAWSON_UNSAFE_EXCEEDANCE;
+}
+
+export type WeibullTail = { shape: number; scaleMs: number };
 
 export type WindSpeedBin = {
   sector: number;
@@ -40,6 +54,7 @@ export type WindSpeedBin = {
   hiMs: number;
   openTop: boolean;
   weight: number;
+  tail?: WeibullTail;
 };
 
 export type WindSeasonWeights = {
@@ -48,18 +63,54 @@ export type WindSeasonWeights = {
   bins: WindSpeedBin[];
 };
 
+// Least-squares Weibull fit per direction on ln(-ln P(U > edge)) against ln(edge), the usual
+// representation of a directional wind climate in comfort assessments (NEN 8100:2006). Only the
+// open top bin uses it, so the tail above the last edge follows the station's own distribution.
+export function fitSectorWeibull(freqs: readonly number[], edgesMs: readonly number[]): WeibullTail | null {
+  const total = freqs.reduce((sum, f) => sum + Math.max(0, f ?? 0), 0);
+  if (!(total > 0)) return null;
+  const xs: number[] = [];
+  const ys: number[] = [];
+  let above = 0;
+  for (let band = Math.min(freqs.length, edgesMs.length - 1) - 1; band >= 1; band--) {
+    above += Math.max(0, freqs[band] ?? 0);
+    const p = above / total;
+    if (!(p > 0 && p < 1) || !(edgesMs[band]! > 0)) continue;
+    xs.push(Math.log(edgesMs[band]!));
+    ys.push(Math.log(-Math.log(p)));
+  }
+  if (xs.length < 2) return null;
+  const mx = xs.reduce((a, b) => a + b, 0) / xs.length;
+  const my = ys.reduce((a, b) => a + b, 0) / ys.length;
+  let sxy = 0;
+  let sxx = 0;
+  for (let k = 0; k < xs.length; k++) {
+    sxy += (xs[k]! - mx) * (ys[k]! - my);
+    sxx += (xs[k]! - mx) ** 2;
+  }
+  const shape = sxx > 0 ? sxy / sxx : NaN;
+  if (!(shape > 0) || !Number.isFinite(shape)) return null;
+  return { shape, scaleMs: Math.exp(mx - my / shape) };
+}
+
 export function windSeasonWeights(record: WindRoseSeasonRecord, edgesMs: readonly number[]): WindSeasonWeights {
   const bins: WindSpeedBin[] = [];
   let total = Math.max(0, record.calmPct / 100);
   for (let sector = 0; sector < WIND_SECTOR_COUNT; sector++) {
     const freqs = record.sectors[sector] ?? [];
+    let tail: WeibullTail | null | undefined;
     for (let band = 0; band < freqs.length; band++) {
       const weight = freqs[band] ?? 0;
       if (!(weight > 0)) continue;
       const loMs = edgesMs[band]!;
       const openTop = band + 2 >= edgesMs.length;
       const hiMs = openTop ? loMs + (loMs - (edgesMs[band - 1] ?? 0)) : edgesMs[band + 1]!;
-      bins.push({ sector, loMs, hiMs, openTop, weight });
+      const bin: WindSpeedBin = { sector, loMs, hiMs, openTop, weight };
+      if (openTop) {
+        tail ??= fitSectorWeibull(freqs, edgesMs);
+        if (tail) bin.tail = tail;
+      }
+      bins.push(bin);
       total += weight;
     }
   }
@@ -69,10 +120,14 @@ export function windSeasonWeights(record: WindRoseSeasonRecord, edgesMs: readonl
 }
 
 // The TMYx top bin is open-ended. Inside a closed bin the speed is spread evenly; above the top
-// edge the tail falls off exponentially with a mean excess of one bin width (no invented gusts).
-export function binExceedance(bin: Pick<WindSpeedBin, "loMs" | "hiMs" | "openTop">, speedMs: number): number {
-  const { loMs, hiMs, openTop } = bin;
+// edge the tail follows the direction's fitted Weibull, or, when the bins are too sparse to fit,
+// falls off exponentially with a mean excess of one bin width.
+export function binExceedance(bin: Pick<WindSpeedBin, "loMs" | "hiMs" | "openTop" | "tail">, speedMs: number): number {
+  const { loMs, hiMs, openTop, tail } = bin;
   if (speedMs <= loMs) return 1;
+  if (openTop && tail) {
+    return Math.exp(Math.pow(loMs / tail.scaleMs, tail.shape) - Math.pow(speedMs / tail.scaleMs, tail.shape));
+  }
   if (openTop) return Math.exp(-(speedMs - loMs) / Math.max(1e-6, hiMs - loMs));
   if (speedMs >= hiMs) return 0;
   return (hiMs - speedMs) / (hiMs - loMs);
@@ -94,7 +149,7 @@ export function sectorReferenceSpeedMs(weights: WindSeasonWeights, sector: numbe
 }
 
 export function exceedanceAt(weights: WindSeasonWeights, ratioOf: (sector: number) => number): ComfortExceedance {
-  const out = [0, 0, 0, 0];
+  const out = COMFORT_THRESHOLDS_MS.map(() => 0);
   for (const bin of weights.bins) {
     const ratio = ratioOf(bin.sector);
     if (!(ratio > 0)) continue;
@@ -102,7 +157,7 @@ export function exceedanceAt(weights: WindSeasonWeights, ratioOf: (sector: numbe
       out[t]! += bin.weight * binExceedance(bin, COMFORT_THRESHOLDS_MS[t]! / ratio);
     }
   }
-  return { p4: out[0]!, p6: out[1]!, p10: out[2]!, p15: out[3]! };
+  return { p4: out[0]!, p6: out[1]!, p8: out[2]!, p10: out[3]!, p15: out[4]! };
 }
 
 export type ComfortFields = {
@@ -110,13 +165,22 @@ export type ComfortFields = {
   rows: number;
   p4: Float32Array;
   p6: Float32Array;
+  p8: Float32Array;
   p10: Float32Array;
   p15: Float32Array;
 };
 
 export function emptyComfortFields(cols: number, rows: number): ComfortFields {
   const n = cols * rows;
-  return { cols, rows, p4: new Float32Array(n), p6: new Float32Array(n), p10: new Float32Array(n), p15: new Float32Array(n) };
+  return {
+    cols,
+    rows,
+    p4: new Float32Array(n),
+    p6: new Float32Array(n),
+    p8: new Float32Array(n),
+    p10: new Float32Array(n),
+    p15: new Float32Array(n),
+  };
 }
 
 export function accumulateSectorExceedance(
@@ -130,7 +194,7 @@ export function accumulateSectorExceedance(
 ): void {
   const bins = weights.bins.filter((bin) => bin.sector === sector);
   if (bins.length === 0) return;
-  const targets = [fields.p4, fields.p6, fields.p10, fields.p15];
+  const targets = [fields.p4, fields.p6, fields.p8, fields.p10, fields.p15];
   for (let idx = from; idx < to; idx++) {
     const r = ratio[idx]! * scale;
     if (!(r > 0)) continue;
@@ -144,14 +208,14 @@ export function accumulateSectorExceedance(
 }
 
 export function comfortClassAt(fields: ComfortFields, idx: number): ComfortClass {
-  return lawsonClass({ p4: fields.p4[idx]!, p6: fields.p6[idx]!, p10: fields.p10[idx]!, p15: fields.p15[idx]! });
+  return lawsonClass({ p4: fields.p4[idx]!, p6: fields.p6[idx]!, p8: fields.p8[idx]!, p10: fields.p10[idx]! });
 }
 
 export function unsafeMask(fields: ComfortFields, solid?: Uint8Array): Uint8Array {
   const mask = new Uint8Array(fields.cols * fields.rows);
   for (let idx = 0; idx < mask.length; idx++) {
     if (solid?.[idx]) continue;
-    mask[idx] = fields.p15[idx]! > LAWSON_UNSAFE_EXCEEDANCE ? 1 : 0;
+    mask[idx] = isUnsafe({ p15: fields.p15[idx]! }) ? 1 : 0;
   }
   return mask;
 }
