@@ -15,7 +15,7 @@ import {
 } from "../lib/windPlanField";
 import { windPlanComfortBands, windPlanSpeedContours, type WorldRing } from "../lib/windPlanContours";
 import { windPlanLineStyle, type WindPlanLineStyle, type WindPlanPen } from "../lib/windPlanStyle";
-import { placeWindArrow, type ScreenRect, type WindArrowLayout } from "../lib/windPlanArrow";
+import { placeWindArrow, windPlanArrowLabel, type ScreenRect, type WindArrowLayout } from "../lib/windPlanArrow";
 import type { WindPlanState } from "./useWindPlan";
 
 export type WindPlanTransform = { ox: number; oy: number; exX: number; exY: number; enX: number; enY: number };
@@ -252,7 +252,7 @@ export function WindPlanOverlay({
   const buildings = useMemo(() => buildingShapes(model), [model]);
   const cut = useMemo(() => cutExtent(model), [model]);
   const { mode, speed, comfort, sector, scaleMaxMs } = plan;
-  const arrowLabel = sector != null ? `Wind ${sectorLabel(sector)}` : "";
+  const arrowLabel = sector != null ? windPlanArrowLabel(sectorLabel(sector)) : "";
 
   const draw = useCallback(() => {
     const host = hostRef.current;

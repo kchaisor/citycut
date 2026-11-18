@@ -18,6 +18,10 @@ export type WindArrowLayout = {
   clear: boolean;
 };
 
+export function windPlanArrowLabel(dir: string): string {
+  return dir ? `Wind from ${dir}` : "";
+}
+
 export function unit(v: ScreenVec): ScreenVec {
   const len = Math.hypot(v.x, v.y) || 1;
   return { x: v.x / len, y: v.y / len };

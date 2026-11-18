@@ -3,6 +3,8 @@ import {
   placeWindArrow,
   rectsOverlap,
   upwindMapEdge,
+  windArrowRelative,
+  windPlanArrowLabel,
   WIND_ARROW_CLEAR_PX,
   WIND_ARROW_EDGE_GAP_PX,
   WIND_ARROW_STEP_PX,
@@ -19,9 +21,42 @@ const corners = (r: ScreenRect, dx = 0, dy = 0): ScreenVec[] => [
   { x: r.x0 + dx, y: r.y0 + dy },
 ];
 const fromNorth = { x: 0, y: 1 };
+const fromSouth = { x: 0, y: -1 };
 const fromNorthEast = { x: -Math.SQRT1_2, y: Math.SQRT1_2 };
 const chip = { chipW: 70, chipH: 20 };
 const midX = (mapRect.x0 + mapRect.x1) / 2;
+
+const centreOf = (r: ScreenRect): ScreenVec => ({ x: (r.x0 + r.x1) / 2, y: (r.y0 + r.y1) / 2 });
+const dist = (a: ScreenVec, b: ScreenVec) => Math.hypot(a.x - b.x, a.y - b.y);
+
+describe("windPlanArrowLabel", () => {
+  it("reads 'Wind from' the selected direction", () => {
+    expect(windPlanArrowLabel("S")).toBe("Wind from S");
+    expect(windPlanArrowLabel("N")).toBe("Wind from N");
+    expect(windPlanArrowLabel("NE")).toBe("Wind from NE");
+    expect(windPlanArrowLabel("SSW")).toBe("Wind from SSW");
+  });
+
+  it("stays empty without a direction", () => {
+    expect(windPlanArrowLabel("")).toBe("");
+  });
+});
+
+describe("windArrowRelative", () => {
+  it.each([
+    ["north", fromNorth],
+    ["south", fromSouth],
+    ["north-east", fromNorthEast],
+  ])("puts the chip at the upwind tail of a %s wind, not at the head", (_, downwind) => {
+    const rel = windArrowRelative(downwind, 110, 20);
+    const c = centreOf(rel.chip);
+    expect(dist(c, rel.tail)).toBeLessThan(dist(c, rel.head));
+    const along = (c.x - rel.tail.x) * downwind.x + (c.y - rel.tail.y) * downwind.y;
+    expect(along).toBeLessThan(0);
+    const headAlong = (rel.head.x - rel.tail.x) * downwind.x + (rel.head.y - rel.tail.y) * downwind.y;
+    expect(headAlong).toBeGreaterThan(0);
+  });
+});
 
 describe("upwindMapEdge", () => {
   it("anchors a north wind at the middle of the map's top edge", () => {
@@ -150,5 +185,22 @@ describe("placeWindArrow", () => {
       panels: [{ x0: 0, y0: 0, x1: 1440, y1: 900 }],
     });
     expect(layout.clear).toBe(false);
+  });
+
+  it("keeps a long 'Wind from S' chip 24px clear of the bottom console and compass", () => {
+    const map = { x0: 320, y0: 40, x1: 1060, y1: 780 };
+    const hudConsole = { x0: 300, y0: 800, x1: 1080, y1: 886 };
+    const compass = { x0: 1330, y0: 790, x1: 1426, y1: 886 };
+    const panels = [hudConsole, compass];
+    const layout = placeWindArrow({ view, map: corners(map), downwind: fromSouth, chipW: 110, chipH: 20, panels });
+    expect(layout.clear).toBe(true);
+    expect(layout.head.y).toBeLessThan(layout.tail.y);
+    for (const p of panels) {
+      expect(rectsOverlap(layout.bounds, p, WIND_ARROW_CLEAR_PX)).toBe(false);
+      expect(rectsOverlap(layout.chip, p, WIND_ARROW_CLEAR_PX)).toBe(false);
+    }
+    const c = centreOf(layout.chip);
+    expect(dist(c, layout.tail)).toBeLessThan(dist(c, layout.head));
+    expect(c.y).toBeGreaterThan(layout.tail.y);
   });
 });
