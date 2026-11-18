@@ -255,6 +255,102 @@ input[type="range"]::-moz-range-thumb { width: 18px; height: 3px; border-radius:
 .sun-study-foot { display: flex; }
 .sun-study-time { font-size: 12px; }
 
+.sun-hours-direct-legend { display: grid; gap: 6px; margin: 6px 0 10px; font-size: 11px; }
+.sun-hours-direct-legend.is-compact {
+  margin: 0;
+  display: grid;
+  gap: 8px;
+  width: 216px;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  font-size: 11px;
+}
+.sun-hours-direct-legend-title { margin: 0; font-weight: 600; font-size: inherit; }
+.sun-hours-direct-legend-body { display: grid; grid-template-columns: auto 16px 3.2em; align-items: stretch; gap: 8px; }
+.sun-hours-direct-legend-unit { font-size: 10px; color: var(--muted-text); align-self: start; padding-top: 2px; }
+.sun-hours-direct-legend-bar { width: 16px; min-height: 120px; border-radius: 3px; border: 1px solid var(--sun-card-border); }
+.sun-hours-direct-legend.is-compact .sun-hours-direct-legend-scale {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+}
+.sun-hours-direct-legend.is-compact .sun-hours-direct-legend-bar {
+  width: 100%;
+  height: 8px;
+  min-height: 8px;
+  border-radius: 3px;
+}
+.sun-hours-direct-legend-ticks { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; justify-content: space-between; font-size: 10px; color: var(--muted-text); font-variant-numeric: tabular-nums; }
+.sun-hours-direct-legend.is-compact .sun-hours-direct-legend-ticks {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  align-items: baseline;
+  width: 100%;
+  min-height: 0;
+  min-width: 0;
+  font-size: 11px;
+  line-height: 1;
+  color: var(--muted-text);
+}
+.sun-hours-direct-legend.is-compact .sun-hours-direct-legend-ticks li:nth-child(1) {
+  justify-self: start;
+  text-align: left;
+}
+.sun-hours-direct-legend.is-compact .sun-hours-direct-legend-ticks li:nth-child(5) {
+  justify-self: end;
+  text-align: right;
+}
+.sun-hours-direct-legend.is-compact .sun-hours-direct-legend-ticks li:nth-child(2),
+.sun-hours-direct-legend.is-compact .sun-hours-direct-legend-ticks li:nth-child(3),
+.sun-hours-direct-legend.is-compact .sun-hours-direct-legend-ticks li:nth-child(4) {
+  justify-self: center;
+  text-align: center;
+}
+.sun-hours-direct-legend.is-compact .sun-hours-direct-legend-footnote {
+  margin: 0;
+  font-size: 10px;
+  line-height: 1.2;
+  white-space: nowrap;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--sun-hours-direct-dock-footnote);
+}
+.plan-solar-dock-stack {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: min(320px, calc(100% - 24px));
+  pointer-events: none;
+}
+.model:has(.bottom-bar.env-console) .plan-solar-dock-stack,
+.sun-hours-direct-dock-stack {
+  bottom: 212px;
+}
+.sun-hours-direct-dock-stack {
+  position: absolute;
+  left: 12px;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: min(320px, calc(100% - 24px));
+  pointer-events: none;
+}
+.plan-solar-legend-dock:has([data-sun-hours-direct-legend]) {
+  padding: 12px;
+  box-sizing: border-box;
+  width: fit-content;
+  max-width: min(240px, calc(100vw - 24px));
+  min-width: 0;
+}
+.plan-solar-legend-dock { padding: 10px 12px; pointer-events: none; }
+
 .sun-study-kicker { margin: 14px 0 6px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; line-height: normal; color: var(--sidebar-text); }
 .sun-study > .sun-study-kicker + * { margin-top: -10px; }
 .sun-study-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
@@ -4019,16 +4115,7 @@ body,
   flex: 1 !important;
   height: 18px !important;
   border-radius: 5px !important;
-  background: linear-gradient(
-    90deg,
-    rgb(20 20 19 / 7%) 0%,
-    rgb(20 20 19 / 7%) 10%,
-    rgb(255 245 0 / 22%) 18%,
-    rgb(255 215 80 / 32%) 50%,
-    rgb(255 245 0 / 22%) 82%,
-    rgb(20 20 19 / 7%) 90%,
-    rgb(20 20 19 / 7%) 100%
-  ) !important;
+  background: color-mix(in srgb, var(--ink) 7%, transparent) !important;
   position: relative !important;
   display: flex !important;
   align-items: center !important;
@@ -4036,10 +4123,22 @@ body,
   padding: 0 6px !important;
 }
 
+.model .bottom-bar.env-console .daylight-band {
+  position: absolute !important;
+  top: 0 !important;
+  bottom: 0 !important;
+  border-radius: 5px !important;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--accent) 22%, transparent) 0%,
+    color-mix(in srgb, var(--accent) 34%, transparent) 50%,
+    color-mix(in srgb, var(--accent) 22%, transparent) 100%
+  ) !important;
+  pointer-events: none !important;
+}
+
 .model .bottom-bar.env-console .rescode-window {
   position: absolute !important;
-  left: 22% !important;
-  width: 56% !important;
   top: 2px !important;
   bottom: 2px !important;
   border-left: 1.5px dashed rgb(20 20 19 / 30%) !important;
@@ -4049,15 +4148,16 @@ body,
 }
 
 .model .bottom-bar.env-console .scrubber-ticks {
-  position: relative !important;
+  position: absolute !important;
+  inset: 0 !important;
   z-index: 3 !important;
-  width: 100% !important;
-  display: flex !important;
-  align-items: center !important;
-  justify-content: space-between !important;
+  pointer-events: none !important;
 }
 
 .model .bottom-bar.env-console .scrubber-tick-btn {
+  position: absolute !important;
+  top: 50% !important;
+  pointer-events: auto !important;
   height: 16px !important;
   min-width: 18px !important;
   padding: 0 3px !important;
