@@ -85,7 +85,6 @@ import {
   applyPrimaryViewportTint,
   snapshotPrimaryViewportColors,
   applyCanvasRoadTint,
-  primaryViewportLighting,
 } from "../lib/primaryViewport";
 import { applyWhiteCardGroundTint, snapshotWhiteCardTerrainColors } from "../lib/whiteCardViewport";
 import { studioNorthNeedleDeg } from "../lib/studioCompass";
@@ -100,7 +99,8 @@ import {
   perspectiveClipFar,
 } from "../lib/perspectiveViewportFit";
 import { heliodonRadiusM } from "../lib/heliodonRadius";
-import { sunStudyViewportLighting } from "../lib/sunStudyViewport";
+import { studioSceneLighting } from "../lib/sunStudyViewport";
+import { applySolarGreyscale } from "../lib/solarGreyscale";
 import { SunHoursLayer } from "./SunHoursLayer";
 import type { SunHoursDirectOverlay } from "../lib/sunHoursDirectAssess";
 import type { SunHoursGroundGrid } from "../lib/sunHoursGroundPlan";
@@ -510,6 +510,8 @@ function City({
   solarDiagramOn,
   directSunHoursOn,
   solarNeutralFill,
+  solarGreyscale,
+  solarShadowsActive,
   heightEditBuildingId,
   selectedBuildingIds,
   display,
@@ -532,6 +534,8 @@ function City({
   solarDiagramOn: boolean;
   directSunHoursOn: boolean;
   solarNeutralFill: string;
+  solarGreyscale: boolean;
+  solarShadowsActive: boolean;
   heightEditBuildingId: number | null;
   selectedBuildingIds?: readonly number[];
   display: View3dDisplaySettings;
@@ -913,8 +917,21 @@ function City({
       applyCanvasRoadTint(group, "off");
       applyWhiteCardGroundTint(group, false);
     }
+    if (solarShadowsActive) applyCanvasRoadTint(group, "off");
+    applySolarGreyscale(group, solarGreyscale);
     invalidate();
-  }, [group, colourMode, solarDiagramOn, directSunHoursOn, solarNeutralFill, colourTick, display.primaryView, invalidate]);
+  }, [
+    group,
+    colourMode,
+    solarDiagramOn,
+    directSunHoursOn,
+    solarNeutralFill,
+    solarGreyscale,
+    solarShadowsActive,
+    colourTick,
+    display.primaryView,
+    invalidate,
+  ]);
   const buildingsVisible = isLayer3dVisible(display, "buildings");
   const roadsVisible = isLayer3dVisible(display, "roads");
   const footpathsVisible = isLayer3dVisible(display, "footpaths");
@@ -2170,6 +2187,7 @@ export function Scene3D({
   sunHoursGroundGrid = null,
   sunHoursDirectOverlay = null,
   sunHoursScaleMax = 0,
+  solarAnalysisActive = false,
 }: {
   model: CityModel;
   uniformBuildings: boolean;
@@ -2211,6 +2229,7 @@ export function Scene3D({
   sunHoursGroundGrid?: SunHoursGroundGrid | null;
   sunHoursDirectOverlay?: SunHoursDirectOverlay | null;
   sunHoursScaleMax?: number;
+  solarAnalysisActive?: boolean;
 }) {
   const boundsRef = useRef<Aabb | null>(null);
   const onBounds = useCallback((bounds: Aabb) => {
@@ -2254,16 +2273,14 @@ export function Scene3D({
     setGlContextLost(false);
     setGlEpoch((value) => value + 1);
   }, []);
-  const viewportLight = sunStudyViewportLighting({
-    showPath: solar.showPath && !display.primaryView,
+  const { fillKeyLight, fillAmbient, fillHemi, sunIntensity, noToneMapping } = studioSceneLighting({
+    primaryView: display.primaryView,
+    showPath: solar.showPath,
     castShadows: solar.castShadows,
+    solarAnalysisActive,
+    sunAboveHorizon: sunSample.aboveHorizon,
   });
-  const primaryLight = primaryViewportLighting(display.primaryView);
-  const fillKeyLight = display.primaryView ? primaryLight.fillKeyLight : viewportLight.fillKeyLight;
-  const fillAmbient = display.primaryView ? primaryLight.fillAmbient : viewportLight.fillAmbient;
-  const fillHemi = display.primaryView ? primaryLight.fillHemi : viewportLight.fillHemi;
-  const { sunIntensity, noToneMapping: sunStudyNoToneMapping } = viewportLight;
-  const noToneMapping = sunStudyNoToneMapping || display.primaryView;
+  const solarShadowsActive = solarAnalysisActive && solar.castShadows && sunSample.aboveHorizon;
   const heliodonRadius = heliodonRadiusM(model.sideM, solar.radiusFactor);
   const shadowTargetY = groundY;
   const siteTopY = useMemo(() => {
@@ -2359,6 +2376,8 @@ export function Scene3D({
         solarDiagramOn={solar.showPath}
         directSunHoursOn={Boolean(solar.sunHours && sunHoursDirectOverlay)}
         solarNeutralFill={solarNeutralFill}
+        solarGreyscale={solarAnalysisActive}
+        solarShadowsActive={solarShadowsActive}
         onBounds={onBounds}
         onSceneInspectPick={onSceneInspectPick}
         onClearSceneInspect={onClearSceneInspect}

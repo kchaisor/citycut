@@ -26,6 +26,7 @@ import { shouldShowIntroBridgePill } from "./shouldShowIntroBridgePill";
 
 export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").ModelPageViewModel }) {
   const {
+    analysisKind,
     axoSettings,
     cameraMemory,
     colourByUse,
@@ -190,6 +191,7 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
                 sunHoursGroundGrid={solar.sunHours ? sunHoursGround.grid : null}
                 sunHoursDirectOverlay={solar.sunHours ? sunHoursGround.overlay : null}
                 sunHoursScaleMax={solar.sunHours ? sunHoursGround.scaleMaxHours : 0}
+                solarAnalysisActive={analysisKind === "solar"}
               />
               <MassingToolHud
                 visible={

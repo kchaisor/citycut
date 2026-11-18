@@ -3,8 +3,8 @@ import { describe, expect, it } from "vitest";
 import { applyBuildingSolarNeutral } from "./buildingViewportColor";
 import { getColour } from "./colours";
 import { applySunStudySurfaceTint } from "./sunStudySurfaceViewport";
-import { sunStudyViewportLighting } from "./sunStudyViewport";
-import { applyPrimaryViewportTint } from "./primaryViewport";
+import { studioSceneLighting, sunStudyViewportLighting } from "./sunStudyViewport";
+import { applyPrimaryViewportTint, primaryViewportLighting } from "./primaryViewport";
 
 describe("sunStudyViewportLighting", () => {
   it("uses pure white for the solar neutral building fill token", () => {
@@ -64,5 +64,51 @@ describe("sunStudyViewportLighting", () => {
     expect(buildingMat.emissive.getHex()).toBe(0x000000);
     expect(buildingMat.emissiveIntensity).toBe(1);
     expect((rail.material as THREE.MeshStandardMaterial).color.getHexString()).toBe("888888");
+  });
+});
+
+describe("studioSceneLighting", () => {
+  const base = { primaryView: true, showPath: true, castShadows: true, solarAnalysisActive: true, sunAboveHorizon: true };
+  const shadowFill = (light: { fillAmbient: number; fillHemi: number; fillKeyLight: number }) =>
+    light.fillAmbient + light.fillHemi + light.fillKeyLight;
+
+  it("drops Primary studio fill under Solar Study shadows so the sun casts a dark shadow", () => {
+    const light = studioSceneLighting(base);
+    expect(light).toEqual({ fillKeyLight: 0, fillAmbient: 0.15, fillHemi: 0.45, sunIntensity: 5.5, noToneMapping: true });
+    const primary = primaryViewportLighting(true);
+    expect(shadowFill(light)).toBeLessThan(shadowFill(primary) / 3);
+    const lowWinterSun = Math.sin((20 * Math.PI) / 180);
+    const shadowed = shadowFill(light) / Math.PI;
+    const lit = shadowed + (light.sunIntensity * lowWinterSun) / Math.PI;
+    expect(shadowed).toBeLessThan(0.2);
+    expect(lit / shadowed).toBeGreaterThan(3);
+  });
+
+  it("restores Primary studio lighting when Solar Study is not the active analysis", () => {
+    const light = studioSceneLighting({ ...base, solarAnalysisActive: false });
+    expect(light).toEqual({ ...primaryViewportLighting(true), sunIntensity: 2.35, noToneMapping: true });
+  });
+
+  it("keeps Primary studio lighting under Solar Study while shadows are off", () => {
+    expect(studioSceneLighting({ ...base, castShadows: false })).toEqual({
+      ...primaryViewportLighting(true),
+      sunIntensity: 2.35,
+      noToneMapping: true,
+    });
+  });
+
+  it("uses the sun-study rig when Primary studio is off", () => {
+    expect(studioSceneLighting({ ...base, primaryView: false })).toEqual(
+      sunStudyViewportLighting({ showPath: true, castShadows: true }),
+    );
+  });
+
+  it("goes to night with no sun before sunrise or after sunset under Solar Study", () => {
+    for (const primaryView of [true, false]) {
+      const night = studioSceneLighting({ ...base, primaryView, sunAboveHorizon: false });
+      expect(night.sunIntensity).toBe(0);
+      expect(night.fillKeyLight).toBe(0);
+      expect(shadowFill(night)).toBeLessThan(shadowFill(primaryViewportLighting(true)) / 3);
+    }
   });
 });

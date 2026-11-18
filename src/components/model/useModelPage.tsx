@@ -170,11 +170,7 @@ import { useWindStreakMotion } from "../../lib/windStreakMotion";
 import type { SitePlanExportOptions } from "../../lib/aiPlan";
 import type { PlanShadowInput } from "../../lib/buildingShadows";
 import type { HeliodonDiagramExportOptions, HeliodonGroundExportOptions } from "../../lib/heliodonDiagram";
-import {
-  readStoredHeliodonRadiusFactor,
-  resolveHeliodonRadiusFactor,
-  writeStoredHeliodonRadiusFactor,
-} from "../../lib/heliodonRadius";
+import { writeStoredHeliodonRadiusFactor } from "../../lib/heliodonRadius";
 import type { SolarViewSettings } from "../SolarHeliodon";
 import {
   isLayer3dVisible,
@@ -188,6 +184,8 @@ import { readStoredRenderQuality, writeStoredRenderQuality, type RenderQuality }
 
 import { shouldShowIntroBridgePill } from "./shouldShowIntroBridgePill";
 import { loadView } from "./loadModelView";
+import { initialSolarSettings } from "./initialSolarSettings";
+import { SOLAR_SLIDER_END_MIN, SOLAR_SLIDER_START_MIN, clampSolarSliderMinutes } from "../../lib/solarSlider";
 import {
   SECTION_ICONS,
   iconProps,
@@ -373,20 +371,9 @@ export function useModelPage({
   const [windTable, setWindTable] = useState<WindRoseTable | null>(null);
   const [windNote, setWindNote] = useState<string | null>(null);
   const windMotion = useWindStreakMotion();
-  const [solar, setSolar] = useState<SolarViewSettings>(() => ({
-    showPath: capturePresetFromSearch(window.location.search).solarPath,
-    castShadows: false,
-    radiusFactor: resolveHeliodonRadiusFactor(
-      readStoredHeliodonRadiusFactor(window.localStorage),
-      window.location.search,
-    ),
-    year: 2026,
-    month: 9,
-    day: 22,
-    hour: 15,
-    minute: 0,
-    parkRuleId: defaultParkRuleId(),
-  }));
+  const [solar, setSolar] = useState<SolarViewSettings>(() =>
+    initialSolarSettings(window.location.search, window.localStorage),
+  );
 
   function commitSolar(next: SolarViewSettings) {
     writeStoredHeliodonRadiusFactor(window.localStorage, next.radiusFactor);
@@ -1508,14 +1495,12 @@ export function useModelPage({
     if (!consolePlaying) return;
     let raf = 0;
     let last = performance.now();
-    let minutesFloat = solar.hour * 60 + solar.minute;
-    const minM = consoleDaylight.sunrise;
-    const maxM = consoleDaylight.sunset;
+    let minutesFloat = clampSolarSliderMinutes(solar.hour * 60 + solar.minute);
     const step = (now: number) => {
       const dt = Math.min(0.1, (now - last) / 1000);
       last = now;
       minutesFloat += dt * 72;
-      if (minutesFloat > maxM) minutesFloat = minM;
+      if (minutesFloat > SOLAR_SLIDER_END_MIN) minutesFloat = SOLAR_SLIDER_START_MIN;
       const rounded = Math.round(minutesFloat);
       const hour = Math.floor(rounded / 60);
       const minute = rounded % 60;
@@ -1524,7 +1509,7 @@ export function useModelPage({
     };
     raf = requestAnimationFrame(step);
     return () => cancelAnimationFrame(raf);
-  }, [consolePlaying, consoleDaylight.sunrise, consoleDaylight.sunset]);
+  }, [consolePlaying]);
 
   function selectSection(id: string) {
     if (id === "solar" || id === "wind" || id === "view") setAnalysisKind(id);

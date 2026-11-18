@@ -4248,16 +4248,7 @@ body,
   flex: 1 !important;
   height: 18px !important;
   border-radius: 5px !important;
-  background: linear-gradient(
-    90deg,
-    rgb(20 20 19 / 7%) 0%,
-    rgb(20 20 19 / 7%) 10%,
-    rgb(255 245 0 / 22%) 18%,
-    rgb(255 215 80 / 32%) 50%,
-    rgb(255 245 0 / 22%) 82%,
-    rgb(20 20 19 / 7%) 90%,
-    rgb(20 20 19 / 7%) 100%
-  ) !important;
+  background: color-mix(in srgb, var(--ink) 7%, transparent) !important;
   position: relative !important;
   display: flex !important;
   align-items: center !important;
@@ -4265,10 +4256,22 @@ body,
   padding: 0 6px !important;
 }
 
+.model .bottom-bar.env-console .daylight-band {
+  position: absolute !important;
+  top: 0 !important;
+  bottom: 0 !important;
+  border-radius: 5px !important;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--accent) 22%, transparent) 0%,
+    color-mix(in srgb, var(--accent) 34%, transparent) 50%,
+    color-mix(in srgb, var(--accent) 22%, transparent) 100%
+  ) !important;
+  pointer-events: none !important;
+}
+
 .model .bottom-bar.env-console .rescode-window {
   position: absolute !important;
-  left: 22% !important;
-  width: 56% !important;
   top: 2px !important;
   bottom: 2px !important;
   border-left: 1.5px dashed rgb(20 20 19 / 30%) !important;
@@ -4278,15 +4281,16 @@ body,
 }
 
 .model .bottom-bar.env-console .scrubber-ticks {
-  position: relative !important;
+  position: absolute !important;
+  inset: 0 !important;
   z-index: 3 !important;
-  width: 100% !important;
-  display: flex !important;
-  align-items: center !important;
-  justify-content: space-between !important;
+  pointer-events: none !important;
 }
 
 .model .bottom-bar.env-console .scrubber-tick-btn {
+  position: absolute !important;
+  top: 50% !important;
+  pointer-events: auto !important;
   height: 16px !important;
   min-width: 18px !important;
   padding: 0 3px !important;
