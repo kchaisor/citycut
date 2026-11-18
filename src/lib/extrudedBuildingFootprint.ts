@@ -11,6 +11,7 @@ export type ExtrudedFootprint = {
   ring: Ring;
   holes: Ring[];
   height: number;
+  base?: number;
 };
 
 export type ExtrudedFootprintMaskPart = ExtrudedFootprint & {
@@ -49,7 +50,7 @@ function resolveExtrudedFootprints(building: BuildingFeat): ExtrudedFootprint[] 
     const geometry = extrudePart(part.ring, holes, part.height, 0);
     if (!geometry) continue;
     geometry.dispose();
-    footprints.push({ ring: part.ring, holes, height: part.height });
+    footprints.push({ ring: part.ring, holes, height: part.height, base: part.base });
   }
   return footprints;
 }

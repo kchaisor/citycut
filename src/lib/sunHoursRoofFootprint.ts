@@ -1,14 +1,18 @@
 import * as THREE from "three";
 import { planToWorld } from "./facadeSolarTypes";
-import { extrudedFootprintsForBuilding, extrudedBuildingsForModel } from "./extrudedBuildingFootprint";
+import {
+  extrudedFootprintsForBuilding,
+  extrudedBuildingsForModel,
+  type ExtrudedFootprint,
+} from "./extrudedBuildingFootprint";
 import { openRing } from "./geo";
 import { sunHoursDirectRgb } from "./sunHoursGround";
+import { SURFACE } from "./surfaceLayers";
 import { footprintBase } from "./terrain";
 import type { DirectSunHoursSample } from "./sunHoursDirectSample";
 import type { BuildingFeat, CityModel, Pt, Ring } from "../types";
 
-export const ROOF_OVERLAY_LIFT_M = 0.2;
-const BUILDING_SURFACE_LIFT_M = 0.05;
+export const ROOF_OVERLAY_CLEARANCE_M = 0.15;
 
 export function ringCentroid(ring: Ring): Pt {
   const open = openRing(ring);
@@ -22,10 +26,21 @@ export function ringCentroid(ring: Ring): Pt {
   return [sumE / open.length, sumN / open.length];
 }
 
-export function roofElevationYM(model: CityModel, building: BuildingFeat, heightM = building.height): number {
-  const baseYM =
-    (model.terrain ? footprintBase(model.terrain, building.ring, model.sideM) : 0) + BUILDING_SURFACE_LIFT_M;
-  return baseYM + heightM - 0.04;
+export function extrudedRoofTopYM(
+  model: CityModel,
+  building: BuildingFeat,
+  part: Pick<ExtrudedFootprint, "height" | "base"> = building,
+): number {
+  const groundYM = model.terrain ? footprintBase(model.terrain, building.ring, model.sideM) : 0;
+  return groundYM + SURFACE.building.lift + (part.base ?? 0) + part.height;
+}
+
+export function roofElevationYM(
+  model: CityModel,
+  building: BuildingFeat,
+  part: Pick<ExtrudedFootprint, "height" | "base"> = building,
+): number {
+  return extrudedRoofTopYM(model, building, part) + ROOF_OVERLAY_CLEARANCE_M;
 }
 
 function roofHoursNearPlanPoint(
@@ -75,11 +90,17 @@ function pushRoofTriangle(
     [c, hoursC],
   ];
   for (const [point, hour] of corners) {
-    const [x, y, z] = planToWorld(point[0], point[1], yWorld - ROOF_OVERLAY_LIFT_M);
+    const [x, y, z] = planToWorld(point[0], point[1], yWorld);
     const rgb = sunHoursDirectRgb(hour, maxSunHours);
-    roofPositions.push(x, y + ROOF_OVERLAY_LIFT_M, z);
+    roofPositions.push(x, y, z);
     roofColors.push(...rgb);
   }
+}
+
+function triangulateRoof(contour: THREE.Vector2[], holes: THREE.Vector2[][]) {
+  const faces = THREE.ShapeUtils.triangulateShape(contour, holes);
+  if (faces.length > 0 || holes.length === 0) return { faces, vertices: [...contour, ...holes.flat()] };
+  return { faces: THREE.ShapeUtils.triangulateShape(contour, []), vertices: contour };
 }
 
 export function appendBuildingRoofFootprint(
@@ -102,10 +123,9 @@ export function appendBuildingRoofFootprint(
       .map((hole) => openRing(hole))
       .filter((hole) => hole.length >= 3)
       .map((hole) => hole.map(([east, north]) => new THREE.Vector2(east, north)));
-    const faces = THREE.ShapeUtils.triangulateShape(contour, holeRings);
-    const vertices = [...contour, ...holeRings.flat()];
+    const { faces, vertices } = triangulateRoof(contour, holeRings);
     if (faces.length === 0) continue;
-    const yWorld = roofElevationYM(model, building, part.height);
+    const yWorld = roofElevationYM(model, building, part);
     for (const [ia, ib, ic] of faces) {
       const a = vertices[ia]!;
       const b = vertices[ib]!;
