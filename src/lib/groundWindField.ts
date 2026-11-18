@@ -11,14 +11,20 @@ export const GROUND_WIND_TREE_WEIGHT = 0.4;
 export const GROUND_WIND_DEFLECT_GAIN = 2.2;
 export const GROUND_WIND_WINDWARD_SLOW = 0.6;
 export const GROUND_WIND_LATERAL_REACH_M = 24;
-export const GROUND_WIND_SIDE_BOOST = 0.3;
+export const GROUND_WIND_SIDE_BOOST = 0.2;
 export const GROUND_WIND_CHANNEL_BOOST = 0.5;
+export const GROUND_WIND_CHANNEL_REACH_M = 40;
+export const GROUND_WIND_CORNER_BOOST = 0.7;
+export const GROUND_WIND_CORNER_MIN_M = 16;
+export const GROUND_WIND_CORNER_MAX_M = 48;
 export const GROUND_WIND_BUILDING_SHELTER_FLOOR = 0.14;
 export const GROUND_WIND_TREE_SHELTER_FLOOR = 0.8;
-export const GROUND_WIND_WAKE_HEIGHT_MULTIPLE = 3;
+export const GROUND_WIND_WAKE_HEIGHT_MULTIPLE = 4;
 export const GROUND_WIND_TREE_WAKE_HEIGHT_MULTIPLE = 1.5;
 export const GROUND_WIND_WAKE_MIN_M = 12;
-export const GROUND_WIND_WAKE_MAX_M = 90;
+export const GROUND_WIND_WAKE_MAX_M = 240;
+export const GROUND_WIND_WAKE_SPREAD = 0.12;
+export const GROUND_WIND_WAKE_SPREAD_MAX_M = 16;
 export const GROUND_WIND_SPEED_MIN = 0.12;
 export const GROUND_WIND_ROWS_PER_SLICE = 24;
 
@@ -224,6 +230,16 @@ function shelterField(obs: GroundWindObstacles, base: WindVector): Float32Array 
   const shelter = new Float32Array(cols * rows).fill(1);
   const stepE = base.east;
   const stepN = base.north;
+  const perpE = -stepN;
+  const perpN = stepE;
+  const spreadMaxCells = Math.round(GROUND_WIND_WAKE_SPREAD_MAX_M / cellM);
+  const shade = (x: number, y: number, factor: number): boolean => {
+    if (x < 0 || y < 0 || x >= cols || y >= rows) return false;
+    const idx = y * cols + x;
+    if (solid[idx]) return false;
+    if (factor < shelter[idx]!) shelter[idx] = factor;
+    return true;
+  };
   for (let j = 0; j < rows; j++) {
     for (let i = 0; i < cols; i++) {
       const idx = j * cols + i;
@@ -240,37 +256,160 @@ function shelterField(obs: GroundWindObstacles, base: WindVector): Float32Array 
       const wakeM = Math.min(GROUND_WIND_WAKE_MAX_M, Math.max(GROUND_WIND_WAKE_MIN_M, height * multiple));
       const steps = Math.ceil(wakeM / cellM);
       for (let s = 1; s <= steps; s++) {
-        const x = Math.round(i + stepE * s);
-        const y = Math.round(j + stepN * s);
-        if (x < 0 || y < 0 || x >= cols || y >= rows) break;
-        const wIdx = y * cols + x;
-        if (solid[wIdx]) break;
+        const cx = i + stepE * s;
+        const cy = j + stepN * s;
         const t = s / steps;
         const factor = floor + (1 - floor) * t * t;
-        if (factor < shelter[wIdx]!) shelter[wIdx] = factor;
+        if (!shade(Math.round(cx), Math.round(cy), factor)) break;
+        const spread = Math.min(spreadMaxCells, Math.floor(s * GROUND_WIND_WAKE_SPREAD));
+        for (let k = 1; k <= spread; k++) {
+          const edge = k / (spread + 1);
+          const side = factor + (1 - factor) * edge * edge;
+          shade(Math.round(cx + perpE * k), Math.round(cy + perpN * k), side);
+          shade(Math.round(cx - perpE * k), Math.round(cy - perpN * k), side);
+        }
       }
     }
   }
   return shelter;
 }
 
-function lateralClearM(obs: GroundWindObstacles, i: number, j: number, dirE: number, dirN: number, reachSteps: number): number {
-  const { cols, rows, cellM, solid } = obs;
+type SolidBlob = { members: Int32Array; tallest: number };
+
+const solidBlobs = new WeakMap<GroundWindObstacles, SolidBlob[]>();
+
+function blobsOf(obs: GroundWindObstacles): SolidBlob[] {
+  const cached = solidBlobs.get(obs);
+  if (cached) return cached;
+  const { cols, rows, solid, heights } = obs;
+  const seen = new Uint8Array(cols * rows);
+  const stack: number[] = [];
+  const blobs: SolidBlob[] = [];
+  for (let start = 0; start < solid.length; start++) {
+    if (!solid[start] || seen[start]) continue;
+    seen[start] = 1;
+    stack.push(start);
+    let tallest = 0;
+    const members: number[] = [];
+    while (stack.length > 0) {
+      const idx = stack.pop()!;
+      members.push(idx);
+      tallest = Math.max(tallest, heights[idx]!);
+      const i = idx % cols;
+      const j = (idx - i) / cols;
+      const visit = (n: number) => {
+        if (solid[n] && !seen[n]) {
+          seen[n] = 1;
+          stack.push(n);
+        }
+      };
+      if (i > 0) visit(idx - 1);
+      if (i + 1 < cols) visit(idx + 1);
+      if (j > 0) visit(idx - cols);
+      if (j + 1 < rows) visit(idx + cols);
+    }
+    blobs.push({ members: Int32Array.from(members), tallest });
+  }
+  solidBlobs.set(obs, blobs);
+  return blobs;
+}
+
+function cornerField(obs: GroundWindObstacles, base: WindVector): Float32Array {
+  const { cols, cellM } = obs;
+  const corner = new Float32Array(obs.cols * obs.rows);
+  const perpE = -base.north;
+  const perpN = base.east;
+  for (const { members, tallest } of blobsOf(obs)) {
+    let minC = Infinity;
+    let maxC = -Infinity;
+    for (const idx of members) {
+      const i = idx % cols;
+      const c = i * perpE + ((idx - i) / cols) * perpN;
+      if (c < minC) minC = c;
+      if (c > maxC) maxC = c;
+    }
+    const reachM = Math.min(GROUND_WIND_CORNER_MAX_M, Math.max(GROUND_WIND_CORNER_MIN_M, tallest));
+    for (const [edgeC, sign] of [
+      [minC, -1],
+      [maxC, 1],
+    ] as const) {
+      let best = -1;
+      let bestA = Infinity;
+      for (const idx of members) {
+        const i = idx % cols;
+        const j = (idx - i) / cols;
+        const offset = Math.abs(i * perpE + j * perpN - edgeC);
+        if (offset > 1) continue;
+        const a = i * base.east + j * base.north + offset;
+        if (a < bestA) {
+          bestA = a;
+          best = idx;
+        }
+      }
+      if (best >= 0) stampCorner(obs, corner, best % cols, Math.floor(best / cols), base, sign, reachM / cellM);
+    }
+  }
+  return corner;
+}
+
+function stampCorner(obs: GroundWindObstacles, corner: Float32Array, ci: number, cj: number, base: WindVector, sign: number, reach: number) {
+  const { cols, rows, solid } = obs;
+  const perpE = -base.north * sign;
+  const perpN = base.east * sign;
+  const along = reach * 1.5;
+  const across = reach * 0.75;
+  const r = Math.ceil(along);
+  for (let y = Math.max(0, cj - r); y <= Math.min(rows - 1, cj + r); y++) {
+    for (let x = Math.max(0, ci - r); x <= Math.min(cols - 1, ci + r); x++) {
+      const idx = y * cols + x;
+      if (solid[idx]) continue;
+      const a = (x - ci) * base.east + (y - cj) * base.north;
+      const c = (x - ci) * perpE + (y - cj) * perpN;
+      if (c < 0 || a < -across) continue;
+      const da = a / (a < 0 ? across : along);
+      const dc = c / across;
+      const fade = 1 - da * da - dc * dc;
+      if (fade <= 0) continue;
+      const boost = GROUND_WIND_CORNER_BOOST * fade * fade;
+      if (boost > corner[idx]!) corner[idx] = boost;
+    }
+  }
+}
+
+type ProbeSteps = { di: Int32Array; dj: Int32Array };
+
+function probeSteps(dirE: number, dirN: number, reachSteps: number): ProbeSteps {
+  const di = new Int32Array(reachSteps);
+  const dj = new Int32Array(reachSteps);
   for (let s = 1; s <= reachSteps; s++) {
-    const x = Math.round(i + dirE * s);
-    const y = Math.round(j + dirN * s);
+    di[s - 1] = Math.round(dirE * s);
+    dj[s - 1] = Math.round(dirN * s);
+  }
+  return { di, dj };
+}
+
+function lateralClearM(obs: GroundWindObstacles, i: number, j: number, probe: ProbeSteps): number {
+  const { cols, rows, cellM, solid } = obs;
+  const { di, dj } = probe;
+  for (let s = 0; s < di.length; s++) {
+    const x = i + di[s]!;
+    const y = j + dj[s]!;
     if (x < 0 || y < 0 || x >= cols || y >= rows) return Infinity;
-    if (solid[y * cols + x]) return s * cellM;
+    if (solid[y * cols + x]) return (s + 1) * cellM;
   }
   return Infinity;
 }
 
-function flowRows(obs: GroundWindObstacles, base: WindVector, shelter: Float32Array, grid: GroundWindFlowGrid, j0: number, j1: number) {
+type GroundWindPrep = { shelter: Float32Array; corner: Float32Array };
+
+function flowRows(obs: GroundWindObstacles, base: WindVector, prep: GroundWindPrep, grid: GroundWindFlowGrid, j0: number, j1: number) {
   const { cols, solid, gradE, gradN } = obs;
+  const { shelter, corner } = prep;
   const reachM = GROUND_WIND_LATERAL_REACH_M;
-  const reachSteps = Math.ceil(reachM / obs.cellM);
-  const perpE = -base.north;
-  const perpN = base.east;
+  const channelM = GROUND_WIND_CHANNEL_REACH_M;
+  const reachSteps = Math.ceil(Math.max(reachM, channelM) / obs.cellM);
+  const leftProbe = probeSteps(-base.north, base.east, reachSteps);
+  const rightProbe = probeSteps(base.north, -base.east, reachSteps);
   for (let j = j0; j < j1; j++) {
     for (let i = 0; i < cols; i++) {
       const idx = j * cols + i;
@@ -296,13 +435,13 @@ function flowRows(obs: GroundWindObstacles, base: WindVector, shelter: Float32Ar
         if (into > 0) factor *= 1 - GROUND_WIND_WINDWARD_SLOW * strength * into;
       }
       const dirMag = Math.hypot(dirE, dirN) || 1;
-      const left = lateralClearM(obs, i, j, perpE, perpN, reachSteps);
-      const right = lateralClearM(obs, i, j, -perpE, -perpN, reachSteps);
+      const left = lateralClearM(obs, i, j, leftProbe);
+      const right = lateralClearM(obs, i, j, rightProbe);
       const nearest = Math.min(left, right);
       const side = nearest < reachM ? GROUND_WIND_SIDE_BOOST * (1 - nearest / reachM) : 0;
       const channel =
-        left < reachM && right < reachM ? GROUND_WIND_CHANNEL_BOOST * (1 - (left + right) / (2 * reachM)) : 0;
-      factor *= (1 + Math.max(side, channel)) * shelter[idx]!;
+        left < channelM && right < channelM ? GROUND_WIND_CHANNEL_BOOST * (1 - (left + right) / (2 * channelM)) : 0;
+      factor *= (1 + Math.max(side, channel, corner[idx]!)) * shelter[idx]!;
       factor = Math.max(GROUND_WIND_SPEED_MIN, factor);
       grid.flowE[idx] = (dirE / dirMag) * factor;
       grid.flowN[idx] = (dirN / dirMag) * factor;
@@ -316,7 +455,7 @@ export function createGroundWindGridBuilder(cache: GroundWindFieldCache, sectorI
   const base = downwindFromSector(sector);
   let result = cache.grids.get(sector) ?? null;
   let grid: GroundWindFlowGrid | null = null;
-  let shelter: Float32Array | null = null;
+  let prep: GroundWindPrep | null = null;
   let row = 0;
 
   const now = () => (typeof performance !== "undefined" ? performance.now() : Date.now());
@@ -330,11 +469,11 @@ export function createGroundWindGridBuilder(cache: GroundWindFieldCache, sectorI
     if (!grid) {
       const n = obs.cols * obs.rows;
       grid = { sector, base, obstacles: obs, flowE: new Float32Array(n), flowN: new Float32Array(n), speed: new Float32Array(n) };
-      shelter = shelterField(obs, base);
+      prep = { shelter: shelterField(obs, base), corner: cornerField(obs, base) };
       return false;
     }
     const next = Math.min(obs.rows, row + GROUND_WIND_ROWS_PER_SLICE);
-    flowRows(obs, base, shelter!, grid, row, next);
+    flowRows(obs, base, prep!, grid, row, next);
     row = next;
     if (row < obs.rows) return false;
     cache.grids.set(sector, grid);

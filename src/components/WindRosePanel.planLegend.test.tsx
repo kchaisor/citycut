@@ -27,7 +27,6 @@ function stubPlan(mode: WindPlanState["mode"], scaleMaxMs: number | null): WindP
     referenceMs: 5,
     hasData: true,
     ready: true,
-    overWater: false,
     scaleMaxMs,
     speed: null,
     comfort: null,

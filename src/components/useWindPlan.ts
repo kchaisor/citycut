@@ -12,7 +12,6 @@ import {
   createWindPlanComfortJob,
   createWindPlanScaleJob,
   createWindPlanSpeedJob,
-  windPlanOverWater,
   windPlanReferenceMs,
   windPlanScaleKey,
   windPlanSpeedKey,
@@ -53,7 +52,6 @@ export type WindPlanState = {
   referenceMs: number | null;
   hasData: boolean;
   ready: boolean;
-  overWater: boolean;
   scaleMaxMs: number | null;
   speed: WindPlanSpeed | null;
   comfort: WindPlanComfort | null;
@@ -217,7 +215,6 @@ export function useWindPlan({
     referenceMs,
     hasData,
     ready,
-    overWater: active && windPlanOverWater(model),
     scaleMaxMs,
     speed,
     comfort,

@@ -197,6 +197,13 @@ function baseMapShapes(model: CityModel): BaseMapShapes {
   return { roads, water, green };
 }
 
+function clipToLand(ctx: CanvasRenderingContext2D, shapes: BaseMapShapes, cut: { minE: number; minN: number; maxE: number; maxN: number }) {
+  const land = new Path2D();
+  land.rect(cut.minE, cut.minN, cut.maxE - cut.minE, cut.maxN - cut.minN);
+  land.addPath(shapes.water);
+  ctx.clip(land, "evenodd");
+}
+
 function drawBaseMap(ctx: CanvasRenderingContext2D, shapes: BaseMapShapes) {
   ctx.fillStyle = getColour("--wind-plan-green");
   ctx.fill(shapes.green, "evenodd");
@@ -305,6 +312,12 @@ export function WindPlanOverlay({
     ctx.rect(cut.minE, cut.minN, cut.maxE - cut.minE, cut.maxN - cut.minN);
     ctx.clip();
 
+    ctx.fillStyle = getColour("--wind-plan-basemap");
+    ctx.fillRect(cut.minE, cut.minN, cut.maxE - cut.minE, cut.maxN - cut.minN);
+    drawBaseMap(ctx, baseMap);
+    ctx.save();
+    clipToLand(ctx, baseMap, cut);
+
     if (mode === "speed" && speed && scaleMaxMs != null) {
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = "high";
@@ -317,9 +330,6 @@ export function WindPlanOverlay({
       strokePen(ctx, cachedPath(levels, () => levels.flat()), style.contour, scale);
       ctx.restore();
     } else if (mode === "comfort" && comfort) {
-      ctx.fillStyle = getColour("--wind-plan-basemap");
-      ctx.fillRect(cut.minE, cut.minN, cut.maxE - cut.minE, cut.maxN - cut.minN);
-      drawBaseMap(ctx, baseMap);
       ctx.save();
       ctx.clip(site.path, "evenodd");
       ctx.fillStyle = getColour("--wind-plan-sitting");
@@ -357,6 +367,7 @@ export function WindPlanOverlay({
       }
       ctx.restore();
     }
+    ctx.restore();
 
     ctx.fillStyle = getColour(mode === "comfort" ? "--wind-plan-comfort-building" : "--wind-plan-building");
     ctx.fill(buildings, "nonzero");

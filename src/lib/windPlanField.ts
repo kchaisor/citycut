@@ -1,6 +1,8 @@
 import type { CityModel } from "../types";
 import {
   createGroundWindGridBuilder,
+  GROUND_WIND_CHANNEL_REACH_M,
+  GROUND_WIND_CORNER_MAX_M,
   GROUND_WIND_LATERAL_REACH_M,
   GROUND_WIND_TREE_WAKE_HEIGHT_MULTIPLE,
   GROUND_WIND_WAKE_HEIGHT_MULTIPLE,
@@ -99,7 +101,7 @@ export const PEDESTRIAN_HEIGHT_FACTOR = powerLawHeightFactor(STATION_HEIGHT_M, P
 export const OPEN_WATER_PROFILE_ALPHA = 0.11;
 export const WATER_PEDESTRIAN_HEIGHT_FACTOR = powerLawHeightFactor(STATION_HEIGHT_M, PEDESTRIAN_HEIGHT_M, OPEN_WATER_PROFILE_ALPHA);
 export const WATER_SHORE_BLEND_M = 60;
-export const WIND_PLAN_WATER_VERSION = 1;
+export const WIND_PLAN_WATER_VERSION = 2;
 
 export function pedestrianHeightFactorAt(waterDistanceM: number): number {
   const t = Math.max(0, 1 - waterDistanceM / WATER_SHORE_BLEND_M);
@@ -157,7 +159,19 @@ export function windPlanReferenceMs(weights: WindSeasonWeights, sector: number):
 
 export type WindPlanMode = "speed" | "comfort";
 
-export type WindPlanGeometry = Pick<GroundWindObstacles, "cols" | "rows" | "cellM" | "originE" | "originN" | "solid">;
+export type WindPlanGeometry = Pick<GroundWindObstacles, "cols" | "rows" | "cellM" | "originE" | "originN" | "solid"> & {
+  water: Uint8Array;
+};
+
+export function windPlanPaintsCell(geometry: Pick<WindPlanGeometry, "solid" | "water">, idx: number): boolean {
+  return !geometry.solid[idx] && !geometry.water[idx];
+}
+
+export function windPlanUnpaintedMask(geometry: Pick<WindPlanGeometry, "solid" | "water">): Uint8Array {
+  const mask = new Uint8Array(geometry.solid.length);
+  for (let idx = 0; idx < mask.length; idx++) mask[idx] = windPlanPaintsCell(geometry, idx) ? 0 : 1;
+  return mask;
+}
 
 export type WindPlanSpeed = {
   key: string;
@@ -187,6 +201,7 @@ type PlanFlow = {
   pad: number;
   padded: GroundWindFieldCache;
   ratios: Map<number, Float32Array>;
+  water: Uint8Array;
   heightFactors: Float32Array | null;
 };
 
@@ -321,7 +336,8 @@ export function windPlanEdgePadCells(obs: GroundWindObstacles): number {
     if (obs.canopy[idx]! > canopy) canopy = obs.canopy[idx]!;
   }
   const wakeM = Math.max(tallest * GROUND_WIND_WAKE_HEIGHT_MULTIPLE, canopy * GROUND_WIND_TREE_WAKE_HEIGHT_MULTIPLE);
-  const reachM = Math.min(GROUND_WIND_WAKE_MAX_M, Math.max(GROUND_WIND_WAKE_MIN_M, wakeM)) + GROUND_WIND_LATERAL_REACH_M;
+  const reachM = Math.min(GROUND_WIND_WAKE_MAX_M, Math.max(GROUND_WIND_WAKE_MIN_M, wakeM)) +
+    Math.max(GROUND_WIND_LATERAL_REACH_M, GROUND_WIND_CHANNEL_REACH_M, GROUND_WIND_CORNER_MAX_M);
   return Math.min(obs.cols, obs.rows, Math.ceil(reachM / obs.cellM));
 }
 
@@ -388,7 +404,7 @@ function planFlow(model: CityModel): PlanFlow {
     const water = rasterGroundWindWater(model, inner, inner.solid);
     const heightFactors = pedestrianHeightFactors(water, inner.cols, inner.rows, inner.cellM);
     const fingerprint = windPlanSiteFingerprint(inner, water);
-    cache.flow = { inner, fingerprint, pad, padded, ratios: new Map(), heightFactors };
+    cache.flow = { inner, fingerprint, pad, padded, ratios: new Map(), water, heightFactors };
   }
   return cache.flow;
 }
@@ -420,8 +436,8 @@ function createPlanRatioJob(model: CityModel, sector: number): PlanRatioJob {
   };
 }
 
-export function windPlanGeometry(obs: GroundWindObstacles): WindPlanGeometry {
-  return { cols: obs.cols, rows: obs.rows, cellM: obs.cellM, originE: obs.originE, originN: obs.originN, solid: obs.solid };
+export function windPlanGeometry(obs: GroundWindObstacles, water: Uint8Array = new Uint8Array(obs.solid.length)): WindPlanGeometry {
+  return { cols: obs.cols, rows: obs.rows, cellM: obs.cellM, originE: obs.originE, originN: obs.originN, solid: obs.solid, water };
 }
 
 export function windPlanSpeedField(ratio: ArrayLike<number>, referenceMs: number): Float32Array {
@@ -450,10 +466,6 @@ export function cachedWindPlanComfort(model: CityModel, key: string): WindPlanCo
   return planCache(model).comfort.get(surfaceKey(model, key)) ?? null;
 }
 
-export function windPlanOverWater(model: CityModel): boolean {
-  return planCache(model).flow?.heightFactors != null;
-}
-
 export function windPlanDisplayField(
   ratio: Float32Array,
   geometry: WindPlanGeometry,
@@ -466,16 +478,16 @@ export function windPlanDisplayField(
   return speed;
 }
 
-export function windPlanFieldPercentile(values: ArrayLike<number>, solid: Uint8Array, fraction: number): number {
+export function windPlanFieldPercentile(values: ArrayLike<number>, unpainted: Uint8Array, fraction: number): number {
   const open: number[] = [];
-  for (let idx = 0; idx < values.length; idx++) if (!solid[idx] && Number.isFinite(values[idx]!)) open.push(values[idx]!);
+  for (let idx = 0; idx < values.length; idx++) if (!unpainted[idx] && Number.isFinite(values[idx]!)) open.push(values[idx]!);
   if (open.length === 0) return NaN;
   open.sort((a, b) => a - b);
   return open[Math.min(open.length - 1, Math.max(0, Math.ceil(fraction * open.length) - 1))]!;
 }
 
 export function windPlanScaleRatio(ratio: Float32Array, geometry: WindPlanGeometry, heightFactors: Float32Array | null = null): number {
-  return windPlanFieldPercentile(windPlanDisplayField(ratio, geometry, 1, heightFactors), geometry.solid, WIND_PLAN_SCALE_PERCENTILE);
+  return windPlanFieldPercentile(windPlanDisplayField(ratio, geometry, 1, heightFactors), windPlanUnpaintedMask(geometry), WIND_PLAN_SCALE_PERCENTILE);
 }
 
 export function windPlanScaleKey(views: readonly WindPlanView[]): string {
@@ -510,7 +522,7 @@ export function createWindPlanScaleJob(model: CityModel, views: readonly WindPla
     if (!siteScaleRatios.has(ratioKey(sector))) {
       ratioJob ??= createPlanRatioJob(model, sector);
       if (!ratioJob.step(budgetMs)) return false;
-      rememberSite(siteScaleRatios, ratioKey(sector), windPlanScaleRatio(ratioJob.ratio()!, windPlanGeometry(flow.inner), flow.heightFactors));
+      rememberSite(siteScaleRatios, ratioKey(sector), windPlanScaleRatio(ratioJob.ratio()!, windPlanGeometry(flow.inner, flow.water), flow.heightFactors));
       ratioJob = null;
     }
     sectorAt += 1;
@@ -533,7 +545,8 @@ export function createWindPlanScaleJob(model: CityModel, views: readonly WindPla
 export function buildWindPlanRatio(model: CityModel, sector: number): { geometry: WindPlanGeometry; ratio: Float32Array } {
   const job = createPlanRatioJob(model, groundWindSector(sector));
   while (!job.step(Infinity));
-  return { geometry: windPlanGeometry(job.flow()!.inner), ratio: job.ratio()! };
+  const flow = job.flow()!;
+  return { geometry: windPlanGeometry(flow.inner, flow.water), ratio: job.ratio()! };
 }
 
 export function createWindPlanSpeedJob(
@@ -557,7 +570,7 @@ export function createWindPlanSpeedJob(
         if (now() - start >= budgetMs) return false;
       }
       const flow = ratioJob!.flow()!;
-      const geometry = windPlanGeometry(flow.inner);
+      const geometry = windPlanGeometry(flow.inner, flow.water);
       const speedMs = windPlanDisplayField(ratioJob!.ratio()!, geometry, referenceMs, flow.heightFactors);
       result = { key, sector, referenceMs, geometry, speedMs };
       cache.speed.set(cacheKey, result);
@@ -568,9 +581,10 @@ export function createWindPlanSpeedJob(
 }
 
 export function finishWindPlanComfort(geometry: WindPlanGeometry, fields: ComfortFields, key: string): WindPlanComfort {
-  const { solid, cols, rows } = geometry;
-  for (let idx = 0; idx < solid.length; idx++) if (solid[idx]) fields.p15[idx] = 0;
-  return { key, geometry, fields, unsafeAreas: maskComponents(unsafeMask(fields, solid), cols, rows) };
+  const { cols, rows } = geometry;
+  const unpainted = windPlanUnpaintedMask(geometry);
+  for (let idx = 0; idx < unpainted.length; idx++) if (unpainted[idx]) fields.p15[idx] = 0;
+  return { key, geometry, fields, unsafeAreas: maskComponents(unsafeMask(fields, unpainted), cols, rows) };
 }
 
 export function createWindPlanComfortJob(model: CityModel, seasonKey: string, weights: WindSeasonWeights): WindPlanJob<WindPlanComfort> {
@@ -589,7 +603,7 @@ export function createWindPlanComfortJob(model: CityModel, seasonKey: string, we
   const work = (budgetMs: number): boolean => {
     if (!geometry) {
       const flow = planFlow(model);
-      geometry = windPlanGeometry(flow.inner);
+      geometry = windPlanGeometry(flow.inner, flow.water);
       heightFactors = flow.heightFactors ?? PEDESTRIAN_HEIGHT_FACTOR;
       fields = emptyComfortFields(geometry.cols, geometry.rows);
       return false;

@@ -85,7 +85,7 @@ describe("DesignWindPresets", () => {
 describe("WindPlanRows water note", () => {
   afterEach(cleanup);
 
-  const plan = (overWater: boolean) => ({
+  const plan = {
     active: true,
     mode: "speed" as const,
     setMode: () => {},
@@ -98,17 +98,14 @@ describe("WindPlanRows water note", () => {
     referenceMs: 3.4,
     hasData: true,
     ready: true,
-    overWater,
     scaleMaxMs: 4,
     speed: null,
     comfort: null,
-  });
+  };
 
-  it("says wind runs faster over water only when the site has water", () => {
-    const { rerender } = render(<WindPlanRows plan={plan(true)} period="annual" />);
-    expect(screen.getByText("Faster over water (smoother surface)")).toBeTruthy();
+  it("makes no claim about wind over water, which the plan leaves unpainted", () => {
+    render(<WindPlanRows plan={plan} period="annual" />);
     expect(screen.getByText("3.4 m/s")).toBeTruthy();
-    rerender(<WindPlanRows plan={plan(false)} period="annual" />);
-    expect(screen.queryByText("Faster over water (smoother surface)")).toBeNull();
+    expect(screen.queryByText(/water/i)).toBeNull();
   });
 });

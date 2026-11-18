@@ -7,7 +7,9 @@ Makes the wind rose, the plan wind maps and the 3D wind closer to what wind cons
 1. **Longest weather record.** Use the longest weather record available for each station, not the file whose name says 2009–2023. Riverview Observatory, for example, goes from 7 years (2009–2015) to 19 years (1997–2015).
 2. **Sydney Airport for harbour sites.** Prefer Sydney Airport for harbour sites, and say in the wind panel which station is used, how far away it is, the years covered, and why a closer station was skipped.
 3. **Design winds.** Add the three design winds, north-east, south and west, to the maps alongside the seasons.
-4. **Faster wind over water.** Wind runs faster over open water than over streets and buildings.
+4. **Faster wind over water.** Wind runs faster over open water than over streets and buildings. Superseded on 19 Nov 2026: the plan maps now leave water unpainted (see Kelvin's 19 Nov call below).
+
+Kelvin's call on 19 Nov 2026, after comparing the Pyrmont Comfort map with his White Bay CFD reference: ignore water on the plan maps, and give buildings better wakes, windward-corner speed-ups and gap and street channelling.
 
 All of this stays indicative, not a CFD study.
 
@@ -29,13 +31,16 @@ Sketch or screenshot:
 - Fit the Wind speed colour scale to each site's winds: a round top at or above the site's fastest walking-height speed, never below 4 m/s, and the same scale when switching season or design wind at one site (Kelvin's call, 18 Nov 2026).
 - The fitted top is stable for a site: it comes from the 99.5th percentile of the painted open-ground speeds, not the single fastest cell, and the same complete site always gets the same top (Kelvin's approval, 18 Nov 2026).
 - Melbourne CBD switching to Melbourne Regional Office is fine; keep the current station choice (Kelvin's call, 18 Nov 2026).
+- Ignore water on the plan maps: Wind speed and Comfort show water as the plain grey base map, and water is left out of the fitted scale and the Unsafe count. Better wakes (3–5H, decaying, directional), windward-corner speed-ups and gap and street channelling. Still indicative, not CFD (Kelvin's yes, 19 Nov 2026).
 
 ## How we'll know it works
 
 - [x] Pyrmont (−33.86627, 151.18389), 1.5 km cut: the panel names Sydney Airport, its distance (about 8.9 km), the years covered, and why Riverview and Observatory Hill were skipped.
 - [x] Pyrmont: the station's record is its longest usable one (Riverview 1997–2015, 19 years, not 2009–2015; the Airport's 2011–2025 file, because its full record looks gappy).
 - [x] Pyrmont: NE, S and W can be picked on the maps next to the seasons, and each shows its own wakes and speeds.
-- [x] Pyrmont: the bay runs visibly faster than the streets on Wind speed.
+- [ ] Pyrmont: the bays are plain grey base map on Wind speed and Comfort, with no speed or comfort colour on the water; streets at the water's edge may run a little faster than inland.
+- [ ] Pyrmont: a windy bay does not lift the Wind speed scale top or add Unsafe areas.
+- [ ] Pyrmont: tall buildings leave long, tapered sheltered streaks on their lee side (out to about 4H, easing off downwind); windward corners and streets aligned with the wind run faster than open ground.
 - [x] Mont Albert North (−37.80458, 145.1065), 1 km cut: still uses Viewbank, and the panel names it.
 - [ ] Observatory Hill is used or skipped by the calm checks (no more than 30% calm in winter, 35% over the year), never by name.
 
@@ -55,7 +60,11 @@ Note on the speed scale (18 Nov 2026): the Wind speed map now fits its colour sc
 
 Note on scale stability (19 Nov 2026): the same Pyrmont cut showed a 0–8 top in one load (11 of 21 sources) and 0–10 in another (21 of 22). The top was set by the single fastest painted cell across the eight views. Pyrmont's strongest view, Spring from the south, runs at 5.5 m/s on open land and about 7.1 m/s over open water, so one corner or gap speed-up 14% above open water anywhere on the map pushed the top past 8.1 and on to 10. Buildings, trees or water arriving in a later or fuller load add or move those speed-ups, so the top flipped between loads. Results were never shared between two loads (the cache was per model), so it was the single-cell rule, not a stale cache. The top now comes from the 99.5th percentile of the painted walking-height speeds over open (non-building) cells in each view, the largest of those across the eight views, with the same round-number rule (4 or less gives 4; 4 to 6 rounds up to the next whole m/s; above 6 rounds up to the next even number). The scale is cached by a fingerprint of the obstacle heights, tree canopy and water mask the map is drawn from, so a partial site never reuses a complete one, and the same complete site always gets the same top however many times it is loaded. The map waits for that top before colouring, as before. Picking a direction on the rose never changes it. Expected Pyrmont top: 8 m/s (open water in Spring from the south about 7.1 m/s; the 99.5th percentile would need to sit 14% above open water to reach 10). This is worked out from the station data and still needs a check on the live site.
 
-On a 0–10 scale, design wind NE (3.9 m/s on land, about 5.1 m/s over open water) sat in one narrow mid-cyan band, so the shore blend and the wakes over water were hard to see. The field itself already has them: the water uses the same flow model as land, so buildings on the shore leave slower wakes over the water, and the 60 m shore blend runs from the land speed to the water speed. A test now checks both. On a 0–8 scale the same speeds span cyan to green-yellow. No extra water physics was added.
+On a 0–10 scale, design wind NE (3.9 m/s on land, about 5.1 m/s over open water) sat in one narrow mid-cyan band, so the shore blend and the wakes over water were hard to see. The field itself already has them: the water uses the same flow model as land, so buildings on the shore leave slower wakes over the water, and the 60 m shore blend runs from the land speed to the water speed. A test now checks both. On a 0–8 scale the same speeds span cyan to green-yellow. No extra water physics was added. (Superseded by the 19 Nov call below: water is no longer painted.)
+
+Note on Kelvin's 19 Nov 2026 call (water and wakes): the plan maps no longer paint water. Water cells come from the model's water areas (the same mask as fix 4; buildings over water stay solid and still draw as footprints). On Wind speed and Comfort the cut shows the muted grey base map first, and the speed or comfort colour is painted only on land, so water shows as the base map's grey-blue water. Water cells are left out of the 99.5th-percentile scale fit and out of the Unsafe count, so a windy bay cannot lift the top or add an Unsafe area. Land within 60 m of water keeps the quiet shore boost (the 0.11 to 0.25 exponent blend), so streets at the water's edge can run a little faster than inland. The card line "Faster over water (smoother surface)" is gone. Pyrmont's top is now set by land, not open water, so it may come down from 8 m/s; that still needs a check on the live site.
+
+The per-direction flow field behind both maps and the 3D ground wind also changes. Building wakes reach 4H (up to 240 m, was 3H capped at 90 m, so towers over 30 m got a stub) and still ease off with distance (the floor + (1 − floor)·t² shape). Each wake widens slowly downwind into a tapered streak (about 0.12 m sideways per metre, up to 16 m each side) rather than a one-cell ray. Each building's two windward corners, where the flow separates, get an acceleration zone up to 1.7× the local speed that runs downwind along the side and fades over about 1.5H (16–48 m); the plain side boost dropped from 0.3 to 0.2 so the corner reads clearly. Gaps and streets with buildings on both sides now channel wind out to 40 m either side (was 24 m), so wind-aligned streets up to about 60 m wide speed up. Trees keep their shorter 1.5H wake. Wind speed and a picked design wind use one heading; Comfort still combines every heading by the station's direction frequencies. Lawson thresholds and the Weibull tail are unchanged. This is still a rule-based, indicative field, not CFD.
 
 ## Out of scope
 

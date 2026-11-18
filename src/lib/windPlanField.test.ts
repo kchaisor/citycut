@@ -37,7 +37,9 @@ import {
   windPlanImageUpscale,
   windPlanLegendGradient,
   windPlanLegendStops,
-  windPlanOverWater,
+  windPlanPaintsCell,
+  windPlanUnpaintedMask,
+  finishWindPlanComfort,
   windPlanScaleRatio,
   windPlanSiteFingerprint,
   windPlanSpeedRamp,
@@ -222,15 +224,18 @@ describe("wind over water", () => {
     expect(pedestrianHeightFactorAt(500)).toBe(PEDESTRIAN_HEIGHT_FACTOR);
   });
 
-  it("runs about 1.3 times faster over open water than over open land", () => {
+  it("flags water cells and paints only open land", () => {
     const model = halfWater();
     const speed = run(createWindPlanSpeedJob(model, "water:annual", windPlanReferenceMs(weights, WEST), WEST));
-    const land = at(speed.geometry, speed.speedMs, -100, 0);
-    const water = at(speed.geometry, speed.speedMs, 100, 0);
-    expect(land).toBeCloseTo(speed.referenceMs, 4);
-    expect(water / land).toBeCloseTo(WATER_PEDESTRIAN_HEIGHT_FACTOR / PEDESTRIAN_HEIGHT_FACTOR, 3);
-    expect(water / land).toBeCloseTo(1.304, 2);
-    expect(windPlanOverWater(model)).toBe(true);
+    const { geometry } = speed;
+    const cell = (east: number, north: number) =>
+      Math.floor((north - geometry.originN) / geometry.cellM) * geometry.cols + Math.floor((east - geometry.originE) / geometry.cellM);
+    expect(geometry.water[cell(100, 0)]).toBe(1);
+    expect(geometry.solid[cell(100, 0)]).toBe(0);
+    expect(windPlanPaintsCell(geometry, cell(100, 0))).toBe(false);
+    expect(geometry.water[cell(-100, 0)]).toBe(0);
+    expect(windPlanPaintsCell(geometry, cell(-100, 0))).toBe(true);
+    expect(at(geometry, speed.speedMs, -100, 0)).toBeCloseTo(speed.referenceMs, 4);
   });
 
   it("blends the boost across the shore, falling steadily with distance inland", () => {
@@ -269,8 +274,9 @@ describe("wind over water", () => {
     const water = expected(WATER_PEDESTRIAN_HEIGHT_FACTOR);
     expect(water.p4[0]!).toBeGreaterThan(land.p4[0]!);
     expect(at(comfort.geometry, comfort.fields.p4, -100, 0)).toBeCloseTo(land.p4[0]!, 4);
-    expect(at(comfort.geometry, comfort.fields.p4, 100, 0)).toBeCloseTo(water.p4[0]!, 4);
-    expect(at(comfort.geometry, comfort.fields.p6, 100, 0)).toBeCloseTo(water.p6[0]!, 4);
+    const shore = at(comfort.geometry, comfort.fields.p4, -10, 0);
+    expect(shore).toBeGreaterThan(land.p4[0]!);
+    expect(shore).toBeLessThan(water.p4[0]!);
   });
 
   it("leaves a site with no water exactly as before", () => {
@@ -278,7 +284,7 @@ describe("wind over water", () => {
     const speed = run(createWindPlanSpeedJob(model, "dry:annual", windPlanReferenceMs(weights, WEST), WEST));
     const { geometry, ratio } = buildWindPlanRatio(model, WEST);
     expect(Array.from(speed.speedMs)).toEqual(Array.from(windPlanDisplayField(ratio, geometry, speed.referenceMs)));
-    expect(windPlanOverWater(model)).toBe(false);
+    expect(geometry.water.every((cell) => cell === 0)).toBe(true);
     expect(cachedWindPlanSpeed(model, windPlanSpeedKey("dry:annual", WEST))).toBe(speed);
 
     const comfort = run(createWindPlanComfortJob(model, "dry:annual", weights));
@@ -290,16 +296,64 @@ describe("wind over water", () => {
     }
   });
 
-  it("shows a wake over water in the lee of a shoreline building, slower than open water", () => {
-    const model = withWater(modelOf(240, [{ ring: ring(-30, -15, -5, 15), height: 20 }]), ring(0, -120, 120, 120));
-    const speed = run(createWindPlanSpeedJob(model, "water:wake", windPlanReferenceMs(weights, WEST), WEST));
-    const lee = at(speed.geometry, speed.speedMs, 15, 0);
-    const open = at(speed.geometry, speed.speedMs, 15, 80);
-    expect(lee).toBeLessThan(open * 0.85);
-    const shore = at(speed.geometry, speed.speedMs, -40, 80);
-    const inland = at(speed.geometry, speed.speedMs, -100, 80);
+  it("keeps a quiet shore boost on land at the water's edge", () => {
+    const model = halfWater();
+    const speed = run(createWindPlanSpeedJob(model, "water:shore", windPlanReferenceMs(weights, WEST), WEST));
+    const shore = at(speed.geometry, speed.speedMs, -10, 0);
+    const inland = at(speed.geometry, speed.speedMs, -100, 0);
     expect(shore).toBeGreaterThan(inland);
-    expect(open).toBeGreaterThan(shore);
+    expect(shore).toBeLessThan(inland * (WATER_PEDESTRIAN_HEIGHT_FACTOR / PEDESTRIAN_HEIGHT_FACTOR));
+  });
+
+  it("lets no water cell lift the scale percentile", () => {
+    const values = new Float32Array(100).fill(2);
+    const water = new Uint8Array(100);
+    for (let idx = 50; idx < 100; idx++) {
+      values[idx] = 40;
+      water[idx] = 1;
+    }
+    const solid = new Uint8Array(100);
+    expect(windPlanFieldPercentile(values, windPlanUnpaintedMask({ solid, water }), WIND_PLAN_SCALE_PERCENTILE)).toBe(2);
+    expect(windPlanFieldPercentile(values, solid, WIND_PLAN_SCALE_PERCENTILE)).toBe(40);
+  });
+
+  it("sizes a harbour site's scale from land, not the bay", () => {
+    const model = halfWater();
+    const { geometry, ratio } = buildWindPlanRatio(model, WEST);
+    const obs = rasterGroundWindObstacles(model);
+    const factors = pedestrianHeightFactors(rasterGroundWindWater(model, obs, obs.solid), obs.cols, obs.rows, obs.cellM);
+    const display = windPlanDisplayField(ratio, geometry, 1, factors);
+    const withBay = windPlanFieldPercentile(display, geometry.solid, WIND_PLAN_SCALE_PERCENTILE);
+    expect(withBay).toBeCloseTo(WATER_PEDESTRIAN_HEIGHT_FACTOR / PEDESTRIAN_HEIGHT_FACTOR, 3);
+    expect(windPlanScaleRatio(ratio, geometry, factors)).toBeLessThan(withBay);
+  });
+
+  it("never counts a water cell as an unsafe area", () => {
+    const cols = 4;
+    const rows = 1;
+    const fields = emptyComfortFields(cols, rows);
+    fields.p15.set([0, 0, 0.5, 0.5]);
+    const geometry: WindPlanGeometry = {
+      cols,
+      rows,
+      cellM: 2,
+      originE: 0,
+      originN: 0,
+      solid: new Uint8Array(cols),
+      water: Uint8Array.from([0, 0, 1, 1]),
+    };
+    const comfort = finishWindPlanComfort(geometry, fields, "water:unsafe");
+    expect(comfort.unsafeAreas).toHaveLength(0);
+    expect(Array.from(comfort.fields.p15)).toEqual([0, 0, 0, 0]);
+  });
+
+  it("finds unsafe areas on a gale-swept shore only on land", () => {
+    const gale = windSeasonWeights(season({ [WEST]: [0, 0, 0, 0, 0.9] }), WIND_SPEED_BIN_EDGES_MS);
+    const comfort = run(createWindPlanComfortJob(halfWater(), "water:gale", gale));
+    const { geometry } = comfort;
+    expect(comfort.unsafeAreas.length).toBeGreaterThan(0);
+    for (const area of comfort.unsafeAreas) expect(geometry.originE + (area.maxI + 0.5) * geometry.cellM).toBeLessThan(0);
+    expect(at(geometry, comfort.fields.p15, 100, 0)).toBe(0);
   });
 
   it("keeps cached water fields apart from dry ones for the same season", () => {
@@ -513,7 +567,7 @@ describe("wind plan site speed scale", () => {
     ];
     const top = run(createWindPlanScaleJob(model, views));
     const strongest = run(createWindPlanSpeedJob(model, "scale:design-w", 5.5, WEST));
-    const painted = windPlanFieldPercentile(strongest.speedMs, strongest.geometry.solid, WIND_PLAN_SCALE_PERCENTILE);
+    const painted = windPlanFieldPercentile(strongest.speedMs, windPlanUnpaintedMask(strongest.geometry), WIND_PLAN_SCALE_PERCENTILE);
     expect(top).toBeGreaterThan(4);
     expect(top).toBe(windPlanScaleMaxMs(painted));
     expect(cachedWindPlanScale(model, windPlanScaleKey(views))).toBe(top);
@@ -573,7 +627,7 @@ describe("wind plan site speed scale", () => {
     const obs = rasterGroundWindObstacles(model);
     const factors = pedestrianHeightFactors(rasterGroundWindWater(model, obs, obs.solid), obs.cols, obs.rows, obs.cellM);
     const display = windPlanDisplayField(ratio, geometry, 1, factors);
-    expect(windPlanScaleRatio(ratio, geometry, factors)).toBe(windPlanFieldPercentile(display, geometry.solid, WIND_PLAN_SCALE_PERCENTILE));
+    expect(windPlanScaleRatio(ratio, geometry, factors)).toBe(windPlanFieldPercentile(display, windPlanUnpaintedMask(geometry), WIND_PLAN_SCALE_PERCENTILE));
   });
 });
 
