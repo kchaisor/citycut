@@ -74,14 +74,17 @@ describe("studioSceneLighting", () => {
 
   it("drops Primary studio fill under Solar Study shadows so the sun casts a dark shadow", () => {
     const light = studioSceneLighting(base);
-    expect(light).toEqual({ fillKeyLight: 0, fillAmbient: 0.15, fillHemi: 0.45, sunIntensity: 5.5, noToneMapping: true });
+    expect(light).toEqual({ fillKeyLight: 0, fillAmbient: 0.07, fillHemi: 0.2, sunIntensity: 6.5, noToneMapping: true });
     const primary = primaryViewportLighting(true);
-    expect(shadowFill(light)).toBeLessThan(shadowFill(primary) / 3);
+    expect(shadowFill(light)).toBeLessThan(shadowFill(primary) / 6);
+    expect(shadowFill(light)).toBeLessThan(0.6 * 0.5);
+    expect(shadowFill(light)).toBeGreaterThan(0.15);
     const lowWinterSun = Math.sin((20 * Math.PI) / 180);
     const shadowed = shadowFill(light) / Math.PI;
     const lit = shadowed + (light.sunIntensity * lowWinterSun) / Math.PI;
-    expect(shadowed).toBeLessThan(0.2);
-    expect(lit / shadowed).toBeGreaterThan(3);
+    expect(shadowed).toBeLessThan(0.1);
+    expect(lit).toBeGreaterThan(0.6);
+    expect(lit / shadowed).toBeGreaterThan(7);
   });
 
   it("restores Primary studio lighting when Solar Study is not the active analysis", () => {

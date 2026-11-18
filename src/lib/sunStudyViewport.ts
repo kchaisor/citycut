@@ -23,9 +23,9 @@ export function sunStudyViewportLighting(options: {
 
 export const SOLAR_PRIMARY_SHADOW_LIGHTING: SunStudyLighting = {
   fillKeyLight: 0,
-  fillAmbient: 0.15,
-  fillHemi: 0.45,
-  sunIntensity: 5.5,
+  fillAmbient: 0.07,
+  fillHemi: 0.2,
+  sunIntensity: 6.5,
   noToneMapping: true,
 };
 
