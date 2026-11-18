@@ -9,7 +9,11 @@ import {
 
 export type WorldRing = Float64Array;
 
-export type ComfortBandLayer = { band: "standing" | "walking" | "uncomfortable" | "unsafe"; rings: WorldRing[] };
+export type ComfortBand = "standing" | "strolling" | "walking" | "uncomfortable";
+
+export type ComfortBandLayer = { band: ComfortBand; rings: WorldRing[] };
+
+export type ComfortLayers = { bands: ComfortBandLayer[]; unsafe: WorldRing[] };
 
 export function worldRings(geometry: WindPlanGeometry, values: ArrayLike<number>, level: number): WorldRing[] {
   const { cols, rows, cellM, originE, originN } = geometry;
@@ -24,7 +28,7 @@ export function worldRings(geometry: WindPlanGeometry, values: ArrayLike<number>
 }
 
 const speedContours = new WeakMap<WindPlanSpeed, Map<number, WorldRing[][]>>();
-const comfortBands = new WeakMap<WindPlanComfort, ComfortBandLayer[]>();
+const comfortBands = new WeakMap<WindPlanComfort, ComfortLayers>();
 
 export function windPlanSpeedContours(speed: WindPlanSpeed, scaleMaxMs: number): WorldRing[][] {
   let byScale = speedContours.get(speed);
@@ -40,16 +44,19 @@ export function windPlanSpeedContours(speed: WindPlanSpeed, scaleMaxMs: number):
   return rings;
 }
 
-export function windPlanComfortBands(comfort: WindPlanComfort): ComfortBandLayer[] {
+export function windPlanComfortBands(comfort: WindPlanComfort): ComfortLayers {
   let layers = comfortBands.get(comfort);
   if (!layers) {
     const { geometry, fields } = comfort;
-    layers = [
-      { band: "standing", rings: worldRings(geometry, fields.p4, LAWSON_EXCEEDANCE) },
-      { band: "walking", rings: worldRings(geometry, fields.p6, LAWSON_EXCEEDANCE) },
-      { band: "uncomfortable", rings: worldRings(geometry, fields.p10, LAWSON_EXCEEDANCE) },
-      { band: "unsafe", rings: worldRings(geometry, fields.p15, LAWSON_UNSAFE_EXCEEDANCE) },
-    ];
+    layers = {
+      bands: [
+        { band: "standing", rings: worldRings(geometry, fields.p4, LAWSON_EXCEEDANCE) },
+        { band: "strolling", rings: worldRings(geometry, fields.p6, LAWSON_EXCEEDANCE) },
+        { band: "walking", rings: worldRings(geometry, fields.p8, LAWSON_EXCEEDANCE) },
+        { band: "uncomfortable", rings: worldRings(geometry, fields.p10, LAWSON_EXCEEDANCE) },
+      ],
+      unsafe: worldRings(geometry, fields.p15, LAWSON_UNSAFE_EXCEEDANCE),
+    };
     comfortBands.set(comfort, layers);
   }
   return layers;

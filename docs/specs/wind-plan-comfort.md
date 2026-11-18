@@ -6,14 +6,14 @@ In Plan view with Wind Rose on, the ground becomes a top-down wind diagram. A **
 
 ## What it looks like
 
-Screens this touches: Plan view of the 3D model with Analysis → Wind Rose on; the wind-rose card (left); the bottom wind console; Site Intelligence (right, collapse only).
+Screens this touches: Plan view of the 3D model with Analysis → Wind Rose on; the wind-rose card (left); the floating Velocity and Comfort legend cards (lower right); the bottom wind console; Site Intelligence (right, collapse only).
 
 Sketch or screenshot (Paper mock-ups v2, approved by Designbot on 17 Nov 2026):
 
 ![Wind speed, 1440](wind-plan-comfort/v2-speed-1440.png)
 ![Comfort, 1440](wind-plan-comfort/v2-comfort-1440.png)
 
-The 1024 mock-ups are on the shared computer at `/workspace/wind-plan-mock/v2-speed-1024.png` and `v2-comfort-1024.png`. Tweaks on top of the mock-ups: smooth comfort-band edges, Standing deepened to #9FCB94 with edged legend swatches, a larger clickable rose in the Plan wind card, and no wind arrow on the map.
+The 1024 mock-ups are on the shared computer at `/workspace/wind-plan-mock/v2-speed-1024.png` and `v2-comfort-1024.png`. Wind speed tweaks on top of the mock-ups: a larger clickable rose in the Plan wind card, and no wind arrow on the map. Comfort no longer follows the mock-up: since 19 Nov 2026 it follows Kelvin's Lawson reference (White Bay / Rozelle comfort map, `/workspace/comfort-restyle/kelvin-reference.png`), described under Comfort below.
 
 ### Wind speed
 - The ground shows a smooth velocity field in m/s: the #232 speed-ratio field for the heading, times the season's reference speed for that direction. The scale is fitted to each site (see the 18 Nov call below): its top is a round number at or above the 99.5th percentile of the walking-height speeds the map paints over open ground (building cells left out) in any of the site's views (Annual, Summer, Autumn, Winter, Spring and its three design winds), with the over-water boost included. A percentile, not the single fastest cell, so one tight corner speed-up cannot lift the top a whole step. The top is cached by a fingerprint of the obstacle, tree and water geometry the map is drawn from: the same complete site always gets the same top, and a site loaded with fewer sources never reuses it. Peaks up to 4 m/s give 4; from 4 to 6 m/s the top rounds up to the next whole m/s (5 or 6); above 6 m/s it rounds up to the next even number (8, 10, 12…). Switching season or design wind at one site keeps the same scale so the maps compare; picking any of the 16 directions on the rose never changes it, and a heading that runs past the top takes the top colour. The scale is worked out once per site before the first Wind speed map is coloured, so it never flashes 0–4 first; Comfort does not wait for it.
@@ -22,7 +22,7 @@ The 1024 mock-ups are on the shared computer at `/workspace/wind-plan-mock/v2-sp
 - The map is smoothed for display only (Gaussian, about 6 m) so it reads as flow shaped by buildings, not speckle. Contours use the same smoothed field; comfort classes use the unsmoothed one.
 - Cells near the cut edge are computed with the cut's buildings wrapped round its edges (a periodic boundary), so the edge sees built-up ground upwind and downwind like the rest of the site rather than open land. Nothing outside the cut is drawn.
 - Wakes (low speed) sit on the lee side of each building and move when the season or direction changes. Corners and gaps speed up.
-- Imported models: wind treats every visible imported model as solid and removes map buildings underneath them (any footprint overlap drops the whole map building), plus trees whose crowns overlap them, so they are not counted twice. Moving, hiding or removing an import recomputes the field. The 3D ground-wind flow uses the same obstacle grid. Imported models are drawn on the wind maps as white footprints in the same style as map buildings, in both Wind speed and Comfort. Map buildings under an import still draw on the wind maps, in the 3D view, plans and exports unless the user hides them. Hidden map buildings (Hide selected or a hidden use) are left out of the wind: the obstacle grid for the plan and the 3D flow.
+- Imported models: wind treats every visible imported model as solid and removes map buildings underneath them (any footprint overlap drops the whole map building), plus trees whose crowns overlap them, so they are not counted twice. Moving, hiding or removing an import recomputes the field. The 3D ground-wind flow uses the same obstacle grid. Imported models are drawn on the wind maps in the same style as map buildings: white on Wind speed, light grey on Comfort. Map buildings under an import still draw on the wind maps, in the 3D view, plans and exports unless the user hides them. Hidden map buildings (Hide selected or a hidden use) are left out of the wind: the obstacle grid for the plan and the 3D flow.
 - Preference: wind treats imported models as solid and removes map buildings underneath them (Kelvin's yes, 17 Nov 2026).
 - Preference: imported models are drawn on the wind maps; hidden map buildings are left out of the wind (Kelvin's yes, 17 Nov 2026).
 - Isolines from one step up to one step below the top: every 0.25 m/s at a top of 4, every 0.5 m/s at a top of 5–8, every 1 m/s at 10 or more. Uniform 0.75px mid grey (#5A5A5A) at 30% opacity, so they read as a fine mesh, not bold belts.
@@ -54,16 +54,27 @@ These replace the hover tooltip, selected mark and guide-label details above whe
 ### Comfort (Lawson LDDC, indicative)
 - For each ground cell, every direction in the season is weighted by its frequency (from the Viewbank TMYx speed bins) and combined with that direction's speed-ratio field to get how often each threshold is exceeded.
 - The station speeds get the same 10 m to 1.5 m pedestrian-height correction as Wind speed (power law, α = 0.25, factor ≈ 0.62) before the thresholds are tested.
-- Criteria: Lawson LDDC as used in the City of London *Wind Microclimate Guidelines* (2019). Comfort uses mean-hourly speeds exceeded no more than 5% of the time: Sitting ≤ 4 m/s, Standing ≤ 6 m/s, Walking ≤ 10 m/s (leisure and business walking merged), Uncomfortable above that. Unsafe: more than 15 m/s for more than 0.022% of the year (about 2 hours).
-- Hard-edged bands drawn as smooth vector contours, no staircase pixels at 1440. Palette: Sitting #DCEBD8, Standing #9FCB94, Walking #F1DE97, Uncomfortable #E8964F, Unsafe #C2362B. Unsafe also gets a 45° hatch (1px #7A1A12 at 6px spacing), a 2px #7A1A12 outline and a minimum drawn size of 12px, drawn fully inside the map.
+- Above the top station bin (40 km/h and over, open-ended) each direction's speeds follow a Weibull curve fitted to that direction's own bins, as wind climates are usually described for comfort studies (NEN 8100). Before 19 Nov 2026 the tail was a fixed exponential guess one bin wide, which made the 15 m/s test fail on open ground at windy stations: at Sydney Airport (White Bay, Pyrmont) open ground came out at 0.04% of the year against the 0.022% limit, so nearly the whole map was flagged Unsafe. The fitted curves come out close to the textbook shape for wind (k ≈ 2) and put that open ground near 0%; strong corner and gap speed-ups at exposed sites can still be Unsafe. The thresholds did not change. Directions with too few bins to fit keep the old exponential tail.
+- Criteria: Lawson LDDC, with comfort and safety as in the City of London *Wind Microclimate Guidelines* (2019). Comfort uses mean-hourly speeds exceeded no more than 5% of the time, in five bands: Sitting ≤ 4 m/s, Standing ≤ 6 m/s, Strolling ≤ 8 m/s (the LDDC leisure-walking band), Walking ≤ 10 m/s, Uncomfortable above that.
+- Unsafe is a safety flag, not a sixth comfort colour: more than 15 m/s for more than 0.022% of the year (about 2 hours). An unsafe patch keeps its comfort-band colour and gains a 45° hatch (1px #7A1A12 at 6px spacing) and a 2px #7A1A12 outline; patches smaller than 12px are drawn as a 12px hatched, outlined disc. All of it stays inside the site clip.
+- Styled like Kelvin's Lawson reference (Kelvin's call, 19 Nov 2026):
+  - Five Lawson colours, sampled from the reference legend: Sitting #BDF8DA, Standing #6ADCA0, Strolling #F8D404, Walking #FAA902, Uncomfortable #F44333.
+  - A smooth, fully opaque filled field: Sitting as the base, then each higher band as a smooth vector contour with clean edges. No grid cells and no isolines.
+  - The field is clipped to the site parcel and the parcel is drawn as a dashed red site boundary (#D7263D, the same dash and weight as other CityCut site outlines). Where there is no parcel (for example NSW cuts with no Vicmap parcel), the clip and the dashed outline fall back to the cut rectangle.
+  - Inside the cut but outside the site: a muted grey base map (#F3F3F3) with soft grey roads, grey-blue water and grey-green parks. No map tiles, street labels or wind roses.
+  - Buildings are light grey (#C5C5C5) with the same light ink edge, inside and outside the site.
+  - A boxed Comfort legend card (see Panels).
+- The four time-of-day wind roses in the reference are left out for now.
 - The card shows "Unsafe: N areas" or "Unsafe: none". Direction reads "All".
+- Preference: comfort map styled like the reference: five Lawson colours (Sitting, Standing, Strolling, Walking, Uncomfortable), smooth opaque fill, clipped to a dashed red site boundary (cut fallback when no parcel), muted grey base map with light-grey buildings, boxed HUD legend (Kelvin's yes, 19 Nov 2026).
 
 ### Panels and console
-- The plan rows (Season, Direction, Reference in m/s or Criteria "Lawson", "Indicative only, not a CFD study") sit at the top of the existing wind-rose card. In Comfort the legend sits at its bottom: five 8px swatches with a 1px rgba(26,26,26,0.2) edge in a 2-column grid. In Wind speed the same footer holds the horizontal Velocity (m/s) bar and ticks instead, never both. The card is 272px wide with 16px padding, and the rose fills the 240px content width (up from 160px in a 236px card with 12px padding; Designbot, 18 Nov 2026). The card stays at least 8px clear of the bottom console, the left rail and the compass, and scrolls rather than covering the console when space runs short. At 1280 wide or less the console starts 8px right of the 272px card.
+- The plan rows (Season, Direction, Reference in m/s or Criteria "Lawson", "Indicative only, not a CFD study") sit at the top of the existing wind-rose card, with "Unsafe: N areas" in Comfort. The card has no comfort swatches. In Wind speed the card footer holds the horizontal Velocity (m/s) bar and ticks. The card is 272px wide with 16px padding, and the rose fills the 240px content width (up from 160px in a 236px card with 12px padding; Designbot, 18 Nov 2026). The card stays at least 8px clear of the bottom console, the left rail and the compass, and scrolls rather than covering the console when space runs short. At 1280 wide or less the console starts 8px right of the 272px card.
 - The "Closer:" station line is 12px/500 and wraps only between stations; each distance ("7.9 km") is one unbreakable unit, never clipped or split, and the line is not clamped. Its tooltip keeps the full single-line text.
+- In Comfort the legend is its own floating card in the lower-right corner: the usual HUD card surface, border, shadow and 12px corners, a "COMFORT" title (10px/700 uppercase, ink-3), then one column of five rows (Sitting, Standing, Strolling, Walking, Uncomfortable), each a 20×12px swatch with a faint 1px edge, an 8px gap and a 12px/500 ink label. No Unsafe row. It stays at least 8px clear of Site Intelligence, the bottom console, the compass and the wind-rose card at 1024–1440, moving left of Site Intelligence if that panel runs long.
 - The switch uses the white raised sub-option style. Wind Rose stays the one yellow active.
 - Plan wind views use m/s only (no km/h in the console) and the console has no DIR readout.
-- Buildings are white footprints with a 1px #1A1A1A edge at 40% opacity. Tree dots are hidden in wind plan views.
+- Buildings have a 1px #1A1A1A edge at 40% opacity: white footprints on Wind speed, light grey on Comfort. Tree dots are hidden in wind plan views.
 - At 1280 wide or less, Site Intelligence collapses to its header while a wind plan is showing.
 - Colours come from tokens only (DESIGN-SYSTEM.md); any deviation is listed in the PR body.
 
@@ -76,22 +87,27 @@ These replace the hover tooltip, selected mark and guide-label details above whe
 - [ ] The same complete site always shows the same scale top; one fast cell does not lift it from 8 to 10.
 - [ ] Clicking any of the 16 rose sectors (empty ones too) sets the direction; clicking while a design wind is active switches to that direction for the current season. Left/Right on the focused rose step it; Enter confirms. Direction reads e.g. `NE · 45°`.
 - [ ] Rose hover: 1.5px ink outline, others visibly at 45%, 11px tooltip pinned outside the ring with share of hours and walking-height speed (period first unless it is the active design wind; no "median"). Selected: 4px yellow arc on the ring with an ink edge and a bold label at R+14. 33%/66% labels on the quietest bearing. Closer stations behind "Nearby stations".
-- [ ] Comfort: five Lawson bands with clean edges at 1440 and the listed palette; Unsafe hatched and outlined, at least 12px; the card reads "Unsafe: N areas" or "Unsafe: none"; Direction reads "All".
-- [ ] Plan rows sit inside the wind-rose card; in Comfort the card shows the Lawson swatches and no speed bar.
+- [ ] Comfort: five Lawson bands (Sitting, Standing, Strolling at 8 m/s, Walking, Uncomfortable) in the reference colours, as a smooth opaque fill with clean edges at 1440 and no isolines; Unsafe hatched and outlined over its band colour, at least 12px; the card reads "Unsafe: N areas" or "Unsafe: none"; Direction reads "All".
+- [ ] Comfort: the fill stops at the site parcel, drawn as a dashed red site boundary; with no parcel it fills the cut and the dashed outline runs round the cut.
+- [ ] Comfort: outside the site the cut shows a muted grey base map with light-grey buildings, grey roads, and soft water and park tones; no tiles or labels.
+- [ ] Comfort: a boxed Comfort legend card in the lower right with five single-column rows and no Unsafe row; no swatches in the wind-rose card; at least 8px clear of every panel.
+- [ ] A windy station (Sydney Airport, for example White Bay) no longer flags open ground as Unsafe; Unsafe stays limited to strong speed-ups.
+- [ ] Plan rows sit inside the wind-rose card; in Wind speed the card footer shows the Velocity bar; in Comfort it does not.
 - [ ] The "Closer:" line reads each distance whole ("7.9 km", never "79 km") and wraps between stations.
 - [ ] Console shows m/s only in plan wind views, with no DIR readout.
-- [ ] Buildings white with a light ink edge; no tree dots in wind plan views.
+- [ ] Buildings with a light ink edge, white on Wind speed and light grey on Comfort; no tree dots in wind plan views.
 - [ ] At ≤1280 Site Intelligence collapses to its header; zero overlap and gaps of at least 8px at 1024, 1280 and 1440.
 - [ ] Import a block: wind recomputes, the lee calms and the corners speed up; hiding or removing the import restores the previous field.
-- [ ] Import a block: its white footprint appears on both plan wind maps (Wind speed and Comfort) and updates when the import is moved, hidden or removed.
+- [ ] Import a block: its footprint appears on both plan wind maps (white on Wind speed, light grey on Comfort) and updates when the import is moved, hidden or removed.
 - [ ] Hiding a map building with Hide selected (or hiding its use) drops it from the wind field.
 - [ ] Switching season, direction or mode feels instant (fields computed once and cached) and never moves the camera.
-- [ ] Tests: lee-side wake (lower behind than upwind, flips with direction), Lawson thresholds, unsafe-area count, frequency weights sum to 1.
+- [ ] Tests: lee-side wake (lower behind than upwind, flips with direction), Lawson thresholds including Strolling at 8 m/s, Weibull tail fit, comfort colours and legend order, site clip with cut fallback, unsafe-area count, frequency weights sum to 1.
 
 ## Out of scope
 
 - A real CFD or wind-tunnel study and gust (GEM) speeds.
 - Exporting the plan diagrams to PNG, .3dm or .ai.
+- The four time-of-day wind roses from Kelvin's comfort reference (later).
 - Changes to the 3D wind streak renderer from #232. The 3D flow does now use the import-aware obstacle grid.
 - Auto-hiding map buildings under imports in the 3D view, plans or exports.
 - Mobile layouts.

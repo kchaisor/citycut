@@ -1,6 +1,6 @@
-import { getColour } from "../lib/colours";
+import { getColour, type ColourKey } from "../lib/colours";
 import { useColourRevision } from "../lib/useColourRevision";
-import { COMFORT_CLASSES, COMFORT_CLASS_LABELS, unsafeAreasLabel } from "../lib/windComfort";
+import { COMFORT_CLASSES, COMFORT_CLASS_LABELS, unsafeAreasLabel, type ComfortClass } from "../lib/windComfort";
 import { windPlanLegendGradient, windPlanSpeedTicks } from "../lib/windPlanField";
 import { monthPeriodLabel, sectorCenterDeg, sectorLabel, type WindPeriodId } from "../lib/windRose";
 import type { DesignWind } from "../lib/windDesignWinds";
@@ -74,18 +74,22 @@ export function WindPlanRows({ plan, period }: { plan: WindPlanState; period: Wi
   );
 }
 
-const COMFORT_SWATCH: Record<(typeof COMFORT_CLASSES)[number], string> = {
+export const COMFORT_SWATCH: Record<ComfortClass, ColourKey> = {
   sitting: "--wind-plan-sitting",
   standing: "--wind-plan-standing",
+  strolling: "--wind-plan-strolling",
   walking: "--wind-plan-walking",
   uncomfortable: "--wind-plan-uncomfortable",
-  unsafe: "--wind-plan-unsafe",
 };
 
 export function WindPlanLegend({ plan }: { plan: Pick<WindPlanState, "mode" | "scaleMaxMs"> }) {
   if (plan.mode === "speed") return <WindPlanVelocityLegend scaleMaxMs={plan.scaleMaxMs} />;
+  return null;
+}
+
+export function WindPlanComfortLegend() {
   return (
-    <div className="wind-plan-legend" aria-label="Pedestrian comfort, Lawson">
+    <div className="wind-plan-comfort hud-card" aria-label="Pedestrian comfort, Lawson">
       <p className="wind-plan-legend-title">Comfort</p>
       <ul className="wind-plan-swatches">
         {COMFORT_CLASSES.map((cls) => (

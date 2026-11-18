@@ -12,7 +12,10 @@ import {
   type WindPlanComfort,
   type WindPlanSpeed,
 } from "../lib/windPlanField";
-import { windPlanComfortBands, windPlanSpeedContours, type WorldRing } from "../lib/windPlanContours";
+import { windPlanComfortBands, windPlanSpeedContours, type ComfortBand, type WorldRing } from "../lib/windPlanContours";
+import { cutExtent, pointInClip, windPlanSiteClip } from "../lib/windPlanSiteClip";
+import { dashSegments, readDrawingStyle } from "../lib/drawingStyle";
+import { screenDashPx, screenPx } from "../lib/lineweights";
 import { windPlanLineStyle, type WindPlanLineStyle, type WindPlanPen } from "../lib/windPlanStyle";
 import type { WindPlanState } from "./useWindPlan";
 
@@ -69,11 +72,11 @@ export function WindPlanProjector({ store }: { store: WindPlanTransformStore }) 
   return null;
 }
 
-const COMFORT_FILL: Record<"standing" | "walking" | "uncomfortable" | "unsafe", ColourKey> = {
+const COMFORT_FILL: Record<ComfortBand, ColourKey> = {
   standing: "--wind-plan-standing",
+  strolling: "--wind-plan-strolling",
   walking: "--wind-plan-walking",
   uncomfortable: "--wind-plan-uncomfortable",
-  unsafe: "--wind-plan-unsafe",
 };
 
 const speedImages = new WeakMap<WindPlanSpeed, { revision: number; scaleMaxMs: number; canvas: HTMLCanvasElement }>();
@@ -165,12 +168,58 @@ function clampInside(value: number, lo: number, hi: number): number {
   return lo > hi ? (lo + hi) / 2 : Math.min(hi, Math.max(lo, value));
 }
 
-type CutExtent = { minE: number; minN: number; maxE: number; maxN: number };
+type BaseMapShapes = { roads: Array<{ path: Path2D; width: number }>; water: Path2D; green: Path2D };
 
-function cutExtent(model: CityModel): CutExtent {
-  const w = model.widthM ?? model.sideM;
-  const h = model.heightM ?? model.sideM;
-  return { minE: -w / 2, minN: -h / 2, maxE: w / 2, maxN: h / 2 };
+function ptsPath(path: Path2D, ring: readonly Pt[], close: boolean) {
+  ring.forEach(([e, n], k) => {
+    if (k === 0) path.moveTo(e, n);
+    else path.lineTo(e, n);
+  });
+  if (close) path.closePath();
+}
+
+function baseMapShapes(model: CityModel): BaseMapShapes {
+  const water = new Path2D();
+  const green = new Path2D();
+  for (const area of model.areas) {
+    if (area.kind === "block" || area.ring.length < 3) continue;
+    const target = area.kind === "water" ? water : green;
+    ptsPath(target, area.ring, true);
+    for (const hole of area.holes) if (hole.length >= 3) ptsPath(target, hole, true);
+  }
+  const roads: BaseMapShapes["roads"] = [];
+  for (const road of model.roads) {
+    if (road.kind !== "road" || road.line.length < 2 || !(road.width > 0)) continue;
+    const path = new Path2D();
+    ptsPath(path, road.line, false);
+    roads.push({ path, width: road.width });
+  }
+  return { roads, water, green };
+}
+
+function drawBaseMap(ctx: CanvasRenderingContext2D, shapes: BaseMapShapes) {
+  ctx.fillStyle = getColour("--wind-plan-green");
+  ctx.fill(shapes.green, "evenodd");
+  ctx.fillStyle = getColour("--wind-plan-water");
+  ctx.fill(shapes.water, "evenodd");
+  ctx.strokeStyle = getColour("--wind-plan-road");
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  for (const road of shapes.roads) {
+    ctx.lineWidth = road.width;
+    ctx.stroke(road.path);
+  }
+}
+
+function strokeSiteBoundary(ctx: CanvasRenderingContext2D, path: Path2D, scale: number) {
+  const pen = readDrawingStyle().siteBoundary;
+  const segments = dashSegments(pen.dash);
+  ctx.strokeStyle = getColour("--site-boundary");
+  ctx.lineWidth = Math.max(1, screenPx(pen.mm)) / scale;
+  ctx.lineJoin = "round";
+  ctx.lineCap = segments?.some((segment, index) => segment === 0 && index % 2 === 0) ? "round" : "butt";
+  ctx.setLineDash(segments ? segments.map((mm) => screenDashPx(mm) / scale) : []);
+  ctx.stroke(path);
 }
 
 function strokePen(ctx: CanvasRenderingContext2D, path: Path2D, pen: WindPlanPen, scale: number) {
@@ -217,6 +266,11 @@ export function WindPlanOverlay({
   const colourRevision = useColourRevision();
   const buildings = useMemo(() => buildingPath(model), [model]);
   const cut = useMemo(() => cutExtent(model), [model]);
+  const site = useMemo(() => {
+    const clip = windPlanSiteClip(model);
+    return { ...clip, path: ringsPath(clip.rings) };
+  }, [model]);
+  const baseMap = useMemo(() => baseMapShapes(model), [model]);
   const { mode, speed, comfort, scaleMaxMs } = plan;
 
   const draw = useCallback(() => {
@@ -263,14 +317,21 @@ export function WindPlanOverlay({
       strokePen(ctx, cachedPath(levels, () => levels.flat()), style.contour, scale);
       ctx.restore();
     } else if (mode === "comfort" && comfort) {
+      ctx.fillStyle = getColour("--wind-plan-basemap");
+      ctx.fillRect(cut.minE, cut.minN, cut.maxE - cut.minE, cut.maxN - cut.minN);
+      drawBaseMap(ctx, baseMap);
+      ctx.save();
+      ctx.clip(site.path, "evenodd");
       ctx.fillStyle = getColour("--wind-plan-sitting");
-      ctx.fillRect(originE, originN, gridW, gridH);
-      for (const layer of windPlanComfortBands(comfort)) {
+      ctx.fillRect(cut.minE, cut.minN, cut.maxE - cut.minE, cut.maxN - cut.minN);
+      const layers = windPlanComfortBands(comfort);
+      for (const layer of layers.bands) {
         if (layer.rings.length === 0) continue;
-        const path = cachedPath(layer, () => layer.rings);
         ctx.fillStyle = getColour(COMFORT_FILL[layer.band]);
-        ctx.fill(path, "evenodd");
-        if (layer.band !== "unsafe") continue;
+        ctx.fill(cachedPath(layer, () => layer.rings), "evenodd");
+      }
+      if (layers.unsafe.length > 0) {
+        const path = cachedPath(layers.unsafe, () => layers.unsafe);
         ctx.save();
         ctx.clip(path, "evenodd");
         hatch(ctx, rect.width, rect.height, style, dpr);
@@ -285,24 +346,30 @@ export function WindPlanOverlay({
         const inset = radius + style.unsafeOutline.px / 2 / scale;
         const e = clampInside(originE + (area.sumI / area.cells + 0.5) * cellM, cut.minE + inset, cut.maxE - inset);
         const n = clampInside(originN + (area.sumJ / area.cells + 0.5) * cellM, cut.minN + inset, cut.maxN - inset);
+        if (!pointInClip(e, n, site.rings)) continue;
         const disc = new Path2D();
         disc.arc(e, n, radius, 0, Math.PI * 2);
-        ctx.fillStyle = getColour("--wind-plan-unsafe");
-        ctx.fill(disc);
         ctx.save();
         ctx.clip(disc);
         hatch(ctx, rect.width, rect.height, style, dpr);
         ctx.restore();
         strokePen(ctx, disc, style.unsafeOutline, scale);
       }
+      ctx.restore();
     }
 
-    ctx.fillStyle = getColour("--wind-plan-building");
+    ctx.fillStyle = getColour(mode === "comfort" ? "--wind-plan-comfort-building" : "--wind-plan-building");
     ctx.fill(buildings, "nonzero");
     strokeInside(ctx, buildings, style.buildingEdge, scale);
     ctx.restore();
+    if (mode === "comfort") {
+      ctx.save();
+      worldTransform();
+      strokeSiteBoundary(ctx, site.path, scale);
+      ctx.restore();
+    }
 
-  }, [store, mode, speed, comfort, scaleMaxMs, buildings, cut, colourRevision]);
+  }, [store, mode, speed, comfort, scaleMaxMs, buildings, cut, site, baseMap, colourRevision]);
 
   const frame = useRef<number | null>(null);
   const schedule = useCallback(() => {

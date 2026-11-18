@@ -316,7 +316,7 @@ describe("wind plan field edges", () => {
     const model = modelOf(300, []);
     const comfort = run(createWindPlanComfortJob(model, "open:annual", weights));
     expect(comfort.unsafeAreas).toHaveLength(0);
-    for (const field of [comfort.fields.p4, comfort.fields.p6, comfort.fields.p10, comfort.fields.p15]) {
+    for (const field of [comfort.fields.p4, comfort.fields.p6, comfort.fields.p8, comfort.fields.p10, comfort.fields.p15]) {
       expect(Math.max(...field) - Math.min(...field)).toBeLessThan(1e-6);
     }
     const speed = run(createWindPlanSpeedJob(model, "open:annual", windPlanReferenceMs(weights, WEST), WEST));

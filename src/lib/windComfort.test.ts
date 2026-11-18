@@ -1,9 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
   binExceedance,
+  COMFORT_CLASS_LABELS,
+  COMFORT_CLASSES,
   countUnsafeAreas,
   exceedanceAt,
+  fitSectorWeibull,
+  isUnsafe,
   LAWSON_EXCEEDANCE,
+  LAWSON_STROLLING_MS,
   LAWSON_UNSAFE_EXCEEDANCE,
   lawsonClass,
   sectorReferenceSpeedMs,
@@ -25,19 +30,52 @@ function emptySectors(): number[][] {
 }
 
 describe("lawsonClass", () => {
-  it("classifies at and around each comfort threshold", () => {
-    expect(lawsonClass({ p4: LAWSON_EXCEEDANCE, p6: 0, p10: 0, p15: 0 })).toBe("sitting");
-    expect(lawsonClass({ p4: below, p6: 0, p10: 0, p15: 0 })).toBe("sitting");
-    expect(lawsonClass({ p4: above, p6: LAWSON_EXCEEDANCE, p10: 0, p15: 0 })).toBe("standing");
-    expect(lawsonClass({ p4: above, p6: above, p10: LAWSON_EXCEEDANCE, p15: 0 })).toBe("walking");
-    expect(lawsonClass({ p4: 1, p6: above, p10: below, p15: 0 })).toBe("walking");
-    expect(lawsonClass({ p4: 1, p6: 1, p10: above, p15: 0 })).toBe("uncomfortable");
+  const none = { p4: 0, p6: 0, p8: 0, p10: 0 };
+
+  it("classifies at and around each 5% comfort threshold", () => {
+    expect(lawsonClass({ ...none, p4: LAWSON_EXCEEDANCE })).toBe("sitting");
+    expect(lawsonClass({ ...none, p4: below })).toBe("sitting");
+    expect(lawsonClass({ ...none, p4: above })).toBe("standing");
+    expect(lawsonClass({ ...none, p4: above, p6: LAWSON_EXCEEDANCE })).toBe("standing");
+    expect(lawsonClass({ ...none, p4: 1, p6: below })).toBe("standing");
+    expect(lawsonClass({ ...none, p4: 1, p6: above })).toBe("strolling");
+    expect(lawsonClass({ ...none, p4: 1, p6: above, p8: LAWSON_EXCEEDANCE })).toBe("strolling");
+    expect(lawsonClass({ ...none, p4: 1, p6: 1, p8: below })).toBe("strolling");
+    expect(lawsonClass({ ...none, p4: 1, p6: 1, p8: above })).toBe("walking");
+    expect(lawsonClass({ p4: 1, p6: 1, p8: above, p10: LAWSON_EXCEEDANCE })).toBe("walking");
+    expect(lawsonClass({ p4: 1, p6: 1, p8: 1, p10: below })).toBe("walking");
+    expect(lawsonClass({ p4: 1, p6: 1, p8: 1, p10: above })).toBe("uncomfortable");
   });
 
-  it("lets Unsafe override every comfort band", () => {
-    expect(lawsonClass({ p4: 0, p6: 0, p10: 0, p15: LAWSON_UNSAFE_EXCEEDANCE })).toBe("sitting");
-    expect(lawsonClass({ p4: 0, p6: 0, p10: 0, p15: LAWSON_UNSAFE_EXCEEDANCE + 1e-7 })).toBe("unsafe");
-    expect(lawsonClass({ p4: 1, p6: 1, p10: 1, p15: 0.01 })).toBe("unsafe");
+  it("splits the old 6–10 m/s walking range at 8 m/s", () => {
+    const sectors = emptySectors();
+    sectors[0] = [0, 0, 0, 1, 0];
+    const weights = windSeasonWeights(record(sectors, 0), WIND_SPEED_BIN_EDGES_MS);
+    const at = (ratio: number) => lawsonClass(exceedanceAt(weights, () => ratio));
+    expect(LAWSON_STROLLING_MS).toBe(8);
+    expect(at(0.5)).toBe("standing");
+    expect(at(0.65)).toBe("strolling");
+    expect(at(0.85)).toBe("walking");
+    expect(at(1)).toBe("uncomfortable");
+  });
+
+  it("keeps the five comfort classes in legend order with Strolling and no Unsafe", () => {
+    expect([...COMFORT_CLASSES]).toEqual(["sitting", "standing", "strolling", "walking", "uncomfortable"]);
+    expect(COMFORT_CLASSES.map((cls) => COMFORT_CLASS_LABELS[cls])).toEqual([
+      "Sitting",
+      "Standing",
+      "Strolling",
+      "Walking",
+      "Uncomfortable",
+    ]);
+  });
+});
+
+describe("isUnsafe", () => {
+  it("flags 15 m/s for more than 0.022% as a safety flag, separate from the comfort band", () => {
+    expect(isUnsafe({ p15: LAWSON_UNSAFE_EXCEEDANCE })).toBe(false);
+    expect(isUnsafe({ p15: LAWSON_UNSAFE_EXCEEDANCE + 1e-7 })).toBe(true);
+    expect(lawsonClass({ p4: 0, p6: 0, p8: 0, p10: 0 })).toBe("sitting");
   });
 });
 
@@ -72,11 +110,46 @@ describe("binExceedance", () => {
     expect(binExceedance(bin, 6)).toBe(0);
   });
 
-  it("decays smoothly above an open top bin", () => {
+  it("decays smoothly above an open top bin when no tail was fitted", () => {
     const bin = { loMs: 11, hiMs: 14, openTop: true };
     expect(binExceedance(bin, 11)).toBe(1);
     expect(binExceedance(bin, 14)).toBeCloseTo(Math.exp(-1), 12);
     expect(binExceedance(bin, 17)).toBeLessThan(binExceedance(bin, 14));
+  });
+
+  it("follows the fitted Weibull above an open top bin", () => {
+    const tail = { shape: 2, scaleMs: 6 };
+    const bin = { loMs: 11, hiMs: 14, openTop: true, tail };
+    const survive = (u: number) => Math.exp(-((u / 6) ** 2));
+    expect(binExceedance(bin, 11)).toBe(1);
+    expect(binExceedance(bin, 20)).toBeCloseTo(survive(20) / survive(11), 12);
+  });
+});
+
+describe("fitSectorWeibull", () => {
+  const edges = WIND_SPEED_BIN_EDGES_MS;
+  const survive = (u: number, k: number, c: number) => Math.exp(-((u / c) ** k));
+
+  it("recovers the shape and scale of a Weibull wind climate from its bins", () => {
+    const k = 2;
+    const c = 6;
+    const freqs = [0, 1, 2, 3, 4].map((band) => survive(edges[band]!, k, c) - (band === 4 ? 0 : survive(edges[band + 1]!, k, c)));
+    const fit = fitSectorWeibull(freqs, edges)!;
+    expect(fit.shape).toBeCloseTo(k, 1);
+    expect(fit.scaleMs).toBeCloseTo(c, 0);
+  });
+
+  it("gives up on a direction with too few bins to fit", () => {
+    expect(fitSectorWeibull([0, 0, 0, 0, 0.9], edges)).toBeNull();
+    expect(fitSectorWeibull([0, 0, 0, 0, 0], edges)).toBeNull();
+  });
+
+  it("puts open ground in a windy Weibull climate well under the unsafe limit", () => {
+    const sectors = emptySectors();
+    sectors[0] = [0, 1, 2, 3, 4].map((band) => survive(edges[band]!, 2, 6.2) - (band === 4 ? 0 : survive(edges[band + 1]!, 2, 6.2)));
+    const weights = windSeasonWeights(record(sectors, 0), edges);
+    expect(weights.bins.find((bin) => bin.openTop)?.tail).toBeDefined();
+    expect(isUnsafe(exceedanceAt(weights, () => 0.62))).toBe(false);
   });
 });
 

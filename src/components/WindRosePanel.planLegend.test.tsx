@@ -61,10 +61,10 @@ describe("WindRosePanel plan legend", () => {
     expect(card.querySelector(".wind-plan-swatches")).toBeNull();
   });
 
-  it("keeps the Lawson key in comfort without a speed bar", () => {
+  it("keeps comfort without a speed bar or swatches in the rose card", () => {
     const { container } = renderCard(stubPlan("comfort", 8));
     const card = container.querySelector(".wind-rose-panel.is-plan")!;
-    expect(card.querySelector(".wind-plan-swatches")).toBeTruthy();
+    expect(card.querySelector(".wind-plan-swatches")).toBeNull();
     expect(card.querySelector(".wind-plan-velocity")).toBeNull();
     expect(card.querySelector(".wind-plan-velocity-bar")).toBeNull();
   });
@@ -104,9 +104,10 @@ describe("WindRosePanel plan legend", () => {
     expect(css).not.toMatch(/\.wind-rose-meta-skipped \{[^}]*line-clamp/);
   });
 
-  it("drops the right-side velocity card from the model page", () => {
+  it("keeps the velocity scale out of a separate model-page card", () => {
     const view = readFileSync(path.join(process.cwd(), "src/components/model/ModelPageView.tsx"), "utf8");
     expect(view).not.toContain("WindPlanVelocityLegend");
-    expect(view).not.toContain("--wind-plan-legend-");
+    expect(view).not.toContain("WindPlanInfo");
+    expect(view).toContain("WindPlanComfortLegend");
   });
 });
