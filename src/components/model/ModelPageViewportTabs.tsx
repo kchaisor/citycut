@@ -12,6 +12,8 @@ import { sceneSelectionBuildingId } from "../../lib/sceneInspectPick";
 import { qaHideHeightPopoverFromSearch } from "../../lib/qaCameraBridge";
 import { sunStudyMutedOn, toggleSelection } from "../../lib/sunStudyPlan";
 import { SceneBoundary } from "../SceneBoundary";
+import { SunHoursLegendDock } from "./SunHoursLegendDock";
+import { solarStudyViewActive } from "../../lib/solarStudyView";
 import { WindRoseOverlay } from "../WindRoseOverlay";import { ViewLegend } from "../ViewPanel";
 
 import { SectionKnifeElevationPanel } from "../SectionKnifeElevationPanel";import { WalkRippleLegend } from "../WalkRipplePanel";
@@ -21,6 +23,7 @@ import { shouldShowIntroBridgePill } from "./shouldShowIntroBridgePill";
 
 export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").ModelPageViewModel }) {
   const {
+    analysisKind,
     axoSettings,
     cameraMemory,
     colourByUse,
@@ -39,6 +42,7 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
     inspectAnchor,
     inspectHudPosition,
     isoDrawingViewport,
+    leftOpen,
     lineStyles,
     massing,
     model,
@@ -74,6 +78,7 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
     showSource,
     snapId,
     solar,
+    sunHoursGround,
     sunStudyDate,
     sunStudySelected,
     tab,
@@ -88,6 +93,7 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
     windSettings,
     windTable,
   } = vm;
+  const sunHoursOnPlan = Boolean(solar.sunHours) && drawing === "site";
 
   return (
     <>
@@ -173,6 +179,10 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
                 sectionKnife={sectionKnifeTool}
                 onSectionKnifePoseChange={onSectionKnifePoseChange}
                 quality={renderQuality}
+                sunHoursGroundGrid={solar.sunHours ? sunHoursGround.grid : null}
+                sunHoursDirectOverlay={solar.sunHours ? sunHoursGround.overlay : null}
+                sunHoursScaleMax={solar.sunHours ? sunHoursGround.scaleMaxHours : 0}
+                solarAnalysisActive={solarStudyViewActive(leftOpen, analysisKind)}
               />
               {tab === "3d" && sectionKnifeTool.active && (
                 <SectionKnifeElevationPanel model={displayModel} tool={sectionKnifeTool} />
@@ -183,6 +193,9 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
                 <p className="walk-ripple-toast" role="status">
                   {walkRippleToast}
                 </p>
+              ) : null}
+              {tab === "3d" && solar.sunHours ? (
+                <SunHoursLegendDock stackClassName="sun-hours-direct-dock-stack" sunHoursGround={sunHoursGround} />
               ) : null}
               {tab === "3d" && studioCompassVisible(view.projection, view.freeRotate) && (
                 <StudioCompass needleDeg={compassNeedleDeg} />
@@ -298,8 +311,14 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
                 viewport={planViewport}
                 onViewportChange={setPlanViewport}
                 fitCounter={fitCounter}
+                sunHoursGroundGrid={sunHoursOnPlan ? sunHoursGround.grid : null}
+                sunHoursGroundScaleMax={sunHoursOnPlan ? sunHoursGround.scaleMaxHours : 0}
+                sunHoursRoofPlanRaster={sunHoursOnPlan ? (sunHoursGround.overlay?.roofPlanRaster ?? null) : null}
               />
             )}
+            {sunHoursOnPlan ? (
+              <SunHoursLegendDock stackClassName="plan-solar-dock-stack" sunHoursGround={sunHoursGround} />
+            ) : null}
           </div>
         )}
         {tab === "satellite" && (

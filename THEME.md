@@ -34,6 +34,7 @@ The name is `--background`. The value is `#EBEBEB`.
 | `--panel-border` | The line around panels, cards, and inputs. | `#C8C8C8` |
 | `--text` | Main text, icons, and the Create model button. | `#1A1916` |
 | `--muted-text` | Notes, credits, and other secondary text. | `#6E685E` |
+| `--sun-hours-direct-dock-footnote` | Compact Direct Sun Hours dock legend footnote. | `#5F5F5F` |
 | `--font-sans` | The font for buttons, labels, and ordinary text. | `"Geist", -apple-system, BlinkMacSystemFont, sans-serif` |
 | `--font-mono` | The font for numbers and data, such as stats and coordinates. | `"Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace` |
 | `--font-serif` | The font for the large “Your model is ready” title. Despite the name, it is Geist; a later change renames it `--sans`. | `"Geist", "Iowan Old Style", Georgia, serif` |
@@ -225,6 +226,13 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--sun-study-path-edge` | `#d4d4d0` | Sun study muted base plan (on by default with the sun study; toggle off in the Sun panel): footpath edge. |
 | `--sun-study-building` | `#ffffff` | Sun study muted base plan (on by default with the sun study; toggle off in the Sun panel): buildings (the site building keeps its own colour). |
 | `--sun-study-tree` | `#b8e0b0` | Tree crowns in the sun study muted base plan, at 50% opacity. Pastel green so trees stay visible under the hourly shadows. |
+| `--sun-hours-direct-0` | `#313695` | Direct sun hours 0 h (blue). |
+| `--sun-hours-direct-15` | `#4575b4` | Direct sun hours low blue. |
+| `--sun-hours-direct-30` | `#a5006a` | Direct sun hours purple. |
+| `--sun-hours-direct-50` | `#d73027` | Direct sun hours red mid. |
+| `--sun-hours-direct-70` | `#f46d43` | Direct sun hours orange. |
+| `--sun-hours-direct-90` | `#fdae61` | Direct sun hours light orange. |
+| `--sun-hours-direct-max` | `#fee825` | Direct sun hours max (yellow). |
 | `--axo-water` | `#7eb8da` | Exploded axo floodplain / water layer. |
 | `--axo-road` | `#e8883a` | Exploded axo roads layer. |
 | `--axo-green` | `#8fbc8f` | Exploded axo green spaces layer. |
