@@ -7,6 +7,7 @@ import {
   vicmapPageUrl,
   vicmapPointsToTrees,
 } from "./vicmapTrees";
+import { makeSiteFrame } from "./siteFrame";
 
 const bounds = { south: -37.81, west: 144.94, north: -37.79, east: 144.96 };
 
@@ -83,7 +84,7 @@ describe("Vicmap pages", () => {
       expect(points).toHaveLength(VICMAP_PAGE_SIZE - 1 + 3);
       expect(points.some((point) => point.dense)).toBe(true);
       expect(info).toHaveBeenCalledWith(expect.stringContaining("dropped 1 Vicmap"));
-      const trees = vicmapPointsToTrees(points, { lon: 144.95, lat: -37.8 }, 500);
+      const trees = vicmapPointsToTrees(points, { lon: 144.95, lat: -37.8 }, makeSiteFrame(500, "square"));
       expect(trees.length).toBeGreaterThan(0);
       expect(trees.every((point) => point.tier === "vicmap" && point.sizeSource === "vicmap")).toBe(true);
       expect(trees.every((point) => point.height_m >= 2 && point.height_m <= 40)).toBe(true);

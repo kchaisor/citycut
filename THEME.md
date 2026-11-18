@@ -35,8 +35,9 @@ The name is `--background`. The value is `#EBEBEB`.
 | `--text` | Main text, icons, and the Create model button. | `#1A1916` |
 | `--muted-text` | Notes, credits, and other secondary text. | `#6E685E` |
 | `--sun-hours-direct-dock-footnote` | Compact Direct Sun Hours dock legend footnote. | `#5F5F5F` |
-| `--font-sans` | The font for buttons, labels, and ordinary text. | `"Outfit", "Avenir Next", "Segoe UI", sans-serif` |
-| `--font-serif` | The font for the large “Your model is ready” title. | `"Fraunces", "Iowan Old Style", Georgia, serif` |
+| `--font-sans` | The font for buttons, labels, and ordinary text. | `"Geist", -apple-system, BlinkMacSystemFont, sans-serif` |
+| `--font-mono` | The font for numbers and data, such as stats and coordinates. | `"Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace` |
+| `--font-serif` | The font for the large “Your model is ready” title. Despite the name, it is Geist; a later change renames it `--sans`. | `"Geist", "Iowan Old Style", Georgia, serif` |
 | `--font-size` | The size of ordinary text. | `15px` |
 | `--font-size-brand` | The size of the CityCut name in the sidebar brand bar. | `18px` |
 | `--font-size-drawer` | The size of a drawer title, such as Exports. | `15px` |
@@ -92,14 +93,17 @@ Use capital or lowercase letters. `#ebebeb` and `#EBEBEB` are the same colour.
 
 The safest choices are fonts the app already loads, or a common font that is already on the computer:
 
-- Outfit, for ordinary text. The app loads this.
-- Fraunces, for the large title. The app loads this.
-- Avenir Next, Segoe UI, Georgia, and the words `sans-serif` or `serif`. These are fallbacks. The browser uses the first one it can find.
+- Geist, for buttons, labels and ordinary text. The app loads this.
+- Geist Mono, for numbers and data. The app loads this.
+- Outfit at weight 700, only for the CityCut wordmark and the Create model button. Use it nowhere else.
+- -apple-system, BlinkMacSystemFont, ui-monospace and the words `sans-serif` or `monospace`. These are fallbacks. The browser uses the first one it can find.
+
+Fraunces is no longer used.
 
 Keep the quotes around a name that has a space, and keep the commas. A good ordinary-text line is:
 
 ```css
---font-sans: "Outfit", "Avenir Next", "Segoe UI", sans-serif;
+--font-sans: "Geist", -apple-system, BlinkMacSystemFont, sans-serif;
 ```
 
 A name the app does not load, such as a font from your computer only, will show for you and not for other people.

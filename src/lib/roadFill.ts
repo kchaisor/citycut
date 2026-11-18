@@ -422,13 +422,14 @@ export function surfaceVerticesOutsideFrame(
   sideM: number,
   frameShape: SiteFrameShape = DEFAULT_SITE_FRAME_SHAPE,
   toleranceM = 0.02,
+  frameSize?: FrameGroundSize,
 ): Pt[] {
   const half = sideM / 2;
   const outside: Pt[] = [];
   for (const polygon of polygons) {
     for (const ring of polygon) {
       for (const [x, y] of ring) {
-        if (!pointInSiteFrame([x, y], sideM, frameShape)) {
+        if (!pointInSiteFrame([x, y], sideM, frameShape, frameSize)) {
           outside.push([x, y]);
         } else if (frameShape === "square") {
           const slack = toleranceM;

@@ -19,6 +19,7 @@ import { attachScenePointPick } from "../lib/buildingPick";
 import { attachSceneInspectPick, type SceneInspectWorld, type SceneSelection } from "../lib/sceneInspectPick";
 import { buildCityGroup, disposeObject } from "../lib/buildCity";
 import { basePlinthBottomY } from "../lib/terrain";
+import { siteFrameFromModel } from "../lib/modelFrame";
 import { auditBuildingSelection, mountSelectedBuildingsVisual } from "../lib/buildingSelectionVisual";
 import { CAMERA_FIT_INCLUDES_HELIODON } from "../lib/sceneCameraFit";
 import { shotFromCamera, type CameraShot } from "../lib/cameraShot";
@@ -2236,6 +2237,10 @@ export function Scene3D({
   const studioFill = getColour("--light-fill");
   const groundY = model.terrain ? model.terrain.min : 0;
   const plinthBottomY = basePlinthBottomY(model.sideM, model.terrain);
+  const cutFrame = useMemo(
+    () => siteFrameFromModel(model),
+    [model.sideM, model.widthM, model.heightM, model.frameShape],
+  );
   const solarNeutralFill = useMemo(() => getColour("--building-solar-neutral"), [colourTick]);
   const sunSample = useMelbourneSunSample(model.center.lat, model.center.lon, solar);
   const [glEpoch, setGlEpoch] = useState(0);
@@ -2324,7 +2329,7 @@ export function Scene3D({
         sideM={model.sideM}
         plinthBottomY={plinthBottomY}
         showShadow={projection !== "plan"}
-        frameShape={model.frameShape ?? "square"}
+        frame={cutFrame}
         colourTick={colourTick}
         primaryView={display.primaryView}
       />

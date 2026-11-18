@@ -5,7 +5,8 @@ import {
   clipUnion as union,
 } from "./safePolygonClip";
 import { openRing } from "./geo";
-import { siteFramePolygon } from "./siteFrame";
+import { outline } from "./siteFrame";
+import { siteFrameFromModel } from "./modelFrame";
 import { sunAtMelbourneLocal, type SolarSample } from "./solar";
 import { buildingHeightsFingerprint } from "./heightOverrides";
 import { footprintBase, sampleTerrain } from "./terrain";
@@ -164,8 +165,8 @@ export function buildingShadowPolygon(building: BuildingFeat, offset: Pt): Multi
   return merged;
 }
 
-function framePolygon(sideM: number, frameShape: import("./siteFrame").SiteFrameShape = "square"): Polygon {
-  return siteFramePolygon(sideM, frameShape) as Polygon;
+function framePolygon(model: Pick<CityModel, "sideM" | "widthM" | "heightM" | "frameShape">): Polygon {
+  return outline(siteFrameFromModel(model)) as Polygon;
 }
 
 function clipRingFromClipRing(ring: ClipRing): import("../types").Ring {
@@ -262,7 +263,7 @@ function safeDifference(subject: MultiPolygon, clip: MultiPolygon): MultiPolygon
 
 function clipShadowToFrame(merged: MultiPolygon, model: CityModel): MultiPolygon {
   if (merged.length === 0) return [];
-  const frame = framePolygon(model.sideM, model.frameShape ?? "square");
+  const frame = framePolygon(model);
   try {
     return intersection(merged, frame);
   } catch {

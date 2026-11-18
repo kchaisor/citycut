@@ -15,6 +15,7 @@ import {
 } from "./treesPrebake";
 import { overtureTreesFromPoints } from "./overtureBase";
 import { vicmapPointsToTrees } from "./vicmapTrees";
+import { makeSiteFrame } from "./siteFrame";
 
 const bytes = readFileSync(new URL("./test/fixtures/trees-mini.pmtiles", import.meta.url));
 const archive = () =>
@@ -65,7 +66,7 @@ describe("pre-baked tree reader", () => {
     const result = await loadPrebakedTrees(bounds, undefined, { fetchManifest: async () => manifest, archive: archive() });
     if (!result.ok) throw new Error(result.reason);
     const center = { lat: -37.8475, lon: 145.015 };
-    const trees = vicmapPointsToTrees(result.trees.vicmap, center, 2000);
+    const trees = vicmapPointsToTrees(result.trees.vicmap, center, makeSiteFrame(2000, "square"));
     expect(trees.every((t) => t.tier === "vicmap" && t.sizeSource === "vicmap")).toBe(true);
     const osm = overtureTreesFromPoints(result.trees.osm, center, 2000);
     expect(osm.find((t) => t.id === 42)?.height_m).toBe(12);

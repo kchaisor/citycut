@@ -41,6 +41,7 @@ import { windPlanPdfChunk } from "./windExport";
 import { comBuildingHeightCreditLine } from "./comBuildingHeightCredit";
 import { comTreesCreditLine } from "./comTreesCredit";
 import { plainDataCredit } from "./dataCredits";
+import { modelFrameSize } from "./modelFrame";
 import {
   explodedAxoChunks,
   explodedAxoPageSize,
@@ -705,7 +706,7 @@ export function figureGroundChunks(
   model = stableExportModel(model);
   const layout = layoutForModel(model, scale);
   const frameShape = model.frameShape ?? "square";
-  const ground = figureGround(model.buildings, model.sideM, frameShape);
+  const ground = figureGround(model.buildings, model.sideM, frameShape, modelFrameSize(model));
   const chunks: PdfChunk[] = [];
   const paths = ground.polygons
     .map((polygon) => mapRings(polygon, model.sideM, layout))

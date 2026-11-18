@@ -1,4 +1,5 @@
-import { pointInSiteFrame, DEFAULT_SITE_FRAME_SHAPE } from "./siteFrame";
+import { siteFrameFromModel } from "./modelFrame";
+import { containsPoint } from "./siteFrame";
 import { axoPlanDepth, type AxoSolidFace } from "./explodedAxoMassing";
 import type { CityModel, Pt, TreeSizeSource } from "../types";
 
@@ -30,10 +31,9 @@ export function axoCrownSource(source: TreeSizeSource | undefined): AxoCrownSour
 export function buildAxoCanopyFaces(
   model: CityModel,
 ): { faces: AxoSolidFace[]; counts: Record<AxoCrownSource, number> } {
-  const shape = model.frameShape ?? DEFAULT_SITE_FRAME_SHAPE;
   const counts: Record<AxoCrownSource, number> = { measured: 0, estimate: 0 };
   const trees = model.trees
-    .filter((tree) => pointInSiteFrame(tree.at, model.sideM, shape))
+    .filter((tree) => containsPoint(siteFrameFromModel(model), tree.at))
     .sort((a, b) => axoPlanDepth(a.at[0], a.at[1]) - axoPlanDepth(b.at[0], b.at[1]));
   const faces: AxoSolidFace[] = [];
   for (const tree of trees) {
