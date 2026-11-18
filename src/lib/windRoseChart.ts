@@ -1,5 +1,5 @@
 import type { WindPeriodStats } from "./windRose";
-import { sectorCenterDeg, WIND_SECTOR_COUNT } from "./windRose";
+import { sectorCenterDeg, sectorLabel, WIND_SECTOR_COUNT } from "./windRose";
 import { stackedSectorArmLength } from "./windRoseStats";
 import { windBandFill } from "./windBins";
 
@@ -25,9 +25,9 @@ export const DEFAULT_WIND_ROSE_LAYOUT: WindRoseChartLayout = {
   labelR: 88 + 12,
 };
 
-export type WindRoseChartWedge = { d: string; fill: string };
+export type WindRoseChartWedge = { d: string; fill: string; sector: number };
 
-function annularSectorPath(
+export function annularSectorPath(
   cx: number,
   cy: number,
   rInner: number,
@@ -48,11 +48,38 @@ function annularSectorPath(
   return `M ${x1} ${y1} L ${x2} ${y2} A ${rOuter} ${rOuter} 0 0 1 ${x3} ${y3} L ${x4} ${y4} Z`;
 }
 
+function windRoseArms(stats: WindPeriodStats): number[] {
+  return Array.from({ length: WIND_SECTOR_COUNT }, (_, s) => stackedSectorArmLength(stats, s));
+}
+
+export function windRosePetalOuterRadii(
+  stats: WindPeriodStats,
+  layout: WindRoseChartLayout = DEFAULT_WIND_ROSE_LAYOUT,
+): number[] {
+  const arms = windRoseArms(stats);
+  const maxArm = Math.max(...arms, 0.001);
+  return arms.map((arm) => (arm > 0 ? layout.hubR + (arm / maxArm) * (layout.petalMaxR - layout.hubR) : 0));
+}
+
+export function windRoseSectorPoint(layout: WindRoseChartLayout, sector: number, r: number): { x: number; y: number } {
+  const rad = ((sectorCenterDeg(sector) - 90) * Math.PI) / 180;
+  return { x: layout.cx + Math.cos(rad) * r, y: layout.cy + Math.sin(rad) * r };
+}
+
+export function windRoseSectorSharePct(stats: WindPeriodStats, sector: number): number {
+  return stackedSectorArmLength(stats, sector) * 100;
+}
+
+export function windRoseSectorTip(sector: number, sharePct: number, referenceMs: number | null): string {
+  const speed = referenceMs != null ? `${referenceMs.toFixed(1)} m/s median` : "no wind";
+  return `${sectorLabel(sector)} · ${Math.round(sharePct)}% of hours · ${speed}`;
+}
+
 export function windRoseStackedWedges(
   stats: WindPeriodStats,
   layout: WindRoseChartLayout = DEFAULT_WIND_ROSE_LAYOUT,
 ): WindRoseChartWedge[] {
-  const arms = Array.from({ length: WIND_SECTOR_COUNT }, (_, s) => stackedSectorArmLength(stats, s));
+  const arms = windRoseArms(stats);
   const maxArm = Math.max(...arms, 0.001);
   const { cx, cy, hubR, petalMaxR } = layout;
   const wedges: WindRoseChartWedge[] = [];
@@ -69,6 +96,7 @@ export function windRoseStackedWedges(
       wedges.push({
         d: annularSectorPath(cx, cy, rInner, rOuter, sectorCenterDeg(sector)),
         fill: windBandFill(band),
+        sector,
       });
       rInner = rOuter;
     }

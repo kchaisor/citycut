@@ -1,7 +1,6 @@
 import { useLayoutEffect } from "react";
 import { ShortcutCheatsheet } from "../ShortcutCheatsheet";
 import { WindRosePanel } from "../WindRosePanel";
-import { WindPlanInfo } from "../WindPlanCard";
 import { shouldShowIntroBridgePill } from "./shouldShowIntroBridgePill";
 import { ModelPageSidebar } from "./ModelPageSidebar";
 import { ModelPageViewportFooter } from "./ModelPageViewportFooter";
@@ -26,7 +25,6 @@ export function ModelPageView({ vm }: { vm: ModelPageViewModel }) {
   } = vm;
 
   const windCardOn = leftOpen === "analysis" && tab !== "satellite" && analysisKind === "wind" && siteWind != null;
-  const speedHudOn = windCardOn && windPlan.active && windPlan.mode === "speed";
   useWindPlanCardBounds(windCardOn && windPlan.active);
 
   return (
@@ -60,7 +58,6 @@ export function ModelPageView({ vm }: { vm: ModelPageViewModel }) {
             />
           </div>
         ) : null}
-        {speedHudOn ? <WindPlanInfo plan={windPlan} period={windSettings.period} /> : null}
         <ModelPageViewportFooter vm={vm} />
       </div>
       <ShortcutCheatsheet open={shortcutCheatsheetOpen} onClose={() => setShortcutCheatsheetOpen(false)} />

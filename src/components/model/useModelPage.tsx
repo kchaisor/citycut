@@ -1350,6 +1350,7 @@ export function useModelPage({
     period: windSettings.period,
     designWind,
     designWinds,
+    clearDesignWind: () => commitWind({ ...windSettings, designWind: null }),
     active: tab === "3d" && view.projection === "plan" && leftOpen === "analysis" && analysisKind === "wind" && siteWind != null,
   });
 

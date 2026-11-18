@@ -29,6 +29,7 @@ import {
 } from "./windComfort";
 
 export const WIND_PLAN_SPEED_MAX_MS = 4;
+export const WIND_PLAN_SCALE_PERCENTILE = 0.995;
 export const WIND_PLAN_IMAGE_UPSCALE = 4;
 export const WIND_PLAN_IMAGE_MAX_PIXELS = 4_000_000;
 
@@ -182,10 +183,10 @@ export type WindPlanView = { sector: number; referenceMs: number };
 
 type PlanFlow = {
   inner: GroundWindObstacles;
+  fingerprint: string;
   pad: number;
   padded: GroundWindFieldCache;
   ratios: Map<number, Float32Array>;
-  peakRatios: Map<number, number>;
   heightFactors: Float32Array | null;
 };
 
@@ -193,15 +194,24 @@ type PlanCache = {
   flow: PlanFlow | null;
   speed: Map<string, WindPlanSpeed>;
   comfort: Map<string, WindPlanComfort>;
-  scale: Map<string, number>;
 };
+
+const SITE_CACHE_LIMIT = 64;
+const siteScaleRatios = new Map<string, number>();
+const siteScales = new Map<string, number>();
+
+function rememberSite<T>(store: Map<string, T>, key: string, value: T) {
+  store.delete(key);
+  store.set(key, value);
+  if (store.size > SITE_CACHE_LIMIT) store.delete(store.keys().next().value!);
+}
 
 const planCaches = new WeakMap<CityModel, PlanCache>();
 
 function planCache(model: CityModel): PlanCache {
   let cache = planCaches.get(model);
   if (!cache) {
-    cache = { flow: null, speed: new Map(), comfort: new Map(), scale: new Map() };
+    cache = { flow: null, speed: new Map(), comfort: new Map() };
     planCaches.set(model, cache);
   }
   return cache;
@@ -349,6 +359,24 @@ export function windPlanRatioField(grid: GroundWindFlowGrid, pad: number, cols: 
   return cropPadded(ratio, paddedCols, pad, cols, rows);
 }
 
+function hashWords(hash: number, words: Uint32Array): number {
+  let h = hash;
+  for (let k = 0; k < words.length; k++) h = Math.imul(h ^ words[k]!, 0x01000193) >>> 0;
+  return h;
+}
+
+export function windPlanSiteFingerprint(obs: GroundWindObstacles, water: Uint8Array): string {
+  const waterWords = new Uint32Array(water.length);
+  waterWords.set(water);
+  let h = 0x811c9dc5;
+  h = hashWords(h, new Uint32Array(obs.heights.buffer, obs.heights.byteOffset, obs.heights.length));
+  h = hashWords(h, new Uint32Array(obs.canopy.buffer, obs.canopy.byteOffset, obs.canopy.length));
+  h = hashWords(h, waterWords);
+  let cells = 0;
+  for (let idx = 0; idx < water.length; idx++) cells += water[idx]! + obs.solid[idx]! * 2;
+  return `${obs.cols}x${obs.rows}@${obs.cellM}:${obs.originE},${obs.originN}:${cells}:${h.toString(16)}`;
+}
+
 function planFlow(model: CityModel): PlanFlow {
   const cache = planCache(model);
   if (!cache.flow) {
@@ -359,7 +387,8 @@ function planFlow(model: CityModel): PlanFlow {
     const padded: GroundWindFieldCache = { model, obstacles: periodicPadObstacles(inner, pad), grids: new Map(), builds: 0 };
     const water = rasterGroundWindWater(model, inner, inner.solid);
     const heightFactors = pedestrianHeightFactors(water, inner.cols, inner.rows, inner.cellM);
-    cache.flow = { inner, pad, padded, ratios: new Map(), peakRatios: new Map(), heightFactors };
+    const fingerprint = windPlanSiteFingerprint(inner, water);
+    cache.flow = { inner, fingerprint, pad, padded, ratios: new Map(), heightFactors };
   }
   return cache.flow;
 }
@@ -437,11 +466,16 @@ export function windPlanDisplayField(
   return speed;
 }
 
-export function windPlanPeakRatio(ratio: Float32Array, geometry: WindPlanGeometry, heightFactors: Float32Array | null = null): number {
-  const display = windPlanDisplayField(ratio, geometry, 1, heightFactors);
-  let peak = 0;
-  for (let idx = 0; idx < display.length; idx++) if (display[idx]! > peak) peak = display[idx]!;
-  return peak;
+export function windPlanFieldPercentile(values: ArrayLike<number>, solid: Uint8Array, fraction: number): number {
+  const open: number[] = [];
+  for (let idx = 0; idx < values.length; idx++) if (!solid[idx] && Number.isFinite(values[idx]!)) open.push(values[idx]!);
+  if (open.length === 0) return NaN;
+  open.sort((a, b) => a - b);
+  return open[Math.min(open.length - 1, Math.max(0, Math.ceil(fraction * open.length) - 1))]!;
+}
+
+export function windPlanScaleRatio(ratio: Float32Array, geometry: WindPlanGeometry, heightFactors: Float32Array | null = null): number {
+  return windPlanFieldPercentile(windPlanDisplayField(ratio, geometry, 1, heightFactors), geometry.solid, WIND_PLAN_SCALE_PERCENTILE);
 }
 
 export function windPlanScaleKey(views: readonly WindPlanView[]): string {
@@ -449,30 +483,34 @@ export function windPlanScaleKey(views: readonly WindPlanView[]): string {
 }
 
 export function cachedWindPlanScale(model: CityModel, key: string): number | null {
-  return planCache(model).scale.get(surfaceKey(model, key)) ?? null;
+  const flow = planCache(model).flow;
+  return flow ? (siteScales.get(`${flow.fingerprint}|${key}`) ?? null) : null;
 }
 
 export function createWindPlanScaleJob(model: CityModel, views: readonly WindPlanView[]): WindPlanJob<number> {
-  const cache = planCache(model);
-  const cacheKey = surfaceKey(model, windPlanScaleKey(views));
-  let result = cache.scale.get(cacheKey) ?? null;
+  const viewsKey = windPlanScaleKey(views);
   const sectors = [...new Set(views.map((view) => groundWindSector(view.sector)))];
+  let result = cachedWindPlanScale(model, viewsKey);
   let sectorAt = 0;
   let ratioJob: PlanRatioJob | null = null;
 
   const work = (budgetMs: number): boolean => {
     const flow = planFlow(model);
+    const scaleKey = `${flow.fingerprint}|${viewsKey}`;
+    const ratioKey = (sector: number) => `${flow.fingerprint}|${sector}`;
+    result = siteScales.get(scaleKey) ?? null;
+    if (result !== null) return true;
     if (sectorAt >= sectors.length) {
-      const peaks = views.map((view) => view.referenceMs * flow.peakRatios.get(groundWindSector(view.sector))!);
+      const peaks = views.map((view) => view.referenceMs * siteScaleRatios.get(ratioKey(groundWindSector(view.sector)))!);
       result = windPlanSiteScaleMaxMs(peaks);
-      cache.scale.set(cacheKey, result);
+      rememberSite(siteScales, scaleKey, result);
       return true;
     }
     const sector = sectors[sectorAt]!;
-    if (!flow.peakRatios.has(sector)) {
+    if (!siteScaleRatios.has(ratioKey(sector))) {
       ratioJob ??= createPlanRatioJob(model, sector);
       if (!ratioJob.step(budgetMs)) return false;
-      flow.peakRatios.set(sector, windPlanPeakRatio(ratioJob.ratio()!, windPlanGeometry(flow.inner), flow.heightFactors));
+      rememberSite(siteScaleRatios, ratioKey(sector), windPlanScaleRatio(ratioJob.ratio()!, windPlanGeometry(flow.inner), flow.heightFactors));
       ratioJob = null;
     }
     sectorAt += 1;
@@ -606,9 +644,19 @@ export function windPlanRampStops(
   });
 }
 
-export function windPlanLegendGradient(colourOf: (token: ColourKey) => string): string {
-  const stops = WIND_PLAN_SPEED_RAMP.map((s) => `${colourOf(s.token)} ${((s.ms / WIND_PLAN_SPEED_MAX_MS) * 100).toFixed(1)}%`);
-  return `linear-gradient(to top, ${stops.join(", ")})`;
+export type WindPlanLegendStop = { token: ColourKey; pct: number };
+
+export function windPlanLegendStops(scaleMaxMs: number = WIND_PLAN_SPEED_MAX_MS): WindPlanLegendStop[] {
+  return windPlanSpeedRamp(scaleMaxMs).map((stop) => ({ token: stop.token, pct: (stop.ms / scaleMaxMs) * 100 }));
+}
+
+export function windPlanLegendGradient(
+  colourOf: (token: ColourKey) => string,
+  scaleMaxMs: number = WIND_PLAN_SPEED_MAX_MS,
+  direction: "to right" | "to top" = "to right",
+): string {
+  const stops = windPlanLegendStops(scaleMaxMs).map((stop) => `${colourOf(stop.token)} ${Number(stop.pct.toFixed(3))}%`);
+  return `linear-gradient(${direction}, ${stops.join(", ")})`;
 }
 
 export function windPlanImageUpscale(cols: number, rows: number): number {

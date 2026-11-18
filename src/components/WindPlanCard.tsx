@@ -2,7 +2,7 @@ import { getColour } from "../lib/colours";
 import { useColourRevision } from "../lib/useColourRevision";
 import { COMFORT_CLASSES, COMFORT_CLASS_LABELS, unsafeAreasLabel } from "../lib/windComfort";
 import { windPlanLegendGradient, windPlanSpeedTicks } from "../lib/windPlanField";
-import { monthPeriodLabel, type WindPeriodId } from "../lib/windRose";
+import { monthPeriodLabel, sectorCenterDeg, sectorLabel, type WindPeriodId } from "../lib/windRose";
 import type { DesignWind } from "../lib/windDesignWinds";
 import type { WindPlanState } from "./useWindPlan";
 
@@ -27,6 +27,11 @@ export function windPlanTitle(plan: Pick<WindPlanState, "mode">): string {
   return plan.mode === "comfort" ? "Pedestrian comfort" : "Plan wind";
 }
 
+export function windPlanDirectionValue(plan: Pick<WindPlanState, "mode" | "sector" | "dirLabel">): string {
+  if (plan.mode !== "speed" || plan.sector == null) return plan.dirLabel;
+  return `${sectorLabel(plan.sector)} · ${sectorCenterDeg(plan.sector)}°`;
+}
+
 export function WindPlanRows({ plan, period }: { plan: WindPlanState; period: WindPeriodId }) {
   const speedMode = plan.mode === "speed";
   const design = speedMode ? plan.designWind : null;
@@ -40,23 +45,7 @@ export function WindPlanRows({ plan, period }: { plan: WindPlanState; period: Wi
         </div>
         <div className="wind-plan-row">
           <dt>Direction</dt>
-          <dd>
-            {design ? (
-              <span className="wind-plan-dir mono">{`${design.label} · ${design.headingDeg}°`}</span>
-            ) : speedMode && plan.sector != null ? (
-              <span className="wind-plan-stepper">
-                <button type="button" aria-label="Previous wind direction" onClick={() => plan.stepSector(-1)}>
-                  ‹
-                </button>
-                <span className="wind-plan-dir">{plan.dirLabel}</span>
-                <button type="button" aria-label="Next wind direction" onClick={() => plan.stepSector(1)}>
-                  ›
-                </button>
-              </span>
-            ) : (
-              plan.dirLabel
-            )}
-          </dd>
+          <dd className={speedMode ? "wind-plan-dir mono" : undefined}>{windPlanDirectionValue(plan)}</dd>
         </div>
         <div className="wind-plan-row">
           <dt>{speedMode ? "Reference" : "Criteria"}</dt>
@@ -114,26 +103,6 @@ export function windPlanReferenceLabel(referenceMs: number | null): string {
   return referenceMs != null ? `${referenceMs.toFixed(1)} m/s` : "—";
 }
 
-export function WindPlanInfo({ plan, period }: { plan: WindPlanState; period: WindPeriodId }) {
-  const design = plan.mode === "speed" ? plan.designWind : null;
-  return (
-    <dl className="wind-plan-info hud-card" aria-label="Plan wind conditions">
-      <div className="wind-plan-row">
-        <dt>Wind speed</dt>
-        <dd className="mono">{windPlanReferenceLabel(plan.referenceMs)}</dd>
-      </div>
-      <div className="wind-plan-row">
-        <dt>Direction</dt>
-        <dd>{plan.dirLabel}</dd>
-      </div>
-      <div className="wind-plan-row">
-        <dt>{design ? "Design wind" : "Season"}</dt>
-        <dd>{design ? `${design.label} · ${Math.round(design.sharePct)}%` : windPlanSeasonLabel(period)}</dd>
-      </div>
-    </dl>
-  );
-}
-
 export function WindPlanVelocityLegend({ scaleMaxMs }: { scaleMaxMs: number | null }) {
   useColourRevision();
   return (
@@ -141,7 +110,7 @@ export function WindPlanVelocityLegend({ scaleMaxMs }: { scaleMaxMs: number | nu
       <p className="wind-plan-legend-title">
         Velocity <span className="wind-plan-unit">(m/s)</span>
       </p>
-      <span className="wind-plan-velocity-bar" aria-hidden="true" style={{ background: windPlanLegendGradient(getColour) }} />
+      <span className="wind-plan-velocity-bar" aria-hidden="true" style={{ background: windPlanLegendGradient(getColour, scaleMaxMs ?? undefined) }} />
       <span className="wind-plan-velocity-ticks mono" aria-hidden="true">
         {scaleMaxMs != null
           ? windPlanSpeedTicks(scaleMaxMs).map((tick) => {

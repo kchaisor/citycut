@@ -1,10 +1,9 @@
 import { useFrame, useThree } from "@react-three/fiber";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import type { CityModel, Pt } from "../types";
 import { colourRgb, getColour, type ColourKey } from "../lib/colours";
 import { useColourRevision } from "../lib/useColourRevision";
-import { downwindFromSector, sectorLabel } from "../lib/windRose";
 import {
   bilinearSample,
   rampRgb,
@@ -15,7 +14,6 @@ import {
 } from "../lib/windPlanField";
 import { windPlanComfortBands, windPlanSpeedContours, type WorldRing } from "../lib/windPlanContours";
 import { windPlanLineStyle, type WindPlanLineStyle, type WindPlanPen } from "../lib/windPlanStyle";
-import { placeWindArrow, windPlanArrowLabel, type ScreenRect, type WindArrowLayout } from "../lib/windPlanArrow";
 import type { WindPlanState } from "./useWindPlan";
 
 export type WindPlanTransform = { ox: number; oy: number; exX: number; exY: number; enX: number; enY: number };
@@ -77,12 +75,6 @@ const COMFORT_FILL: Record<"standing" | "walking" | "uncomfortable" | "unsafe", 
   uncomfortable: "--wind-plan-uncomfortable",
   unsafe: "--wind-plan-unsafe",
 };
-
-const ARROW_CHIP_HEIGHT_PX = 20;
-const ARROW_CHIP_PAD_PX = 12;
-const ARROW_CHIP_FONT = "600 11px Geist, system-ui, sans-serif";
-const VIEW_INSET_PX = 14;
-const HUD_SELECTOR = ".hud-card, .studio-compass";
 
 const speedImages = new WeakMap<WindPlanSpeed, { revision: number; scaleMaxMs: number; canvas: HTMLCanvasElement }>();
 
@@ -147,11 +139,8 @@ function signedArea(ring: readonly Pt[]): number {
   return sum / 2;
 }
 
-type BuildingShapes = { path: Path2D; boxes: Array<[number, number, number, number]> };
-
-function buildingShapes(model: CityModel): BuildingShapes {
+function buildingPath(model: CityModel): Path2D {
   const path = new Path2D();
-  const boxes: Array<[number, number, number, number]> = [];
   const trace = (ring: readonly Pt[], reverse: boolean) => {
     const points = reverse ? [...ring].reverse() : ring;
     points.forEach(([e, n], k) => {
@@ -163,24 +152,13 @@ function buildingShapes(model: CityModel): BuildingShapes {
   for (const building of model.buildings) {
     const ring = building.ring;
     if (ring.length < 3) continue;
-    let minE = Infinity;
-    let minN = Infinity;
-    let maxE = -Infinity;
-    let maxN = -Infinity;
-    for (const [e, n] of ring) {
-      minE = Math.min(minE, e);
-      maxE = Math.max(maxE, e);
-      minN = Math.min(minN, n);
-      maxN = Math.max(maxN, n);
-    }
     const outerSign = Math.sign(signedArea(ring));
     trace(ring, false);
     for (const hole of building.holes ?? []) {
       if (hole.length >= 3) trace(hole, Math.sign(signedArea(hole)) === outerSign);
     }
-    boxes.push([minE, minN, maxE, maxN]);
   }
-  return { path, boxes };
+  return path;
 }
 
 function clampInside(value: number, lo: number, hi: number): number {
@@ -225,17 +203,6 @@ function hatch(ctx: CanvasRenderingContext2D, width: number, height: number, sty
   ctx.restore();
 }
 
-function sameArrow(a: WindArrowLayout | null, b: WindArrowLayout | null): boolean {
-  if (!a || !b) return a === b;
-  return (
-    Math.abs(a.tail.x - b.tail.x) < 0.5 &&
-    Math.abs(a.tail.y - b.tail.y) < 0.5 &&
-    Math.abs(a.head.x - b.head.x) < 0.5 &&
-    Math.abs(a.head.y - b.head.y) < 0.5 &&
-    a.chip.x1 - a.chip.x0 === b.chip.x1 - b.chip.x0
-  );
-}
-
 export function WindPlanOverlay({
   model,
   plan,
@@ -248,11 +215,9 @@ export function WindPlanOverlay({
   const hostRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const colourRevision = useColourRevision();
-  const [arrow, setArrow] = useState<WindArrowLayout | null>(null);
-  const buildings = useMemo(() => buildingShapes(model), [model]);
+  const buildings = useMemo(() => buildingPath(model), [model]);
   const cut = useMemo(() => cutExtent(model), [model]);
-  const { mode, speed, comfort, sector, scaleMaxMs } = plan;
-  const arrowLabel = sector != null ? windPlanArrowLabel(sectorLabel(sector)) : "";
+  const { mode, speed, comfort, scaleMaxMs } = plan;
 
   const draw = useCallback(() => {
     const host = hostRef.current;
@@ -270,10 +235,7 @@ export function WindPlanOverlay({
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, width, height);
     const data: WindPlanSpeed | WindPlanComfort | null = mode === "speed" ? (scaleMaxMs != null ? speed : null) : comfort;
-    if (!data) {
-      setArrow(null);
-      return;
-    }
+    if (!data) return;
     const style = windPlanLineStyle();
     const ox = t.ox - rect.left;
     const oy = t.oy - rect.top;
@@ -336,40 +298,11 @@ export function WindPlanOverlay({
     }
 
     ctx.fillStyle = getColour("--wind-plan-building");
-    ctx.fill(buildings.path, "nonzero");
-    strokeInside(ctx, buildings.path, style.buildingEdge, scale);
+    ctx.fill(buildings, "nonzero");
+    strokeInside(ctx, buildings, style.buildingEdge, scale);
     ctx.restore();
 
-    if (mode !== "speed" || sector == null) {
-      setArrow(null);
-      return;
-    }
-    const wind = downwindFromSector(sector);
-    const downwind = { x: t.exX * wind.east + t.enX * wind.north, y: t.exY * wind.east + t.enY * wind.north };
-    const toScreen = (e: number, n: number) => ({ x: ox + e * t.exX + n * t.enX, y: oy + e * t.exY + n * t.enY });
-    const map = [toScreen(cut.minE, cut.minN), toScreen(cut.maxE, cut.minN), toScreen(cut.maxE, cut.maxN), toScreen(cut.minE, cut.maxN)];
-    ctx.font = ARROW_CHIP_FONT;
-    const chipW = Math.ceil(ctx.measureText(arrowLabel).width) + ARROW_CHIP_PAD_PX;
-    const panels: ScreenRect[] = [];
-    for (const el of document.querySelectorAll<HTMLElement>(HUD_SELECTOR)) {
-      const r = el.getBoundingClientRect();
-      if (r.width <= 0 || r.height <= 0) continue;
-      panels.push({ x0: r.left - rect.left, y0: r.top - rect.top, x1: r.right - rect.left, y1: r.bottom - rect.top });
-    }
-    const buildingRects: ScreenRect[] = [];
-    for (const [minE, minN, maxE, maxN] of buildings.boxes) {
-      const corners = [toScreen(minE, minN), toScreen(maxE, minN), toScreen(maxE, maxN), toScreen(minE, maxN)];
-      const x0 = Math.min(...corners.map((p) => p.x));
-      const x1 = Math.max(...corners.map((p) => p.x));
-      const y0 = Math.min(...corners.map((p) => p.y));
-      const y1 = Math.max(...corners.map((p) => p.y));
-      if (x1 < 0 || y1 < 0 || x0 > rect.width || y0 > rect.height) continue;
-      buildingRects.push({ x0, y0, x1, y1 });
-    }
-    const view = { x0: VIEW_INSET_PX, y0: VIEW_INSET_PX, x1: rect.width - VIEW_INSET_PX, y1: rect.height - VIEW_INSET_PX };
-    const next = placeWindArrow({ view, map, downwind, chipW, chipH: ARROW_CHIP_HEIGHT_PX, panels, buildings: buildingRects });
-    setArrow((prev) => (sameArrow(prev, next) ? prev : next));
-  }, [store, mode, speed, comfort, sector, scaleMaxMs, buildings, cut, colourRevision, arrowLabel]);
+  }, [store, mode, speed, comfort, scaleMaxMs, buildings, cut, colourRevision]);
 
   const frame = useRef<number | null>(null);
   const schedule = useCallback(() => {
@@ -399,48 +332,9 @@ export function WindPlanOverlay({
     };
   }, [store, schedule]);
 
-  const headPoints = useMemo(() => {
-    if (!arrow) return "";
-    const dx = arrow.head.x - arrow.tail.x;
-    const dy = arrow.head.y - arrow.tail.y;
-    const len = Math.hypot(dx, dy) || 1;
-    const ux = dx / len;
-    const uy = dy / len;
-    const back = 10;
-    const half = 5;
-    const bx = arrow.head.x - ux * back;
-    const by = arrow.head.y - uy * back;
-    return `${arrow.head.x},${arrow.head.y} ${bx - uy * half},${by + ux * half} ${bx + uy * half},${by - ux * half}`;
-  }, [arrow]);
-
   return (
     <div ref={hostRef} className="wind-plan-overlay" aria-hidden="true" data-wind-plan-mode={mode}>
       <canvas ref={canvasRef} className="wind-plan-canvas" />
-      {arrow ? (
-        <>
-          <svg className="wind-plan-arrow" data-clear={arrow.clear ? "1" : "0"}>
-            <line
-              className="wind-plan-arrow-shaft"
-              x1={arrow.tail.x}
-              y1={arrow.tail.y}
-              x2={arrow.head.x - (arrow.head.x - arrow.tail.x) * 0.15}
-              y2={arrow.head.y - (arrow.head.y - arrow.tail.y) * 0.15}
-            />
-            <polygon className="wind-plan-arrow-head" points={headPoints} />
-          </svg>
-          <span
-            className="wind-plan-arrow-chip"
-            style={{
-              left: arrow.chip.x0,
-              top: arrow.chip.y0,
-              width: arrow.chip.x1 - arrow.chip.x0,
-              height: arrow.chip.y1 - arrow.chip.y0,
-            }}
-          >
-            {arrowLabel}
-          </span>
-        </>
-      ) : null}
     </div>
   );
 }

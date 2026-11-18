@@ -424,7 +424,6 @@ A dash is two lengths in millimetres: how long the mark is, then how long the ga
 | `--wind-plan-unsafe-hatch-spacing-px` | Plan comfort map: gap between hatch lines | `6` | screen px |
 | `--wind-plan-unsafe-min-px` | Plan comfort map: smallest drawn size of an unsafe area | `12` | screen px |
 | `--wind-plan-swatch-edge` / `--wind-plan-swatch-edge-opacity` | Plan wind card: 1px edge on the comfort legend swatches | `#1A1A1A` / `0.2` | colour / 0–1 |
-| `--wind-plan-arrow-shaft-px` | Plan wind speed map: shaft weight of the upwind arrow (ink, filled head) | `2` | screen px |
 
 Green fills, water fills, tree fills, and the other fills are in the Fills table above. This list is the pens. The footpath fill stays named here because the Line styles panel still edits it, and the value itself is in `src/colours.css`.
 

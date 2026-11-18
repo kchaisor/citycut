@@ -60,7 +60,7 @@ describe("DesignWindPresets", () => {
     for (const label of ["NE", "S", "W"]) {
       expect(screen.getByRole("button", { name: `Design wind ${label}` }).textContent).toBe(label);
     }
-    expect(screen.getByRole("button", { name: "Next wind direction" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Next wind direction" })).toBeNull();
 
     act(() => {
       fireEvent.click(screen.getByRole("button", { name: "Design wind S" }));
@@ -72,7 +72,7 @@ describe("DesignWindPresets", () => {
     expect(window.__citycutWindPlan?.referenceMs).toBeCloseTo(south.referenceMs, 9);
     expect(screen.getByText("Design wind")).toBeTruthy();
     expect(screen.getByText(`S · ${Math.round(south.sharePct)}% of hours`)).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Next wind direction" })).toBeNull();
+    expect(screen.getByText("S · 180°")).toBeTruthy();
 
     act(() => {
       fireEvent.click(screen.getByRole("button", { name: "Winter" }));
@@ -92,7 +92,9 @@ describe("WindPlanRows water note", () => {
     sector: 12,
     designWind: null,
     dirLabel: "W",
+    selectSector: () => {},
     stepSector: () => {},
+    sectorReferenceMs: () => null,
     referenceMs: 3.4,
     hasData: true,
     ready: true,

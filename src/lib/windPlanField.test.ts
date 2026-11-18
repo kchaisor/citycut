@@ -9,6 +9,7 @@ import {
   windSeasonWeights,
 } from "./windComfort";
 import { rasterGroundWindObstacles, rasterGroundWindWater } from "./groundWindField";
+import type { ColourKey } from "./colours";
 import type { WindRoseSeasonRecord } from "./windRoseData";
 import {
   bilinearSample,
@@ -32,8 +33,15 @@ import {
   createWindPlanScaleJob,
   windPlanContourLevels,
   windPlanDisplayField,
+  windPlanFieldPercentile,
   windPlanImageUpscale,
+  windPlanLegendGradient,
+  windPlanLegendStops,
   windPlanOverWater,
+  windPlanScaleRatio,
+  windPlanSiteFingerprint,
+  windPlanSpeedRamp,
+  WIND_PLAN_SCALE_PERCENTILE,
   windPlanRampStops,
   windPlanReferenceMs,
   windPlanScaleKey,
@@ -282,6 +290,18 @@ describe("wind over water", () => {
     }
   });
 
+  it("shows a wake over water in the lee of a shoreline building, slower than open water", () => {
+    const model = withWater(modelOf(240, [{ ring: ring(-30, -15, -5, 15), height: 20 }]), ring(0, -120, 120, 120));
+    const speed = run(createWindPlanSpeedJob(model, "water:wake", windPlanReferenceMs(weights, WEST), WEST));
+    const lee = at(speed.geometry, speed.speedMs, 15, 0);
+    const open = at(speed.geometry, speed.speedMs, 15, 80);
+    expect(lee).toBeLessThan(open * 0.85);
+    const shore = at(speed.geometry, speed.speedMs, -40, 80);
+    const inland = at(speed.geometry, speed.speedMs, -100, 80);
+    expect(shore).toBeGreaterThan(inland);
+    expect(open).toBeGreaterThan(shore);
+  });
+
   it("keeps cached water fields apart from dry ones for the same season", () => {
     const model = halfWater();
     const speed = run(createWindPlanSpeedJob(model, "water:annual", windPlanReferenceMs(weights, WEST), WEST));
@@ -484,7 +504,7 @@ describe("wind plan site speed scale", () => {
     expect(rampRgb(stops, 11, out)).toEqual(stops[stops.length - 1]!.rgb);
   });
 
-  it("sizes the scale from the strongest painted view and caches it per site", () => {
+  it("sizes the scale from the high percentile of the strongest painted view and caches it per site", () => {
     const model = withWater(oneBuilding(), ring(-120, -120, 120, -40));
     const views = [
       { sector: WEST, referenceMs: 2 },
@@ -493,11 +513,91 @@ describe("wind plan site speed scale", () => {
     ];
     const top = run(createWindPlanScaleJob(model, views));
     const strongest = run(createWindPlanSpeedJob(model, "scale:design-w", 5.5, WEST));
-    const painted = Math.max(...strongest.speedMs);
+    const painted = windPlanFieldPercentile(strongest.speedMs, strongest.geometry.solid, WIND_PLAN_SCALE_PERCENTILE);
     expect(top).toBeGreaterThan(4);
     expect(top).toBe(windPlanScaleMaxMs(painted));
-    expect(top).toBeGreaterThanOrEqual(painted);
     expect(cachedWindPlanScale(model, windPlanScaleKey(views))).toBe(top);
     expect(cachedWindPlanScale(model, windPlanScaleKey(views.slice(0, 2)))).toBeNull();
+  });
+
+  it("does not let one fast cell lift the top from 8 to 10", () => {
+    const values = new Float32Array(2000).fill(7.4);
+    for (let idx = 0; idx < values.length; idx += 7) values[idx] = 6.2;
+    values[123] = 8.6;
+    const solid = new Uint8Array(values.length);
+    expect(windPlanScaleMaxMs(Math.max(...values))).toBe(10);
+    expect(windPlanScaleMaxMs(windPlanFieldPercentile(values, solid, WIND_PLAN_SCALE_PERCENTILE))).toBe(8);
+  });
+
+  it("takes the percentile over open cells only", () => {
+    const values = Float32Array.from([1, 2, 3, 4, 50]);
+    expect(windPlanFieldPercentile(values, Uint8Array.from([0, 0, 0, 0, 1]), 1)).toBe(4);
+    expect(windPlanFieldPercentile(values, Uint8Array.from([1, 1, 1, 1, 1]), 1)).toBeNaN();
+  });
+
+  it("gives the same complete site the same top, whatever loaded before it", () => {
+    const complete = () => withWater(modelOf(240, [{ ring: ring(-12, -12, 12, 12), height: 20 }, { ring: ring(30, 30, 50, 60), height: 35 }]), ring(-120, -120, 120, -40));
+    const partial = withWater(oneBuilding(), ring(-120, -120, 120, -40));
+    const views = [
+      { sector: WEST, referenceMs: 3.1 },
+      { sector: EAST, referenceMs: 4.4 },
+    ];
+    const first = complete();
+    const firstTop = run(createWindPlanScaleJob(first, views));
+    run(createWindPlanScaleJob(partial, views));
+    const again = complete();
+    expect(again).not.toBe(first);
+    expect(cachedWindPlanScale(again, windPlanScaleKey(views))).toBeNull();
+    const job = createWindPlanScaleJob(again, views);
+    expect(job.step(Infinity)).toBe(true);
+    expect(job.result()).toBe(firstTop);
+    expect(cachedWindPlanScale(again, windPlanScaleKey(views))).toBe(firstTop);
+  });
+
+  it("fingerprints the obstacle and water geometry so a partial site never reuses a complete one", () => {
+    const print = (model: CityModel) => {
+      const obs = rasterGroundWindObstacles(model);
+      return windPlanSiteFingerprint(obs, rasterGroundWindWater(model, obs, obs.solid));
+    };
+    const water = ring(-120, -120, 120, -40);
+    const full = withWater(modelOf(240, [{ ring: ring(-12, -12, 12, 12), height: 20 }, { ring: ring(30, 30, 50, 60), height: 35 }]), water);
+    expect(print(full)).toBe(print(withWater(modelOf(240, [{ ring: ring(-12, -12, 12, 12), height: 20 }, { ring: ring(30, 30, 50, 60), height: 35 }]), water)));
+    expect(print(full)).not.toBe(print(withWater(oneBuilding(), water)));
+    expect(print(full)).not.toBe(print(modelOf(240, [{ ring: ring(-12, -12, 12, 12), height: 20 }, { ring: ring(30, 30, 50, 60), height: 35 }])));
+    expect(print(full)).not.toBe(print(withWater(modelOf(240, [{ ring: ring(-12, -12, 12, 12), height: 21 }, { ring: ring(30, 30, 50, 60), height: 35 }]), water)));
+  });
+
+  it("scales from the painted field, not the raw solver ratio", () => {
+    const model = withWater(oneBuilding(), ring(-120, -120, 120, -40));
+    const { geometry, ratio } = buildWindPlanRatio(model, WEST);
+    const obs = rasterGroundWindObstacles(model);
+    const factors = pedestrianHeightFactors(rasterGroundWindWater(model, obs, obs.solid), obs.cols, obs.rows, obs.cellM);
+    const display = windPlanDisplayField(ratio, geometry, 1, factors);
+    expect(windPlanScaleRatio(ratio, geometry, factors)).toBe(windPlanFieldPercentile(display, geometry.solid, WIND_PLAN_SCALE_PERCENTILE));
+  });
+});
+
+describe("wind plan velocity legend", () => {
+  const colourOf = (token: ColourKey) => `var(${token})`;
+
+  it("paints one left-to-right gradient", () => {
+    const gradient = windPlanLegendGradient(colourOf, 8);
+    expect(gradient.startsWith("linear-gradient(to right, ")).toBe(true);
+    expect(gradient).not.toContain("to top");
+  });
+
+  it("uses the map ramp's tokens at the map ramp's positions for every site top", () => {
+    for (const top of [4, 5, 6, 8, 10, 12]) {
+      const ramp = windPlanSpeedRamp(top);
+      const legend = windPlanLegendStops(top);
+      expect(legend.map((stop) => stop.token)).toEqual(ramp.map((stop) => stop.token));
+      legend.forEach((stop, k) => expect(stop.pct).toBeCloseTo((ramp[k]!.ms / top) * 100, 9));
+      const rgb = (token: ColourKey) => ({ r: WIND_PLAN_SPEED_RAMP.findIndex((s) => s.token === token), g: 0, b: 0 });
+      expect(windPlanRampStops(rgb, top).map((stop) => (stop.ms / top) * 100)).toEqual(legend.map((stop) => stop.pct));
+    }
+    expect(windPlanLegendStops(8).map((stop) => stop.pct)).toEqual([0, 25, 50, 70, 87.5, 100]);
+    expect(windPlanLegendGradient(colourOf, 8)).toBe(
+      "linear-gradient(to right, var(--wind-plan-speed-still) 0%, var(--wind-plan-speed-calm) 25%, var(--wind-plan-speed-breeze) 50%, var(--wind-plan-speed-brisk) 70%, var(--wind-plan-speed-strong) 87.5%, var(--wind-plan-speed-fast) 100%)",
+    );
   });
 });

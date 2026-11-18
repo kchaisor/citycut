@@ -1946,55 +1946,97 @@ input[type="range"]::-moz-range-thumb {
   width: 100%;
   height: 100%;
 }
-.wind-plan-arrow {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  overflow: visible;
-}
-.wind-plan-arrow-shaft {
-  stroke: var(--ink);
-  stroke-width: var(--wind-plan-arrow-shaft-px);
-  stroke-linecap: round;
-}
-.wind-plan-arrow-head {
-  fill: var(--ink);
-}
-.wind-plan-arrow-chip {
-  position: absolute;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  box-sizing: border-box;
-  border-radius: 4px;
-  background: var(--bg-elev);
-  box-shadow: inset 0 0 0 1px var(--border-outer);
-  color: var(--ink);
-  font-family: var(--sans);
-  font-size: 11px;
-  font-weight: 600;
-  line-height: 16px;
-  white-space: nowrap;
-}
-
 .model[data-wind-plan] .wind-rose-analysis-card.is-plan {
   top: var(--wind-plan-card-top, 214px);
   bottom: auto;
   left: 14px;
-  width: 236px;
+  width: 272px;
   max-height: calc(100vh - var(--wind-plan-card-top, 214px) - var(--wind-plan-card-bottom, 14px));
   overflow-y: auto;
   box-sizing: border-box;
-  padding: 12px;
+  padding: 16px;
   border-radius: 12px;
   background: var(--bg-card);
   border: 1px solid var(--border-outer);
   box-shadow: var(--shadow-hud);
 }
 .wind-rose-panel.is-plan .wind-rose-panel-svg {
-  width: min(160px, 100%);
+  width: 100%;
   margin-top: 8px;
+}
+.wind-rose-picker {
+  position: relative;
+}
+.wind-rose-picker-svg {
+  border-radius: 8px;
+  pointer-events: auto;
+}
+.wind-rose-picker-svg:focus {
+  outline: none;
+}
+.wind-rose-picker-svg:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+.wind-rose-petal {
+  opacity: 1;
+  transition: opacity 120ms ease-out;
+}
+.wind-rose-picker[data-hovering] .wind-rose-petal:not(.is-hovered) {
+  opacity: 0.45;
+}
+.wind-rose-petal-band {
+  fill-opacity: 0.95;
+}
+.wind-rose-petal.is-hovered .wind-rose-petal-band {
+  fill-opacity: 1;
+}
+.wind-rose-petal-outline {
+  fill: none;
+  stroke: none;
+}
+.wind-rose-petal.is-selected .wind-rose-petal-outline {
+  stroke: var(--ink);
+  stroke-width: 1px;
+}
+.wind-rose-petal.is-hovered .wind-rose-petal-outline {
+  stroke: var(--ink);
+  stroke-width: 1.5px;
+}
+.wind-rose-selected-arc {
+  fill: var(--accent);
+  stroke: var(--ink);
+  stroke-width: 1px;
+}
+.wind-rose-hit {
+  fill: transparent;
+  stroke: none;
+  pointer-events: all;
+  cursor: pointer;
+}
+.wind-rose-tip {
+  position: absolute;
+  z-index: 2;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--bg-elev);
+  box-shadow: inset 0 0 0 1px var(--border-outer);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 16px;
+  white-space: nowrap;
+  pointer-events: none;
+  transform: translate(var(--wind-rose-tip-shift, -50%), calc(-100% - 6px));
+}
+.wind-rose-tip.is-below {
+  transform: translate(var(--wind-rose-tip-shift, -50%), 6px);
+}
+@media (prefers-reduced-motion: reduce) {
+  .wind-rose-petal {
+    transition: none;
+  }
 }
 .wind-rose-panel.is-plan .wind-rose-meta-source {
   margin-top: 8px;
@@ -2035,38 +2077,12 @@ input[type="range"]::-moz-range-thumb {
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
-.wind-plan-stepper {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-}
-.wind-plan-stepper button {
-  width: 24px;
-  height: 24px;
-  padding: 0;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--ink-2);
-  font-family: var(--sans);
-  font-size: 13px;
-  font-weight: 600;
-  line-height: 1;
-  cursor: pointer;
-  pointer-events: auto;
-}
-.wind-plan-stepper button:hover {
-  background: var(--bg-sub);
-  color: var(--ink);
-}
-.wind-plan-stepper button:focus-visible,
 .model .bottom-bar.env-console .wind-plan-switch-btn:focus-visible {
   outline: 2px solid var(--ink);
   outline-offset: 2px;
 }
 .wind-plan-dir {
-  min-width: 32px;
-  text-align: center;
+  white-space: nowrap;
 }
 .wind-plan-note {
   margin: 8px 0 0;
@@ -2115,22 +2131,6 @@ input[type="range"]::-moz-range-thumb {
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--wind-plan-swatch-edge) calc(var(--wind-plan-swatch-edge-opacity) * 100%), transparent);
 }
 
-.wind-plan-info {
-  position: fixed;
-  z-index: 6;
-  margin: 0;
-  box-sizing: border-box;
-  border-radius: 12px;
-  pointer-events: none;
-}
-.wind-plan-info {
-  top: 68px;
-  left: calc(14px + 236px + 8px);
-  width: 176px;
-  padding: 8px 12px;
-  display: grid;
-  gap: 2px;
-}
 .wind-plan-unit {
   text-transform: none;
   letter-spacing: 0;
@@ -2197,10 +2197,10 @@ input[type="range"]::-moz-range-thumb {
     overflow: hidden;
   }
   .model[data-wind-plan] .bottom-bar.env-console {
-    left: calc(14px + 236px + 8px) !important;
+    left: calc(14px + 272px + 8px) !important;
     right: auto !important;
     transform: none !important;
     min-width: 0 !important;
-    max-width: calc(100vw - 14px - 236px - 8px - 80px) !important;
+    max-width: calc(100vw - 14px - 272px - 8px - 80px) !important;
   }
 }

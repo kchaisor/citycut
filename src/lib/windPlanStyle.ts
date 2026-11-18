@@ -12,7 +12,6 @@ export type WindPlanLineStyle = {
   unsafeHatch: WindPlanPen;
   hatchSpacingPx: number;
   unsafeMinPx: number;
-  arrowShaftPx: number;
 };
 
 function reader(read?: (name: string) => string): (name: string) => string {
@@ -46,6 +45,5 @@ export function windPlanLineStyle(read?: (name: string) => string): WindPlanLine
     unsafeHatch: { colour: unsafe, opacity: 1, px: num(get, "--wind-plan-unsafe-hatch-px") },
     hatchSpacingPx: num(get, "--wind-plan-unsafe-hatch-spacing-px"),
     unsafeMinPx: num(get, "--wind-plan-unsafe-min-px"),
-    arrowShaftPx: num(get, "--wind-plan-arrow-shaft-px"),
   };
 }

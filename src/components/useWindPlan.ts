@@ -47,7 +47,9 @@ export type WindPlanState = {
   sector: number | null;
   designWind: DesignWind | null;
   dirLabel: string;
+  selectSector: (sector: number) => void;
   stepSector: (delta: number) => void;
+  sectorReferenceMs: (sector: number) => number | null;
   referenceMs: number | null;
   hasData: boolean;
   ready: boolean;
@@ -105,6 +107,7 @@ export function useWindPlan({
   period,
   designWind = null,
   designWinds = NO_DESIGN_WINDS,
+  clearDesignWind,
   active,
 }: {
   model: CityModel;
@@ -112,6 +115,7 @@ export function useWindPlan({
   period: WindPeriodId;
   designWind?: DesignWind | null;
   designWinds?: readonly DesignWind[];
+  clearDesignWind?: () => void;
   active: boolean;
 }): WindPlanState {
   const [mode, setMode] = useState<WindPlanMode>("speed");
@@ -142,13 +146,24 @@ export function useWindPlan({
       ? windPlanReferenceMs(weights, sector)
       : null;
 
+  const selectSector = useCallback(
+    (next: number) => {
+      if (designWind) clearDesignWind?.();
+      setOverride({ period, sector: (((next % WIND_SECTOR_COUNT) + WIND_SECTOR_COUNT) % WIND_SECTOR_COUNT) });
+    },
+    [period, designWind, clearDesignWind],
+  );
+
   const stepSector = useCallback(
     (delta: number) => {
-      if (sector == null || designWind) return;
-      const next = (((sector + delta) % WIND_SECTOR_COUNT) + WIND_SECTOR_COUNT) % WIND_SECTOR_COUNT;
-      setOverride({ period, sector: next });
+      if (sector != null) selectSector(sector + delta);
     },
-    [sector, period, designWind],
+    [sector, selectSector],
+  );
+
+  const sectorReferenceMs = useCallback(
+    (at: number) => (weights ? windPlanReferenceMs(weights, at) : null),
+    [weights],
   );
 
   const scaleMaxMs = active && scaleViews.length > 0 ? cachedWindPlanScale(model, scaleKey) : null;
@@ -196,7 +211,9 @@ export function useWindPlan({
     sector,
     designWind,
     dirLabel: mode === "comfort" ? "All" : sector != null ? sectorLabel(sector) : "—",
+    selectSector,
     stepSector,
+    sectorReferenceMs,
     referenceMs,
     hasData,
     ready,
