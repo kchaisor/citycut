@@ -181,19 +181,6 @@ export type ModelPageProps = {
   commandBarOpen?: boolean;
 };
 
-function contentWidth(island: HTMLElement): number {
-  const shown = [...island.children].filter(
-    (child): child is HTMLElement => child instanceof HTMLElement && child.offsetWidth > 0,
-  );
-  if (shown.length === 0) return island.offsetWidth;
-  const span = shown[shown.length - 1]!.getBoundingClientRect().right - shown[0]!.getBoundingClientRect().left;
-  const truncated = [...island.querySelectorAll<HTMLElement>(".place-chip")].reduce(
-    (sum, chip) => sum + Math.max(0, chip.scrollWidth - chip.clientWidth),
-    0,
-  );
-  return span + truncated;
-}
-
 export function useModelPage({
   model,
   onHome,
@@ -2077,7 +2064,7 @@ export function useModelPage({
         return;
       }
       const inner = window.innerWidth - 28;
-      const bundle = center.offsetWidth + 2 * Math.max(contentWidth(left), contentWidth(right)) + barGap * 2;
+      const bundle = left.offsetWidth + center.offsetWidth + right.offsetWidth + barGap * 2;
       setTopbarLayout(bundle <= inner + 0.5 ? "centered" : "flow");
     };
     measure();

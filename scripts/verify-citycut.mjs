@@ -1552,18 +1552,9 @@ async function main() {
       const outlinerText = outlinerHeader ? outlinerHeader.innerText.trim() : "";
       const leftExportBtn = document.querySelector(".model .left-tool-rail button[data-section=\"exports\"]");
       const leftRailEl = document.querySelector(".model .left-tool-rail");
+      const topBarLeftEl = document.querySelector(".model .top-bar-left");
       const leftRailBg = leftRailEl ? getComputedStyle(leftRailEl).backgroundColor : "";
-      const topBarIslandChrome = ["left", "center", "right"].map((side) => {
-        const el = document.querySelector(`.model .top-bar-${side}`);
-        if (!el) return { side, bg: "", shadow: "" };
-        const cs = getComputedStyle(el);
-        return { side, bg: cs.backgroundColor, shadow: cs.boxShadow };
-      });
-      const topBarIslandsBare = topBarIslandChrome.every(
-        (island) =>
-          (island.bg === "rgba(0, 0, 0, 0)" || island.bg === "transparent") &&
-          (island.shadow === "none" || !island.shadow),
-      );
+      const topBarLeftBg = topBarLeftEl ? getComputedStyle(topBarLeftEl).backgroundColor : "";
 
       const hudSelectors = [
         ".model .top-bar-left",
@@ -1608,8 +1599,7 @@ async function main() {
         outlinerText,
         hasLeftExportBtn: Boolean(leftExportBtn),
         leftRailBg,
-        topBarIslandsBare,
-        topBarIslandChrome,
+        topBarLeftBg,
         overlaps,
       };
     });
@@ -1626,16 +1616,16 @@ async function main() {
 
     assertCheck(
       "css-surface-hierarchy",
-      ".right-inspector and .sidebar-panel.is-right have 0px border and zero legacy #DBDBDB/#EBEBEB inner bleed; .left-tool-rail keeps its HUD card; header islands have no card fill or shadow; Left outliner says VIEW STYLE; zero card overlap at 1440x900",
+      ".right-inspector and .sidebar-panel.is-right have 0px border and zero legacy #DBDBDB/#EBEBEB inner bleed; .left-tool-rail matches .top-bar-left HUD card background; Left outliner says VIEW STYLE; zero card overlap at 1440x900",
       uiInvariants.rightInspBorder === "0px" &&
         uiInvariants.rightPanelBorder === "0px" &&
         uiInvariants.legacyBleedCount === 0 &&
         uiInvariants.outlinerText.toUpperCase() === "VIEW STYLE" &&
         !uiInvariants.hasLeftExportBtn &&
+        uiInvariants.leftRailBg === uiInvariants.topBarLeftBg &&
         uiInvariants.leftRailBg !== "rgba(0, 0, 0, 0)" &&
-        uiInvariants.topBarIslandsBare &&
         uiInvariants.overlaps.length === 0,
-      `rightInspBorder=${uiInvariants.rightInspBorder}, leftRailBg=${uiInvariants.leftRailBg}, topBarIslandsBare=${uiInvariants.topBarIslandsBare}, bleed=${uiInvariants.legacyBleedCount}, outliner="${uiInvariants.outlinerText}", overlaps=${uiInvariants.overlaps.length}`,
+      `rightInspBorder=${uiInvariants.rightInspBorder}, leftRailBg=${uiInvariants.leftRailBg}, topBarLeftBg=${uiInvariants.topBarLeftBg}, bleed=${uiInvariants.legacyBleedCount}, outliner="${uiInvariants.outlinerText}", overlaps=${uiInvariants.overlaps.length}`,
     );
 
     await page.keyboard.press("Control+KeyK");

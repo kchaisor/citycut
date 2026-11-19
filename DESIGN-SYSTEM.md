@@ -118,14 +118,14 @@ Control heights: `--control-xs` 24 · `--control-sm` 28 · `--control-md` 32 · 
 | **Panel / section header** | – | micro, `--ink-3`; meta on the right in mono caption `--ink-3` | – | 8 to content, 12 between sections, 1px `--border-subtle` divider between sections |
 | **List row** (outliner) | sm 28, padding 0 6, r 6, gap 8; checkbox 14 r 4; swatch 12 circle | sm 500 `--ink`; count mono caption `--ink-3` | transparent | hover `--bg-sub`; off = text `--ink-3` + empty box with a **1px inset `--ink-3` edge** (no `opacity: .55`); checked box = `--ink` with an accent tick |
 | **KPI cell** | 4-up grid, gap 6, padding 6, r 8 | value mono body 600; label micro `--ink-3` | `--bg-sub` | – |
-| **HUD island** | toolbar islands 42 high (32 control + 4 + 4 + 1 + 1), padding 4; panel islands padding 12 | – | `--bg-card`, blur 18 / saturate 150%, 1px `--border-outer`, `--shadow-hud`, r 12. Not the model header: its groups are bare 42 pills (§8) | z `--z-hud` |
+| **HUD island** | toolbar islands 42 high (32 control + 4 + 4 + 1 + 1), padding 4; panel islands padding 12 | – | `--bg-card`, blur 18 / saturate 150%, 1px `--border-outer`, `--shadow-hud`, r 12 | z `--z-hud` |
 | **Tooltip** | padding 4 8, r 6, 8 from the trigger | sm 500 | `--ink` / `--on-ink` | appears after 300ms hover, or at once on focus; fades in `--dur-fast` |
 
 ## 8. Layout (1440×900 reference; must also hold at 1280×800)
 
 | Region | Position / size (measured) | Rule |
 |---|---|---|
-| Header islands (left, centre, right) | top 14, height 42; left and right at 14 from the edges; centre centred | ≥ 8 gap between them (1280 measures exactly 8; don't add width at 1280). No island card: the islands have no fill, border, shadow or blur. Each group inside is its own 42 pill (`--bg-elev`, 1px `--border-outer`, r 12; submode track `--bg-sub`), 4 apart. Same pill groups and type in 3D, Drawing and Satellite; the centre hugs its pills in every view (no Drawing-only full-width bar). Satellite's centre is the mode pills only. Kelvin, 19 Nov 2026, 5:18 / 5:27 PM AEDT |
+| Header islands (left, centre, right) | top 14, height 42; left and right at 14 from the edges; centre centred | ≥ 8 gap between them (1280 measures exactly 8; don't add width at 1280) |
 | Left tool rail | x 14, y 68, w 52 | 8 to the outliner |
 | Left outliner | x 74, y 68, w 248, max-h `100vh − 134` | scrolls inside itself; padding 12 |
 | Right inspector (SITE INTELLIGENCE) | right 14, y 68, w 268, max-h `100vh − 134` | border 0, uniform `--bg-card`, no inner borders, no legacy `#DBDBDB`/`#EBEBEB` |
