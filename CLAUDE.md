@@ -39,6 +39,7 @@ CityCut (github.com/kchaisor/citycut) cuts a square out of a city and exports a 
 
 - One feature per PR.
 - Never merge without Kelvin's explicit go.
+- Merge with `gh api -X PUT repos/kchaisor/citycut/pulls/<n>/merge -f merge_method=squash` (`gh pr merge` needs GraphQL, which cloud sessions block). Mark a draft ready first with `gh api -X POST repos/kchaisor/citycut/pulls/<n>/ccr/ready_for_review`.
 - Only one tool, Cursor or Claude Code, works on a branch at a time. Do not commit, push, or switch branches in a checkout another agent is using.
 - On handoff, fill in `.github/HANDOFF.md` in the PR description.
 
