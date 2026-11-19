@@ -1,4 +1,6 @@
 import { Download, RotateCcw } from "lucide-react";
+import { StudioCompass } from "../StudioCompass";
+import { studioCompassVisible } from "../../lib/studioCompass";
 import { Sidebar } from "../Sidebar";
 import { type DrawingKind } from "../DrawingPlan";
 import { mgaCrs } from "../../lib/crsZone";
@@ -54,6 +56,7 @@ export function ModelPageSidebar({ vm }: { vm: import("./useModelPage").ModelPag
     setTopbarExportOpen,
     sidebarCollapsed,
     sourcesLoaded,
+    compassHeadingDeg,
     tab,
     topbarExportOpen,
     topbarExportRef,
@@ -89,6 +92,9 @@ export function ModelPageSidebar({ vm }: { vm: import("./useModelPage").ModelPag
             }
             headerCenter={
               <div className="header-center-cluster">
+                {tab === "3d" && studioCompassVisible(view.projection, view.freeRotate) && (
+                  <StudioCompass headingDeg={compassHeadingDeg} />
+                )}
                 <select
                   className="topbar-view-select"
                   aria-label="Model view"

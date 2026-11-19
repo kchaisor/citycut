@@ -1771,23 +1771,23 @@ async function main() {
 
     const measureStudioCompassClearance = () =>
       page.evaluate(() => {
-        const compass = document.querySelector(".studio-compass");
-        const envConsole = document.querySelector(".model .bottom-bar.env-console");
-        const rightPanel =
-          document.querySelector(".model .right-inspector") ??
-          document.querySelector(".model .right-rail");
-        if (!compass) return { hasCompass: false };
+        const compass = document.querySelector(".model .top-bar-center .studio-compass");
+        const center = document.querySelector(".model .top-bar-center");
+        const left = document.querySelector(".model .top-bar-left");
+        if (!compass || !center || !left) return { hasCompass: false };
         const c = compass.getBoundingClientRect();
-        const gapBottomBar = envConsole ? envConsole.getBoundingClientRect().top - c.bottom : null;
-        const gapRightPanel = rightPanel ? rightPanel.getBoundingClientRect().left - c.right : null;
+        const m = center.getBoundingClientRect();
+        const l = left.getBoundingClientRect();
         const aria = compass.getAttribute("aria-label") ?? "";
         return {
           hasCompass: true,
-          hasNeedle: Boolean(document.querySelector(".studio-compass-needle")),
+          hasNeedle: Boolean(compass.querySelector(".studio-compass-needle")),
           ariaStartsNorth: aria.startsWith("North,"),
           viewportW: window.innerWidth,
-          gapBottomBar,
-          gapRightPanel,
+          size: [c.width, c.height],
+          topDiff: c.top - m.top,
+          gapCentre: m.left - c.right,
+          gapLeft: c.left - l.right,
         };
       });
 
@@ -1796,13 +1796,16 @@ async function main() {
       await page.waitForTimeout(220);
       const compassLayout = await measureStudioCompassClearance();
       assertCheck(
-        `studio-compass-clearance-${compassWidth}`,
-        `At ${compassWidth}x900 the Designbot C studio compass has >=16px clearance from the env console and right panel`,
+        `studio-compass-topbar-${compassWidth}`,
+        `At ${compassWidth}x900 the studio compass is a 42px chip 8px left of the centre island, top-aligned, >=8px from the left island`,
         compassLayout.hasCompass &&
           compassLayout.hasNeedle &&
           compassLayout.ariaStartsNorth &&
-          (compassLayout.gapBottomBar == null || compassLayout.gapBottomBar >= 15.5) &&
-          (compassLayout.gapRightPanel == null || compassLayout.gapRightPanel >= 15.5),
+          Math.abs(compassLayout.size[0] - 42) < 1 &&
+          Math.abs(compassLayout.size[1] - 42) < 1 &&
+          Math.abs(compassLayout.topDiff) < 1 &&
+          Math.abs(compassLayout.gapCentre - 8) < 1 &&
+          compassLayout.gapLeft >= 7.5,
         JSON.stringify(compassLayout),
       );
     }

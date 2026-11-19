@@ -2064,7 +2064,9 @@ export function useModelPage({
         return;
       }
       const inner = window.innerWidth - 28;
-      const bundle = center.offsetWidth + 2 * Math.max(left.offsetWidth, right.offsetWidth) + barGap * 2;
+      const compass = center.querySelector(".studio-compass");
+      const compassSpan = compass instanceof HTMLElement ? compass.offsetWidth + 8 : 0;
+      const bundle = center.offsetWidth + 2 * (Math.max(left.offsetWidth, right.offsetWidth) + compassSpan) + barGap * 2;
       setTopbarLayout(bundle <= inner + 0.5 ? "centered" : "flow");
     };
     measure();
@@ -2075,7 +2077,7 @@ export function useModelPage({
       observer.disconnect();
       window.removeEventListener("resize", measure);
     };
-  }, [tab, drawing, view.projection, cutDimLabel, topbarExportOpen, busy, sourcesLoaded.loaded]);
+  }, [tab, drawing, view.projection, view.freeRotate, cutDimLabel, topbarExportOpen, busy, sourcesLoaded.loaded]);
 
   return {
     analysisKind,
