@@ -1242,6 +1242,10 @@ body,
   pointer-events: auto;
 }
 
+.model .height-source-notice {
+  top: 64px;
+}
+
 .model .top-bar-center .header-center-cluster {
   display: flex;
   align-items: center;

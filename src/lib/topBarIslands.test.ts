@@ -31,4 +31,10 @@ describe("model top bar islands (Kelvin, 19 Nov 2026)", () => {
   it("has no Drawing-only top bar layout", () => {
     expect(rulesFor(/data-view-tab="drawing"\][^{]*\.(top-bar-|sidebar-brand-bar|topbar-)/)).toEqual([]);
   });
+
+  it("keeps the height-source notice below the top bar", () => {
+    const rules = rulesFor(/\.model\s+\.height-source-notice/);
+    expect(rules.length).toBeGreaterThan(0);
+    expect(rules.some((rule) => /top:\s*64px/.test(rule))).toBe(true);
+  });
 });
