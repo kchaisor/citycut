@@ -5082,7 +5082,17 @@ body,
 }
 
 @media (min-width: 1360px) {
-  .model[data-view-tab] .sidebar-brand-bar {
+  .model[data-view-tab] .top-bar-left.studio-header-left {
+    max-width: min(24rem, calc(50vw - 16rem));
+    min-width: 0;
+    overflow: visible;
+  }
+
+  .model[data-view-tab] .top-bar-left .place-chip.studio-breadcrumb-place {
+    max-width: 200px;
+  }
+
+  .model[data-topbar-layout="flow"][data-view-tab] .sidebar-brand-bar {
     position: fixed !important;
     top: 14px !important;
     left: 14px !important;
@@ -5092,6 +5102,7 @@ body,
     display: flex !important;
     flex-direction: row !important;
     align-items: center !important;
+    gap: 8px !important;
     pointer-events: none !important;
     z-index: var(--z-studio-topbar) !important;
     padding: 0 !important;
@@ -5099,48 +5110,20 @@ body,
     overflow: visible !important;
   }
 
-  .model[data-view-tab] .top-bar-left.studio-header-left,
-  .model[data-view-tab] .top-bar-center.studio-header-center,
-  .model[data-view-tab] .top-bar-right.studio-header-right {
+  .model[data-topbar-layout="flow"][data-view-tab] .top-bar-left.studio-header-left,
+  .model[data-topbar-layout="flow"][data-view-tab] .top-bar-center.studio-header-center,
+  .model[data-topbar-layout="flow"][data-view-tab] .top-bar-right.studio-header-right {
     position: static !important;
     top: auto !important;
     left: auto !important;
     right: auto !important;
     transform: none !important;
     pointer-events: auto !important;
-    overflow: visible;
-  }
-
-  .model[data-view-tab] .top-bar-left.studio-header-left {
-    flex: 1 1 auto;
-    max-width: min(50%, 28rem);
-    min-width: 14rem;
-    display: flex !important;
-    align-items: center !important;
-    gap: 7px !important;
-  }
-
-  .model[data-view-tab] .top-bar-center.studio-header-center {
-    flex: 0 1 auto;
-    width: max-content;
-    max-width: none;
-    min-width: 0;
-    justify-content: flex-start;
-    overflow: visible;
-  }
-
-  .model[data-view-tab] .top-bar-right.studio-header-right {
     flex: 0 0 auto;
-    max-width: 34%;
-    overflow: visible;
   }
 
-  .model[data-topbar-layout="flow"][data-view-tab] .sidebar-brand-bar {
-    gap: 8px !important;
-  }
-
-  .model[data-view-tab] .top-bar-left .place-chip.studio-breadcrumb-place {
-    max-width: 200px;
+  .model[data-topbar-layout="flow"][data-view-tab] .top-bar-center.studio-header-center {
+    margin: 0 auto;
   }
 
   .model .topbar-export-compact {

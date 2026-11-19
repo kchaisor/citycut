@@ -2064,7 +2064,7 @@ export function useModelPage({
         return;
       }
       const inner = window.innerWidth - 28;
-      const bundle = left.offsetWidth + center.offsetWidth + right.offsetWidth + barGap * 2;
+      const bundle = center.offsetWidth + 2 * Math.max(left.offsetWidth, right.offsetWidth) + barGap * 2;
       setTopbarLayout(bundle <= inner + 0.5 ? "centered" : "flow");
     };
     measure();

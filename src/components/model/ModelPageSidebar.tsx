@@ -21,7 +21,6 @@ export function ModelPageSidebar({ vm }: { vm: import("./useModelPage").ModelPag
     busy,
     comMeasuredHeightCount,
     commitView,
-    cutDimLabel,
     displayModel,
     drawing,
     items,
@@ -79,16 +78,7 @@ export function ModelPageSidebar({ vm }: { vm: import("./useModelPage").ModelPag
             showNewCut
             onSelect={selectSection}
             onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
-            rightMeta={
-              <>
-                MGA{mgaCrs(model.center.lon).zone}
-                <span className="card-meta-sep" aria-hidden="true">
-                  {" "}
-                  ·{" "}
-                </span>
-                {cutDimLabel}
-              </>
-            }
+            rightMeta={`MGA${mgaCrs(model.center.lon).zone}`}
             brandMeta={
               <>
                 <span className="v-sep hud-sep" aria-hidden="true" />
