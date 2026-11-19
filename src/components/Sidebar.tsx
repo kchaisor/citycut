@@ -171,14 +171,16 @@ export function Sidebar({
   return (
     <div className={collapsed ? "sidebar is-collapsed" : "sidebar"}>
       <div className="sidebar-brand-bar">
-        <div className="studio-header-left top-bar-left hud-card">
-          <button className="sidebar-brand" type="button" onClick={onHome} aria-label="CityCut home">
-            <span className="sidebar-brand-mark brand-mark-sm">
-              <Mark />
-            </span>
-            <span className="sidebar-brand-name brand-name-sm">CityCut</span>
-          </button>
-          {brandMeta ? <div className="top-bar-left-meta">{brandMeta}</div> : null}
+        <div className="studio-header-left top-bar-left">
+          <div className="top-bar-identity">
+            <button className="sidebar-brand" type="button" onClick={onHome} aria-label="CityCut home">
+              <span className="sidebar-brand-mark brand-mark-sm">
+                <Mark />
+              </span>
+              <span className="sidebar-brand-name brand-name-sm">CityCut</span>
+            </button>
+            {brandMeta ? <div className="top-bar-left-meta">{brandMeta}</div> : null}
+          </div>
           {showNewCut && onNewCut && !collapsed ? (
             <button
               className="sidebar-new-cut new-cut-pill topbar-compact-icon-btn"
@@ -193,10 +195,10 @@ export function Sidebar({
           ) : null}
         </div>
         {headerCenter ? (
-          <div className="studio-header-center top-bar-center hud-card">{headerCenter}</div>
+          <div className="studio-header-center top-bar-center">{headerCenter}</div>
         ) : null}
         {headerRight ? (
-          <div className="studio-header-right top-bar-right hud-card">{headerRight}</div>
+          <div className="studio-header-right top-bar-right">{headerRight}</div>
         ) : null}
       </div>
       <div className="sidebar-main">

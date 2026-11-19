@@ -149,7 +149,6 @@ export function ModelPageSidebar({ vm }: { vm: import("./useModelPage").ModelPag
                     </button>
                   ))}
                 </div>
-                <span className="v-sep" aria-hidden="true" />
                 {tab === "3d" ? (
                   <>
                     <select
@@ -196,7 +195,7 @@ export function ModelPageSidebar({ vm }: { vm: import("./useModelPage").ModelPag
                       </button>
                     </div>
                   </>
-                ) : (
+                ) : tab === "drawing" ? (
                   <>
                     <select
                       className="topbar-drawing-select"
@@ -237,44 +236,46 @@ export function ModelPageSidebar({ vm }: { vm: import("./useModelPage").ModelPag
                       ))}
                     </div>
                   </>
+                ) : null}
+                {tab === "satellite" ? null : (
+                  <button
+                    type="button"
+                    className="cam-reset studio-reset-btn topbar-compact-icon-btn"
+                    aria-label="Reset view"
+                    title="Reset view"
+                    onClick={() => {
+                      if (tab === "3d") {
+                        setSnapId((id) => id + 1);
+                      } else if (tab === "drawing" && drawing === "exploded-axo") {
+                        setExplodedViewport(
+                          explodedAxoViewportExtent(explodedAxoBounds(displayModel, axoSettings)),
+                        );
+                        setFitCounter((token) => token + 1);
+                      } else if (tab === "drawing" && drawing === "isometric") {
+                        setIsoDrawingViewport(
+                          explodedAxoViewportExtent(isometricDrawingBounds(displayModel, view.corner)),
+                        );
+                        setFitCounter((token) => token + 1);
+                      } else {
+                        setPlanViewport(planViewportExtent(displayModel.sideM));
+                        setFitCounter((token) => token + 1);
+                      }
+                    }}
+                  >
+                    <RotateCcw size={15} strokeWidth={2.1} className="topbar-compact-icon" aria-hidden="true" />
+                    <span className="topbar-compact-label">Reset view</span>
+                  </button>
                 )}
-                <span className="v-sep" aria-hidden="true" />
-                <button
-                  type="button"
-                  className="cam-reset studio-reset-btn topbar-compact-icon-btn"
-                  aria-label="Reset view"
-                  title="Reset view"
-                  onClick={() => {
-                    if (tab === "3d") {
-                      setSnapId((id) => id + 1);
-                    } else if (tab === "drawing" && drawing === "exploded-axo") {
-                      setExplodedViewport(
-                        explodedAxoViewportExtent(explodedAxoBounds(displayModel, axoSettings)),
-                      );
-                      setFitCounter((token) => token + 1);
-                    } else if (tab === "drawing" && drawing === "isometric") {
-                      setIsoDrawingViewport(
-                        explodedAxoViewportExtent(isometricDrawingBounds(displayModel, view.corner)),
-                      );
-                      setFitCounter((token) => token + 1);
-                    } else {
-                      setPlanViewport(planViewportExtent(displayModel.sideM));
-                      setFitCounter((token) => token + 1);
-                    }
-                  }}
-                >
-                  <RotateCcw size={15} strokeWidth={2.1} className="topbar-compact-icon" aria-hidden="true" />
-                  <span className="topbar-compact-label">Reset view</span>
-                </button>
               </div>
             }
             headerRight={
               <>
-                <span className="ready-dot status-dot is-ready" aria-hidden="true" />
-                <span className="ready-text studio-status-pill mono">
-                  Ready · {sourcesLoaded.loaded}/{sourcesLoaded.total} sources
+                <span className="status-pill topbar-status">
+                  <span className="ready-dot status-dot is-ready" aria-hidden="true" />
+                  <span className="ready-text studio-status-pill mono">
+                    Ready · {sourcesLoaded.loaded}/{sourcesLoaded.total} sources
+                  </span>
                 </span>
-                <span className="v-sep" aria-hidden="true" />
                 <div className="topbar-export-wide studio-quick-exports">
                   {tab === "drawing" ? (
                     <>

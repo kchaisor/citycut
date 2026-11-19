@@ -72,6 +72,8 @@ The name is `--background`. The value is `#EBEBEB`.
 | `--studio-intelligence-meta` | MGA / cut-size line in the Site Intelligence header (`~6.3:1` on `--bg-card`). | `#5F5E5A` |
 | `--studio-submode-select-edge` | 1 px outline on the collapsed Perspective / Site plan submode `<select>` below 1280. | `#D9D8D3` |
 
+**Model top bar.** Kelvin asked for this on 19 Nov 2026 (5:18 PM AEDT notes, approved 5:27 PM AEDT): every view (3D Perspective, Isometric and Plan, Drawing, Satellite) uses the same top-bar pill groups and type as the 3D model view, with no dark grey card behind them and no Drawing-only full-width bar. The three header islands have no fill, border, shadow or blur. Each group is its own 42 px pill: logo and place, the mode pills, the submode pills, status, and the downloads. Mode pills, status, and downloads sit on `--bg-elev` with a 1 px `--border-outer` edge; the submode track uses `--bg-sub`. The fills are opaque, so they read on the white 3D and Drawing backdrop and on the Satellite map. Satellite shows only the mode pills in the centre.
+
 `var(--background)` means “use whatever `--background` is set to”. That is why one edit recolours the page, the model, and the drawing together.
 
 Downloaded Illustrator and PNG files do not use the colours in this file. Pens for the site plan, both on screen and in the site-plan Illustrator download, use `src/drawing-style.css`. Fills for the plan, the 3D view, and every download use `src/colours.css`. Both files are described below.

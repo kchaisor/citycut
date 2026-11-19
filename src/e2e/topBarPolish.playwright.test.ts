@@ -54,13 +54,59 @@ function waitForHttp(url: string, timeoutMs = 60_000): Promise<void> {
   });
 }
 
-async function switchView(page: Page, name: "3D model" | "Drawing") {
+async function switchView(page: Page, name: "3D model" | "Drawing" | "Satellite") {
   const tab = page.getByRole("tab", { name });
   if (await tab.isVisible().catch(() => false)) {
     await tab.evaluate((el) => (el as HTMLButtonElement).click());
     return;
   }
-  await page.locator(".model .topbar-view-select").selectOption(name === "3D model" ? "3d" : "drawing");
+  await page
+    .locator(".model .topbar-view-select")
+    .selectOption(name === "3D model" ? "3d" : name === "Drawing" ? "drawing" : "satellite");
+}
+
+type CentreGeometry = {
+  islandLeft: number;
+  islandWidth: number;
+  clusterWidth: number;
+  modeGroupLeft: number;
+  modeGroupHeight: number;
+  activeMode: string;
+  inactiveMode: string;
+};
+
+async function measureCentre(page: Page): Promise<CentreGeometry | null> {
+  return page.evaluate(() => {
+    const island = document.querySelector(".model .top-bar-center");
+    const cluster = document.querySelector(".model .top-bar-center .header-center-cluster");
+    const modes = document.querySelector(".model .top-bar-center .mode-group");
+    const active = document.querySelector(".model .top-bar-center .mode-btn.active");
+    const inactive = document.querySelector(".model .top-bar-center .mode-btn:not(.active)");
+    if (
+      !(island instanceof HTMLElement) ||
+      !(cluster instanceof HTMLElement) ||
+      !(modes instanceof HTMLElement) ||
+      !(active instanceof HTMLElement) ||
+      !(inactive instanceof HTMLElement)
+    ) {
+      return null;
+    }
+    const paint = (el: HTMLElement) => {
+      const cs = getComputedStyle(el);
+      return `${cs.fontSize}/${cs.fontWeight}/${cs.color}/${cs.backgroundColor}/${cs.height}`;
+    };
+    const ir = island.getBoundingClientRect();
+    const mr = modes.getBoundingClientRect();
+    return {
+      islandLeft: ir.left,
+      islandWidth: ir.width,
+      clusterWidth: cluster.getBoundingClientRect().width,
+      modeGroupLeft: mr.left - ir.left,
+      modeGroupHeight: mr.height,
+      activeMode: paint(active),
+      inactiveMode: paint(inactive),
+    };
+  });
 }
 
 async function assertMontAlbertPlaceUnclipped(page: Page) {
@@ -163,6 +209,51 @@ describe("top bar design polish", () => {
   );
 
   for (const width of [1360, 1440] as const) {
+    it(
+      `uses the 3D pill group, unwrapped and hugged, in Drawing and Satellite at ${width}`,
+      async () => {
+        const browser = await chromium.launch();
+        const page = await browser.newPage();
+        page.setDefaultTimeout(360_000);
+        try {
+          await openModel(page, baseUrl, DANDENONG);
+          await page.setViewportSize({ width, height: 800 });
+          await page.waitForTimeout(400);
+          await switchView(page, "3D model");
+          await page.waitForTimeout(300);
+          const threeD = await measureCentre(page);
+          expect(threeD).not.toBeNull();
+          expect(threeD!.islandWidth - threeD!.clusterWidth).toBeLessThanOrEqual(1.5);
+          expect(Math.abs(threeD!.modeGroupHeight - 42)).toBeLessThanOrEqual(1);
+
+          await switchView(page, "Drawing");
+          await page.waitForSelector("svg.plan", { timeout: 120_000 });
+          await page.waitForTimeout(300);
+          const drawing = await measureCentre(page);
+          expect(drawing).not.toBeNull();
+          expect(drawing!.islandWidth - drawing!.clusterWidth).toBeLessThanOrEqual(1.5);
+          expect(drawing!.modeGroupLeft).toBeCloseTo(threeD!.modeGroupLeft, 0);
+          expect(drawing!.activeMode).toBe(threeD!.activeMode);
+          expect(drawing!.inactiveMode).toBe(threeD!.inactiveMode);
+
+          await switchView(page, "Satellite");
+          await page.waitForTimeout(400);
+          const satellite = await measureCentre(page);
+          expect(satellite).not.toBeNull();
+          expect(satellite!.islandWidth - satellite!.clusterWidth).toBeLessThanOrEqual(1.5);
+          expect(satellite!.activeMode).toBe(threeD!.activeMode);
+          expect(satellite!.inactiveMode).toBe(threeD!.inactiveMode);
+          const satelliteExtras = await page.evaluate(
+            () => document.querySelectorAll(".model .top-bar-center .proj-group, .model .top-bar-center .cam-reset").length,
+          );
+          expect(satelliteExtras).toBe(0);
+        } finally {
+          await browser.close();
+        }
+      },
+      520_000,
+    );
+
     for (const view of ["3D model", "Drawing"] as const) {
       it(
         `shows full Mont Albert North place chip at ${width} in ${view}`,

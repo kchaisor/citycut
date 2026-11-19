@@ -113,6 +113,27 @@ async function assertExportMenuHitTest(page: Page) {
   expect(result.ok, result.errors?.join("; ")).toBe(true);
 }
 
+async function assertUnwrappedExportTrigger(page: Page) {
+  const result = await page.evaluate(() => {
+    const errors: string[] = [];
+    const right = document.querySelector(".model .top-bar-right");
+    const trigger = document.querySelector(".model .topbar-export-trigger");
+    if (!(right instanceof HTMLElement) || !(trigger instanceof HTMLElement)) {
+      return { ok: false, errors: ["missing right island or Export trigger"] };
+    }
+    const rcs = getComputedStyle(right);
+    if (right.classList.contains("hud-card")) errors.push("right island still uses hud-card");
+    if (rcs.backgroundColor !== "rgba(0, 0, 0, 0)") errors.push(`right island background ${rcs.backgroundColor}`);
+    if (rcs.boxShadow !== "none") errors.push(`right island shadow ${rcs.boxShadow}`);
+    const tcs = getComputedStyle(trigger);
+    if (tcs.backgroundColor !== "rgb(255, 255, 255)") errors.push(`Export trigger fill ${tcs.backgroundColor}`);
+    const h = trigger.getBoundingClientRect().height;
+    if (Math.abs(h - 32) > 1) errors.push(`Export trigger ${h.toFixed(1)}px high, expected 32`);
+    return { ok: errors.length === 0, errors };
+  });
+  expect(result.ok, result.errors.join("; ")).toBe(true);
+}
+
 describe("top bar export menu (compact)", () => {
   let preview: ChildProcess;
   let baseUrl: string;
@@ -178,6 +199,8 @@ describe("top bar export menu (compact)", () => {
             () => document.activeElement?.classList.contains("topbar-export-trigger") ?? false,
           );
           expect(focusedExport).toBe(true);
+          await page.mouse.move(width / 2, 400);
+          await assertUnwrappedExportTrigger(page);
         } finally {
           await browser.close();
         }
@@ -222,6 +245,8 @@ describe("top bar export menu (compact)", () => {
             () => document.activeElement?.classList.contains("topbar-export-trigger") ?? false,
           );
           expect(focusedExport).toBe(true);
+          await page.mouse.move(width / 2, 400);
+          await assertUnwrappedExportTrigger(page);
         } finally {
           await browser.close();
         }

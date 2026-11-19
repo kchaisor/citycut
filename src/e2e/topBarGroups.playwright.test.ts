@@ -20,6 +20,7 @@ const HEIGHT = 800;
 type TopBarAudit = {
   ok: boolean;
   errors: string[];
+  typography: string;
 };
 
 function freePort(): Promise<number> {
@@ -84,8 +85,64 @@ async function auditTopBar(page: Page): Promise<TopBarAudit> {
     const groupSels = [".model .top-bar-left", ".model .top-bar-center", ".model .top-bar-right"] as const;
     const groupEls = groupSels.map((sel) => document.querySelector(sel) as HTMLElement | null);
     if (groupEls.some((el) => !el)) {
-      return { ok: false, errors: ["missing top bar group"] };
+      return { ok: false, errors: ["missing top bar group"], typography: "" };
     }
+
+    const islandNames = ["left", "center", "right"] as const;
+    groupEls.forEach((el, index) => {
+      const cs = getComputedStyle(el!);
+      const name = islandNames[index];
+      if (el!.classList.contains("hud-card")) {
+        errors.push(`${name} island still uses hud-card`);
+      }
+      if (cs.backgroundColor !== "rgba(0, 0, 0, 0)") {
+        errors.push(`${name} island has a background (${cs.backgroundColor})`);
+      }
+      if (cs.boxShadow !== "none") {
+        errors.push(`${name} island has a shadow (${cs.boxShadow})`);
+      }
+      if (parseFloat(cs.borderTopWidth) > 0 || parseFloat(cs.borderLeftWidth) > 0) {
+        errors.push(`${name} island has a border`);
+      }
+      if (cs.backdropFilter && cs.backdropFilter !== "none") {
+        errors.push(`${name} island has a backdrop filter (${cs.backdropFilter})`);
+      }
+    });
+
+    const pillSels = [
+      ".model .top-bar-left .top-bar-identity",
+      ".model .top-bar-right .topbar-status",
+    ];
+    if (vw >= 1360) {
+      pillSels.push(".model .top-bar-center .mode-group", ".model .top-bar-right .topbar-export-wide");
+    }
+    for (const sel of pillSels) {
+      const pill = document.querySelector(sel) as HTMLElement | null;
+      if (!pill || !isVisible(pill)) {
+        errors.push(`pill group ${sel} not visible`);
+        continue;
+      }
+      const bg = getComputedStyle(pill).backgroundColor;
+      if (bg !== "rgb(255, 255, 255)") {
+        errors.push(`pill group ${sel} is not opaque white (${bg})`);
+      }
+      const h = pill.getBoundingClientRect().height;
+      if (Math.abs(h - 42) > 1) {
+        errors.push(`pill group ${sel} is ${h.toFixed(1)}px high, expected 42`);
+      }
+    }
+
+    const fontOf = (sel: string) => {
+      const el = document.querySelector(sel) as HTMLElement | null;
+      if (!el) return "-";
+      const cs = getComputedStyle(el);
+      return `${cs.fontFamily}/${cs.fontSize}/${cs.fontWeight}`;
+    };
+    const typography = [
+      fontOf(".model .top-bar-center .mode-btn:not(.active)"),
+      fontOf(".model .top-bar-left .sidebar-brand-name"),
+      fontOf(".model .top-bar-right .ready-text"),
+    ].join(" | ");
 
     const rects = groupEls.map((el) => {
       const r = el!.getBoundingClientRect();
@@ -165,11 +222,38 @@ async function auditTopBar(page: Page): Promise<TopBarAudit> {
 
     const tab = modelEl?.getAttribute("data-view-tab") ?? "";
     const isDrawing = tab === "drawing";
+    const isSatellite = tab === "satellite";
+
+    const centerEl = groupEls[1]!;
+    const cluster = centerEl.querySelector(".header-center-cluster") as HTMLElement | null;
+    if (cluster) {
+      const cw = centerEl.getBoundingClientRect().width;
+      const kw = cluster.getBoundingClientRect().width;
+      if (cw - kw > 1.5) {
+        errors.push(`centre island stretches past its pills (${cw.toFixed(1)}px vs ${kw.toFixed(1)}px)`);
+      }
+    }
+    if (vw >= 1360 && parseFloat(getComputedStyle(centerEl).flexGrow) > 0) {
+      errors.push("centre island grows to fill the bar at 1360+");
+    }
+
+    if (isSatellite) {
+      for (const sel of [".proj-group", ".topbar-3d-select", ".topbar-drawing-select", ".cam-reset"]) {
+        if (centerEl.querySelector(sel)) {
+          errors.push(`Satellite centre still shows ${sel}`);
+        }
+      }
+    } else {
+      const sub = centerEl.querySelector(isDrawing ? ".topbar-drawing-modes" : ".topbar-3d-modes");
+      if (!sub) {
+        errors.push(`${tab} sub-pills missing from the centre cluster`);
+      }
+    }
     const exportLabels = isDrawing
       ? ["Quick export Adobe Illustrator .ai", "Quick export SVG", "Quick export 3dm"]
       : ["Quick export Rhino .3dm", "Quick export 2x PNG"];
 
-    if (vw < 1360) {
+    if (vw < 1360 && !isSatellite) {
       const compactChecks: Array<[string, string]> = [
         [".model .top-bar-center .cam-reset.topbar-compact-icon-btn", "Reset view"],
         [".model .top-bar-left .sidebar-new-cut.topbar-compact-icon-btn", "New cut"],
@@ -298,13 +382,21 @@ async function auditTopBar(page: Page): Promise<TopBarAudit> {
         errors.push(`brand bar column gap ${barGap.toFixed(1)}px != expected ${expected}px (${layout})`);
       }
     } else if (leftGroup && centerGroup && rightGroup) {
-      const leftGap = centerGroup.getBoundingClientRect().left - leftGroup.getBoundingClientRect().right;
-      const rightGap = rightGroup.getBoundingClientRect().left - centerGroup.getBoundingClientRect().right;
-      const gapDelta = Math.abs(leftGap - rightGap);
-      const flowGap = Math.abs(leftGap - 8) <= 1.5 && Math.abs(rightGap - 8) <= 1.5;
-      if (gapDelta > 2 && !flowGap) {
+      const cr = centerGroup.getBoundingClientRect();
+      const leftGap = cr.left - leftGroup.getBoundingClientRect().right;
+      const rightGap = rightGroup.getBoundingClientRect().left - cr.right;
+      const layout = modelEl?.getAttribute("data-topbar-layout") ?? "flow";
+      if (leftGap < 6.5 || rightGap < 6.5) {
+        errors.push(`top bar gaps under 8px (${leftGap.toFixed(1)}px left, ${rightGap.toFixed(1)}px right)`);
+      }
+      if (layout === "centered") {
+        const offCentre = Math.abs((cr.left + cr.right) / 2 - vw / 2);
+        if (offCentre > 2) {
+          errors.push(`centred top bar is ${offCentre.toFixed(1)}px off the viewport centre`);
+        }
+      } else if (Math.abs(leftGap - rightGap) > 2) {
         errors.push(
-          `top bar side gaps uneven (${leftGap.toFixed(1)}px left, ${rightGap.toFixed(1)}px right; need within 2px or both ~8px)`,
+          `flow top bar gaps uneven (${leftGap.toFixed(1)}px left, ${rightGap.toFixed(1)}px right)`,
         );
       }
     }
@@ -323,11 +415,11 @@ async function auditTopBar(page: Page): Promise<TopBarAudit> {
       }
     }
 
-  return { ok: errors.length === 0, errors };
+  return { ok: errors.length === 0, errors, typography };
   });
 }
 
-async function activateTab(page: Page, name: string) {
+async function activateTab(page: Page, name: "3D model" | "Drawing" | "Satellite") {
   const tab = page.getByRole("tab", { name });
   const visible = await tab.isVisible().catch(() => false);
   if (!visible) {
@@ -365,7 +457,7 @@ describe("model top bar group layout", () => {
   });
 
   it(
-    "keeps top bar groups separate with unclipped controls at 1024–1440",
+    "keeps one unwrapped pill top bar across 3D, Drawing and Satellite at 1024–1440",
     async () => {
       const browser = await chromium.launch();
       const page = await browser.newPage();
@@ -405,6 +497,14 @@ describe("model top bar group layout", () => {
           await page.waitForTimeout(200);
           const auditDrawing = await auditTopBar(page);
           expect(auditDrawing, auditDrawing.errors.join("; ")).toMatchObject({ ok: true });
+
+          await activateTab(page, "Satellite");
+          await page.waitForTimeout(400);
+          const auditSatellite = await auditTopBar(page);
+          expect(auditSatellite, auditSatellite.errors.join("; ")).toMatchObject({ ok: true });
+
+          expect(auditDrawing.typography, `Drawing type differs from 3D at ${width}`).toBe(audit3d.typography);
+          expect(auditSatellite.typography, `Satellite type differs from 3D at ${width}`).toBe(audit3d.typography);
         }
       } finally {
         await browser.close();
