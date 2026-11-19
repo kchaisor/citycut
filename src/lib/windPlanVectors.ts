@@ -77,6 +77,14 @@ export function windPlanVectorStride(spacingM: number, pxPerM: number, minGapPx:
   return stride;
 }
 
+export function windPlanVectorGapPx(
+  spacingM: number,
+  pxPerM: number,
+  stride: number = 1,
+): number {
+  return spacingM * stride * pxPerM;
+}
+
 export function windPlanVectorLengthPx(strength: number, gapPx: number, maxPx: number): number {
   const full = Math.min(maxPx, gapPx * WIND_PLAN_VECTOR_GAP_FILL);
   return full * (WIND_PLAN_VECTOR_MIN_FRACTION + (1 - WIND_PLAN_VECTOR_MIN_FRACTION) * Math.min(1, Math.max(0, strength)));

@@ -21,6 +21,7 @@ import { windPlanLineStyle, type WindPlanLineStyle, type WindPlanPen } from "../
 import {
   WIND_PLAN_VECTOR_HEAD_DEG,
   WIND_PLAN_VECTOR_SPACING_M,
+  windPlanVectorGapPx,
   windPlanVectorLengthPx,
   windPlanVectors,
   windPlanVectorScaleMs,
@@ -297,7 +298,7 @@ function drawVectors(
   dpr: number,
 ) {
   const stride = windPlanVectorStride(WIND_PLAN_VECTOR_SPACING_M, scale);
-  const gapPx = WIND_PLAN_VECTOR_SPACING_M * stride * scale;
+  const gapPx = windPlanVectorGapPx(WIND_PLAN_VECTOR_SPACING_M, scale, stride);
   const head = style.vectorHeadPx;
   const cos = Math.cos((WIND_PLAN_VECTOR_HEAD_DEG * Math.PI) / 180);
   const sin = Math.sin((WIND_PLAN_VECTOR_HEAD_DEG * Math.PI) / 180);
