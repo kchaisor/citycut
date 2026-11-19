@@ -18,6 +18,8 @@ import {
 } from "./windPlanField";
 import {
   WIND_PLAN_VECTOR_MIN_FRACTION,
+  WIND_PLAN_VECTOR_MIN_GAP_PX,
+  WIND_PLAN_VECTOR_SPACING_M,
   windPlanVectorLengthPx,
   windPlanVectors,
   windPlanVectorSites,
@@ -183,20 +185,23 @@ describe("plan wind vector sizing", () => {
   });
 
   it("thins the grid when zoomed out so vectors keep a screen gap", () => {
-    expect(windPlanVectorStride(30, 1)).toBe(1);
-    expect(windPlanVectorStride(30, 0.3)).toBe(2);
-    expect(windPlanVectorStride(30, 0.1)).toBe(8);
+    expect(WIND_PLAN_VECTOR_SPACING_M).toBe(15);
+    expect(WIND_PLAN_VECTOR_MIN_GAP_PX).toBe(7);
+    expect(windPlanVectorStride(15, 1)).toBe(1);
+    expect(windPlanVectorStride(15, 0.5)).toBe(1);
+    expect(windPlanVectorStride(15, 0.3)).toBe(2);
+    expect(windPlanVectorStride(15, 0.1)).toBe(8);
   });
 
-  it("uses the mid-grey lighter stroke and smaller head tokens", () => {
+  it("uses the dark stroke tokens and the smaller 3px head", () => {
     const css = readFileSync(new URL("../drawing-style.css", import.meta.url), "utf8");
     const value = (name: string) => {
       const match = css.match(new RegExp(`${name}\\s*:\\s*([^;]+);`));
       expect(match, name).toBeTruthy();
       return match![1]!.trim();
     };
-    expect(value("--wind-plan-vector-stroke").toUpperCase()).toBe("#737373");
-    expect(value("--wind-plan-vector-opacity")).toBe("0.6");
+    expect(value("--wind-plan-vector-stroke").toUpperCase()).toBe("#1A1A1A");
+    expect(value("--wind-plan-vector-opacity")).toBe("0.7");
     expect(value("--wind-plan-vector-px")).toBe("1");
     expect(value("--wind-plan-vector-head-px")).toBe("3");
   });

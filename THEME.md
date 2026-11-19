@@ -428,8 +428,8 @@ A dash is two lengths in millimetres: how long the mark is, then how long the ga
 | `--wind-plan-unsafe-hatch-px` | Plan comfort map: weight of the 45° unsafe hatch | `1` | screen px |
 | `--wind-plan-unsafe-hatch-spacing-px` | Plan comfort map: gap between hatch lines | `6` | screen px |
 | `--wind-plan-unsafe-min-px` | Plan comfort map: smallest drawn size of an unsafe area | `12` | screen px |
-| `--wind-plan-vector-stroke` | Plan wind maps (Wind speed and Comfort): colour of the flow vector arrows | `#737373` | colour |
-| `--wind-plan-vector-opacity` | Plan wind maps: opacity of the flow vector arrows | `0.6` | 0–1 |
+| `--wind-plan-vector-stroke` | Plan wind maps (Wind speed and Comfort): colour of the flow vector arrows | `#1A1A1A` | colour |
+| `--wind-plan-vector-opacity` | Plan wind maps: opacity of the flow vector arrows | `0.7` | 0–1 |
 | `--wind-plan-vector-px` | Plan wind maps: shaft and head weight of the flow vector arrows | `1` | screen px |
 | `--wind-plan-vector-head-px` | Plan wind maps: length of each arrowhead stroke | `3` | screen px |
 | `--wind-plan-vector-max-px` | Plan wind maps: longest arrow (the windiest cell); calm cells draw at 35% of it, and arrows never exceed 75% of the on-screen grid gap | `18` | screen px |
