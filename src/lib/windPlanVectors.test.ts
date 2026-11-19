@@ -86,13 +86,18 @@ function geometryOf(cols: number, rows: number, cellM: number): WindPlanGeometry
 const weights = windSeasonWeights(season({ [SOUTH]: [10, 20, 10, 5, 0], [WEST]: [10, 20, 10, 5, 0] }), WIND_SPEED_BIN_EDGES_MS);
 
 describe("plan wind vector sites", () => {
-  it("lays a regular world-space grid on open land", () => {
+  it("lays a staggered diagrid on open land at the same density", () => {
     const geometry = geometryOf(60, 60, 2);
     const sites = windPlanVectorSites(geometry, 20, 0);
     expect(sites.length).toBe(6 * 6);
+    const evens = sites.filter((site) => site.gj % 2 === 0);
+    const odds = sites.filter((site) => site.gj % 2 !== 0);
+    expect(evens.length).toBeGreaterThan(0);
+    expect(odds.length).toBeGreaterThan(0);
+    const rem = (value: number, step: number) => ((value % step) + step) % step;
     for (const site of sites) {
-      expect(Math.abs(site.east % 20)).toBe(0);
-      expect(Math.abs(site.north % 20)).toBe(0);
+      expect(rem(site.north, 20)).toBe(0);
+      expect(rem(site.east, 20)).toBe(site.gj % 2 === 0 ? 0 : 10);
     }
   });
 

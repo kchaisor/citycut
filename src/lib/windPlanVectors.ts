@@ -34,14 +34,15 @@ export function windPlanVectorSites(
   const sites: WindPlanVectorSite[] = [];
   const gj0 = Math.ceil(originN / spacingM);
   const gj1 = Math.floor((originN + rows * cellM) / spacingM);
-  const gi0 = Math.ceil(originE / spacingM);
-  const gi1 = Math.floor((originE + cols * cellM) / spacingM);
   for (let gj = gj0; gj <= gj1; gj++) {
     const north = gj * spacingM;
     const j = Math.floor((north - originN) / cellM);
     if (j < 0 || j >= rows) continue;
+    const shift = (gj & 1) * (spacingM / 2);
+    const gi0 = Math.ceil((originE - shift) / spacingM);
+    const gi1 = Math.floor((originE + cols * cellM - shift) / spacingM);
     for (let gi = gi0; gi <= gi1; gi++) {
-      const east = gi * spacingM;
+      const east = gi * spacingM + shift;
       const i = Math.floor((east - originE) / cellM);
       if (i < 0 || i >= cols) continue;
       if (!clearOfObstacles(geometry, i, j, reach)) continue;
