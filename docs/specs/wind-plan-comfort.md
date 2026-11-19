@@ -91,7 +91,7 @@ These replace the hover tooltip, selected mark and guide-label details above whe
 - Colours come from tokens only (DESIGN-SYSTEM.md); any deviation is listed in the PR body.
 
 ### Kelvin's 19 Nov 2026 notes (5:18 PM AEDT, approved 5:27 PM AEDT)
-- No duplicate rose card under Site Intelligence: the only wind-rose card is the left one. The console Wind Rose chip shows or hides it (on by default).
+- No duplicate rose card under Site Intelligence: the only wind-rose card is the left one. The console Wind Rose chip (3D only) shows or hides it (on by default). In Plan the Pedestrian Comfort / Plan Wind card stays visible even if that chip is off.
 - 3D Wind Flow petals are clickable with the same hover, selected arc and tooltip as plan Wind speed, and share the heading with plan: picking a petal in either view turns the 3D streaks and the plan map to that sector, and leaves a design wind the same way.
 - The 3D card uses the m/s Velocity legend on the site's scale, not the old km/h bar or the sheltered / open legend, and has no Pedestrian comfort rows.
 - Comfort stays all-directions, with no picker.

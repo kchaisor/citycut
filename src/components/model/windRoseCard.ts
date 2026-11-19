@@ -15,13 +15,16 @@ export function windRoseCardOn({
   analysisKind,
   siteWind,
   windSettings,
+  planActive,
 }: {
   leftOpen: string | null;
   tab: string;
   analysisKind: string;
   siteWind: SiteWindSelection | null;
   windSettings: Pick<WindViewSettings, "showRose">;
+  planActive: boolean;
 }): boolean {
   if (leftOpen !== "analysis" || tab === "satellite" || analysisKind !== "wind" || siteWind == null) return false;
+  if (planActive) return true;
   return windRoseChipOn(windSettings);
 }

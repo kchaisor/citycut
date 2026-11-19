@@ -26,7 +26,7 @@ export function ModelPageView({ vm }: { vm: ModelPageViewModel }) {
     windPlan,
   } = vm;
 
-  const windCardOn = windRoseCardOn({ leftOpen, tab, analysisKind, siteWind, windSettings });
+  const windCardOn = windRoseCardOn({ leftOpen, tab, analysisKind, siteWind, windSettings, planActive: windPlan.active });
   useWindPlanCardBounds(windCardOn && windPlan.active);
 
   return (

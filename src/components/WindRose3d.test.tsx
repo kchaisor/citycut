@@ -70,10 +70,10 @@ function FlowHarness({ initialDesign = null, flowHeading = true }: { initialDesi
 }
 
 describe("console Wind Rose chip and the left card", () => {
-  const card = (windSettings: WindViewSettings) =>
-    windRoseCardOn({ leftOpen: "analysis", tab: "3d", analysisKind: "wind", siteWind: pyrmont, windSettings });
+  const card = (windSettings: WindViewSettings, planActive = false) =>
+    windRoseCardOn({ leftOpen: "analysis", tab: "3d", analysisKind: "wind", siteWind: pyrmont, windSettings, planActive });
 
-  it("shows the left card exactly when the chip is pressed, including in plan, and the chip toggles both ways", () => {
+  it("shows the left card exactly when the chip is pressed in 3D, and the chip toggles both ways", () => {
     const on: WindViewSettings = { ...DEFAULT_WIND_SETTINGS, enabled: true, showRose: true };
     expect(windRoseChipOn(on)).toBe(true);
     expect(card(on)).toBe(true);
@@ -96,10 +96,20 @@ describe("console Wind Rose chip and the left card", () => {
     expect(fromCold.showRose).toBe(true);
   });
 
+  it("keeps the plan Pedestrian Comfort / Plan Wind card on even when the 3D rose chip is off", () => {
+    const off: WindViewSettings = { ...DEFAULT_WIND_SETTINGS, enabled: true, showRose: false };
+    expect(windRoseChipOn(off)).toBe(false);
+    expect(card(off, false)).toBe(false);
+    expect(card(off, true)).toBe(true);
+    const on: WindViewSettings = { ...DEFAULT_WIND_SETTINGS, enabled: true, showRose: true };
+    expect(card(on, true)).toBe(true);
+  });
+
   it("hides the card outside wind analysis", () => {
     const on: WindViewSettings = { ...DEFAULT_WIND_SETTINGS, enabled: true, showRose: true };
-    expect(windRoseCardOn({ leftOpen: "analysis", tab: "satellite", analysisKind: "wind", siteWind: pyrmont, windSettings: on })).toBe(false);
-    expect(windRoseCardOn({ leftOpen: "analysis", tab: "3d", analysisKind: "solar", siteWind: pyrmont, windSettings: on })).toBe(false);
+    expect(windRoseCardOn({ leftOpen: "analysis", tab: "satellite", analysisKind: "wind", siteWind: pyrmont, windSettings: on, planActive: false })).toBe(false);
+    expect(windRoseCardOn({ leftOpen: "analysis", tab: "3d", analysisKind: "solar", siteWind: pyrmont, windSettings: on, planActive: false })).toBe(false);
+    expect(windRoseCardOn({ leftOpen: "analysis", tab: "satellite", analysisKind: "wind", siteWind: pyrmont, windSettings: on, planActive: true })).toBe(false);
   });
 
   it("drives aria-pressed and the card from the same rule and mounts no 3D rose overlay", () => {
