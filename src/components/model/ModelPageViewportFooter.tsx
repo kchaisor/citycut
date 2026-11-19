@@ -4,6 +4,7 @@ import { WalkRippleTimeScrubber } from "../WalkRippleTimeScrubber";import { WALK
 import { WIND_PERIOD_LABELS, WindPeriodId } from "../../lib/windRose";
 import { withDesignWind, withWindSeason } from "../../lib/windState";
 import { DesignWindPresets } from "../DesignWindPresets";
+import { WindPlanSwitch } from "./WindPlanSwitch";
 
 
 export function ModelPageViewportFooter({ vm }: { vm: import("./useModelPage").ModelPageViewModel }) {
@@ -194,24 +195,7 @@ export function ModelPageViewportFooter({ vm }: { vm: import("./useModelPage").M
               {!planWind && <span className="v-sep hud-sep" aria-hidden="true" />}
 
               {planWind ? (
-                <div className="wind-plan-switch" role="group" aria-label="Plan wind diagram">
-                  {(
-                    [
-                      ["speed", "Wind speed"],
-                      ["comfort", "Comfort"],
-                    ] as const
-                  ).map(([id, label]) => (
-                    <button
-                      key={id}
-                      type="button"
-                      className={windPlan.mode === id ? "wind-plan-switch-btn is-active" : "wind-plan-switch-btn"}
-                      aria-pressed={windPlan.mode === id}
-                      onClick={() => windPlan.setMode(id)}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
+                <WindPlanSwitch plan={windPlan} />
               ) : (
                 <div className="overlay-chips" role="group" aria-label="Scene overlay toggles">
                   {analysisKind === "solar" && (

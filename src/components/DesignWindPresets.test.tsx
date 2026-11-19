@@ -89,6 +89,8 @@ describe("WindPlanRows water note", () => {
     active: true,
     mode: "speed" as const,
     setMode: () => {},
+    vectorsOn: true,
+    setVectorsOn: () => {},
     sector: 12,
     designWind: null,
     dirLabel: "W",

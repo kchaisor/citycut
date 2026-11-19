@@ -18,6 +18,8 @@ function stubPlan(mode: WindPlanState["mode"], scaleMaxMs: number | null): WindP
     active: true,
     mode,
     setMode: () => {},
+    vectorsOn: true,
+    setVectorsOn: () => {},
     sector: 8,
     designWind: null,
     dirLabel: "S",

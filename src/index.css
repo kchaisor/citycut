@@ -2213,6 +2213,9 @@ input[type="range"]::-moz-range-thumb {
   background: var(--bg-sub);
   flex-shrink: 0;
 }
+.model .bottom-bar.env-console .wind-plan-vector-switch {
+  margin-left: 6px;
+}
 .model .bottom-bar.env-console .wind-plan-switch-btn {
   height: 24px;
   padding: 0 8px;

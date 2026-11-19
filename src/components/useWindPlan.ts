@@ -26,6 +26,7 @@ declare global {
   interface Window {
     __citycutWindPlan?: {
       readonly mode: WindPlanMode;
+      readonly vectors: boolean;
       readonly season: WindPeriodId | DesignWindId;
       readonly dirDeg: number | null;
       readonly referenceMs: number | null;
@@ -43,6 +44,8 @@ export type WindPlanState = {
   active: boolean;
   mode: WindPlanMode;
   setMode: (mode: WindPlanMode) => void;
+  vectorsOn: boolean;
+  setVectorsOn: (on: boolean) => void;
   sector: number | null;
   designWind: DesignWind | null;
   dirLabel: string;
@@ -117,6 +120,7 @@ export function useWindPlan({
   active: boolean;
 }): WindPlanState {
   const [mode, setMode] = useState<WindPlanMode>("speed");
+  const [vectorsOn, setVectorsOn] = useState(true);
   const [override, setOverride] = useState<{ period: WindPeriodId; sector: number } | null>(null);
   const [revision, setRevision] = useState(0);
 
@@ -190,6 +194,7 @@ export function useWindPlan({
     if (!active) return;
     window.__citycutWindPlan = {
       mode,
+      vectors: vectorsOn,
       season: designWind ? designWind.id : period,
       dirDeg: mode === "speed" && sector != null ? sectorCenterDeg(sector) : null,
       referenceMs: mode === "speed" ? referenceMs : null,
@@ -200,12 +205,14 @@ export function useWindPlan({
     return () => {
       delete window.__citycutWindPlan;
     };
-  }, [active, mode, period, designWind, sector, referenceMs, scaleMaxMs, ready, comfort, revision]);
+  }, [active, mode, vectorsOn, period, designWind, sector, referenceMs, scaleMaxMs, ready, comfort, revision]);
 
   return {
     active,
     mode,
     setMode,
+    vectorsOn,
+    setVectorsOn,
     sector,
     designWind,
     dirLabel: mode === "comfort" ? "All" : sector != null ? sectorLabel(sector) : "—",

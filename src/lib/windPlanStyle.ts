@@ -12,6 +12,9 @@ export type WindPlanLineStyle = {
   unsafeHatch: WindPlanPen;
   hatchSpacingPx: number;
   unsafeMinPx: number;
+  vector: WindPlanPen;
+  vectorHeadPx: number;
+  vectorMaxPx: number;
 };
 
 function reader(read?: (name: string) => string): (name: string) => string {
@@ -45,5 +48,12 @@ export function windPlanLineStyle(read?: (name: string) => string): WindPlanLine
     unsafeHatch: { colour: unsafe, opacity: 1, px: num(get, "--wind-plan-unsafe-hatch-px") },
     hatchSpacingPx: num(get, "--wind-plan-unsafe-hatch-spacing-px"),
     unsafeMinPx: num(get, "--wind-plan-unsafe-min-px"),
+    vector: {
+      colour: get("--wind-plan-vector-stroke"),
+      opacity: num(get, "--wind-plan-vector-opacity"),
+      px: num(get, "--wind-plan-vector-px"),
+    },
+    vectorHeadPx: num(get, "--wind-plan-vector-head-px"),
+    vectorMaxPx: num(get, "--wind-plan-vector-max-px"),
   };
 }

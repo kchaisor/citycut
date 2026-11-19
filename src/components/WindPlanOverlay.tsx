@@ -10,6 +10,7 @@ import {
   windPlanImageUpscale,
   windPlanRampStops,
   type WindPlanComfort,
+  type WindPlanGeometry,
   type WindPlanSpeed,
 } from "../lib/windPlanField";
 import { windPlanComfortBands, windPlanSpeedContours, type ComfortBand, type WorldRing } from "../lib/windPlanContours";
@@ -17,6 +18,16 @@ import { cutExtent, pointInClip, windPlanSiteClip } from "../lib/windPlanSiteCli
 import { dashSegments, readDrawingStyle } from "../lib/drawingStyle";
 import { screenDashPx, screenPx } from "../lib/lineweights";
 import { windPlanLineStyle, type WindPlanLineStyle, type WindPlanPen } from "../lib/windPlanStyle";
+import {
+  WIND_PLAN_VECTOR_HEAD_DEG,
+  WIND_PLAN_VECTOR_SPACING_M,
+  windPlanVectorLengthPx,
+  windPlanVectors,
+  windPlanVectorScaleMs,
+  windPlanVectorSites,
+  windPlanVectorStride,
+  type WindPlanVector,
+} from "../lib/windPlanVectors";
 import type { WindPlanState } from "./useWindPlan";
 
 export type WindPlanTransform = { ox: number; oy: number; exX: number; exY: number; enX: number; enY: number };
@@ -259,6 +270,68 @@ function hatch(ctx: CanvasRenderingContext2D, width: number, height: number, sty
   ctx.restore();
 }
 
+const vectorSites = new WeakMap<WindPlanGeometry, ReturnType<typeof windPlanVectorSites>>();
+const vectorFields = new WeakMap<object, { scaleMs: number; vectors: WindPlanVector[] }>();
+
+function planVectors(data: WindPlanSpeed | WindPlanComfort, scaleMs: number | null): WindPlanVector[] {
+  const cached = vectorFields.get(data);
+  const top = scaleMs ?? (cached ? cached.scaleMs : windPlanVectorScaleMs(data.flow, data.geometry));
+  if (cached && cached.scaleMs === top) return cached.vectors;
+  let sites = vectorSites.get(data.geometry);
+  if (!sites) {
+    sites = windPlanVectorSites(data.geometry);
+    vectorSites.set(data.geometry, sites);
+  }
+  const vectors = windPlanVectors(sites, data.flow, top);
+  vectorFields.set(data, { scaleMs: top, vectors });
+  return vectors;
+}
+
+function drawVectors(
+  ctx: CanvasRenderingContext2D,
+  vectors: readonly WindPlanVector[],
+  t: WindPlanTransform,
+  origin: { x: number; y: number },
+  scale: number,
+  style: WindPlanLineStyle,
+  dpr: number,
+) {
+  const stride = windPlanVectorStride(WIND_PLAN_VECTOR_SPACING_M, scale);
+  const gapPx = WIND_PLAN_VECTOR_SPACING_M * stride * scale;
+  const head = style.vectorHeadPx;
+  const cos = Math.cos((WIND_PLAN_VECTOR_HEAD_DEG * Math.PI) / 180);
+  const sin = Math.sin((WIND_PLAN_VECTOR_HEAD_DEG * Math.PI) / 180);
+  ctx.save();
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.beginPath();
+  for (const v of vectors) {
+    if (v.gi % stride !== 0 || v.gj % stride !== 0) continue;
+    const x = origin.x + t.exX * v.east + t.enX * v.north;
+    const y = origin.y + t.exY * v.east + t.enY * v.north;
+    const sx = t.exX * v.dirE + t.enX * v.dirN;
+    const sy = t.exY * v.dirE + t.enY * v.dirN;
+    const sLen = Math.hypot(sx, sy) || 1;
+    const dx = sx / sLen;
+    const dy = sy / sLen;
+    const half = windPlanVectorLengthPx(v.strength, gapPx, style.vectorMaxPx) / 2;
+    const tipX = x + dx * half;
+    const tipY = y + dy * half;
+    ctx.moveTo(x - dx * half, y - dy * half);
+    ctx.lineTo(tipX, tipY);
+    ctx.moveTo(tipX - head * (dx * cos - dy * sin), tipY - head * (dy * cos + dx * sin));
+    ctx.lineTo(tipX, tipY);
+    ctx.lineTo(tipX - head * (dx * cos + dy * sin), tipY - head * (dy * cos - dx * sin));
+  }
+  ctx.globalAlpha = style.vector.opacity;
+  ctx.strokeStyle = style.vector.colour;
+  ctx.lineWidth = style.vector.px;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  ctx.setLineDash([]);
+  ctx.stroke();
+  ctx.restore();
+}
+
 export function WindPlanOverlay({
   model,
   plan,
@@ -278,7 +351,7 @@ export function WindPlanOverlay({
     return { ...clip, path: ringsPath(clip.rings) };
   }, [model]);
   const baseMap = useMemo(() => baseMapShapes(model), [model]);
-  const { mode, speed, comfort, scaleMaxMs } = plan;
+  const { mode, speed, comfort, scaleMaxMs, vectorsOn } = plan;
 
   const draw = useCallback(() => {
     const host = hostRef.current;
@@ -329,6 +402,7 @@ export function WindPlanOverlay({
       const levels = windPlanSpeedContours(speed, scaleMaxMs);
       strokePen(ctx, cachedPath(levels, () => levels.flat()), style.contour, scale);
       ctx.restore();
+      if (vectorsOn) drawVectors(ctx, planVectors(speed, scaleMaxMs), t, { x: ox, y: oy }, scale, style, dpr);
     } else if (mode === "comfort" && comfort) {
       ctx.save();
       ctx.clip(site.path, "evenodd");
@@ -365,6 +439,7 @@ export function WindPlanOverlay({
         ctx.restore();
         strokePen(ctx, disc, style.unsafeOutline, scale);
       }
+      if (vectorsOn) drawVectors(ctx, planVectors(comfort, null), t, { x: ox, y: oy }, scale, style, dpr);
       ctx.restore();
     }
     ctx.restore();
@@ -380,7 +455,7 @@ export function WindPlanOverlay({
       ctx.restore();
     }
 
-  }, [store, mode, speed, comfort, scaleMaxMs, buildings, cut, site, baseMap, colourRevision]);
+  }, [store, mode, speed, comfort, scaleMaxMs, vectorsOn, buildings, cut, site, baseMap, colourRevision]);
 
   const frame = useRef<number | null>(null);
   const schedule = useCallback(() => {
@@ -411,7 +486,7 @@ export function WindPlanOverlay({
   }, [store, schedule]);
 
   return (
-    <div ref={hostRef} className="wind-plan-overlay" aria-hidden="true" data-wind-plan-mode={mode}>
+    <div ref={hostRef} className="wind-plan-overlay" aria-hidden="true" data-wind-plan-mode={mode} data-wind-plan-vectors={vectorsOn ? "on" : "off"}>
       <canvas ref={canvasRef} className="wind-plan-canvas" />
     </div>
   );

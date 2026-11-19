@@ -148,6 +148,12 @@ export function sectorReferenceSpeedMs(weights: WindSeasonWeights, sector: numbe
   return mass > 0 ? sum / mass : null;
 }
 
+export function sectorWindWeight(weights: WindSeasonWeights, sector: number): number {
+  let sum = 0;
+  for (const bin of weights.bins) if (bin.sector === sector) sum += bin.weight * binMeanMs(bin);
+  return sum;
+}
+
 export function exceedanceAt(weights: WindSeasonWeights, ratioOf: (sector: number) => number): ComfortExceedance {
   const out = COMFORT_THRESHOLDS_MS.map(() => 0);
   for (const bin of weights.bins) {
