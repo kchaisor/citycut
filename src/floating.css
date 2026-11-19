@@ -5082,7 +5082,7 @@ body,
 }
 
 @media (min-width: 1360px) {
-  .model:not([data-view-tab="drawing"]) .sidebar-brand-bar {
+  .model[data-view-tab] .sidebar-brand-bar {
     position: fixed !important;
     top: 14px !important;
     left: 14px !important;
@@ -5099,9 +5099,9 @@ body,
     overflow: visible !important;
   }
 
-  .model:not([data-view-tab="drawing"]) .top-bar-left.studio-header-left,
-  .model:not([data-view-tab="drawing"]) .top-bar-center.studio-header-center,
-  .model:not([data-view-tab="drawing"]) .top-bar-right.studio-header-right {
+  .model[data-view-tab] .top-bar-left.studio-header-left,
+  .model[data-view-tab] .top-bar-center.studio-header-center,
+  .model[data-view-tab] .top-bar-right.studio-header-right {
     position: static !important;
     top: auto !important;
     left: auto !important;
@@ -5111,7 +5111,7 @@ body,
     overflow: visible;
   }
 
-  .model:not([data-view-tab="drawing"]) .top-bar-left.studio-header-left {
+  .model[data-view-tab] .top-bar-left.studio-header-left {
     flex: 1 1 auto;
     max-width: min(50%, 28rem);
     min-width: 14rem;
@@ -5120,7 +5120,7 @@ body,
     gap: 7px !important;
   }
 
-  .model:not([data-view-tab="drawing"]) .top-bar-center.studio-header-center {
+  .model[data-view-tab] .top-bar-center.studio-header-center {
     flex: 0 1 auto;
     width: max-content;
     max-width: none;
@@ -5129,77 +5129,17 @@ body,
     overflow: visible;
   }
 
-  .model:not([data-view-tab="drawing"]) .top-bar-right.studio-header-right {
+  .model[data-view-tab] .top-bar-right.studio-header-right {
     flex: 0 0 auto;
     max-width: 34%;
     overflow: visible;
   }
 
-  .model:not([data-view-tab="drawing"]) .top-bar-left .place-chip.studio-breadcrumb-place {
-    max-width: 200px;
-  }
-
-  .model[data-topbar-layout="flow"]:not([data-view-tab="drawing"]) .sidebar-brand-bar {
+  .model[data-topbar-layout="flow"][data-view-tab] .sidebar-brand-bar {
     gap: 8px !important;
   }
 
-  .model[data-view-tab="drawing"] .sidebar-brand-bar {
-    position: fixed !important;
-    top: 14px !important;
-    left: 14px !important;
-    right: 14px !important;
-    width: auto !important;
-    height: auto !important;
-    display: flex !important;
-    flex-direction: row !important;
-    align-items: center !important;
-    gap: 8px !important;
-    pointer-events: none !important;
-    z-index: var(--z-studio-topbar) !important;
-    padding: 0 !important;
-    margin: 0 !important;
-    overflow: visible !important;
-  }
-
-  .model[data-view-tab="drawing"] .top-bar-left.studio-header-left,
-  .model[data-view-tab="drawing"] .top-bar-center.studio-header-center,
-  .model[data-view-tab="drawing"] .top-bar-right.studio-header-right {
-    position: static !important;
-    top: auto !important;
-    left: auto !important;
-    right: auto !important;
-    transform: none !important;
-    pointer-events: auto !important;
-    overflow: visible;
-  }
-
-  .model[data-view-tab="drawing"] .top-bar-left.studio-header-left {
-    flex: 0 1 auto;
-    max-width: 26%;
-    min-width: 10.5rem;
-    display: flex !important;
-    align-items: center !important;
-    gap: 7px !important;
-  }
-
-  .model[data-view-tab="drawing"] .top-bar-center.studio-header-center {
-    flex: 1 1 0;
-    min-width: 0;
-    justify-content: flex-start;
-    overflow: visible;
-  }
-
-  .model[data-view-tab="drawing"] .top-bar-right.studio-header-right {
-    flex: 0 0 auto;
-    max-width: 28%;
-    overflow: visible;
-  }
-
-  .model[data-view-tab="drawing"] .top-bar-left .place-chip.studio-breadcrumb-place {
-    max-width: 200px;
-  }
-
-  .model .top-bar-left .place-chip.studio-breadcrumb-place {
+  .model[data-view-tab] .top-bar-left .place-chip.studio-breadcrumb-place {
     max-width: 200px;
   }
 
@@ -5209,56 +5149,5 @@ body,
 
   .model .topbar-export-wide {
     display: flex !important;
-  }
-
-  .model[data-view-tab="drawing"] .top-bar-center .mode-btn,
-  .model[data-view-tab="drawing"] .top-bar-center .proj-btn {
-    padding: 0 7px !important;
-    font-size: 10.5px !important;
-  }
-
-  .model[data-view-tab="drawing"] .topbar-compact-icon-btn {
-    box-sizing: border-box;
-    width: 32px;
-    height: 32px;
-    min-width: 32px;
-    min-height: 32px;
-    padding: 0;
-    gap: 0;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 7px;
-  }
-
-  .model[data-view-tab="drawing"] .topbar-compact-icon-btn .topbar-compact-icon {
-    display: block;
-  }
-
-  .model[data-view-tab="drawing"] .topbar-compact-icon-btn .topbar-compact-label {
-    display: none;
-  }
-
-  .model:not([data-view-tab="drawing"]) .topbar-compact-icon-btn {
-    box-sizing: border-box;
-    width: 32px;
-    height: 32px;
-    min-width: 32px;
-    min-height: 32px;
-    padding: 0;
-    gap: 0;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 7px;
-    flex-shrink: 0;
-  }
-
-  .model:not([data-view-tab="drawing"]) .topbar-compact-icon-btn .topbar-compact-icon {
-    display: block;
-  }
-
-  .model:not([data-view-tab="drawing"]) .topbar-compact-icon-btn .topbar-compact-label {
-    display: none;
   }
 }
