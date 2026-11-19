@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import type { CityModel, Pt } from "../types";
 import { downwindFromSector } from "./windRose";
@@ -185,5 +186,18 @@ describe("plan wind vector sizing", () => {
     expect(windPlanVectorStride(30, 1)).toBe(1);
     expect(windPlanVectorStride(30, 0.3)).toBe(2);
     expect(windPlanVectorStride(30, 0.1)).toBe(8);
+  });
+
+  it("uses the mid-grey lighter stroke and smaller head tokens", () => {
+    const css = readFileSync(new URL("../drawing-style.css", import.meta.url), "utf8");
+    const value = (name: string) => {
+      const match = css.match(new RegExp(`${name}\\s*:\\s*([^;]+);`));
+      expect(match, name).toBeTruthy();
+      return match![1]!.trim();
+    };
+    expect(value("--wind-plan-vector-stroke").toUpperCase()).toBe("#737373");
+    expect(value("--wind-plan-vector-opacity")).toBe("0.6");
+    expect(value("--wind-plan-vector-px")).toBe("1");
+    expect(value("--wind-plan-vector-head-px")).toBe("3");
   });
 });
