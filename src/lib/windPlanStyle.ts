@@ -10,6 +10,8 @@ export type WindPlanLineStyle = {
   buildingEdge: WindPlanPen;
   unsafeOutline: WindPlanPen;
   unsafeHatch: WindPlanPen;
+  unsafeMark: WindPlanPen;
+  comfortFeather: { px: number; opacity: number };
   hatchSpacingPx: number;
   unsafeMinPx: number;
   vector: WindPlanPen;
@@ -46,6 +48,15 @@ export function windPlanLineStyle(read?: (name: string) => string): WindPlanLine
     },
     unsafeOutline: { colour: unsafe, opacity: 1, px: num(get, "--wind-plan-unsafe-outline-px") },
     unsafeHatch: { colour: unsafe, opacity: 1, px: num(get, "--wind-plan-unsafe-hatch-px") },
+    unsafeMark: {
+      colour: unsafe,
+      opacity: num(get, "--wind-plan-unsafe-mark-opacity"),
+      px: num(get, "--wind-plan-unsafe-mark-px"),
+    },
+    comfortFeather: {
+      px: num(get, "--wind-plan-comfort-feather-px"),
+      opacity: num(get, "--wind-plan-comfort-feather-opacity"),
+    },
     hatchSpacingPx: num(get, "--wind-plan-unsafe-hatch-spacing-px"),
     unsafeMinPx: num(get, "--wind-plan-unsafe-min-px"),
     vector: {

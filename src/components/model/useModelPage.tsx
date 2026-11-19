@@ -144,7 +144,7 @@ import { useWalkRipple } from "../useWalkRipple";import { useWalkPlayback, useWa
 
 import { loadSiteWind } from "../../lib/windLoad";
 import type { SiteWindSelection } from "../../lib/windRoseData";
-import { sectorCenterDeg } from "../../lib/windRose";
+import { sectorCenterDeg, sectorIndex } from "../../lib/windRose";
 import { analyzeSiteWind, seasonRecord } from "../../lib/windRoseStats";
 
 import { daylightWindowMinutes, sunAtMelbourneLocal } from "../../lib/solar";
@@ -1352,6 +1352,7 @@ export function useModelPage({
     designWinds,
     clearDesignWind: () => commitWind({ ...windSettings, designWind: null }),
     active: tab === "3d" && view.projection === "plan" && leftOpen === "analysis" && analysisKind === "wind" && siteWind != null,
+    scaleWanted: tab === "3d" && windSettings.enabled && windSettings.showRose && leftOpen === "analysis" && analysisKind === "wind",
   });
 
   useEffect(() => {
@@ -1367,7 +1368,12 @@ export function useModelPage({
       const record = seasonRecord(siteWind, windSettings.period);
       root.setAttribute(
         "data-ground-wind-deg",
-        String(designWind?.headingDeg ?? record?.prevailingDirDeg ?? sectorCenterDeg(consoleWindStats.prevailingSector)),
+        String(
+          designWind?.headingDeg ??
+            (windPlan.sector != null && record && windPlan.sector !== sectorIndex(record.prevailingDirDeg)
+              ? sectorCenterDeg(windPlan.sector)
+              : (record?.prevailingDirDeg ?? sectorCenterDeg(consoleWindStats.prevailingSector))),
+        ),
       );
       root.setAttribute("data-ground-wind-season", designWind?.id ?? windSettings.period);
     } else {
@@ -1379,7 +1385,7 @@ export function useModelPage({
       root.removeAttribute("data-ground-wind-deg");
       root.removeAttribute("data-ground-wind-season");
     }
-  }, [siteWind, consoleWindStats, windSettings.period, designWind]);
+  }, [siteWind, consoleWindStats, windSettings.period, designWind, windPlan.sector]);
 
   useEffect(() => {
     if (!consolePlaying) return;

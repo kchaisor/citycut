@@ -83,12 +83,12 @@ export const COMFORT_SWATCH: Record<ComfortClass, ColourKey> = {
 
 export function WindPlanLegend({ plan }: { plan: Pick<WindPlanState, "mode" | "scaleMaxMs"> }) {
   if (plan.mode === "speed") return <WindPlanVelocityLegend scaleMaxMs={plan.scaleMaxMs} />;
-  return null;
+  return <WindPlanComfortSwatches />;
 }
 
-export function WindPlanComfortLegend() {
+export function WindPlanComfortSwatches() {
   return (
-    <div className="wind-plan-comfort hud-card" aria-label="Pedestrian comfort, Lawson">
+    <div className="wind-plan-legend wind-plan-comfort-legend" aria-label="Pedestrian comfort, Lawson">
       <p className="wind-plan-legend-title">Comfort</p>
       <ul className="wind-plan-swatches">
         {COMFORT_CLASSES.map((cls) => (

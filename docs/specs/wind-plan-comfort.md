@@ -6,7 +6,7 @@ In Plan view with Wind Rose on, the ground becomes a top-down wind diagram. A **
 
 ## What it looks like
 
-Screens this touches: Plan view of the 3D model with Analysis → Wind Rose on; the wind-rose card (left); the floating Velocity and Comfort legend cards (lower right); the bottom wind console; Site Intelligence (right, collapse only).
+Screens this touches: Plan view of the 3D model with Analysis → Wind Rose on; the wind-rose card (left), which holds the Velocity and Comfort legends; the bottom wind console; Site Intelligence (right, collapse only).
 
 Sketch or screenshot (Paper mock-ups v2, approved by Designbot on 17 Nov 2026):
 
@@ -47,7 +47,7 @@ The 1024 mock-ups are on the shared computer at `/workspace/wind-plan-mock/v2-sp
 - Still indicative, not CFD: the arrows show the rule-based flow model's direction, not a solved velocity field.
 
 ### Clickable rose (Designbot spec, approved by Kelvin 18 Nov 2026)
-- The ‹ N › stepper is gone. In Wind speed the rose in the Plan wind card is the direction picker. In Comfort it is a plain chart and Direction reads "All". The rose elsewhere (outside plan views) is not interactive.
+- The ‹ N › stepper is gone. In Wind speed the rose in the Plan wind card is the direction picker. In Comfort it is a plain chart and Direction reads "All". Since 19 Nov 2026 the rose in the 3D Wind Flow card is the same picker and shares the heading (see the 19 Nov 5:27 PM note below); elsewhere it is not interactive.
 - Each of the 16 sectors is a click target: the full 22.5° sector out to the outer ring, empty sectors included. Clicking one analyses that direction for the current season or Annual. If a design wind is active, clicking a sector leaves the design wind and shows that direction for the current season or Annual.
 - Hover: the hovered petal goes to full opacity with a 1.5px ink outline; the other 15 fade to 45%; pointer cursor; 120ms ease-out fade, no transition under reduced motion. A tooltip is pinned to the outer ring at the middle of the hovered sector (not following the cursor), 11px: `NE · 18% of hours · 3.9 m/s median` — the 16-point label, that direction's share of all hours (the same basis as the design-wind share), and the walking-height speed the map uses for that direction in the current period, one decimal.
 - Selected: a 22.5° arc on the outer ring, 4px thick, accent yellow with a 1px ink edge; that direction's 16-point label drawn and bold at the ring (N, NE, SSW…); the selected petal keeps a 1px ink outline when not hovered. Selection is never colour-only.
@@ -60,7 +60,7 @@ These replace the hover tooltip, selected mark and guide-label details above whe
 - Selected mark: a circular arc stroke centred on the outer ring (radius R), exactly 22.5° (sector centre ± 11.25°), 4px, butt caps, accent yellow, with a 1px ink edge all round (a 6px ink arc under it, 1px longer at each end). Not a filled tab with radial sides. The bold selected label sits at R+14 along the sector bearing, centred, N/E/S/W included.
 - The 33% and 66% guide labels sit on the rose's least-used bearing, worked out again for each period, at the matching guide-ring radii: 9px, muted text, on a 2px card-surface plate so they read over the guides (a plate, not a text outline).
 - Tooltip: pinned outside the ring, 8px past R along the sector bearing, growing away from the rose. It keeps clear of the N/E/S/W labels and flips to the other side if it would run off the screen. Copy follows the map: on the active design wind's own sector it shows the design-wind figures (`NE · 18% of hours · 3.9 m/s`); otherwise the period comes first (`NE · Annual · 7% of hours · 4.1 m/s`). The word "median" is not used: the speed is the walking-height reference the map uses, not a median.
-- In the Plan wind card the station block under Calm is 11px muted text, and the closer stations sit behind a "Nearby stations" disclosure, closed by default, listing each station with its unbreakable distance (`7.9 km`). The rose outside plan views keeps its plain "Closer:" line.
+- In the Plan wind card the station block under Calm is 11px muted text, and the closer stations sit behind a "Nearby stations" disclosure, closed by default, listing each station with its unbreakable distance (`7.9 km`). The 3D Wind Flow card uses the same 11px station block and "Nearby stations" disclosure.
 
 ### Comfort (Lawson LDDC, indicative)
 - For each ground cell, every direction in the season is weighted by its frequency (from the Viewbank TMYx speed bins) and combined with that direction's speed-ratio field to get how often each threshold is exceeded.
@@ -68,27 +68,36 @@ These replace the hover tooltip, selected mark and guide-label details above whe
 - Water is not rated (Kelvin's call, 19 Nov 2026): inside the site clip the comfort bands and Unsafe hatching are painted on land only, water shows as the grey base map, and water cells never count towards "Unsafe: N areas". The per-heading fields carry the same longer wakes, windward-corner speed-ups and channelling as Wind speed.
 - Above the top station bin (40 km/h and over, open-ended) each direction's speeds follow a Weibull curve fitted to that direction's own bins, as wind climates are usually described for comfort studies (NEN 8100). Before 19 Nov 2026 the tail was a fixed exponential guess one bin wide, which made the 15 m/s test fail on open ground at windy stations: at Sydney Airport (White Bay, Pyrmont) open ground came out at 0.04% of the year against the 0.022% limit, so nearly the whole map was flagged Unsafe. The fitted curves come out close to the textbook shape for wind (k ≈ 2) and put that open ground near 0%; strong corner and gap speed-ups at exposed sites can still be Unsafe. The thresholds did not change. Directions with too few bins to fit keep the old exponential tail.
 - Criteria: Lawson LDDC, with comfort and safety as in the City of London *Wind Microclimate Guidelines* (2019). Comfort uses mean-hourly speeds exceeded no more than 5% of the time, in five bands: Sitting ≤ 4 m/s, Standing ≤ 6 m/s, Strolling ≤ 8 m/s (the LDDC leisure-walking band), Walking ≤ 10 m/s, Uncomfortable above that.
-- Unsafe is a safety flag, not a sixth comfort colour: more than 15 m/s for more than 0.022% of the year (about 2 hours). An unsafe patch keeps its comfort-band colour and gains a 45° hatch (1px #7A1A12 at 6px spacing) and a 2px #7A1A12 outline; patches smaller than 12px are drawn as a 12px hatched, outlined disc. All of it stays inside the site clip.
+- Unsafe is a safety flag, not a sixth comfort colour: more than 15 m/s for more than 0.022% of the year (about 2 hours). An unsafe patch keeps its comfort-band colour and gains a 45° hatch (1px #7A1A12 at 6px spacing) and a 2px #7A1A12 outline; patches smaller than 7px are drawn as a small 7px mark with a 1px outline and the hatch at 60% (smaller and lighter than the old 12px disc, Kelvin's call 19 Nov 2026). All of it stays inside the site clip.
 - Styled like Kelvin's Lawson reference (Kelvin's call, 19 Nov 2026):
   - Five Lawson colours, sampled from the reference legend: Sitting #BDF8DA, Standing #6ADCA0, Strolling #F8D404, Walking #FAA902, Uncomfortable #F44333.
-  - A smooth, fully opaque filled field: Sitting as the base, then each higher band as a smooth vector contour with clean edges. No grid cells and no isolines.
-  - The field is clipped to the site parcel and the parcel is drawn as a dashed red site boundary (#D7263D, the same dash and weight as other CityCut site outlines). Where there is no parcel (for example NSW cuts with no Vicmap parcel), the clip and the dashed outline fall back to the cut rectangle.
+  - A smooth, fully opaque filled field: Sitting as the base, then each higher band as a smooth vector contour (two Chaikin passes) whose edge fades a few pixels into its neighbour, so bands do not read as a hard zoning map. No grid cells, no isolines and no continuous ramp.
+  - The field is clipped to the site parcel, with no dashed red site stroke on the comfort map (Kelvin's call, 19 Nov 2026). Where there is no parcel (for example NSW cuts with no Vicmap parcel), the clip falls back to the cut rectangle.
   - Inside the cut but outside the site: a muted grey base map (#F3F3F3) with soft grey roads, grey-blue water and grey-green parks. No map tiles, street labels or wind roses.
   - Buildings are light grey (#C5C5C5) with the same light ink edge, inside and outside the site.
-  - A boxed Comfort legend card (see Panels).
+  - The Comfort swatches in the left Pedestrian comfort card (see Panels).
 - The four time-of-day wind roses in the reference are left out for now.
 - The card shows "Unsafe: N areas" or "Unsafe: none". Direction reads "All".
-- Preference: comfort map styled like the reference: five Lawson colours (Sitting, Standing, Strolling, Walking, Uncomfortable), smooth opaque fill, clipped to a dashed red site boundary (cut fallback when no parcel), muted grey base map with light-grey buildings, boxed HUD legend (Kelvin's yes, 19 Nov 2026).
+- Preference: comfort map styled like the reference: five Lawson colours (Sitting, Standing, Strolling, Walking, Uncomfortable), smooth opaque fill, clipped to the site (cut fallback when no parcel), muted grey base map with light-grey buildings (Kelvin's yes, 19 Nov 2026). Since 5:27 PM that day: no dashed red site stroke, swatches in the left card.
 
 ### Panels and console
-- The plan rows (Season, Direction, Reference in m/s or Criteria "Lawson", "Indicative only, not a CFD study") sit at the top of the existing wind-rose card, with "Unsafe: N areas" in Comfort. The card has no comfort swatches. In Wind speed the card footer holds the horizontal Velocity (m/s) bar and ticks. The card is 272px wide with 16px padding, and the rose fills the 240px content width (up from 160px in a 236px card with 12px padding; Designbot, 18 Nov 2026). The card stays at least 8px clear of the bottom console, the left rail and the compass, and scrolls rather than covering the console when space runs short. At 1280 wide or less the console starts 8px right of the 272px card.
-- The "Closer:" station line is 12px/500 and wraps only between stations; each distance ("7.9 km") is one unbreakable unit, never clipped or split, and the line is not clamped. Its tooltip keeps the full single-line text.
-- In Comfort the legend is its own floating card in the lower-right corner: the usual HUD card surface, border, shadow and 12px corners, a "COMFORT" title (10px/700 uppercase, ink-3), then one column of five rows (Sitting, Standing, Strolling, Walking, Uncomfortable), each a 20×12px swatch with a faint 1px edge, an 8px gap and a 12px/500 ink label. No Unsafe row. It stays at least 8px clear of Site Intelligence, the bottom console, the compass and the wind-rose card at 1024–1440, moving left of Site Intelligence if that panel runs long.
+- The plan rows (Season, Direction, Reference in m/s or Criteria "Lawson", "Indicative only, not a CFD study") sit at the top of the existing wind-rose card, with "Unsafe: N areas" in Comfort. In Wind speed the card footer holds the horizontal Velocity (m/s) bar and ticks; in Comfort it holds the Lawson swatches. The card is 272px wide with 16px padding, and the rose fills the 240px content width (up from 160px in a 236px card with 12px padding; Designbot, 18 Nov 2026). The card stays at least 8px clear of the bottom console, the left rail and the compass, and scrolls rather than covering the console when space runs short. At 1280 wide or less the console starts 8px right of the 272px card.
+- The closer stations in "Nearby stations" each keep their distance ("7.9 km") as one unbreakable unit, never clipped or split. The disclosure's tooltip keeps the full single-line "Closer:" text.
+- In Comfort the legend sits in the left Pedestrian comfort card footer, below the rose and station lines (Kelvin's call, 19 Nov 2026; there is no bottom-right legend card): a "COMFORT" title (10px/700 uppercase, ink-3), then one column of five rows (Sitting, Standing, Strolling, Walking, Uncomfortable), each a 20×12px swatch with a faint 1px edge, an 8px gap and a 12px/500 ink label. No Unsafe row. The card scrolls rather than covering the console.
 - The switch uses the white raised sub-option style. Wind Rose stays the one yellow active.
 - Plan wind views use m/s only (no km/h in the console) and the console has no DIR readout.
 - Buildings have a 1px #1A1A1A edge at 40% opacity: white footprints on Wind speed, light grey on Comfort. Tree dots are hidden in wind plan views.
 - At 1280 wide or less, Site Intelligence collapses to its header while a wind plan is showing.
 - Colours come from tokens only (DESIGN-SYSTEM.md); any deviation is listed in the PR body.
+
+### Kelvin's 19 Nov 2026 notes (5:18 PM AEDT, approved 5:27 PM AEDT)
+- No duplicate rose card under Site Intelligence: the only wind-rose card is the left one. The console Wind Rose chip shows or hides it (on by default).
+- 3D Wind Flow petals are clickable with the same hover, selected arc and tooltip as plan Wind speed, and share the heading with plan: picking a petal in either view turns the 3D streaks and the plan map to that sector, and leaves a design wind the same way.
+- The 3D card uses the m/s Velocity legend on the site's scale, not the old km/h bar or the sheltered / open legend, and has no Pedestrian comfort rows.
+- Comfort stays all-directions, with no picker.
+- The comfort map has no red dashed site stroke; the site clip stays.
+- The Comfort swatches live in the left Pedestrian comfort card, not a bottom-right HUD.
+- Band edges are slightly softer and smoother, and tiny unsafe patches are smaller, lighter marks. Lawson colours and thresholds are unchanged. Still indicative, not CFD.
 
 ## How we'll know it works
 
@@ -102,15 +111,15 @@ These replace the hover tooltip, selected mark and guide-label details above whe
 - [ ] The same complete site always shows the same scale top; one fast cell does not lift it from 8 to 10.
 - [ ] Clicking any of the 16 rose sectors (empty ones too) sets the direction; clicking while a design wind is active switches to that direction for the current season. Left/Right on the focused rose step it; Enter confirms. Direction reads e.g. `NE · 45°`.
 - [ ] Rose hover: 1.5px ink outline, others visibly at 45%, 11px tooltip pinned outside the ring with share of hours and walking-height speed (period first unless it is the active design wind; no "median"). Selected: 4px yellow arc on the ring with an ink edge and a bold label at R+14. 33%/66% labels on the quietest bearing. Closer stations behind "Nearby stations".
-- [ ] Comfort: five Lawson bands (Sitting, Standing, Strolling at 8 m/s, Walking, Uncomfortable) in the reference colours, as a smooth opaque fill with clean edges at 1440 and no isolines; Unsafe hatched and outlined over its band colour, at least 12px; the card reads "Unsafe: N areas" or "Unsafe: none"; Direction reads "All".
-- [ ] Comfort: the fill stops at the site parcel, drawn as a dashed red site boundary; with no parcel it fills the cut and the dashed outline runs round the cut.
+- [ ] Comfort: five Lawson bands (Sitting, Standing, Strolling at 8 m/s, Walking, Uncomfortable) in the reference colours, as a smooth opaque fill with clean edges at 1440 and no isolines; Unsafe hatched and outlined over its band colour, tiny patches as a small light 7px mark; the card reads "Unsafe: N areas" or "Unsafe: none"; Direction reads "All".
+- [ ] Comfort: the fill stops at the site parcel with no dashed red stroke; with no parcel it fills the cut.
 - [ ] Comfort: outside the site the cut shows a muted grey base map with light-grey buildings, grey roads, and soft water and park tones; no tiles or labels.
-- [ ] Comfort: a boxed Comfort legend card in the lower right with five single-column rows and no Unsafe row; no swatches in the wind-rose card; at least 8px clear of every panel.
+- [ ] Comfort: the five single-column swatch rows (no Unsafe row) sit in the left Pedestrian comfort card; no bottom-right legend card; the card does not overflow the console.
 - [ ] A windy station (Sydney Airport, for example White Bay) no longer flags open ground as Unsafe; Unsafe stays limited to strong speed-ups.
 - [ ] Water (Pyrmont's bays) is plain grey base map on Wind speed and Comfort, never a speed colour or comfort band, and never Unsafe; it does not lift the speed scale.
 - [ ] Tall buildings leave long, tapered sheltered streaks on the lee side; windward corners and wind-aligned streets read faster than open ground on both maps.
-- [ ] Plan rows sit inside the wind-rose card; in Wind speed the card footer shows the Velocity bar; in Comfort it does not.
-- [ ] The "Closer:" line reads each distance whole ("7.9 km", never "79 km") and wraps between stations.
+- [ ] Plan rows sit inside the wind-rose card; in Wind speed the card footer shows the Velocity bar; in Comfort it shows the swatches instead.
+- [ ] "Nearby stations" reads each distance whole ("7.9 km", never "79 km").
 - [ ] Console shows m/s only in plan wind views, with no DIR readout.
 - [ ] Buildings with a light ink edge, white on Wind speed and light grey on Comfort; no tree dots in wind plan views.
 - [ ] At ≤1280 Site Intelligence collapses to its header; zero overlap and gaps of at least 8px at 1024, 1280 and 1440.

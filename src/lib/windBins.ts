@@ -36,10 +36,6 @@ export function windSpeedBinRangeLabel(band: number): string {
   return WIND_SPEED_CONSOLE_CHIP_LABELS[band] ?? WIND_SPEED_CONSOLE_CHIP_LABELS[4]!;
 }
 
-export function windSpeedLegendTickLine(): string {
-  return `${WIND_SPEED_LEGEND_TICKS_KMH.join(" · ")} km/h`;
-}
-
 export function windBandFill(band: number): string {
   return getColour(WIND_BAND_COLOUR_VARS[band] ?? WIND_BAND_COLOUR_VARS[4]);
 }

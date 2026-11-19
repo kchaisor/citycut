@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { contourRings, ringArea, smoothRing } from "./marchingSquares";
+import { contourRings, ringArea, smoothRing, smoothRingPasses } from "./marchingSquares";
 
 function grid(rows: number[][]) {
   return { values: rows.flat(), cols: rows[0]!.length, rows: rows.length };
@@ -98,5 +98,36 @@ describe("smoothRing", () => {
       expect(v).toBeGreaterThanOrEqual(0);
       expect(v).toBeLessThanOrEqual(1);
     }
+  });
+});
+
+describe("smoothRingPasses", () => {
+  const peak = () =>
+    contourRings(
+      grid([
+        [0, 0, 0, 0, 0],
+        [0, 1, 1, 1, 0],
+        [0, 1, 2, 1, 0],
+        [0, 1, 1, 1, 0],
+        [0, 0, 0, 0, 0],
+      ]),
+      0.5,
+    )[0]!;
+
+  it("matches one Chaikin pass for a single pass and leaves the ring alone for none", () => {
+    const ring = peak();
+    expect(smoothRingPasses(ring, 1)).toEqual(smoothRing(ring));
+    expect(smoothRingPasses(ring, 0)).toBe(ring);
+  });
+
+  it("keeps a twice-smoothed ring closed, distinct and inside the first pass", () => {
+    const ring = peak();
+    const once = smoothRingPasses(ring, 1);
+    const twice = smoothRingPasses(ring, 2);
+    expect(twice.length).toBe(once.length * 2);
+    expect(closedKeys(twice)).toBe(true);
+    expect(Math.abs(ringArea(twice))).toBeLessThan(Math.abs(ringArea(once)));
+    expect(Math.abs(ringArea(twice))).toBeGreaterThan(Math.abs(ringArea(ring)) * 0.85);
+    expect(Math.sign(ringArea(twice))).toBe(Math.sign(ringArea(ring)));
   });
 });

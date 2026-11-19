@@ -159,6 +159,12 @@ export function smoothRing(ring: ContourRing): ContourRing {
   return out;
 }
 
+export function smoothRingPasses(ring: ContourRing, passes: number): ContourRing {
+  let out = ring;
+  for (let k = 0; k < passes; k++) out = smoothRing(out);
+  return out;
+}
+
 export function ringArea(ring: ContourRing): number {
   const n = ring.length / 2;
   let sum = 0;

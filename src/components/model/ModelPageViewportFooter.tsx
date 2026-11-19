@@ -4,6 +4,7 @@ import { WalkRippleTimeScrubber } from "../WalkRippleTimeScrubber";import { WALK
 import { WIND_PERIOD_LABELS, WindPeriodId } from "../../lib/windRose";
 import { withDesignWind, withWindSeason } from "../../lib/windState";
 import { DesignWindPresets } from "../DesignWindPresets";
+import { toggleWindRoseChip, windRoseChipOn } from "./windRoseCard";
 import { WindPlanSwitch } from "./WindPlanSwitch";
 
 
@@ -266,15 +267,9 @@ export function ModelPageViewportFooter({ vm }: { vm: import("./useModelPage").M
                       </button>
                       <button
                         type="button"
-                        className={windSettings.enabled && windSettings.showRose ? "ov-chip on" : "ov-chip"}
-                        aria-pressed={windSettings.enabled && windSettings.showRose}
-                        onClick={() =>
-                          commitWind({
-                            ...windSettings,
-                            enabled: true,
-                            showRose: !windSettings.showRose,
-                          })
-                        }
+                        className={windRoseChipOn(windSettings) ? "ov-chip on" : "ov-chip"}
+                        aria-pressed={windRoseChipOn(windSettings)}
+                        onClick={() => commitWind(toggleWindRoseChip(windSettings))}
                       >
                         <span className="ov-dot" aria-hidden="true" />
                         <span>Wind Rose</span>

@@ -427,7 +427,11 @@ A dash is two lengths in millimetres: how long the mark is, then how long the ga
 | `--wind-plan-unsafe-outline-px` | Plan comfort map: unsafe outline weight | `2` | screen px |
 | `--wind-plan-unsafe-hatch-px` | Plan comfort map: weight of the 45° unsafe hatch | `1` | screen px |
 | `--wind-plan-unsafe-hatch-spacing-px` | Plan comfort map: gap between hatch lines | `6` | screen px |
-| `--wind-plan-unsafe-min-px` | Plan comfort map: smallest drawn size of an unsafe area | `12` | screen px |
+| `--wind-plan-unsafe-min-px` | Plan comfort map: smallest drawn size of an unsafe area; smaller patches get a small hatched mark | `7` | screen px |
+| `--wind-plan-unsafe-mark-px` | Plan comfort map: outline weight of the small unsafe mark | `1` | screen px |
+| `--wind-plan-unsafe-mark-opacity` | Plan comfort map: hatch and outline opacity of the small unsafe mark | `0.6` | 0–1 |
+| `--wind-plan-comfort-feather-px` | Plan comfort map: width of the soft edge where Lawson bands meet | `6` | screen px |
+| `--wind-plan-comfort-feather-opacity` | Plan comfort map: opacity of each soft-edge step | `0.22` | 0–1 |
 | `--wind-plan-vector-stroke` | Plan wind maps (Wind speed and Comfort): colour of the flow vector arrows | `#1A1A1A` | colour |
 | `--wind-plan-vector-opacity` | Plan wind maps: opacity of the flow vector arrows | `0.7` | 0–1 |
 | `--wind-plan-vector-px` | Plan wind maps: shaft and head weight of the flow vector arrows | `1` | screen px |

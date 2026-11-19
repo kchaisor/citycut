@@ -110,6 +110,7 @@ export function useWindPlan({
   designWinds = NO_DESIGN_WINDS,
   clearDesignWind,
   active,
+  scaleWanted = false,
 }: {
   model: CityModel;
   siteWind: SiteWindSelection | null;
@@ -118,6 +119,7 @@ export function useWindPlan({
   designWinds?: readonly DesignWind[];
   clearDesignWind?: () => void;
   active: boolean;
+  scaleWanted?: boolean;
 }): WindPlanState {
   const [mode, setMode] = useState<WindPlanMode>("speed");
   const [vectorsOn, setVectorsOn] = useState(true);
@@ -168,12 +170,20 @@ export function useWindPlan({
     [weights],
   );
 
-  const scaleMaxMs = active && scaleViews.length > 0 ? cachedWindPlanScale(model, scaleKey) : null;
+  const scaleOn = active || scaleWanted;
+  const scaleMaxMs = scaleOn && scaleViews.length > 0 ? cachedWindPlanScale(model, scaleKey) : null;
   const speed =
     active && speedKey && sector != null && scaleMaxMs != null
       ? cachedWindPlanSpeed(model, windPlanSpeedKey(speedKey, sector))
       : null;
   const comfort = active && key ? cachedWindPlanComfort(model, key) : null;
+
+  useEffect(() => {
+    if (active || !scaleWanted || scaleViews.length === 0) return;
+    const scaleJob = createWindPlanScaleJob(model, scaleViews);
+    if (scaleJob.result()) return;
+    return runJobs([scaleJob], () => setRevision((r) => r + 1));
+  }, [active, scaleWanted, model, scaleViews]);
 
   useEffect(() => {
     if (!active || !key || !speedKey || !weights) return;

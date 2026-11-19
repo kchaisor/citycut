@@ -113,3 +113,18 @@ export function designWindPeriodStats(stats: WindPeriodStats, wind: DesignWind):
     prevailingMedianKmh: wind.stationMs * 3.6,
   };
 }
+
+export function sectorPeriodStats(stats: WindPeriodStats, sector: number): WindPeriodStats {
+  const at = ((sector % WIND_SECTOR_COUNT) + WIND_SECTOR_COUNT) % WIND_SECTOR_COUNT;
+  if (at === stats.prevailingSector) return stats;
+  return { ...stats, prevailingSector: at, prevailingLabel: sectorLabel(at) };
+}
+
+export function headingPeriodStats(
+  stats: WindPeriodStats,
+  designWind: DesignWind | null,
+  sector: number | null,
+): WindPeriodStats {
+  if (designWind) return designWindPeriodStats(stats, designWind);
+  return sector != null ? sectorPeriodStats(stats, sector) : stats;
+}

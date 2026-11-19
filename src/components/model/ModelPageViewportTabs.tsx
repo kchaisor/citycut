@@ -12,7 +12,7 @@ import { sceneSelectionBuildingId } from "../../lib/sceneInspectPick";
 import { qaHideHeightPopoverFromSearch } from "../../lib/qaCameraBridge";
 import { sunStudyMutedOn, toggleSelection } from "../../lib/sunStudyPlan";
 import { SceneBoundary } from "../SceneBoundary";
-import { WindRoseOverlay } from "../WindRoseOverlay";import { ViewLegend } from "../ViewPanel";
+import { ViewLegend } from "../ViewPanel";
 
 import { SectionKnifeElevationPanel } from "../SectionKnifeElevationPanel";import { WalkRippleLegend } from "../WalkRipplePanel";
 
@@ -135,6 +135,7 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
                 siteWind={siteWind}
                 windPeriod={windSettings.period}
                 windDesignWind={designWind}
+                windSector={windPlan.sector}
                 windAnimateStreaks={windMotion.animateStreaks}
                 windPlan={windPlan.active ? windPlan : null}
                 onExportReady={onExportReady}
@@ -194,15 +195,6 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
               ) : null}
               {tab === "3d" && studioCompassVisible(view.projection, view.freeRotate) && (
                 <StudioCompass needleDeg={compassNeedleDeg} />
-              )}
-              {windSettings.enabled && windSettings.showRose && siteWind && tab === "3d" && !windPlan.active && (
-                <WindRoseOverlay
-                  selection={siteWind}
-                  period={windSettings.period}
-                  streaksPaused={windMotion.streaksPaused}
-                  animateAnyway={windMotion.animateAnyway}
-                  onAnimateAnyway={windMotion.setAnimateAnyway}
-                />
               )}
               {pickedBuilding && !qaHideHeightPopoverFromSearch(window.location.search) && (
                 <BuildingHeightPopover

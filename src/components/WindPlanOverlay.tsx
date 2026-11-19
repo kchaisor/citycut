@@ -15,8 +15,6 @@ import {
 } from "../lib/windPlanField";
 import { windPlanComfortBands, windPlanSpeedContours, type ComfortBand, type WorldRing } from "../lib/windPlanContours";
 import { cutExtent, pointInClip, windPlanSiteClip } from "../lib/windPlanSiteClip";
-import { dashSegments, readDrawingStyle } from "../lib/drawingStyle";
-import { screenDashPx, screenPx } from "../lib/lineweights";
 import { windPlanLineStyle, type WindPlanLineStyle, type WindPlanPen } from "../lib/windPlanStyle";
 import {
   WIND_PLAN_VECTOR_HEAD_DEG,
@@ -90,6 +88,8 @@ const COMFORT_FILL: Record<ComfortBand, ColourKey> = {
   walking: "--wind-plan-walking",
   uncomfortable: "--wind-plan-uncomfortable",
 };
+
+const COMFORT_FEATHER_STEPS = [1, 2 / 3, 1 / 3];
 
 const speedImages = new WeakMap<WindPlanSpeed, { revision: number; scaleMaxMs: number; canvas: HTMLCanvasElement }>();
 
@@ -230,17 +230,6 @@ function drawBaseMap(ctx: CanvasRenderingContext2D, shapes: BaseMapShapes) {
   }
 }
 
-function strokeSiteBoundary(ctx: CanvasRenderingContext2D, path: Path2D, scale: number) {
-  const pen = readDrawingStyle().siteBoundary;
-  const segments = dashSegments(pen.dash);
-  ctx.strokeStyle = getColour("--site-boundary");
-  ctx.lineWidth = Math.max(1, screenPx(pen.mm)) / scale;
-  ctx.lineJoin = "round";
-  ctx.lineCap = segments?.some((segment, index) => segment === 0 && index % 2 === 0) ? "round" : "butt";
-  ctx.setLineDash(segments ? segments.map((mm) => screenDashPx(mm) / scale) : []);
-  ctx.stroke(path);
-}
-
 function strokePen(ctx: CanvasRenderingContext2D, path: Path2D, pen: WindPlanPen, scale: number) {
   ctx.globalAlpha = pen.opacity;
   ctx.strokeStyle = pen.colour;
@@ -256,9 +245,24 @@ function strokeInside(ctx: CanvasRenderingContext2D, path: Path2D, pen: WindPlan
   ctx.restore();
 }
 
-function hatch(ctx: CanvasRenderingContext2D, width: number, height: number, style: WindPlanLineStyle, dpr: number) {
+function featherEdge(ctx: CanvasRenderingContext2D, path: Path2D, colour: string, style: WindPlanLineStyle, scale: number) {
+  const { px, opacity } = style.comfortFeather;
+  if (!(px > 0) || !(opacity > 0)) return;
+  ctx.save();
+  ctx.strokeStyle = colour;
+  ctx.lineJoin = "round";
+  ctx.globalAlpha = opacity;
+  for (const share of COMFORT_FEATHER_STEPS) {
+    ctx.lineWidth = (px * share) / scale;
+    ctx.stroke(path);
+  }
+  ctx.restore();
+}
+
+function hatch(ctx: CanvasRenderingContext2D, width: number, height: number, style: WindPlanLineStyle, dpr: number, opacity = 1) {
   ctx.save();
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.globalAlpha = opacity;
   ctx.strokeStyle = style.unsafeHatch.colour;
   ctx.lineWidth = style.unsafeHatch.px;
   const step = style.hatchSpacingPx * Math.SQRT2;
@@ -412,8 +416,11 @@ export function WindPlanOverlay({
       const layers = windPlanComfortBands(comfort);
       for (const layer of layers.bands) {
         if (layer.rings.length === 0) continue;
-        ctx.fillStyle = getColour(COMFORT_FILL[layer.band]);
-        ctx.fill(cachedPath(layer, () => layer.rings), "evenodd");
+        const path = cachedPath(layer, () => layer.rings);
+        const fill = getColour(COMFORT_FILL[layer.band]);
+        featherEdge(ctx, path, fill, style, scale);
+        ctx.fillStyle = fill;
+        ctx.fill(path, "evenodd");
       }
       if (layers.unsafe.length > 0) {
         const path = cachedPath(layers.unsafe, () => layers.unsafe);
@@ -428,7 +435,7 @@ export function WindPlanOverlay({
         const extentM = Math.max(area.maxI - area.minI + 1, area.maxJ - area.minJ + 1) * cellM;
         if (extentM * scale >= minPx) continue;
         const radius = minPx / 2 / scale;
-        const inset = radius + style.unsafeOutline.px / 2 / scale;
+        const inset = radius + style.unsafeMark.px / 2 / scale;
         const e = clampInside(originE + (area.sumI / area.cells + 0.5) * cellM, cut.minE + inset, cut.maxE - inset);
         const n = clampInside(originN + (area.sumJ / area.cells + 0.5) * cellM, cut.minN + inset, cut.maxN - inset);
         if (!pointInClip(e, n, site.rings)) continue;
@@ -436,9 +443,9 @@ export function WindPlanOverlay({
         disc.arc(e, n, radius, 0, Math.PI * 2);
         ctx.save();
         ctx.clip(disc);
-        hatch(ctx, rect.width, rect.height, style, dpr);
+        hatch(ctx, rect.width, rect.height, style, dpr, style.unsafeMark.opacity);
         ctx.restore();
-        strokePen(ctx, disc, style.unsafeOutline, scale);
+        strokePen(ctx, disc, style.unsafeMark, scale);
       }
       if (vectorsOn) drawVectors(ctx, planVectors(comfort, null), t, { x: ox, y: oy }, scale, style, dpr);
       ctx.restore();
@@ -449,13 +456,6 @@ export function WindPlanOverlay({
     ctx.fill(buildings, "nonzero");
     strokeInside(ctx, buildings, style.buildingEdge, scale);
     ctx.restore();
-    if (mode === "comfort") {
-      ctx.save();
-      worldTransform();
-      strokeSiteBoundary(ctx, site.path, scale);
-      ctx.restore();
-    }
-
   }, [store, mode, speed, comfort, scaleMaxMs, vectorsOn, buildings, cut, site, baseMap, colourRevision]);
 
   const frame = useRef<number | null>(null);

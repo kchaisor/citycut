@@ -119,7 +119,7 @@ import { InspectHudProjector, type InspectHudScreen } from "./InspectHudProjecto
 import type { WindPeriodId } from "../lib/windRose";
 import type { SiteWindSelection } from "../lib/windRoseData";
 import { analyzeSiteWind } from "../lib/windRoseStats";
-import { designWindPeriodStats, type DesignWind } from "../lib/windDesignWinds";
+import { headingPeriodStats, type DesignWind } from "../lib/windDesignWinds";
 import type { CityModel } from "../types";
 
 export type SceneExporter = {
@@ -156,6 +156,20 @@ export function shouldRunIntroTransition(): boolean {
   }
   if (qaModeFromSearch(window.location.search)) return false;
   return true;
+}
+
+const introPlayedCuts = new Set<string>();
+
+export function introCutKey(model: Pick<CityModel, "center" | "sideM">): string {
+  return `${model.center.lat.toFixed(5)},${model.center.lon.toFixed(5)},${model.sideM}`;
+}
+
+export function markIntroPlayed(cutKey: string): void {
+  introPlayedCuts.add(cutKey);
+}
+
+export function introPendingFor(cutKey: string): boolean {
+  return shouldRunIntroTransition() && !introPlayedCuts.has(cutKey);
 }
 
 function easeInOutCubic(x: number): number {
@@ -283,7 +297,7 @@ function SceneDemandBootstrap() {
   return null;
 }
 
-function SceneFrameloopGate() {
+function SceneFrameloopGate({ introOn }: { introOn: boolean }) {
   const set = useThree((state) => state.set);
   const invalidate = useThree((state) => state.invalidate);
   const frameloopMode = () =>
@@ -291,20 +305,20 @@ function SceneFrameloopGate() {
       ? "always"
       : "demand";
   useLayoutEffect(() => {
-    if (!shouldRunIntroTransition()) {
+    if (!introOn) {
       set({ frameloop: frameloopMode() });
       invalidate();
     }
-  }, [set, invalidate]);
+  }, [set, invalidate, introOn]);
   useEffect(() => {
-    if (!shouldRunIntroTransition()) return;
+    if (!introOn) return;
     const onIntroDone = () => {
       set({ frameloop: frameloopMode() });
       invalidate();
     };
     window.addEventListener("citycut:intro-done", onIntroDone);
     return () => window.removeEventListener("citycut:intro-done", onIntroDone);
-  }, [set, invalidate]);
+  }, [set, invalidate, introOn]);
   return null;
 }
 
@@ -558,8 +572,9 @@ function City({
     }),
     [uniformBuildings, colourBySource],
   );
+  const cutKey = introCutKey(model);
   const group = useMemo(() => {
-    const introStagger = shouldRunIntroTransition();
+    const introStagger = introPendingFor(cutKey);
     const city = buildCityGroup(model, { uniformBuildings, colourBySource, highlightManual, introStagger });
     const plinth = city.getObjectByName("BasePlinth");
     const ground = city.getObjectByName("Ground");
@@ -602,6 +617,7 @@ function City({
     }
     return city;
   }, [
+    cutKey,
     model.center,
     model.sideM,
     model.frameShape,
@@ -636,7 +652,6 @@ function City({
     steadyFrames?: number;
     targets: Array<{ obj: THREE.Object3D; pivotY: number; kind: "building" | "tree"; bucket: number }>;
   } | null>(null);
-  const cutKey = `${model.center.lat.toFixed(5)},${model.center.lon.toFixed(5)},${model.sideM}`;
   const introScene = useThree((state) => state.scene);
   const invalidate = useThree((state) => state.invalidate);
   useLayoutEffect(() => {
@@ -677,7 +692,7 @@ function City({
       targets.push({ obj: object, pivotY, kind: "building", bucket });
     }
     const cutRingObj = group.getObjectByName("IntroCutRing") as THREE.LineSegments | undefined;
-    if (!shouldRunIntroTransition() || targets.length === 0) {
+    if (!introPendingFor(cutKey) || targets.length === 0) {
       for (const { obj } of targets) {
         obj.scale.y = 1;
         obj.position.y = 0;
@@ -881,6 +896,7 @@ function City({
     ds.introTreeScale = treeScale.toFixed(3);
     if (done) {
       intro.done = true;
+      markIntroPlayed(intro.cutKey);
       state.scene.userData[INTRO_ACTIVE_KEY] = false;
       if (typeof window !== "undefined") {
         window.dispatchEvent(new CustomEvent("citycut:intro-done"));
@@ -2102,6 +2118,7 @@ function WindLayer({
   siteWind,
   period,
   designWind,
+  sector,
   enabled,
   animateStreaks,
 }: {
@@ -2109,6 +2126,7 @@ function WindLayer({
   siteWind: SiteWindSelection | null;
   period: WindPeriodId;
   designWind: DesignWind | null;
+  sector: number | null;
   enabled: boolean;
   animateStreaks: boolean;
 }) {
@@ -2120,7 +2138,7 @@ function WindLayer({
   }, []);
   if (!enabled) return null;
   const seasonStats = siteWind ? analyzeSiteWind(siteWind, period) : null;
-  const stats = seasonStats && designWind ? designWindPeriodStats(seasonStats, designWind) : seasonStats;
+  const stats = seasonStats ? headingPeriodStats(seasonStats, designWind, sector) : null;
   return (
     <GroundWindFlow model={model} stats={stats} animate={visible && animateStreaks} />
   );
@@ -2142,6 +2160,7 @@ export function Scene3D({
   siteWind,
   windPeriod,
   windDesignWind = null,
+  windSector = null,
   windAnimateStreaks,
   windPlan = null,
   onExportReady,
@@ -2180,6 +2199,7 @@ export function Scene3D({
   siteWind: SiteWindSelection | null;
   windPeriod: WindPeriodId;
   windDesignWind?: DesignWind | null;
+  windSector?: number | null;
   windAnimateStreaks: boolean;
   windPlan?: WindPlanState | null;
   onExportReady: (exporter: SceneExporter | null) => void;
@@ -2204,6 +2224,8 @@ export function Scene3D({
   quality?: RenderQuality;
 }) {
   const boundsRef = useRef<Aabb | null>(null);
+  const sceneCutKey = introCutKey(model);
+  const introOn = useMemo(() => introPendingFor(sceneCutKey), [sceneCutKey]);
   const windPlanStore = useMemo(() => createWindPlanTransformStore(), []);
   const windPlanOn = windPlan?.active === true;
   const onBounds = useCallback((bounds: Aabb) => {
@@ -2298,7 +2320,7 @@ export function Scene3D({
         <ViewInset />
         <WebGlContextWatch onContextLost={onGlContextLost} onContextRestored={onGlContextRestored} />
         <SceneDemandBootstrap />
-        <SceneFrameloopGate />
+        <SceneFrameloopGate introOn={introOn} />
         <AdaptiveViewportDpr />
         <SceneContinuousBridge
           windAnimate={windEnabled && windAnimateStreaks && !windPlanOn}
@@ -2383,6 +2405,7 @@ export function Scene3D({
         siteWind={siteWind}
         period={windPeriod}
         designWind={windDesignWind}
+        sector={windSector}
         enabled={windEnabled && !windPlanOn}
         animateStreaks={windAnimateStreaks}
       />
@@ -2406,7 +2429,7 @@ export function Scene3D({
         lat={model.center.lat}
         lon={model.center.lon}
         cameraMemory={cameraMemory}
-        introEnabled
+        introEnabled={introOn}
         gizmoOrbitLock={sectionKnifeGizmoInteraction.orbitLock}
       />
       </Canvas>

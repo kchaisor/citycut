@@ -43,6 +43,8 @@ function renderCard(plan: WindPlanState) {
   );
 }
 
+const source = (file: string) => readFileSync(path.join(process.cwd(), file), "utf8");
+
 function ticks(container: HTMLElement): string[] {
   return [...container.querySelectorAll(".wind-plan-velocity-ticks > span")].map((el) => el.textContent ?? "");
 }
@@ -62,10 +64,20 @@ describe("WindRosePanel plan legend", () => {
     expect(card.querySelector(".wind-plan-swatches")).toBeNull();
   });
 
-  it("keeps comfort without a speed bar or swatches in the rose card", () => {
+  it("puts the Lawson swatches in the left comfort card, after the rose, without a speed bar", () => {
     const { container } = renderCard(stubPlan("comfort", 8));
     const card = container.querySelector(".wind-rose-panel.is-plan")!;
-    expect(card.querySelector(".wind-plan-swatches")).toBeNull();
+    const swatches = card.querySelector(".wind-plan-comfort-legend .wind-plan-swatches")!;
+    expect([...swatches.querySelectorAll("li")].map((li) => li.textContent)).toEqual([
+      "Sitting",
+      "Standing",
+      "Strolling",
+      "Walking",
+      "Uncomfortable",
+    ]);
+    expect(card.lastElementChild).toBe(swatches.parentElement);
+    expect(card.querySelector(".wind-rose-panel-svg")!.compareDocumentPosition(swatches) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(card.querySelector(".wind-plan-comfort-legend.hud-card")).toBeNull();
     expect(card.querySelector(".wind-plan-velocity")).toBeNull();
     expect(card.querySelector(".wind-plan-velocity-bar")).toBeNull();
   });
@@ -100,7 +112,9 @@ describe("WindRosePanel plan legend", () => {
     );
     const css = readFileSync(path.join(process.cwd(), "src/index.css"), "utf8");
     expect(css).toMatch(/\.wind-rose-skip-dist \{\s*white-space: nowrap;/);
-    expect(css).toMatch(/\.wind-rose-panel\.is-plan \.wind-rose-meta \{\s*font-size: 11px;\s*color: var\(--muted-text\);/);
+    expect(css).toMatch(
+      /\.wind-rose-panel\.is-plan \.wind-rose-meta,\s*\.wind-rose-panel\.is-flow \.wind-rose-meta \{\s*font-size: 11px;\s*color: var\(--muted-text\);/,
+    );
     expect(css).toMatch(/\.wind-rose-nearby \{[^}]*pointer-events: auto;/);
     expect(css).not.toMatch(/\.wind-rose-meta-skipped \{[^}]*line-clamp/);
   });
@@ -109,6 +123,9 @@ describe("WindRosePanel plan legend", () => {
     const view = readFileSync(path.join(process.cwd(), "src/components/model/ModelPageView.tsx"), "utf8");
     expect(view).not.toContain("WindPlanVelocityLegend");
     expect(view).not.toContain("WindPlanInfo");
-    expect(view).toContain("WindPlanComfortLegend");
+    expect(view).not.toContain("WindPlanComfortLegend");
+    expect(view).not.toContain("useWindPlanLegendPlacement");
+    expect(source("src/components/WindPlanCard.tsx")).not.toContain("WindPlanComfortLegend");
+    expect(source("src/index.css")).not.toMatch(/\.wind-plan-comfort \{/);
   });
 });
