@@ -21,7 +21,6 @@ export function ModelPageSidebar({ vm }: { vm: import("./useModelPage").ModelPag
     busy,
     comMeasuredHeightCount,
     commitView,
-    cutDimLabel,
     displayModel,
     drawing,
     items,
@@ -58,6 +57,7 @@ export function ModelPageSidebar({ vm }: { vm: import("./useModelPage").ModelPag
     tab,
     topbarExportOpen,
     topbarExportRef,
+    topbarExportTriggerRef,
     view,
   } = vm;
 
@@ -85,7 +85,6 @@ export function ModelPageSidebar({ vm }: { vm: import("./useModelPage").ModelPag
                 <span className="place-chip studio-breadcrumb-place" title={model.placeLabel}>
                   {model.placeLabel}
                 </span>
-                <span className="dim-chip studio-cut-pill mono">{cutDimLabel}</span>
               </>
             }
             headerCenter={
@@ -341,6 +340,7 @@ export function ModelPageSidebar({ vm }: { vm: import("./useModelPage").ModelPag
                 </div>
                 <div className="topbar-export-compact" ref={topbarExportRef}>
                   <button
+                    ref={topbarExportTriggerRef}
                     type="button"
                     className="topbar-export-trigger studio-export-btn"
                     aria-label="Export"
@@ -387,7 +387,7 @@ export function ModelPageSidebar({ vm }: { vm: import("./useModelPage").ModelPag
                             else void saveSiteSvg();
                           }}
                         >
-                          SVG
+                          SVG (.svg)
                         </button>
                         <button
                           type="button"

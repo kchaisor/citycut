@@ -219,7 +219,9 @@ export function useModelPage({
   const [exportError, setExportError] = useState<string | null>(null);
   const [busy, setBusy] = useState<ExportBusy>(null);
   const [topbarExportOpen, setTopbarExportOpen] = useState(false);
+  const [topbarLayout, setTopbarLayout] = useState<"centered" | "flow">("flow");
   const topbarExportRef = useRef<HTMLDivElement>(null);
+  const topbarExportTriggerRef = useRef<HTMLButtonElement>(null);
   const cutDimLabel = useMemo(
     () =>
       cutSizeLabel(model.sideM, model.frameShape ?? "square", {
@@ -237,7 +239,9 @@ export function useModelPage({
       setTopbarExportOpen(false);
     };
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setTopbarExportOpen(false);
+      if (event.key !== "Escape") return;
+      setTopbarExportOpen(false);
+      topbarExportTriggerRef.current?.focus();
     };
     document.addEventListener("pointerdown", onPointer);
     document.addEventListener("keydown", onKey);
@@ -2048,6 +2052,31 @@ export function useModelPage({
     };
   }, [tab]);
 
+  useEffect(() => {
+    const root = modelRootRef.current;
+    if (!root) return;
+    const barGap = 16;
+    const measure = () => {
+      const left = root.querySelector(".top-bar-left");
+      const center = root.querySelector(".top-bar-center");
+      const right = root.querySelector(".top-bar-right");
+      if (!(left instanceof HTMLElement) || !(center instanceof HTMLElement) || !(right instanceof HTMLElement)) {
+        return;
+      }
+      const inner = window.innerWidth - 28;
+      const bundle = center.offsetWidth + 2 * Math.max(left.offsetWidth, right.offsetWidth) + barGap * 2;
+      setTopbarLayout(bundle <= inner + 0.5 ? "centered" : "flow");
+    };
+    measure();
+    const observer = new ResizeObserver(() => measure());
+    observer.observe(root);
+    window.addEventListener("resize", measure);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  }, [tab, drawing, view.projection, cutDimLabel, topbarExportOpen, busy, sourcesLoaded.loaded]);
+
   return {
     analysisKind,
     annotatedAppliedBuildings,
@@ -2257,6 +2286,8 @@ export function useModelPage({
     tierCounts,
     topbarExportOpen,
     topbarExportRef,
+    topbarExportTriggerRef,
+    topbarLayout,
     uniform,
     unmatchedEdits,
     useCounts,
