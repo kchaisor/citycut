@@ -1,6 +1,5 @@
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { readModelPageSource } from "./modelPageSource";
 import {
   DEFAULT_VIEW3D_DISPLAY,
   DEFAULT_VIEW3D_LAYERS_VISIBLE,
@@ -13,8 +12,6 @@ import {
   writeStoredView3dDisplay,
   type View3dDisplaySettings,
 } from "./view3dDisplay";
-
-const srcRoot = fileURLToPath(new URL("..", import.meta.url));
 
 describe("view3d display defaults and persistence", () => {
   it("omits ground and blocks and defaults all 3D layers (including Contours and Trees) to ON", () => {
@@ -98,7 +95,7 @@ describe("view3d display toggles camera unchanged", () => {
   });
 
   it("does not call setSnapId from display toggle handlers", () => {
-    const page = readFileSync(`${srcRoot}/components/ModelPage.tsx`, "utf8");
+    const page = readModelPageSource();
     const block = page.match(/commitView3dDisplay[\s\S]{0,2000}function commitView/)?.[0] ?? "";
     expect(block).not.toContain("setSnapId");
     expect(page.match(/commitView3dDisplay\(\{[\s\S]*?\}\)/g)?.join("\n") ?? "").not.toContain("setSnapId");

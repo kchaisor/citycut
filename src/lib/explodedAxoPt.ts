@@ -4,7 +4,8 @@ import { PMTiles } from "pmtiles";
 import { toLocal } from "./geo";
 import { tileRange } from "./overtureTiles";
 import { ptModeFromValue, type PublicTransportLine, type PublicTransportStop } from "./explodedAxoOverlayFetch";
-import { clipPolylineSiteFrame, DEFAULT_SITE_FRAME_SHAPE, pointInSiteFrame, type SiteFrameShape } from "./siteFrame";
+import { clipLine, pointInSiteFrame, type SiteFrame } from "./siteFrame";
+import { siteFrameFromModel } from "./modelFrame";
 import type { CityModel, LonLat, Pt } from "../types";
 
 export const PT_METRO_BOUNDS = {
@@ -89,8 +90,7 @@ async function readPmtilesLayer<T>(
   url: string,
   bounds: { south: number; west: number; north: number; east: number },
   preferredLayerNames: string[],
-  sideM: number,
-  frameShape: SiteFrameShape,
+  frame: SiteFrame,
   origin: LonLat,
   signal: AbortSignal | undefined,
   mapFeature: (props: Record<string, unknown>, localLines: Pt[][]) => T[],
@@ -122,14 +122,14 @@ async function readPmtilesLayer<T>(
 
         if (mapPoint) {
           const point = pointFromVectorFeature(feature, x, y, z, origin);
-          if (!point || !pointInSiteFrame(point, sideM, frameShape)) continue;
+          if (!point || !pointInSiteFrame(point, frame.sideM, frame.shape, { widthM: frame.widthM, heightM: frame.heightM })) continue;
           out.push(...mapPoint(props, point));
           continue;
         }
         const rawLines = linesFromVectorFeature(feature, x, y, z, origin);
         const clipped: Pt[][] = [];
         for (const line of rawLines) {
-          for (const part of clipPolylineSiteFrame(line, sideM, frameShape)) {
+          for (const part of clipLine(frame, line)) {
             if (part.length >= 2) clipped.push(part);
           }
         }
@@ -175,14 +175,13 @@ export async function fetchPublicTransportOverlays(
   ) {
     return null;
   }
-  const shape = model.frameShape ?? DEFAULT_SITE_FRAME_SHAPE;
+  const frame = siteFrameFromModel(model);
   const [lines, stops] = await Promise.all([
     readPmtilesLayer(
       PT_LINES_PMTILES_URL,
       bounds,
       ["lines", "geojsonLayer"],
-      model.sideM,
-      shape,
+      frame,
       model.center,
       signal,
       (props, clipped) => {
@@ -194,8 +193,7 @@ export async function fetchPublicTransportOverlays(
       PT_STOPS_PMTILES_URL,
       bounds,
       ["stops", "geojsonLayer"],
-      model.sideM,
-      shape,
+      frame,
       model.center,
       signal,
       () => [],

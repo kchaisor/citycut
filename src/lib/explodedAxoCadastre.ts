@@ -1,5 +1,6 @@
 import { squareBBox } from "./geo";
-import { clipAreaToSiteFrame, DEFAULT_SITE_FRAME_SHAPE } from "./siteFrame";
+import { siteFrameFromModel } from "./modelFrame";
+import { clipPolygonWithHoles } from "./siteFrame";
 import { fetchTierJson } from "./useCascade";
 import { polygonsFromGeometry, VICMAP_PROPERTY_URL } from "./vicmapSiteParcel";
 import type { CityModel, Pt } from "../types";
@@ -53,7 +54,6 @@ type GeoJsonPage = {
 };
 
 export function cadastreFromPages(model: CityModel, pages: GeoJsonPage[], partial: boolean): CadastreOverlay {
-  const shape = model.frameShape ?? DEFAULT_SITE_FRAME_SHAPE;
   const seen = new Set<string>();
   const parcels: Pt[][][] = [];
   let rawCount = 0;
@@ -64,7 +64,7 @@ export function cadastreFromPages(model: CityModel, pages: GeoJsonPage[], partia
         const key = parcelGeometryKey(poly.outer as Pt[]);
         if (seen.has(key)) continue;
         seen.add(key);
-        const clipped = clipAreaToSiteFrame(poly.outer as Pt[], poly.holes as Pt[][], model.sideM, shape);
+        const clipped = clipPolygonWithHoles(siteFrameFromModel(model), poly.outer as Pt[], poly.holes as Pt[][]);
         if (clipped) parcels.push(clipped);
       }
     }

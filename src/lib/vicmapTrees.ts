@@ -10,6 +10,7 @@ import {
   type TreeSourceResult,
 } from "./treeSourceFetch";
 import type { LonLat, TreeFeat } from "../types";
+import { containsPoint, type SiteFrame } from "./siteFrame";
 
 export const VICMAP_TREES_URL =
   "https://services-ap1.arcgis.com/P744lA0wf4LlBZ84/ArcGIS/rest/services/Vicmap_Vegetation_Tree_Urban/FeatureServer/0";
@@ -192,17 +193,12 @@ export async function fetchVicmapTrees(bounds: BBox, signal?: AbortSignal): Prom
 export function vicmapPointsToTrees(
   points: VicmapPoint[],
   origin: LonLat,
-  sideM: number,
-  frameShape: import("./siteFrame").SiteFrameShape = "square",
+  frame: SiteFrame,
 ): TreeFeat[] {
-  const half = sideM / 2;
   const trees: TreeFeat[] = [];
   points.forEach((point, index) => {
     const at = toLocal(point.lat, point.lon, origin);
-    const margin = 0.2;
-    if (frameShape === "square") {
-      if (Math.abs(at[0]) > half + margin || Math.abs(at[1]) > half + margin) return;
-    } else if (at[0] * at[0] + at[1] * at[1] > (half + margin) ** 2) return;
+    if (!containsPoint(frame, at, 0.2)) return;
     const sized = finishTreeSize({
       height: point.height_m,
       crown: point.dense && point.crown_m === null ? (point.height_m ?? 10) * 0.75 : point.crown_m,
