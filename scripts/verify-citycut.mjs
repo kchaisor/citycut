@@ -1759,6 +1759,88 @@ async function main() {
       `visibleLeftDrawers=${analysisInfo.visibleLeftDrawerCount}, noOverflow=${analysisInfo.noHorizontalOverflow}, topReset=${analysisInfo.hasTopCenterReset}, bottomCompass=${analysisInfo.hasBottomCompass}, 3dDome=${analysisInfo.has3dSunDomeIn3d}, planFanIn3d=${analysisInfo.hasPlanFanIn3d}, rect=${JSON.stringify(analysisInfo.envConsoleRect)}`,
     );
 
+    await page.locator(".mode-btn", { hasText: "3D model" }).click();
+    await page.waitForTimeout(220);
+    const perspBtn = page
+      .locator(".model .proj-btn.studio-submode-pill", { hasText: "Perspective" })
+      .first();
+    if ((await perspBtn.count()) > 0) {
+      await perspBtn.click();
+      await page.waitForTimeout(280);
+    }
+
+    const measureStudioCompassClearance = () =>
+      page.evaluate(() => {
+        const compass = document.querySelector(".model .top-bar-center .studio-compass");
+        const center = document.querySelector(".model .top-bar-center");
+        const left = document.querySelector(".model .top-bar-left");
+        if (!compass || !center || !left) return { hasCompass: false };
+        const c = compass.getBoundingClientRect();
+        const m = center.getBoundingClientRect();
+        const l = left.getBoundingClientRect();
+        const aria = compass.getAttribute("aria-label") ?? "";
+        return {
+          hasCompass: true,
+          hasNeedle: Boolean(compass.querySelector(".studio-compass-needle")),
+          ariaStartsNorth: aria.startsWith("North,"),
+          viewportW: window.innerWidth,
+          size: [c.width, c.height],
+          topDiff: c.top - m.top,
+          gapCentre: m.left - c.right,
+          gapLeft: c.left - l.right,
+        };
+      });
+
+    for (const compassWidth of [1280, 1366, 1440]) {
+      await page.setViewportSize({ width: compassWidth, height: 900 });
+      await page.waitForTimeout(220);
+      const compassLayout = await measureStudioCompassClearance();
+      assertCheck(
+        `studio-compass-topbar-${compassWidth}`,
+        `At ${compassWidth}x900 the studio compass is a 42px chip 8px left of the centre island, top-aligned, >=8px from the left island`,
+        compassLayout.hasCompass &&
+          compassLayout.hasNeedle &&
+          compassLayout.ariaStartsNorth &&
+          Math.abs(compassLayout.size[0] - 42) < 1 &&
+          Math.abs(compassLayout.size[1] - 42) < 1 &&
+          Math.abs(compassLayout.topDiff) < 1 &&
+          Math.abs(compassLayout.gapCentre - 8) < 1 &&
+          compassLayout.gapLeft >= 7.5,
+        JSON.stringify(compassLayout),
+      );
+    }
+    const captureCompassArtifacts = async (width) => {
+      await page.setViewportSize({ width, height: 900 });
+      await page.waitForTimeout(240);
+      const canvas = page.locator(".model canvas").first();
+      const box = await canvas.boundingBox();
+      if (box) {
+        const cx = box.x + box.width * 0.52;
+        const cy = box.y + box.height * 0.48;
+        await page.mouse.move(cx, cy);
+        await page.mouse.down({ button: "right" });
+        await page.mouse.move(cx + box.width * 0.12, cy - box.height * 0.04, { steps: 14 });
+        await page.mouse.up({ button: "right" });
+        await page.waitForTimeout(500);
+      }
+      if (fs.existsSync(ARTIFACTS_DIR)) {
+        await page.screenshot({
+          path: path.join(ARTIFACTS_DIR, `studio-compass-rotated-${width}.png`),
+        });
+      }
+      if (fs.existsSync(ARTIFACTS_DIR)) {
+        await page.screenshot({
+          path: path.join(ARTIFACTS_DIR, `studio-compass-needle-${width}.png`),
+        });
+      }
+    };
+
+    if (fs.existsSync(ARTIFACTS_DIR)) {
+      await captureCompassArtifacts(1440);
+      await captureCompassArtifacts(1280);
+    }
+    await page.setViewportSize(VIEWPORT);
+
     await page.getByRole("tab", { name: /Walk Ripple/i }).click();
     await page.waitForTimeout(250);
     await page.getByRole("button", { name: /Pick origin/i }).first().click();

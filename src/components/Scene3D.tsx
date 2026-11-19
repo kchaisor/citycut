@@ -86,7 +86,7 @@ import {
   applyCanvasRoadTint,
 } from "../lib/primaryViewport";
 import { applyWhiteCardGroundTint, snapshotWhiteCardTerrainColors } from "../lib/whiteCardViewport";
-import { studioNorthNeedleDeg } from "../lib/studioCompass";
+import { studioCameraHeadingDeg } from "../lib/studioCompass";
 import {
   DEFAULT_PERSPECTIVE_OFFSET,
   heliodonSceneBounds,
@@ -303,10 +303,10 @@ function SceneFrameloopGate() {
   return null;
 }
 
-function StudioCompassTracker({ onNeedle }: { onNeedle: (deg: number) => void }) {
+function StudioCompassTracker({ onHeading }: { onHeading: (deg: number) => void }) {
   const camera = useThree((state) => state.camera);
   useFrame(() => {
-    onNeedle(studioNorthNeedleDeg(camera));
+    onHeading(studioCameraHeadingDeg(camera));
   });
   return null;
 }
@@ -1634,6 +1634,9 @@ function CameraReadout({
     const controls = orthoView ? orthoControls.current : perspControls.current;
     if (!controls) return;
     publishCamera(camera, controls.target, gl.domElement);
+    gl.domElement.dataset.camBearing = studioCameraHeadingDeg(camera).toFixed(4);
+    const dist = camera.position.distanceTo(controls.target);
+    gl.domElement.dataset.camDistance = dist.toFixed(4);
   });
   return null;
 }
@@ -2165,7 +2168,7 @@ export function Scene3D({
   onScenePoint = null,
   sectionKnife = null,
   onSectionKnifePoseChange = undefined,
-  onCompassNeedle = undefined,
+  onCompassHeading = undefined,
   quality = "high",
   sunHoursGroundGrid = null,
   sunHoursDirectOverlay = null,
@@ -2203,7 +2206,7 @@ export function Scene3D({
   onScenePoint?: ((east: number, north: number, up: number) => void) | null;
   sectionKnife?: SectionKnifeToolState | null;
   onSectionKnifePoseChange?: (pose: SectionKnifePose) => void;
-  onCompassNeedle?: (deg: number) => void;
+  onCompassHeading?: (deg: number) => void;
   quality?: RenderQuality;
   sunHoursGroundGrid?: SunHoursGroundGrid | null;
   sunHoursDirectOverlay?: SunHoursDirectOverlay | null;
@@ -2399,7 +2402,7 @@ export function Scene3D({
         enabled={inspectAnchor != null}
         onScreen={onInspectHudScreen}
       />
-      {onCompassNeedle ? <StudioCompassTracker onNeedle={onCompassNeedle} /> : null}
+      {onCompassHeading ? <StudioCompassTracker onHeading={onCompassHeading} /> : null}
       <WindLayer
         model={model}
         table={windTable}

@@ -5113,7 +5113,7 @@ body,
   .model[data-topbar-layout="flow"][data-view-tab] .top-bar-left.studio-header-left,
   .model[data-topbar-layout="flow"][data-view-tab] .top-bar-center.studio-header-center,
   .model[data-topbar-layout="flow"][data-view-tab] .top-bar-right.studio-header-right {
-    position: static !important;
+    position: relative !important;
     top: auto !important;
     left: auto !important;
     right: auto !important;
@@ -5124,6 +5124,10 @@ body,
 
   .model[data-topbar-layout="flow"][data-view-tab] .top-bar-center.studio-header-center {
     margin: 0 auto;
+  }
+
+  .model[data-topbar-layout="flow"][data-view-tab]:has(.top-bar-center .studio-compass) .top-bar-left.studio-header-left {
+    margin-right: 50px;
   }
 
   .model .topbar-export-compact {

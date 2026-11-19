@@ -6,8 +6,6 @@ import { DrawingExplodedAxo } from "../DrawingExplodedAxo";
 import { DrawingIsometric } from "../DrawingIsometric";
 import { SatellitePane } from "../SatellitePane";import { Scene3D } from "../Scene3D";
 
-import { StudioCompass } from "../StudioCompass";
-import { studioCompassVisible } from "../../lib/studioCompass";
 import { sceneSelectionBuildingId } from "../../lib/sceneInspectPick";
 import { qaHideHeightPopoverFromSearch } from "../../lib/qaCameraBridge";
 import { sunStudyMutedOn, toggleSelection } from "../../lib/sunStudyPlan";
@@ -27,7 +25,6 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
     axoSettings,
     cameraMemory,
     colourByUse,
-    compassNeedleDeg,
     displayModel,
     drawing,
     drawingModel,
@@ -65,7 +62,7 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
     sectionKnifeTool,
     selectForHide,
     setAxoLayerLift,
-    setCompassNeedleDeg,
+    setCompassHeadingDeg,
     setExplodedViewport,
     setHideSelection,
     setInspectHudScreen,
@@ -152,7 +149,7 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
                 }}
                 inspectAnchor={inspectAnchor}
                 onInspectHudScreen={setInspectHudScreen}
-                onCompassNeedle={setCompassNeedleDeg}
+                onCompassHeading={setCompassHeadingDeg}
                 heightEditBuildingId={sceneSelectionBuildingId(sceneSelection)}
                 selectedBuildingIds={
                   hideSelection.length > 0
@@ -197,9 +194,6 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
               {tab === "3d" && solar.sunHours ? (
                 <SunHoursLegendDock stackClassName="sun-hours-direct-dock-stack" sunHoursGround={sunHoursGround} />
               ) : null}
-              {tab === "3d" && studioCompassVisible(view.projection, view.freeRotate) && (
-                <StudioCompass needleDeg={compassNeedleDeg} />
-              )}
               {windSettings.enabled && windSettings.showRose && windTable && tab === "3d" && (
                 <WindRoseOverlay
                   table={windTable}
