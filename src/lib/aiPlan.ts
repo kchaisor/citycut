@@ -30,7 +30,13 @@ import { planShadowRings, type PlanShadowInput } from "./buildingShadows";
 import { SINGLE_SHADOW_OPACITY, SUN_STUDY_SHADOW_OPACITY } from "./sunStudyPlan";
 import { planPaths } from "./svgPlan";
 import { regionCredit } from "./sources/registry";
-import { importedMassingStrokeStyle, importedMassingUpperStrokeStyle, planBuildingStrokeStyle } from "./planBuildingFill";
+import {
+  importedMassingStrokeStyle,
+  importedMassingUpperStrokeStyle,
+  planBuildingStrokeStyle,
+  planExportBuildingFill,
+  type PlanExportSunStudyOptions,
+} from "./planBuildingFill";
 import { windPlanPdfChunk } from "./windExport";
 import { comBuildingHeightCreditLine } from "./comBuildingHeightCredit";
 import { comTreesCreditLine } from "./comTreesCredit";
@@ -263,6 +269,8 @@ export type SitePlanExportOptions = {
   sunStudy?: { layers: { hour: number; rings: Ring[][] }[] } | null;
   sectionKnife?: import("./sectionKnife/state").SectionKnifeToolState | null;
   sunStudyDate?: SunStudyDate | null;
+  sunStudyMuted?: boolean;
+  sunStudySelected?: readonly number[];
 };
 
 export function sunStudyLayerName(hour: number): string {
@@ -486,6 +494,13 @@ export function sitePlanChunks(
   }
   const buildingPen = pen(planBuildingStrokeStyle(style, uniformBuildings, false), "miter");
   const siteBuildingPen = pen(style.siteBuilding, "miter");
+  const sunStudyExport: PlanExportSunStudyOptions = {
+    sunStudyDate: resolved.sunStudyDate,
+    sunStudy: resolved.sunStudy,
+    sunStudyMuted: resolved.sunStudyMuted,
+    sunStudySelected: resolved.sunStudySelected,
+  };
+  const exportBuildingFill = (building: (typeof plan.buildings)[number]) => planExportBuildingFill(building, sunStudyExport);
   const siteBuildings = plan.buildings.filter((building) => building.site);
   const importedBuildings = plan.buildings.filter((building) => building.imported);
   const otherBuildings = plan.buildings.filter((building) => !building.site && !building.imported);
@@ -494,7 +509,7 @@ export function sitePlanChunks(
       name: "Buildings",
       paths: otherBuildings.map((building) => ({
         rings: mapRings(building.rings, model.sideM, layout),
-        fill: hexRgb(building.fill),
+        fill: exportBuildingFill(building),
         evenOdd: true,
         close: true,
         ...(buildingPen ?? {}),
@@ -506,7 +521,7 @@ export function sitePlanChunks(
       name: "Site buildings",
       paths: siteBuildings.map((building) => ({
         rings: mapRings(building.rings, model.sideM, layout),
-        fill: hexRgb(building.fill),
+        fill: exportBuildingFill(building),
         evenOdd: true,
         close: true,
         ...(siteBuildingPen ?? buildingPen ?? {}),
@@ -519,7 +534,7 @@ export function sitePlanChunks(
       name: "Imported massing",
       paths: importedBuildings.map((building) => ({
         rings: mapRings(building.rings, model.sideM, layout),
-        fill: hexRgb(building.fill),
+        fill: exportBuildingFill(building),
         evenOdd: true,
         close: true,
         ...(importedPen ?? buildingPen ?? {}),

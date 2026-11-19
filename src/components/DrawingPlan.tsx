@@ -41,6 +41,10 @@ import {
 } from "../lib/sunStudyPlan";
 import { heliodonLabelFontMetres } from "../lib/heliodonDiagram";
 import { useSunStudyShadows } from "./useSunStudyShadows";
+import { SunHoursGroundPlanOverlay } from "./SunHoursGroundPlanOverlay";
+import { SunHoursRoofPlanOverlay } from "./SunHoursRoofPlanOverlay";
+import type { SunHoursGroundRaster } from "../lib/sunHoursGroundRaster";
+import type { SunHoursGroundGrid } from "../lib/sunHoursGroundPlan";
 
 const NO_SELECTION: readonly number[] = [];
 
@@ -88,6 +92,9 @@ export function DrawingPlan({
   sunStudySelected = NO_SELECTION,
   onSunStudyPick,
   sectionKnife,
+  sunHoursGroundGrid = null,
+  sunHoursGroundScaleMax = 0,
+  sunHoursRoofPlanRaster = null,
 }: {
   model: CityModel;
   kind?: DrawingKind;
@@ -109,6 +116,9 @@ export function DrawingPlan({
   sunStudySelected?: readonly number[];
   onSunStudyPick?: (buildingId: number) => void;
   sectionKnife?: SectionKnifeToolState | null;
+  sunHoursGroundGrid?: SunHoursGroundGrid | null;
+  sunHoursGroundScaleMax?: number;
+  sunHoursRoofPlanRaster?: SunHoursGroundRaster | null;
 }) {
   const svgRef = useRef<SVGSVGElement>(null);
   const drag = useRef<{ px: number; py: number; view: PlanViewport } | null>(null);
@@ -532,12 +542,24 @@ export function DrawingPlan({
                 stroke="none"
               />
             ))}
+            {sunHoursGroundGrid && (
+              <SunHoursGroundPlanOverlay
+                grid={sunHoursGroundGrid}
+                scaleMaxHours={sunHoursGroundScaleMax || sunHoursGroundGrid.maxSunHours}
+              />
+            )}
             {plan.buildings.map((building, index) => (
               <path
                 key={`b${index}`}
                 {...(building.imported ? { "data-imported-podium": true } : {})}
                 d={svgRings(building.rings)}
-                fill={muted && !building.site ? getColour("--sun-study-building") : building.fill}
+                fill={
+                  sunHoursRoofPlanRaster
+                    ? "none"
+                    : muted && !building.site
+                      ? getColour("--sun-study-building")
+                      : building.fill
+                }
                 fillRule="evenodd"
                 {...screenPenAttrs(
                   building.imported
@@ -549,6 +571,7 @@ export function DrawingPlan({
                 )}
               />
             ))}
+            {sunHoursRoofPlanRaster ? <SunHoursRoofPlanOverlay raster={sunHoursRoofPlanRaster} /> : null}
             {plan.importedUpperLevels.map((level, levelIndex) => (
               <g key={`imu${levelIndex}`} data-upper-z={level.z} aria-hidden="true">
                 {level.lines.map((line, lineIndex) => (
