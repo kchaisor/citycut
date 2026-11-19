@@ -94,7 +94,7 @@ describe("plan wind vector sites", () => {
     }
   });
 
-  it("puts no vector on buildings or water but keeps the open land", () => {
+  it("puts no vector on buildings, keeps open land, and also sits on water", () => {
     const geometry = geometryOf(60, 60, 2);
     for (let j = 0; j < 60; j++) {
       for (let i = 0; i < 60; i++) {
@@ -104,22 +104,20 @@ describe("plan wind vector sites", () => {
     }
     const sites = windPlanVectorSites(geometry, 10, 0);
     expect(sites.length).toBeGreaterThan(0);
-    for (const site of sites) {
-      expect(geometry.solid[site.idx]).toBe(0);
-      expect(geometry.water[site.idx]).toBe(0);
-      expect(site.east).toBeGreaterThanOrEqual(-20);
-      expect(site.east).toBeLessThan(20);
-    }
+    expect(sites.some((site) => geometry.water[site.idx])).toBe(true);
+    expect(sites.some((site) => !geometry.water[site.idx] && !geometry.solid[site.idx])).toBe(true);
+    for (const site of sites) expect(geometry.solid[site.idx]).toBe(0);
   });
 
-  it("keeps vectors off a real model's footprints and water", () => {
+  it("keeps vectors off a real model's footprints and still places them on water", () => {
     const model = modelOf(240, [{ ring: ring(-20, -20, 20, 20), height: 20 }], ring(60, -120, 120, 120));
     const { geometry } = buildWindPlanRatio(model, SOUTH);
     const sites = windPlanVectorSites(geometry);
     expect(sites.length).toBeGreaterThan(0);
+    expect(sites.some((site) => site.east >= 60)).toBe(true);
     for (const site of sites) {
       expect(site.east > -22 && site.east < 22 && site.north > -22 && site.north < 22).toBe(false);
-      expect(site.east).toBeLessThan(60);
+      expect(geometry.solid[site.idx]).toBe(0);
     }
   });
 });

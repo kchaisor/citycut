@@ -402,7 +402,6 @@ export function WindPlanOverlay({
       const levels = windPlanSpeedContours(speed, scaleMaxMs);
       strokePen(ctx, cachedPath(levels, () => levels.flat()), style.contour, scale);
       ctx.restore();
-      if (vectorsOn) drawVectors(ctx, planVectors(speed, scaleMaxMs), t, { x: ox, y: oy }, scale, style, dpr);
     } else if (mode === "comfort" && comfort) {
       ctx.save();
       ctx.clip(site.path, "evenodd");
@@ -439,10 +438,18 @@ export function WindPlanOverlay({
         ctx.restore();
         strokePen(ctx, disc, style.unsafeOutline, scale);
       }
-      if (vectorsOn) drawVectors(ctx, planVectors(comfort, null), t, { x: ox, y: oy }, scale, style, dpr);
       ctx.restore();
     }
     ctx.restore();
+
+    if (vectorsOn && mode === "speed" && speed && scaleMaxMs != null) {
+      drawVectors(ctx, planVectors(speed, scaleMaxMs), t, { x: ox, y: oy }, scale, style, dpr);
+    } else if (vectorsOn && mode === "comfort" && comfort) {
+      ctx.save();
+      ctx.clip(site.path, "evenodd");
+      drawVectors(ctx, planVectors(comfort, null), t, { x: ox, y: oy }, scale, style, dpr);
+      ctx.restore();
+    }
 
     ctx.fillStyle = getColour(mode === "comfort" ? "--wind-plan-comfort-building" : "--wind-plan-building");
     ctx.fill(buildings, "nonzero");

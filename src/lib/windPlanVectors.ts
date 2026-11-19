@@ -1,5 +1,5 @@
 import type { WindPlanFlow, WindPlanGeometry } from "./windPlanField";
-import { windPlanFieldPercentile, windPlanPaintsCell, windPlanUnpaintedMask, WIND_PLAN_SCALE_PERCENTILE } from "./windPlanField";
+import { windPlanFieldPercentile, windPlanUnpaintedMask, WIND_PLAN_SCALE_PERCENTILE } from "./windPlanField";
 
 export const WIND_PLAN_VECTOR_SPACING_M = 30;
 export const WIND_PLAN_VECTOR_CLEAR_M = 4;
@@ -14,11 +14,11 @@ export type WindPlanVector = WindPlanVectorSite & { dirE: number; dirN: number; 
 
 type SiteGeometry = Pick<WindPlanGeometry, "cols" | "rows" | "cellM" | "originE" | "originN" | "solid" | "water">;
 
-function clearOfObstacles(geometry: SiteGeometry, i: number, j: number, reach: number): boolean {
-  const { cols, rows } = geometry;
+function clearOfBuildings(geometry: SiteGeometry, i: number, j: number, reach: number): boolean {
+  const { cols, rows, solid } = geometry;
   for (let y = Math.max(0, j - reach); y <= Math.min(rows - 1, j + reach); y++) {
     for (let x = Math.max(0, i - reach); x <= Math.min(cols - 1, i + reach); x++) {
-      if (!windPlanPaintsCell(geometry, y * cols + x)) return false;
+      if (solid[y * cols + x]) return false;
     }
   }
   return true;
@@ -44,7 +44,7 @@ export function windPlanVectorSites(
       const east = gi * spacingM;
       const i = Math.floor((east - originE) / cellM);
       if (i < 0 || i >= cols) continue;
-      if (!clearOfObstacles(geometry, i, j, reach)) continue;
+      if (!clearOfBuildings(geometry, i, j, reach)) continue;
       sites.push({ gi, gj, east, north, idx: j * cols + i });
     }
   }
