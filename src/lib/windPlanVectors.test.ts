@@ -17,6 +17,7 @@ import {
   type WindPlanJob,
 } from "./windPlanField";
 import {
+  WIND_PLAN_VECTOR_GAP_FILL,
   WIND_PLAN_VECTOR_MIN_FRACTION,
   WIND_PLAN_VECTOR_MIN_GAP_PX,
   WIND_PLAN_VECTOR_SPACING_M,
@@ -191,12 +192,12 @@ describe("plan wind vector sizing", () => {
   });
 
   it("thins the grid when zoomed out so vectors keep a screen gap", () => {
-    expect(WIND_PLAN_VECTOR_SPACING_M).toBe(15);
+    expect(WIND_PLAN_VECTOR_SPACING_M).toBe(22);
     expect(WIND_PLAN_VECTOR_MIN_GAP_PX).toBe(7);
-    expect(windPlanVectorStride(15, 1)).toBe(1);
-    expect(windPlanVectorStride(15, 0.5)).toBe(1);
-    expect(windPlanVectorStride(15, 0.3)).toBe(2);
-    expect(windPlanVectorStride(15, 0.1)).toBe(8);
+    expect(windPlanVectorStride(22, 1)).toBe(1);
+    expect(windPlanVectorStride(22, 0.5)).toBe(1);
+    expect(windPlanVectorStride(22, 0.3)).toBe(2);
+    expect(windPlanVectorStride(22, 0.1)).toBe(4);
   });
 
   it("keeps diagrid arrow length equal to the square grid at the same speed", () => {
@@ -206,7 +207,7 @@ describe("plan wind vector sizing", () => {
     const square = windPlanVectorLengthPx(1, gap, 18);
     const diagrid = windPlanVectorLengthPx(1, gap, 18);
     expect(diagrid).toBe(square);
-    expect(diagrid).toBeCloseTo(Math.min(18, gap * 0.75));
+    expect(diagrid).toBeCloseTo(Math.min(18, gap * WIND_PLAN_VECTOR_GAP_FILL));
     const mid = windPlanVectorLengthPx(0.5, gap, 18);
     const calm = windPlanVectorLengthPx(0, gap, 18);
     expect(mid).toBeGreaterThan(calm);
@@ -216,7 +217,20 @@ describe("plan wind vector sizing", () => {
     expect(gap).toBe(WIND_PLAN_VECTOR_SPACING_M * stride * scale);
   });
 
-  it("uses the dark stroke tokens and the smaller 3px head", () => {
+  it("makes typical arrows read as lines at the usual plan view without overlapping", () => {
+    const scale = 0.54;
+    const stride = windPlanVectorStride(WIND_PLAN_VECTOR_SPACING_M, scale);
+    expect(stride).toBe(1);
+    const gap = windPlanVectorGapPx(WIND_PLAN_VECTOR_SPACING_M, scale, stride);
+    const mid = windPlanVectorLengthPx(0.5, gap, 18);
+    const full = windPlanVectorLengthPx(1, gap, 18);
+    expect(mid).toBeGreaterThanOrEqual(8);
+    expect(mid).toBeLessThanOrEqual(10);
+    expect(full).toBeLessThan(gap);
+    expect(full).toBeGreaterThan(mid);
+  });
+
+  it("uses the dark stroke tokens and the 2px head", () => {
     const css = readFileSync(new URL("../drawing-style.css", import.meta.url), "utf8");
     const value = (name: string) => {
       const match = css.match(new RegExp(`${name}\\s*:\\s*([^;]+);`));
@@ -226,6 +240,6 @@ describe("plan wind vector sizing", () => {
     expect(value("--wind-plan-vector-stroke").toUpperCase()).toBe("#1A1A1A");
     expect(value("--wind-plan-vector-opacity")).toBe("0.7");
     expect(value("--wind-plan-vector-px")).toBe("1");
-    expect(value("--wind-plan-vector-head-px")).toBe("3");
+    expect(value("--wind-plan-vector-head-px")).toBe("2");
   });
 });

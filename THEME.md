@@ -431,8 +431,8 @@ A dash is two lengths in millimetres: how long the mark is, then how long the ga
 | `--wind-plan-vector-stroke` | Plan wind maps (Wind speed and Comfort): colour of the flow vector arrows | `#1A1A1A` | colour |
 | `--wind-plan-vector-opacity` | Plan wind maps: opacity of the flow vector arrows | `0.7` | 0–1 |
 | `--wind-plan-vector-px` | Plan wind maps: shaft and head weight of the flow vector arrows | `1` | screen px |
-| `--wind-plan-vector-head-px` | Plan wind maps: length of each arrowhead stroke | `3` | screen px |
-| `--wind-plan-vector-max-px` | Plan wind maps: longest arrow (the windiest cell); calm cells draw at 35% of it, and arrows never exceed 75% of the on-screen grid gap | `18` | screen px |
+| `--wind-plan-vector-head-px` | Plan wind maps: length of each arrowhead stroke | `2` | screen px |
+| `--wind-plan-vector-max-px` | Plan wind maps: longest arrow (the windiest cell); calm cells draw at 72% of it, and arrows never exceed 88% of the on-screen 22 m grid gap | `18` | screen px |
 | `--wind-plan-swatch-edge` / `--wind-plan-swatch-edge-opacity` | Plan wind card: 1px edge on the comfort legend swatches | `#1A1A1A` / `0.2` | colour / 0–1 |
 
 Green fills, water fills, tree fills, and the other fills are in the Fills table above. This list is the pens. The footpath fill stays named here because the Line styles panel still edits it, and the value itself is in `src/colours.css`.
