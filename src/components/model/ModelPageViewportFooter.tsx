@@ -267,21 +267,6 @@ export function ModelPageViewportFooter({ vm }: { vm: import("./useModelPage").M
                       <span className="ov-dot" aria-hidden="true" />
                       <span>3D Wind Flow</span>
                     </button>
-                    <button
-                      type="button"
-                      className={windSettings.enabled && windSettings.showRose ? "ov-chip on" : "ov-chip"}
-                      aria-pressed={windSettings.enabled && windSettings.showRose}
-                      onClick={() =>
-                        commitWind({
-                          ...windSettings,
-                          enabled: true,
-                          showRose: !windSettings.showRose,
-                        })
-                      }
-                    >
-                      <span className="ov-dot" aria-hidden="true" />
-                      <span>Wind Rose</span>
-                    </button>
                   </>
                 )}
 

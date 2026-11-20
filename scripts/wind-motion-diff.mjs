@@ -53,7 +53,6 @@ async function run() {
   if (reducedMotion || animateAnyway) {
     await context.addInitScript((anyway) => {
       localStorage.setItem("citycut.wind.enabled", "1");
-      localStorage.setItem("citycut.wind.showRose", "1");
       if (anyway) localStorage.setItem("citycut.wind.animateAnyway", "1");
     }, animateAnyway);
   }

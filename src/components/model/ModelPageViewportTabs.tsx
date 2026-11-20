@@ -13,7 +13,7 @@ import { sunStudyMutedOn, toggleSelection } from "../../lib/sunStudyPlan";
 import { SceneBoundary } from "../SceneBoundary";
 import { SunHoursLegendDock } from "./SunHoursLegendDock";
 import { solarStudyViewActive } from "../../lib/solarStudyView";
-import { WindRoseOverlay } from "../WindRoseOverlay";import { ViewLegend } from "../ViewPanel";
+import { ViewLegend } from "../ViewPanel";
 
 import { SectionKnifeElevationPanel } from "../SectionKnifeElevationPanel";import { WalkRippleLegend } from "../WalkRipplePanel";
 
@@ -202,15 +202,6 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
               {tab === "3d" && solar.sunHours ? (
                 <SunHoursLegendDock stackClassName="sun-hours-direct-dock-stack" sunHoursGround={sunHoursGround} />
               ) : null}
-              {windSettings.enabled && windSettings.showRose && siteWind && tab === "3d" && (
-                <WindRoseOverlay
-                  selection={siteWind}
-                  period={windSettings.period}
-                  streaksPaused={windMotion.streaksPaused}
-                  animateAnyway={windMotion.animateAnyway}
-                  onAnimateAnyway={windMotion.setAnimateAnyway}
-                />
-              )}
               {pickedBuilding && !qaHideHeightPopoverFromSearch(window.location.search) && (
                 <BuildingHeightPopover
                   building={pickedBuilding}
