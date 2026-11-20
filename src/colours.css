@@ -173,8 +173,24 @@
   --primary-plinth-wall: #000000;
   --uniform-road: #555555;
   --plinth-wall: #ffffff;
-  --ground-wind-glyph: #525252;
-  --ground-wind-flow: #5c7f9c;
+  --ground-wind-sheltered: #24208a;
+  --ground-wind-calm: #1f4fd0;
+  --ground-wind-easing: #008cc4;
+  --ground-wind-open: #009c78;
+  --ground-wind-rising: #d9a300;
+  --ground-wind-fast: #e8670f;
+  --ground-wind-speeding: #cc1f1f;
+  --wind-band-0: #9ec5e8;
+  --wind-band-1: #5b9bd5;
+  --wind-band-2: #2f6fd6;
+  --wind-band-3: #1b4f9c;
+  --wind-band-4: #0b3d91;
+  --wind-rose-card-surface: #fffcf8;
+  --wind-rose-ring: #c9d2da;
+  --wind-rose-guide: #c9d2da;
+  --wind-rose-n-label: #111111;
+  --wind-rose-h-label: #5f5f5f;
+  --wind-calm-caption: #1f2a33;
   --plinth-shadow: #1a1916;
 
   --cut-line: #f7f4ee;

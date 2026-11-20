@@ -3881,6 +3881,24 @@ body,
   flex-shrink: 0;
 }
 
+@media (max-width: 1279px) {
+  .model .wind-band-pills .wind-band-unit {
+    display: none !important;
+  }
+
+  .model[data-env-console="1"] .bottom-bar.env-console {
+    left: 12px !important;
+    right: auto !important;
+    transform: none !important;
+    max-width: calc(100vw - 92px) !important;
+  }
+
+  .model[data-env-console="1"] .studio-compass {
+    right: 12px !important;
+    bottom: 12px !important;
+  }
+}
+
 .model .bottom-bar.env-console {
   position: fixed !important;
   bottom: 12px !important;
@@ -4278,8 +4296,23 @@ body,
   border: 1px solid var(--border-subtle) !important;
   display: inline-flex !important;
   align-items: center !important;
+  gap: 4px !important;
   font-variant-numeric: tabular-nums !important;
 }
+
+.model .bottom-bar.env-console .wind-band-swatch {
+  width: 8px !important;
+  height: 8px !important;
+  border-radius: 2px !important;
+  flex: 0 0 8px !important;
+  display: inline-block !important;
+}
+
+.model .bottom-bar.env-console .wind-band-chip.band-0 .wind-band-swatch { background: var(--wind-band-0) !important; }
+.model .bottom-bar.env-console .wind-band-chip.band-1 .wind-band-swatch { background: var(--wind-band-1) !important; }
+.model .bottom-bar.env-console .wind-band-chip.band-2 .wind-band-swatch { background: var(--wind-band-2) !important; }
+.model .bottom-bar.env-console .wind-band-chip.band-3 .wind-band-swatch { background: var(--wind-band-3) !important; }
+.model .bottom-bar.env-console .wind-band-chip.band-4 .wind-band-swatch { background: var(--wind-band-4) !important; }
 
 .model .bottom-bar.env-console .walk-ripple-scrubber {
   flex: 1 !important;

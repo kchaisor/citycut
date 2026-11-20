@@ -309,6 +309,24 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--axo-tree-trunk` | `#7a6a55` | Exploded axo tree trunk. |
 | `--wind-streak` | `#2B6CB0` | Animated wind streaks in the 3D viewport (~70% opacity). |
 | `--wind-rose` | `#3d5a73` | On-screen wind rose overlay and Wind export layer. |
+| `--wind-rose-card-surface` | `#fffcf8` | Wind analysis card background and rose hub disc. |
+| `--wind-rose-ring` | `#c9d2da` | Wind rose outer ring stroke. |
+| `--wind-rose-guide` | `#c9d2da` | Wind rose frequency guide rings and % labels. |
+| `--wind-rose-n-label` | `#111111` | Wind rose north label. |
+| `--wind-rose-h-label` | `#5f5f5f` | Wind rose E/S/W labels. |
+| `--wind-calm-caption` | `#1f2a33` | Calm caption under the on-card wind rose. |
+| `--ground-wind-sheltered` | `#24208a` | 3D ground-wind line velocity ramp: near-still air in a building wake (speed ≈ 0.15× open ground). |
+| `--ground-wind-calm` | `#1f4fd0` | 3D ground-wind line velocity ramp: well below open-ground speed (≈ 0.45×). |
+| `--ground-wind-easing` | `#008cc4` | 3D ground-wind line velocity ramp: a little below open-ground speed (≈ 0.8×). |
+| `--ground-wind-open` | `#009c78` | 3D ground-wind line velocity ramp: open-ground speed (1×). |
+| `--ground-wind-rising` | `#d9a300` | 3D ground-wind line velocity ramp: speeding up (≈ 1.12×). |
+| `--ground-wind-fast` | `#e8670f` | 3D ground-wind line velocity ramp: speeding up (≈ 1.25×). |
+| `--ground-wind-speeding` | `#cc1f1f` | 3D ground-wind line velocity ramp: strongest speed-up at corners and gaps (≥ 1.4×). |
+| `--wind-band-0` | `#9ec5e8` | Wind console swatch: 2–10 km/h. |
+| `--wind-band-1` | `#5b9bd5` | Wind console swatch: 10–20 km/h. |
+| `--wind-band-2` | `#2f6fd6` | Wind console swatch: 20–30 km/h. |
+| `--wind-band-3` | `#1b4f9c` | Wind console swatch: 30–40 km/h. |
+| `--wind-band-4` | `#0b3d91` | Wind console swatch: 40+ km/h. |
 | `--view-visible` | `#FFF500` | View tab: ground visible from the walker right now (3D overlay, ~86% opacity) and its legend swatch. |
 | `--view-seen` | `#FFF9AA` | View tab: ground seen earlier on the walk (lighter tint, ~47% opacity). |
 | `--view-blocked` | `#28282E` | View tab: ground inside the radius that is not visible (~27% opacity). |

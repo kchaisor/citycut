@@ -114,7 +114,9 @@ import type { WalkRippleBuildingTint } from "../lib/walkRippleBuildingTint";
 import { SolarHeliodon, SolarLight, useMelbourneSunSample, type SolarViewSettings } from "./SolarHeliodon";
 import { GroundWindFlow } from "./GroundWindFlow";
 import { InspectHudProjector, type InspectHudScreen } from "./InspectHudProjector";
-import { analyzeWindPeriod, type WindPeriodId, type WindRoseTable } from "../lib/windRose";
+import type { WindPeriodId } from "../lib/windRose";
+import type { SiteWindSelection } from "../lib/windRoseData";
+import { analyzeSiteWind } from "../lib/windRoseStats";
 import type { CityModel } from "../types";
 import { introAlreadyPlayedForCut, markIntroPlayedForCut, modelCutSiteId } from "../lib/introPlayed";
 
@@ -547,6 +549,7 @@ function City({
   projection,
   walkRippleTint,
   walkRippleArrivals,
+  windFlowActive = false,
   introSkip,
   introPlayed,
 }: {
@@ -573,6 +576,7 @@ function City({
   projection: ProjectionMode;
   walkRippleTint?: WalkRippleBuildingTint | null;
   walkRippleArrivals?: Map<number, number> | null;
+  windFlowActive?: boolean;
   introSkip: boolean;
   introPlayed?: { current: string | null };
 }) {
@@ -1025,9 +1029,11 @@ function City({
     const mat = contours.material as THREE.LineDashedMaterial | undefined;
     if (mat?.color) {
       mat.color.setStyle(getColour("--outline-contour"));
+      mat.transparent = windFlowActive;
+      mat.opacity = windFlowActive ? 0.4 : 1;
       invalidate();
     }
-  }, [contours, colourTick, invalidate]);
+  }, [contours, colourTick, invalidate, windFlowActive]);
   useLayoutEffect(() => {
     if (!contours) return;
     group.add(contours);
@@ -2144,13 +2150,13 @@ export function Cameras({
 
 function WindLayer({
   model,
-  table,
+  siteWind,
   period,
   enabled,
   animateStreaks,
 }: {
   model: CityModel;
-  table: WindRoseTable | null;
+  siteWind: SiteWindSelection | null;
   period: WindPeriodId;
   enabled: boolean;
   animateStreaks: boolean;
@@ -2162,7 +2168,7 @@ function WindLayer({
     return () => document.removeEventListener("visibilitychange", onVis);
   }, []);
   if (!enabled) return null;
-  const stats = table ? analyzeWindPeriod(table, period) : null;
+  const stats = siteWind ? analyzeSiteWind(siteWind, period) : null;
   return (
     <GroundWindFlow model={model} stats={stats} animate={visible && animateStreaks} />
   );
@@ -2179,7 +2185,7 @@ export function Scene3D({
   snapId,
   solar,
   windEnabled,
-  windTable,
+  siteWind,
   windPeriod,
   windAnimateStreaks,
   onExportReady,
@@ -2219,7 +2225,7 @@ export function Scene3D({
   snapId: number;
   solar: SolarViewSettings;
   windEnabled: boolean;
-  windTable: WindRoseTable | null;
+  siteWind: SiteWindSelection | null;
   windPeriod: WindPeriodId;
   windAnimateStreaks: boolean;
   onExportReady: (exporter: SceneExporter | null) => void;
@@ -2416,6 +2422,7 @@ export function Scene3D({
         projection={projection}
         walkRippleTint={walkRippleTint}
         walkRippleArrivals={walkRippleArrivals}
+        windFlowActive={windEnabled}
         introSkip={introSkip}
         introPlayed={introPlayed}
       />
@@ -2449,7 +2456,7 @@ export function Scene3D({
       {onCompassHeading ? <StudioCompassTracker onHeading={onCompassHeading} /> : null}
       <WindLayer
         model={model}
-        table={windTable}
+        siteWind={siteWind}
         period={windPeriod}
         enabled={windEnabled}
         animateStreaks={windAnimateStreaks}

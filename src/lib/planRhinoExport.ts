@@ -229,7 +229,7 @@ export async function sitePlanTo3dm(
   const doc = new rhino.File3dm();
   try {
     const { zone } = applyRhinoMgaDocumentSettings(rhino, doc, model, {
-      windOn: Boolean(exportOptions && "wind" in exportOptions && exportOptions.wind?.table),
+      windOn: Boolean(exportOptions && "wind" in exportOptions && exportOptions.wind?.selection),
       applicationDetails: `${model.placeLabel}; site plan; ${crs.name}`,
     });
     const layers = new Map<string, number>();

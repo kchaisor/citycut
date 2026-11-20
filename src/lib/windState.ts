@@ -2,33 +2,28 @@ import type { WindPeriodId } from "./windRose";
 
 export const WIND_ENABLED_KEY = "citycut.wind.enabled";
 export const WIND_PERIOD_KEY = "citycut.wind.period";
-export const WIND_SHOW_ROSE_KEY = "citycut.wind.showRose";
 
 export type WindViewSettings = {
   enabled: boolean;
   period: WindPeriodId;
-  showRose: boolean;
 };
 
 export const DEFAULT_WIND_SETTINGS: WindViewSettings = {
   enabled: false,
   period: "annual",
-  showRose: true,
 };
 
 export function windSettingsForModelOpen(storage: Storage): WindViewSettings {
-  return { ...readStoredWindSettings(storage), enabled: false };
+  return { ...readStoredWindSettings(storage), enabled: true };
 }
 
 export function readStoredWindSettings(storage: Storage): WindViewSettings {
   try {
     const enabled = storage.getItem(WIND_ENABLED_KEY);
     const period = storage.getItem(WIND_PERIOD_KEY);
-    const showRose = storage.getItem(WIND_SHOW_ROSE_KEY);
     return {
       enabled: enabled === "1",
       period: isWindPeriod(period) ? period : "annual",
-      showRose: showRose !== "0",
     };
   } catch {
     return DEFAULT_WIND_SETTINGS;
@@ -47,7 +42,6 @@ export function writeStoredWindSettings(storage: Storage, settings: WindViewSett
   try {
     storage.setItem(WIND_ENABLED_KEY, settings.enabled ? "1" : "0");
     storage.setItem(WIND_PERIOD_KEY, settings.period);
-    storage.setItem(WIND_SHOW_ROSE_KEY, settings.showRose ? "1" : "0");
   } catch {
   }
 }

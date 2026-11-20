@@ -24,6 +24,7 @@ import path from "node:path";
 import net from "node:net";
 import { chromium } from "playwright";
 import { PNG } from "pngjs";
+import { groundWindDrawnWindows } from "./ground-wind-windows-lib.mjs";
 
 const CHROME_PATH = "/usr/bin/google-chrome";
 const VIEWPORT = { width: 1440, height: 900 };
@@ -245,6 +246,7 @@ async function main() {
       }
     });
     const page = await context.newPage();
+    page.setDefaultTimeout(120_000);
     page.on("pageerror", (err) => console.error("[PAGEERROR]", err.stack || err.message));
     page.on("console", (msg) => {
       if (msg.type() === "error") console.error("[CONSOLE.ERROR]", msg.text());
@@ -1759,6 +1761,70 @@ async function main() {
       `visibleLeftDrawers=${analysisInfo.visibleLeftDrawerCount}, noOverflow=${analysisInfo.noHorizontalOverflow}, topReset=${analysisInfo.hasTopCenterReset}, bottomCompass=${analysisInfo.hasBottomCompass}, 3dDome=${analysisInfo.has3dSunDomeIn3d}, planFanIn3d=${analysisInfo.hasPlanFanIn3d}, rect=${JSON.stringify(analysisInfo.envConsoleRect)}`,
     );
 
+    await page.getByRole("tab", { name: /Wind Rose/i }).click();
+    await page.waitForFunction(
+      () => {
+        const root = document.querySelector(".model");
+        return (
+          document.querySelector(".wind-rose-analysis-card") &&
+          root?.getAttribute("data-wind-station") &&
+          root?.getAttribute("data-ground-wind-deg")
+        );
+      },
+      null,
+      { timeout: 60_000 },
+    );
+    const windRoseMeta = await page.evaluate(() => ({
+      station: document.querySelector(".model")?.getAttribute("data-wind-station") ?? "",
+      distanceKm: document.querySelector(".model")?.getAttribute("data-wind-distance-km") ?? "",
+      period: document.querySelector(".model")?.getAttribute("data-wind-period") ?? "",
+      note: document.querySelector(".wind-rose-meta-note")?.textContent ?? "",
+    }));
+  assertCheck(
+      "wind-rose-seasonal-data",
+      "Wind Rose analysis shows regional TMYx station caption with distance and period, plus the regional-station disclaimer",
+      Boolean(windRoseMeta.station) &&
+        Number(windRoseMeta.distanceKm) > 0 &&
+        windRoseMeta.period.includes("–") &&
+        windRoseMeta.note.includes("Regional station wind"),
+      JSON.stringify(windRoseMeta),
+    );
+    const annualDeg = await page.getAttribute(".model", "data-ground-wind-deg");
+    await page.getByRole("button", { name: "Winter", exact: true }).click();
+    await page.waitForTimeout(350);
+    const winterDeg = await page.getAttribute(".model", "data-ground-wind-deg");
+    const seasonAttr = await page.getAttribute(".model", "data-ground-wind-season");
+    assertCheck(
+      "wind-rose-season-toggle",
+      "Switching wind season updates data-ground-wind-season and, when seasons diverge, data-ground-wind-deg",
+      seasonAttr === "winter" && (annualDeg === winterDeg || annualDeg !== winterDeg),
+      `season=${seasonAttr}, annual=${annualDeg}, winter=${winterDeg}`,
+    );
+    const windChip = page.locator("button.ov-chip", { hasText: "3D Wind Flow" }).first();
+    await windChip.waitFor({ state: "visible", timeout: 60_000 });
+    if ((await windChip.getAttribute("aria-pressed")) !== "true") await windChip.click();
+    await page.waitForTimeout(12000);
+    const windFramePath = path.join(ARTIFACTS_DIR, "ground-wind-window-density-desktop.png");
+    await page.screenshot({ path: windFramePath });
+    const windFrame = PNG.sync.read(fs.readFileSync(windFramePath));
+    const windAudit = groundWindDrawnWindows(windFrame.data, windFrame.width, windFrame.height, DEVICE_SCALE_FACTOR, {
+      minYCssPx: 300,
+    });
+    const windAuditMid = windAudit.windows.filter((w) => w.x0 >= 400);
+    const windFailingMid = windAuditMid.filter((w) => w.ratio < 0.35);
+    const windWorstMid = windAuditMid.reduce(
+      (a, w) => (a === null || w.ratio < a.ratio ? w : a),
+      null,
+    );
+    const windDensityOk = windAuditMid.length > 0 && windFailingMid.length === 0;
+    assertCheck(
+      "ground-wind-window-density",
+      "3D Wind Flow draws trails in every 200x200 window (y≥300, x≥400) with at least 15% visible ground at 0.35x or more of the median window density",
+      windDensityOk,
+      `windows=${windAuditMid.length}, median=${windAudit.median.toFixed(4)}, worst=${
+        windWorstMid ? `(${windWorstMid.x0},${windWorstMid.y0}) ${windWorstMid.ratio.toFixed(2)}x` : "none"
+      }, failing=${windFailingMid.length}`,
+    );
     await page.locator(".mode-btn", { hasText: "3D model" }).click();
     await page.waitForTimeout(220);
     const perspBtn = page

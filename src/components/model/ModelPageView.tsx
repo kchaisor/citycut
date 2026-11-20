@@ -1,4 +1,5 @@
 import { ShortcutCheatsheet } from "../ShortcutCheatsheet";
+import { WindRosePanel } from "../WindRosePanel";
 import { shouldShowIntroBridgePill } from "./shouldShowIntroBridgePill";
 import { ModelPageSidebar } from "./ModelPageSidebar";
 import { ModelPageViewportFooter } from "./ModelPageViewportFooter";
@@ -7,14 +8,18 @@ import type { ModelPageViewModel } from "./useModelPage";
 
 export function ModelPageView({ vm }: { vm: ModelPageViewModel }) {
   const {
+    analysisKind,
     cutDimLabel,
     introHoldReleasedRef,
     introWebglReadyRef,
+    leftOpen,
     modelRootRef,
     setShortcutCheatsheetOpen,
     shortcutCheatsheetOpen,
     sidebarCollapsed,
+    siteWind,
     tab,
+    windSettings,
     topbarLayout,
   } = vm;
 
@@ -36,6 +41,15 @@ export function ModelPageView({ vm }: { vm: ModelPageViewModel }) {
       >
         <ModelPageViewportTabs vm={vm} />
         <ModelPageSidebar vm={vm} />
+        {leftOpen === "analysis" && tab !== "satellite" && analysisKind === "wind" && siteWind ? (
+          <div className="wind-rose-analysis-card hud-card" aria-label="Wind rose panel">
+            <WindRosePanel
+              selection={siteWind}
+              period={windSettings.period}
+              showGroundWindLegend={windSettings.enabled && tab === "3d"}
+            />
+          </div>
+        ) : null}
         <ModelPageViewportFooter vm={vm} />
       </div>
       <ShortcutCheatsheet open={shortcutCheatsheetOpen} onClose={() => setShortcutCheatsheetOpen(false)} />

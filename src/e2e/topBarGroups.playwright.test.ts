@@ -372,7 +372,11 @@ describe("model top bar group layout", () => {
   it(
     "keeps top bar groups separate with unclipped controls at 1024–1440",
     async () => {
-      const browser = await chromium.launch();
+      const browser = await chromium.launch({
+        headless: true,
+        executablePath: "/usr/bin/google-chrome",
+        args: ["--no-sandbox", "--disable-gpu"],
+      });
       const page = await browser.newPage();
       page.setDefaultTimeout(360_000);
       try {
@@ -404,6 +408,21 @@ describe("model top bar group layout", () => {
           await page.waitForTimeout(200);
           const audit3d = await auditTopBar(page);
           expect(audit3d, audit3d.errors.join("; ")).toMatchObject({ ok: true });
+
+          if (width === 1280) {
+            await page.locator('.model button[data-section="analysis"]').first().click({ force: true });
+            await page.waitForTimeout(400);
+            const gap = await page.evaluate(() => {
+              const bar = document.querySelector(".model .bottom-bar.env-console");
+              const compass = document.querySelector(".model .studio-compass");
+              if (!bar || !compass) return -1;
+              return compass.getBoundingClientRect().left - bar.getBoundingClientRect().right;
+            });
+            expect(gap).toBeGreaterThanOrEqual(16);
+            await page.keyboard.press("Escape").catch(() => {});
+            await page.locator('.model button[data-section="analysis"]').first().click({ force: true }).catch(() => {});
+            await page.waitForTimeout(200);
+          }
 
           await activateTab(page, "Drawing");
           await page.waitForSelector("svg.plan", { timeout: 120_000 });

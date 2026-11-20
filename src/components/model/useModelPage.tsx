@@ -139,7 +139,10 @@ import { selectedKnife } from "../../lib/sectionKnife/state";
 import { buildSectionExportSvg, sectionExportLayerNames } from "../../lib/sectionKnife/sectionExport";
 import { useWalkRipple } from "../useWalkRipple";import { useWalkPlayback, useWalkViewshed } from "../useWalkViewshed";
 
-import { fetchWindRoseTable } from "../../lib/windFetch";import { analyzeWindPeriod, WindRoseTable } from "../../lib/windRose";
+import { loadSiteWind } from "../../lib/windLoad";
+import type { SiteWindSelection } from "../../lib/windRoseData";
+import { sectorCenterDeg } from "../../lib/windRose";
+import { analyzeSiteWind, seasonRecord } from "../../lib/windRoseStats";
 
 import { daylightWindowMinutes, sunAtMelbourneLocal } from "../../lib/solar";
 import {
@@ -371,7 +374,7 @@ export function useModelPage({
     writeStoredWindSettings(window.localStorage, next);
     return next;
   });
-  const [windTable, setWindTable] = useState<WindRoseTable | null>(null);
+  const [siteWind, setSiteWind] = useState<SiteWindSelection | null>(null);
   const [windNote, setWindNote] = useState<string | null>(null);
   const windMotion = useWindStreakMotion();
   const [solar, setSolar] = useState<SolarViewSettings>(() =>
@@ -446,8 +449,8 @@ export function useModelPage({
       sunStudyMuted: solar.sunStudy ? sunStudyMutedOn(solar.sunStudy, solar.sunStudyMuted) : undefined,
       sunStudySelected: solar.sunStudy ? sunStudySelected : undefined,
       wind:
-        windSettings.enabled && windTable
-          ? { table: windTable, period: windSettings.period }
+        windSettings.enabled && siteWind
+          ? { selection: siteWind, period: windSettings.period }
           : null,
     };
   }
@@ -463,13 +466,13 @@ export function useModelPage({
     let cancelled = false;
     const lat = model.siteAnchor?.lat ?? model.center.lat;
     const lon = model.siteAnchor?.lon ?? model.center.lon;
-    fetchWindRoseTable(lat, lon).then((result) => {
+    loadSiteWind(lat, lon).then((result) => {
       if (cancelled) return;
       if (result.ok) {
-        setWindTable(result.table);
+        setSiteWind(result.selection);
         setWindNote(null);
       } else {
-        setWindTable(null);
+        setSiteWind(null);
         setWindNote(result.quietNote);
       }
     });
@@ -1344,9 +1347,32 @@ export function useModelPage({
     [model.center.lat, model.center.lon, solar.year, solar.month, solar.day, solar.hour, solar.minute],
   );
   const consoleWindStats = useMemo(
-    () => (windTable ? analyzeWindPeriod(windTable, windSettings.period) : null),
-    [windTable, windSettings.period],
+    () => (siteWind ? analyzeSiteWind(siteWind, windSettings.period) : null),
+    [siteWind, windSettings.period],
   );
+
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const root = document.querySelector(".model");
+    if (!root) return;
+    if (siteWind && consoleWindStats) {
+      root.setAttribute("data-wind-station", siteWind.station.name);
+      root.setAttribute("data-wind-distance-km", String(siteWind.station.distanceKm ?? ""));
+      root.setAttribute("data-wind-period", `${siteWind.station.periodStart}–${siteWind.station.periodEnd}`);
+      const record = seasonRecord(siteWind, windSettings.period);
+      root.setAttribute(
+        "data-ground-wind-deg",
+        String(record?.prevailingDirDeg ?? sectorCenterDeg(consoleWindStats.prevailingSector)),
+      );
+      root.setAttribute("data-ground-wind-season", windSettings.period);
+    } else {
+      root.removeAttribute("data-wind-station");
+      root.removeAttribute("data-wind-distance-km");
+      root.removeAttribute("data-wind-period");
+      root.removeAttribute("data-ground-wind-deg");
+      root.removeAttribute("data-ground-wind-season");
+    }
+  }, [siteWind, consoleWindStats, windSettings.period]);
 
   useEffect(() => {
     if (!consolePlaying) return;
@@ -1484,8 +1510,8 @@ export function useModelPage({
         uniformBuildings: !colourByUse && !showSource,
         colourBySource: showSource,
         wind:
-          windSettings.enabled && windTable
-            ? { table: windTable, period: windSettings.period }
+          windSettings.enabled && siteWind
+            ? { selection: siteWind, period: windSettings.period }
             : null,
         hideTrees: view3dDisplay.hideTrees,
         importedMassing: massing.forExport.length ? massing.forExport : null,
@@ -2281,7 +2307,6 @@ export function useModelPage({
     setWalkRippleToast,
     setWindNote,
     setWindSettings,
-    setWindTable,
     shortcutCheatsheetOpen,
     showAllInCut,
     showBuildings,
@@ -2327,7 +2352,7 @@ export function useModelPage({
     windMotion,
     windNote,
     windSettings,
-    windTable,
+    siteWind,
     writeStoredShowManualHeights,
   };
 }

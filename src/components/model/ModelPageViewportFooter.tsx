@@ -267,21 +267,6 @@ export function ModelPageViewportFooter({ vm }: { vm: import("./useModelPage").M
                       <span className="ov-dot" aria-hidden="true" />
                       <span>3D Wind Flow</span>
                     </button>
-                    <button
-                      type="button"
-                      className={windSettings.enabled && windSettings.showRose ? "ov-chip on" : "ov-chip"}
-                      aria-pressed={windSettings.enabled && windSettings.showRose}
-                      onClick={() =>
-                        commitWind({
-                          ...windSettings,
-                          enabled: true,
-                          showRose: !windSettings.showRose,
-                        })
-                      }
-                    >
-                      <span className="ov-dot" aria-hidden="true" />
-                      <span>Wind Rose</span>
-                    </button>
                   </>
                 )}
 
@@ -490,15 +475,8 @@ export function ModelPageViewportFooter({ vm }: { vm: import("./useModelPage").M
                     <span className="sun-bound">
                       {WIND_PERIOD_LABELS[windSettings.period as keyof typeof WIND_PERIOD_LABELS] ?? "Annual"}
                     </span>
-                    <div className="wind-band-pills" aria-label="Wind speed scale (km/h)">
-                      <span className="wind-band-chip band-0">2–10 km/h</span>
-                      <span className="wind-band-chip band-1">10–20</span>
-                      <span className="wind-band-chip band-2">20–30</span>
-                      <span className="wind-band-chip band-3">30–40</span>
-                      <span className="wind-band-chip band-4">40+ km/h</span>
-                    </div>
                     <span className="time-readout-pill">
-                      🌬 {consoleWindStats ? `${consoleWindStats.prevailingLabel} · ${Math.round(consoleWindStats.prevailingMedianKmh)} km/h` : "ERA5 10m Wind"}
+                      🌬 {consoleWindStats ? `${consoleWindStats.prevailingLabel} · ${Math.round(consoleWindStats.prevailingMedianKmh)} km/h` : "TMYx station wind"}
                     </span>
                   </div>
                 </>
