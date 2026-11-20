@@ -10,9 +10,12 @@ import {
   landmarkQueryUrl,
   landmarksDocument,
   landmarksManifest,
+  isSlowQueryFailure,
   minimumItemsCheck,
   parseWktPoint,
   qidFromUri,
+  queryCells,
+  splitCell,
   yearFromWikidataDate,
 } from "./wikidata-landmarks-lib.mjs";
 
@@ -131,6 +134,8 @@ describe("output", () => {
       generatedAt,
       cellDeg: 0.2,
       cells: 56,
+      queries: 60,
+      splits: 1,
       rows: 5,
       items,
       dropped,
@@ -150,5 +155,52 @@ describe("output", () => {
   it("refuses to publish a suspiciously small answer", () => {
     expect(() => minimumItemsCheck(3, 100)).toThrow(/not publishing/);
     expect(() => minimumItemsCheck(100, 100)).not.toThrow();
+  });
+});
+
+describe("splitting slow cells", () => {
+  const cell = { west: 0, south: 0, east: 0.2, north: 0.2 };
+  it("splits a cell into four quarters that cover it exactly", () => {
+    expect(splitCell(cell)).toEqual([
+      { west: 0, south: 0, east: 0.1, north: 0.1 },
+      { west: 0.1, south: 0, east: 0.2, north: 0.1 },
+      { west: 0, south: 0.1, east: 0.1, north: 0.2 },
+      { west: 0.1, south: 0.1, east: 0.2, north: 0.2 },
+    ]);
+  });
+  it("treats Wikidata timeouts as slow, and refusals as fatal", () => {
+    expect(isSlowQueryFailure(new Error("Wikidata cell failed after 2 attempts: answered HTTP 504."))).toBe(true);
+    expect(isSlowQueryFailure(new Error("Wikidata cell failed after 2 attempts: answered HTTP 500."))).toBe(true);
+    expect(isSlowQueryFailure(new Error("Wikidata cell timed out after 70000 ms"))).toBe(true);
+    expect(isSlowQueryFailure(new Error("Wikidata cell answered HTTP 429; stopping without retry."))).toBe(false);
+    expect(isSlowQueryFailure(new Error("Wikidata SPARQL answer had no results.bindings array."))).toBe(false);
+  });
+  it("queries the quarters of a cell that times out, keeping every other cell", async () => {
+    const asked = [];
+    const fetchCell = async (c) => {
+      asked.push(c);
+      if (c.east - c.west > 0.15) throw new Error("answered HTTP 504.");
+      return [{ cell: c }];
+    };
+    const other = { west: 0.2, south: 0, east: 0.3, north: 0.1 };
+    const { results, splits } = await queryCells([cell, other], fetchCell, { minCellDeg: 0.05 });
+    expect(splits).toBe(1);
+    expect(results.flat().map((r) => r.cell)).toEqual([...splitCell(cell), other]);
+    expect(asked).toHaveLength(6);
+  });
+  it("stops the run when the smallest cell still times out", async () => {
+    const fetchCell = async () => {
+      throw new Error("answered HTTP 504.");
+    };
+    await expect(queryCells([cell], fetchCell, { minCellDeg: 0.05 })).rejects.toThrow(/504/);
+  });
+  it("stops at once on a failure that splitting cannot fix", async () => {
+    let calls = 0;
+    const fetchCell = async () => {
+      calls += 1;
+      throw new Error("answered HTTP 429; stopping without retry.");
+    };
+    await expect(queryCells([cell], fetchCell, { minCellDeg: 0.0125 })).rejects.toThrow(/429/);
+    expect(calls).toBe(1);
   });
 });

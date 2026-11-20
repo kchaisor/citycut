@@ -198,7 +198,7 @@ export function landmarksDocument(items, { bbox, generatedAt }) {
   };
 }
 
-export function landmarksManifest({ bbox, generatedAt, cellDeg, cells, rows, items, dropped, sha256, bytes }) {
+export function landmarksManifest({ bbox, generatedAt, cellDeg, cells, queries, splits, rows, items, dropped, sha256, bytes }) {
   return {
     schemaVersion: WIKIDATA_SCHEMA_VERSION,
     file: WIKIDATA_LANDMARKS_NAME,
@@ -208,6 +208,8 @@ export function landmarksManifest({ bbox, generatedAt, cellDeg, cells, rows, ite
     bbox,
     cellDeg,
     cells,
+    queries,
+    splits,
     rows,
     itemCount: items.length,
     withHeight: items.filter((i) => i.heightsM.length > 0).length,
@@ -222,4 +224,40 @@ export function minimumItemsCheck(count, minimum) {
   if (count < minimum) {
     throw new Error(`Wikidata returned ${count} landmarks, fewer than the ${minimum} floor; not publishing.`);
   }
+}
+
+export function splitCell(cell) {
+  const midLon = (cell.west + cell.east) / 2;
+  const midLat = (cell.south + cell.north) / 2;
+  return [
+    { west: cell.west, south: cell.south, east: midLon, north: midLat },
+    { west: midLon, south: cell.south, east: cell.east, north: midLat },
+    { west: cell.west, south: midLat, east: midLon, north: cell.north },
+    { west: midLon, south: midLat, east: cell.east, north: cell.north },
+  ];
+}
+
+export function isSlowQueryFailure(err) {
+  const message = err instanceof Error ? err.message : String(err);
+  return /HTTP 50[0234]\b|timed out/.test(message);
+}
+
+export async function queryCells(cells, fetchCell, { minCellDeg, onCell = () => {} }) {
+  const queue = [...cells];
+  const results = [];
+  let splits = 0;
+  while (queue.length > 0) {
+    const cell = queue.shift();
+    try {
+      const rows = await fetchCell(cell);
+      results.push(rows);
+      onCell({ cell, rows, remaining: queue.length, splits });
+    } catch (err) {
+      const halfWidth = Math.max(cell.east - cell.west, cell.north - cell.south) / 2;
+      if (!isSlowQueryFailure(err) || halfWidth < minCellDeg - 1e-9) throw err;
+      splits += 1;
+      queue.unshift(...splitCell(cell));
+    }
+  }
+  return { results, splits };
 }
