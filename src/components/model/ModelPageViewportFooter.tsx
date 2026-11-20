@@ -1,6 +1,19 @@
 import { Eye, Footprints, Sun, Wind } from "lucide-react";
 
-import { WalkRippleTimeScrubber } from "../WalkRippleTimeScrubber";import { WALK_SPEEDS } from "../useWalkViewshed";
+import { WalkRippleTimeScrubber } from "../WalkRippleTimeScrubber";
+import { WALK_SPEEDS } from "../useWalkViewshed";
+import {
+  RESCODE_WINDOW_END_HOUR,
+  RESCODE_WINDOW_START_HOUR,
+  SOLAR_SLIDER_END_MIN,
+  SOLAR_SLIDER_START_MIN,
+  SOLAR_SLIDER_STEP_MIN,
+  SOLAR_SLIDER_TICK_HOURS,
+  clampSolarSliderMinutes,
+  isRescodeHour,
+  solarSliderPercent,
+  solarSliderSpan,
+} from "../../lib/solarSlider";
 import { WIND_PERIOD_LABELS, WindPeriodId } from "../../lib/windRose";
 
 
@@ -231,6 +244,16 @@ export function ModelPageViewportFooter({ vm }: { vm: import("./useModelPage").M
                         <span className="ov-dot" aria-hidden="true" />
                         <span>Shadows</span>
                       </button>
+                      <button
+                        type="button"
+                        data-sun-hours-ground-chip
+                        className={solar.sunHours ? "ov-chip on" : "ov-chip"}
+                        aria-pressed={Boolean(solar.sunHours)}
+                        onClick={() => commitSolar({ ...solar, sunHours: !solar.sunHours })}
+                      >
+                        <span className="ov-dot" aria-hidden="true" />
+                        <span>Sun hours</span>
+                      </button>
                       {tab === "drawing" && drawing === "site" && (
                         <button
                           type="button"
@@ -274,21 +297,6 @@ export function ModelPageViewportFooter({ vm }: { vm: import("./useModelPage").M
                       >
                         <span className="ov-dot" aria-hidden="true" />
                         <span>3D Wind Flow</span>
-                      </button>
-                      <button
-                        type="button"
-                        className={windSettings.enabled && windSettings.showRose ? "ov-chip on" : "ov-chip"}
-                        aria-pressed={windSettings.enabled && windSettings.showRose}
-                        onClick={() =>
-                          commitWind({
-                            ...windSettings,
-                            enabled: true,
-                            showRose: !windSettings.showRose,
-                          })
-                        }
-                      >
-                        <span className="ov-dot" aria-hidden="true" />
-                        <span>Wind Rose</span>
                       </button>
                     </>
                   )}
@@ -351,9 +359,9 @@ export function ModelPageViewportFooter({ vm }: { vm: import("./useModelPage").M
                 const formatMin = (m: number) =>
                   `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
                 const curMin = solar.hour * 60 + solar.minute;
-                const minBound = 5 * 60;
-                const maxBound = 20 * 60;
-                const thumbPct = Math.max(4, Math.min(96, ((curMin - minBound) / (maxBound - minBound)) * 100));
+                const thumbPct = solarSliderPercent(curMin);
+                const daylightSpan = solarSliderSpan(consoleDaylight.sunrise, consoleDaylight.sunset);
+                const rescodeSpan = solarSliderSpan(RESCODE_WINDOW_START_HOUR * 60, RESCODE_WINDOW_END_HOUR * 60);
                 return (
                   <>
                     <div className="date-presets" role="group" aria-label="Solar date presets">
@@ -398,39 +406,52 @@ export function ModelPageViewportFooter({ vm }: { vm: import("./useModelPage").M
                         ▲ {formatMin(consoleDaylight.sunrise)}
                       </span>
                       <div className="scrubber-track">
-                        <div className="daylight-band" aria-hidden="true" />
-                        <div className="rescode-window" title="9am–3pm Victorian ResCode assessment window" aria-hidden="true" />
+                        <div
+                          className="daylight-band"
+                          aria-hidden="true"
+                          style={{ left: `${daylightSpan.left}%`, width: `${daylightSpan.width}%` }}
+                        />
+                        <div
+                          className="rescode-window"
+                          title="9am–3pm Victorian ResCode assessment window"
+                          aria-hidden="true"
+                          style={{ left: `${rescodeSpan.left}%`, width: `${rescodeSpan.width}%` }}
+                        />
                         <div className="scrubber-ticks" role="group" aria-label="Solar hour scrubber">
-                          {[6, 9, 10, 11, 12, 13, 14, 15, 18].map((h) => (
-                            <button
-                              key={h}
-                              type="button"
-                              className={
-                                solar.hour === h
-                                  ? "scrubber-tick-btn active"
-                                  : h >= 9 && h <= 15
-                                    ? "scrubber-tick-btn hi"
-                                    : "scrubber-tick-btn"
-                              }
-                              aria-label={`Solar time ${String(h).padStart(2, "0")}:00`}
-                              aria-pressed={solar.hour === h}
-                              onClick={() => {
-                                setConsolePlaying(false);
-                                commitSolar({ ...solar, hour: h, minute: 0, castShadows: true });
-                              }}
-                            >
-                              {String(h).padStart(2, "0")}
-                            </button>
-                          ))}
+                          {SOLAR_SLIDER_TICK_HOURS.map((h) => {
+                            const tickPct = solarSliderPercent(h * 60);
+                            return (
+                              <button
+                                key={h}
+                                type="button"
+                                style={{ left: `${tickPct}%`, transform: `translate(-${tickPct}%, -50%)` }}
+                                className={
+                                  solar.hour === h
+                                    ? "scrubber-tick-btn active"
+                                    : isRescodeHour(h)
+                                      ? "scrubber-tick-btn hi"
+                                      : "scrubber-tick-btn"
+                                }
+                                aria-label={`Solar time ${String(h).padStart(2, "0")}:00`}
+                                aria-pressed={solar.hour === h}
+                                onClick={() => {
+                                  setConsolePlaying(false);
+                                  commitSolar({ ...solar, hour: h, minute: 0, castShadows: true });
+                                }}
+                              >
+                                {String(h).padStart(2, "0")}
+                              </button>
+                            );
+                          })}
                         </div>
                         <input
                           type="range"
                           className="scrubber-range-input"
                           aria-label="Solar time of day"
-                          min={consoleDaylight.sunrise}
-                          max={consoleDaylight.sunset}
-                          step={5}
-                          value={Math.max(consoleDaylight.sunrise, Math.min(consoleDaylight.sunset, curMin))}
+                          min={SOLAR_SLIDER_START_MIN}
+                          max={SOLAR_SLIDER_END_MIN}
+                          step={SOLAR_SLIDER_STEP_MIN}
+                          value={clampSolarSliderMinutes(curMin)}
                           onChange={(e) => {
                             setConsolePlaying(false);
                             const total = Number(e.target.value);
@@ -442,7 +463,11 @@ export function ModelPageViewportFooter({ vm }: { vm: import("./useModelPage").M
                             });
                           }}
                         />
-                        <div className="scrubber-thumb" style={{ left: `${thumbPct}%` }} aria-hidden="true" />
+                        <div
+                          className="scrubber-thumb"
+                          style={{ left: `${thumbPct}%`, transform: `translateX(-${thumbPct}%)` }}
+                          aria-hidden="true"
+                        />
                       </div>
                       <span className="sun-bound" title="Melbourne sunset">
                         ▼ {formatMin(consoleDaylight.sunset)}
@@ -478,18 +503,14 @@ export function ModelPageViewportFooter({ vm }: { vm: import("./useModelPage").M
                       </button>
                     ))}
                   </div>
-                  {planWind ? (
-                    windTelemetry
-                  ) : (
-                    <div className="daylight-scrubber wind-console-bar mono">
-                      <span className="sun-bound">
-                        {WIND_PERIOD_LABELS[windSettings.period as keyof typeof WIND_PERIOD_LABELS] ?? "Annual"}
-                      </span>
-                      <span className="time-readout-pill">
-                        🌬 {consoleWindStats ? `${consoleWindStats.prevailingLabel} · ${Math.round(consoleWindStats.prevailingMedianKmh)} km/h` : "TMYx station wind"}
-                      </span>
-                    </div>
-                  )}
+                  <div className="daylight-scrubber wind-console-bar mono">
+                    <span className="sun-bound">
+                      {WIND_PERIOD_LABELS[windSettings.period as keyof typeof WIND_PERIOD_LABELS] ?? "Annual"}
+                    </span>
+                    <span className="time-readout-pill">
+                      🌬 {consoleWindStats ? `${consoleWindStats.prevailingLabel} · ${Math.round(consoleWindStats.prevailingMedianKmh)} km/h` : "TMYx station wind"}
+                    </span>
+                  </div>
                 </>
               )}
 

@@ -31,6 +31,12 @@ describe("Sun section", () => {
     expect(screen.queryByText(/Hours of sun/)).toBeNull();
   });
 
+  it("scrubs the whole 6am–8pm day outside the shadow standards", () => {
+    render(<SolarPanel embedded settings={settings} onChange={() => undefined} sideM={500} site={site} />);
+    const scrub = screen.getByRole("slider", { name: "Time of day" }) as HTMLInputElement;
+    expect([scrub.min, scrub.max]).toEqual(["360", "1200"]);
+  });
+
   it("date presets keep the time; ResCode jumps to 22 Sep 9am with shadows and narrows the scrubber to 9–3", () => {
     const onChange = vi.fn();
     const view = render(<SolarPanel embedded settings={settings} onChange={onChange} sideM={500} site={site} />);

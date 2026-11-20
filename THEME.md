@@ -34,8 +34,10 @@ The name is `--background`. The value is `#EBEBEB`.
 | `--panel-border` | The line around panels, cards, and inputs. | `#C8C8C8` |
 | `--text` | Main text, icons, and the Create model button. | `#1A1916` |
 | `--muted-text` | Notes, credits, and other secondary text. | `#6E685E` |
-| `--font-sans` | The font for buttons, labels, and ordinary text. | `"Outfit", "Avenir Next", "Segoe UI", sans-serif` |
-| `--font-serif` | The font for the large “Your model is ready” title. | `"Fraunces", "Iowan Old Style", Georgia, serif` |
+| `--sun-hours-direct-dock-footnote` | Compact Direct Sun Hours dock legend footnote. | `#5F5F5F` |
+| `--font-sans` | The font for buttons, labels, and ordinary text. | `"Geist", -apple-system, BlinkMacSystemFont, sans-serif` |
+| `--font-mono` | The font for numbers and data, such as stats and coordinates. | `"Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace` |
+| `--font-serif` | The font for the large “Your model is ready” title. Despite the name, it is Geist; a later change renames it `--sans`. | `"Geist", "Iowan Old Style", Georgia, serif` |
 | `--font-size` | The size of ordinary text. | `15px` |
 | `--font-size-brand` | The size of the CityCut name in the sidebar brand bar. | `18px` |
 | `--font-size-drawer` | The size of a drawer title, such as Exports. | `15px` |
@@ -65,6 +67,10 @@ The name is `--background`. The value is `#EBEBEB`.
 | `--height-manual` | Manual height edits in that bar and key. | `#D4A017` |
 | `--sidebar-rail-w` | Width of the icon rail. The model view starts to its right when the sidebar is collapsed. | `56px` |
 | `--sidebar-panel-w` | Width of the sidebar panel next to the rail. | `320px` |
+| `--z-studio-inspector` | Stacking order of the fixed Site Intelligence panel. | `30` |
+| `--z-studio-topbar` | Stacking order of the floating top-bar HUD (menus paint above the inspector). | `40` |
+| `--studio-intelligence-meta` | MGA / cut-size line in the Site Intelligence header (`~6.3:1` on `--bg-card`). | `#5F5E5A` |
+| `--studio-submode-select-edge` | 1 px outline on the collapsed Perspective / Site plan submode `<select>` below 1280. | `#D9D8D3` |
 
 `var(--background)` means “use whatever `--background` is set to”. That is why one edit recolours the page, the model, and the drawing together.
 
@@ -91,14 +97,17 @@ Use capital or lowercase letters. `#ebebeb` and `#EBEBEB` are the same colour.
 
 The safest choices are fonts the app already loads, or a common font that is already on the computer:
 
-- Outfit, for ordinary text. The app loads this.
-- Fraunces, for the large title. The app loads this.
-- Avenir Next, Segoe UI, Georgia, and the words `sans-serif` or `serif`. These are fallbacks. The browser uses the first one it can find.
+- Geist, for buttons, labels and ordinary text. The app loads this.
+- Geist Mono, for numbers and data. The app loads this.
+- Outfit at weight 700, only for the CityCut wordmark and the Create model button. Use it nowhere else.
+- -apple-system, BlinkMacSystemFont, ui-monospace and the words `sans-serif` or `monospace`. These are fallbacks. The browser uses the first one it can find.
+
+Fraunces is no longer used.
 
 Keep the quotes around a name that has a space, and keep the commas. A good ordinary-text line is:
 
 ```css
---font-sans: "Outfit", "Avenir Next", "Segoe UI", sans-serif;
+--font-sans: "Geist", -apple-system, BlinkMacSystemFont, sans-serif;
 ```
 
 A name the app does not load, such as a font from your computer only, will show for you and not for other people.
@@ -208,6 +217,11 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--sun-marker` | `#ffcc1a` | Sun icon at the current time in the 3D heliodon (screen only). The only yellow in the heliodon. |
 | `--sun-compass` | `#45423c` | Dark grey of the 3D heliodon dial: 10° altitude rings, azimuth radials, 1° ticks, degree numbers and hour lines (screen only). |
 | `--sun-compass-label` | `#1a1916` | Ink of the 3D heliodon dial: horizon ring, 5° and 10° ticks, cardinal ticks, dashed axes, N/E/S/W, hour labels, arc labels and hour-dot outlines (screen only). |
+| `--studio-compass-chip` | `#111111` | 3D view compass (Designbot C): dark disc behind the north/south needle. |
+| `--studio-compass-chip-ring` | `#000000` | 3D view compass: 1px outer ring on the chip. |
+| `--studio-compass-needle-north` | `#ffe500` | 3D view compass: north half of the needle. |
+| `--studio-compass-needle-south` | `#6b6b6b` | 3D view compass: south half of the needle. |
+| `--studio-compass-focus` | `#ffe500` | 3D view compass: keyboard focus ring. |
 | `--building-solar-neutral` | `#ffffff` | Single neutral building fill in the 3D viewport while the sun path and compass are on (screen only). |
 | `--heliodon-dial-disc` | `#e8e2d8` | Faint ground disc under the heliodon dial at about 35% opacity (screen only). |
 | `--shadow-fill` | `#4a5a70` | Site-plan building shadows on the site plan (20% opacity). |
@@ -221,6 +235,13 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--sun-study-path-edge` | `#d4d4d0` | Sun study muted base plan (on by default with the sun study; toggle off in the Sun panel): footpath edge. |
 | `--sun-study-building` | `#ffffff` | Sun study muted base plan (on by default with the sun study; toggle off in the Sun panel): buildings (the site building keeps its own colour). |
 | `--sun-study-tree` | `#b8e0b0` | Tree crowns in the sun study muted base plan, at 50% opacity. Pastel green so trees stay visible under the hourly shadows. |
+| `--sun-hours-direct-0` | `#313695` | Direct sun hours 0 h (blue). |
+| `--sun-hours-direct-15` | `#4575b4` | Direct sun hours low blue. |
+| `--sun-hours-direct-30` | `#a5006a` | Direct sun hours purple. |
+| `--sun-hours-direct-50` | `#d73027` | Direct sun hours red mid. |
+| `--sun-hours-direct-70` | `#f46d43` | Direct sun hours orange. |
+| `--sun-hours-direct-90` | `#fdae61` | Direct sun hours light orange. |
+| `--sun-hours-direct-max` | `#fee825` | Direct sun hours max (yellow). |
 | `--axo-water` | `#7eb8da` | Exploded axo floodplain / water layer. |
 | `--axo-road` | `#e8883a` | Exploded axo roads layer. |
 | `--axo-green` | `#8fbc8f` | Exploded axo green spaces layer. |

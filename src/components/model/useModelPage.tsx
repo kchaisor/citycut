@@ -1,4 +1,4 @@
-import { sunStudyCasterModel, sunStudyShadowCasters, SunStudyDate } from "../../lib/sunStudyPlan";
+import { sunStudyCasterModel, sunStudyMutedOn, sunStudyShadowCasters, SunStudyDate } from "../../lib/sunStudyPlan";
 
 import { sunStudyLayersFor } from "../useSunStudyShadows";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
@@ -156,11 +156,7 @@ import { useWindStreakMotion } from "../../lib/windStreakMotion";
 import type { SitePlanExportOptions } from "../../lib/aiPlan";
 import type { PlanShadowInput } from "../../lib/buildingShadows";
 import type { HeliodonDiagramExportOptions, HeliodonGroundExportOptions } from "../../lib/heliodonDiagram";
-import {
-  readStoredHeliodonRadiusFactor,
-  resolveHeliodonRadiusFactor,
-  writeStoredHeliodonRadiusFactor,
-} from "../../lib/heliodonRadius";
+import { writeStoredHeliodonRadiusFactor } from "../../lib/heliodonRadius";
 import type { SolarViewSettings } from "../SolarHeliodon";
 import {
   isLayer3dVisible,
@@ -174,6 +170,9 @@ import { readStoredRenderQuality, writeStoredRenderQuality, type RenderQuality }
 
 import { shouldShowIntroBridgePill } from "./shouldShowIntroBridgePill";
 import { loadView } from "./loadModelView";
+import { initialSolarSettings } from "./initialSolarSettings";
+import { useSunHoursGround } from "../useSunHoursGround";
+import { SOLAR_SLIDER_END_MIN, SOLAR_SLIDER_START_MIN, clampSolarSliderMinutes } from "../../lib/solarSlider";
 import {
   SECTION_ICONS,
   iconProps,
@@ -186,6 +185,8 @@ export type ModelPageProps = {
   onNewCut: () => void;
   commandBarOpen?: boolean;
 };
+
+const SITE_INTEL_STORAGE_KEY = "citycut.siteIntelligence";
 
 export function useModelPage({
   model,
@@ -225,7 +226,9 @@ export function useModelPage({
   const [exportError, setExportError] = useState<string | null>(null);
   const [busy, setBusy] = useState<ExportBusy>(null);
   const [topbarExportOpen, setTopbarExportOpen] = useState(false);
+  const [topbarLayout, setTopbarLayout] = useState<"centered" | "flow">("flow");
   const topbarExportRef = useRef<HTMLDivElement>(null);
+  const topbarExportTriggerRef = useRef<HTMLButtonElement>(null);
   const cutDimLabel = useMemo(
     () =>
       cutSizeLabel(model.sideM, model.frameShape ?? "square", {
@@ -243,7 +246,9 @@ export function useModelPage({
       setTopbarExportOpen(false);
     };
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setTopbarExportOpen(false);
+      if (event.key !== "Escape") return;
+      setTopbarExportOpen(false);
+      topbarExportTriggerRef.current?.focus();
     };
     document.addEventListener("pointerdown", onPointer);
     document.addEventListener("keydown", onKey);
@@ -272,6 +277,20 @@ export function useModelPage({
   const [sidebar, dispatchSidebar] = useReducer(reduceSidebar, undefined, initialSidebarState);
   const [hiddenBuildingUses, setHiddenBuildingUses] = useState<Set<BuildingUse>>(() => new Set());
   const [sidebarCollapsed, setSidebarCollapsed] = useSidebarCollapsed();
+  const [siteIntelOpen, setSiteIntelOpen] = useState<boolean>(() => {
+    try {
+      return window.localStorage.getItem(SITE_INTEL_STORAGE_KEY) !== "off";
+    } catch {
+      return true;
+    }
+  });
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(SITE_INTEL_STORAGE_KEY, siteIntelOpen ? "on" : "off");
+    } catch {
+      return;
+    }
+  }, [siteIntelOpen]);
   const sidebarModelRef = useRef(model);
   useEffect(() => {
     if (sidebarModelRef.current === model) return;
@@ -313,6 +332,7 @@ export function useModelPage({
   }, [tab, model]);
   const [snapId, setSnapId] = useState(0);
   const cameraMemory = useMemo<CameraMemoryRef>(() => ({ current: null }), [model]);
+  const introPlayed = useMemo<{ current: string | null }>(() => ({ current: null }), [model]);
   const [view3dDisplay, setView3dDisplay] = useState<View3dDisplaySettings>(() => {
     const next = view3dDisplayForModelOpen(window.localStorage);
     writeStoredView3dDisplay(window.localStorage, next);
@@ -359,19 +379,9 @@ export function useModelPage({
   const [siteWind, setSiteWind] = useState<SiteWindSelection | null>(null);
   const [windNote, setWindNote] = useState<string | null>(null);
   const windMotion = useWindStreakMotion();
-  const [solar, setSolar] = useState<SolarViewSettings>(() => ({
-    showPath: capturePresetFromSearch(window.location.search).solarPath,
-    castShadows: false,
-    radiusFactor: resolveHeliodonRadiusFactor(
-      readStoredHeliodonRadiusFactor(window.localStorage),
-      window.location.search,
-    ),
-    year: 2026,
-    month: 9,
-    day: 22,
-    hour: 15,
-    minute: 0,
-  }));
+  const [solar, setSolar] = useState<SolarViewSettings>(() =>
+    initialSolarSettings(window.location.search, window.localStorage),
+  );
 
   function commitSolar(next: SolarViewSettings) {
     writeStoredHeliodonRadiusFactor(window.localStorage, next.radiusFactor);
@@ -438,6 +448,8 @@ export function useModelPage({
       colourBySource: showSource,
       highlightManual: showManualEdits && overrideResult.manualCount > 0,
       sunStudyDate: solar.sunStudy ? sunStudyDate : null,
+      sunStudyMuted: solar.sunStudy ? sunStudyMutedOn(solar.sunStudy, solar.sunStudyMuted) : undefined,
+      sunStudySelected: solar.sunStudy ? sunStudySelected : undefined,
       wind:
         windSettings.enabled && siteWind
           ? { selection: siteWind, period: windSettings.period }
@@ -594,7 +606,7 @@ export function useModelPage({
   const [hideSelection, setHideSelection] = useState<number[]>([]);
   const [sceneSelection, setSceneSelection] = useState<SceneSelection | null>(null);
   const [inspectHudScreen, setInspectHudScreen] = useState<InspectHudScreen | null>(null);
-  const [compassNeedleDeg, setCompassNeedleDeg] = useState(0);
+  const [compassHeadingDeg, setCompassHeadingDeg] = useState(0);
 
   const massing = useImportedMassing(model);
 
@@ -1086,6 +1098,13 @@ export function useModelPage({
       contours: contoursVisible ? displayModel.contours : false,
     };
   }, [displayModel, massing.drawingBuildings, massing.drawingUpperLevels, view3dDisplay]);
+  const sunHoursGround = useSunHoursGround(
+    tab === "drawing" ? drawingModel : displayModel,
+    solar.year,
+    solar.month,
+    solar.day,
+    Boolean(solar.sunHours),
+  );
 
   useEffect(() => {
     qaDisplayBuildingsRef.current = displayModel.buildings;
@@ -1375,14 +1394,12 @@ export function useModelPage({
     if (!consolePlaying) return;
     let raf = 0;
     let last = performance.now();
-    let minutesFloat = solar.hour * 60 + solar.minute;
-    const minM = consoleDaylight.sunrise;
-    const maxM = consoleDaylight.sunset;
+    let minutesFloat = clampSolarSliderMinutes(solar.hour * 60 + solar.minute);
     const step = (now: number) => {
       const dt = Math.min(0.1, (now - last) / 1000);
       last = now;
       minutesFloat += dt * 72;
-      if (minutesFloat > maxM) minutesFloat = minM;
+      if (minutesFloat > SOLAR_SLIDER_END_MIN) minutesFloat = SOLAR_SLIDER_START_MIN;
       const rounded = Math.round(minutesFloat);
       const hour = Math.floor(rounded / 60);
       const minute = rounded % 60;
@@ -1391,7 +1408,7 @@ export function useModelPage({
     };
     raf = requestAnimationFrame(step);
     return () => cancelAnimationFrame(raf);
-  }, [consolePlaying, consoleDaylight.sunrise, consoleDaylight.sunset]);
+  }, [consolePlaying]);
 
   function selectSection(id: string) {
     if (id === "solar" || id === "wind" || id === "view") setAnalysisKind(id);
@@ -2094,6 +2111,33 @@ export function useModelPage({
     };
   }, [tab]);
 
+  useEffect(() => {
+    const root = modelRootRef.current;
+    if (!root) return;
+    const barGap = 16;
+    const measure = () => {
+      const left = root.querySelector(".top-bar-left");
+      const center = root.querySelector(".top-bar-center");
+      const right = root.querySelector(".top-bar-right");
+      if (!(left instanceof HTMLElement) || !(center instanceof HTMLElement) || !(right instanceof HTMLElement)) {
+        return;
+      }
+      const inner = window.innerWidth - 28;
+      const compass = center.querySelector(".studio-compass");
+      const compassSpan = compass instanceof HTMLElement ? compass.offsetWidth + 8 : 0;
+      const bundle = center.offsetWidth + 2 * (Math.max(left.offsetWidth, right.offsetWidth) + compassSpan) + barGap * 2;
+      setTopbarLayout(bundle <= inner + 0.5 ? "centered" : "flow");
+    };
+    measure();
+    const observer = new ResizeObserver(() => measure());
+    observer.observe(root);
+    window.addEventListener("resize", measure);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  }, [tab, drawing, view.projection, view.freeRotate, cutDimLabel, topbarExportOpen, busy, sourcesLoaded.loaded]);
+
   return {
     analysisKind,
     annotatedAppliedBuildings,
@@ -2103,6 +2147,7 @@ export function useModelPage({
     buildingsAsMesh,
     busy,
     cameraMemory,
+    introPlayed,
     colourByUse,
     comFetchBounds,
     comFootprintFetchError,
@@ -2121,7 +2166,7 @@ export function useModelPage({
     commitView,
     commitView3dDisplay,
     commitWind,
-    compassNeedleDeg,
+    compassHeadingDeg,
     consoleDaylight,
     consolePlaying,
     consoleSun,
@@ -2245,7 +2290,7 @@ export function useModelPage({
     setComFootprints,
     setComHeightBuildings,
     setComHeightsApplyFailed,
-    setCompassNeedleDeg,
+    setCompassHeadingDeg,
     setConsolePlaying,
     setDrawing,
     setExplodedViewport,
@@ -2289,12 +2334,15 @@ export function useModelPage({
     showTrees,
     sidebar,
     sidebarCollapsed,
+    siteIntelOpen,
+    setSiteIntelOpen,
     sidebarModelRef,
     sitePlanExportOptions,
     snapId,
     solar,
     sourceCounts,
     sourcesLoaded,
+    sunHoursGround,
     sunStudyDate,
     sunStudyExportLayers,
     sunStudyProgress,
@@ -2303,6 +2351,8 @@ export function useModelPage({
     tierCounts,
     topbarExportOpen,
     topbarExportRef,
+    topbarExportTriggerRef,
+    topbarLayout,
     uniform,
     unmatchedEdits,
     useCounts,

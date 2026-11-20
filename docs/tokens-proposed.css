@@ -1,0 +1,146 @@
+/* Reference only. Not imported by the app yet; see DESIGN-SYSTEM.md. */
+/*
+  CityCut design tokens: proposal v1 (17 Nov 2026), matches DESIGN-SYSTEM.md.
+  For Webwright: merge into the existing :root blocks in src/theme.css (chrome)
+  and src/floating.css (Studio HUD). Existing names are reused; new names are new.
+  Fills stay in src/colours.css and lines in src/drawing-style.css. Not duplicated here.
+*/
+:root {
+  /* Fonts */
+  --sans: "Geist", -apple-system, BlinkMacSystemFont, sans-serif;
+  --mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --display: "Outfit", "Geist", sans-serif;           /* wordmark + Create model only */
+  --font-sans: var(--sans);
+  --font-mono: var(--mono);
+  --font-display: var(--display);
+
+  /* Type scale: base 13, dense 1px steps below, 1.25 above */
+  --fs-micro: 10px;    --lh-micro: 12px;   --ls-micro: 0.08em;
+  --fs-caption: 11px;  --lh-caption: 16px;
+  --fs-sm: 12px;       --lh-sm: 16px;
+  --fs-body: 13px;     --lh-body: 20px;
+  --fs-title: 16px;    --lh-title: 20px;   --ls-title: -0.02em;
+  --fs-stat: 20px;     --lh-stat: 24px;
+  --fs-display: 24px;  --lh-display: 28px;
+  --fw-regular: 400;
+  --fw-medium: 500;
+  --fw-semibold: 600;
+  --fw-bold: 700;
+  --font-size-card: var(--fs-title);
+  --font-size-stat: var(--fs-stat);
+  --font-size-title: var(--fs-display);
+
+  /* Surfaces */
+  --bg-card: rgb(252 251 249 / 94%);
+  --bg-elev: #FFFFFF;
+  --bg-sub: #F2F1EC;
+  --track-bg: var(--bg-sub);
+  --hud-track-bg: var(--bg-sub);
+  --hud-kpi-bg: var(--bg-sub);
+  --hud-sub-toggle-bg: var(--bg-sub);
+  --hud-blur: blur(18px) saturate(150%);
+
+  /* Ink */
+  --ink: #141413;
+  --ink-2: #4A4945;
+  --ink-3: #6B6963;
+  --ink-muted: var(--ink-3);
+  --hud-muted: var(--ink-2);
+  --on-ink: #FFFFFF;
+
+  /* Accent: fill only, always with an --ink edge */
+  --accent: #FFF500;
+  --accent-ink: var(--ink);
+  --accent-edge: var(--ink);
+  --accent-hover: #FFF9A6;
+
+  /* Lines */
+  --border-outer: rgb(20 20 19 / 13%);
+  --border-subtle: rgb(20 20 19 / 8%);
+  --edge-accent: inset 0 0 0 1px var(--ink);
+  --edge-control-off: inset 0 0 0 1px var(--ink-3);
+  --focus-ring-color: var(--ink);
+  --focus-ring-width: 2px;
+  --focus-ring-offset: 2px;
+  --focus-halo: 0 0 0 2px var(--bg-elev);
+
+  /* Status */
+  --status-ok: #478C33;
+  --status-ok-text: #2E6B4F;
+  --status-failed: #8D3418;
+  --danger: var(--status-failed);
+  --status-warn: #D97724;
+  --hud-zone-orange: var(--status-warn);
+  --status-idle: #B8B2A7;
+
+  /* Spacing: 4pt grid; 2 and 6 only inside controls */
+  --space-0-5: 2px;
+  --space-1: 4px;
+  --space-1-5: 6px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --hud-inset: 14px;
+  --hud-gap: 8px;
+  --panel-pad: var(--space-3);
+
+  /* Radius */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-pill: 999px;
+
+  /* Elevation */
+  --shadow-raised: 0 1px 2px rgb(20 20 19 / 8%);
+  --shadow-hud: 0 8px 28px -6px rgb(20 20 19 / 12%), 0 2px 6px -1px rgb(20 20 19 / 6%), inset 0 1px 0 0 rgb(255 255 255 / 85%);
+  --shadow-cta: 0 6px 16px rgb(255 245 0 / 35%), 0 2px 4px rgb(0 0 0 / 8%);
+
+  /* Control sizes */
+  --control-xs: 24px;
+  --control-sm: 28px;
+  --control-md: 32px;
+  --control-lg: 44px;
+  --hud-bar-h: 42px;
+  --icon-sm: 16px;
+
+  /* Layout (Studio HUD) */
+  --hud-rail-w: 52px;
+  --hud-outliner-w: 248px;
+  --hud-inspector-w: 268px;
+  --hud-panel-top: calc(var(--hud-inset) + var(--hud-bar-h) + var(--space-3));
+  --hud-panel-max-h: calc(100vh - 134px);
+  --bottom-bar-h: 40px;
+  --env-console-min-w: min(720px, calc(100vw - 32px));
+  --env-console-min-h: 76px;
+  --omnibox-w: 540px;
+
+  /* Z-index */
+  --z-frame-tag: 20;
+  --z-hud: 30;
+  --z-hud-over: 32;
+  --z-popover: 40;
+  --z-toast: 50;
+  --z-modal: 100;
+
+  /* Motion */
+  --dur-fast: 120ms;
+  --dur-base: 200ms;
+  --dur-slow: 300ms;
+  --dur-reveal: 600ms;
+  --stagger-reveal: 267ms;
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-base: 0ms;
+    --dur-slow: 0ms;
+    --dur-reveal: 0ms;
+    --stagger-reveal: 0ms;
+  }
+}

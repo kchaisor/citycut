@@ -84,10 +84,9 @@ import {
   applyPrimaryViewportTint,
   snapshotPrimaryViewportColors,
   applyCanvasRoadTint,
-  primaryViewportLighting,
 } from "../lib/primaryViewport";
 import { applyWhiteCardGroundTint, snapshotWhiteCardTerrainColors } from "../lib/whiteCardViewport";
-import { studioNorthNeedleDeg } from "../lib/studioCompass";
+import { studioCameraHeadingDeg } from "../lib/studioCompass";
 import {
   DEFAULT_PERSPECTIVE_OFFSET,
   heliodonSceneBounds,
@@ -99,8 +98,11 @@ import {
   perspectiveClipFar,
 } from "../lib/perspectiveViewportFit";
 import { heliodonRadiusM } from "../lib/heliodonRadius";
-import { sunStudyViewportLighting } from "../lib/sunStudyViewport";
+import { studioSceneLighting } from "../lib/sunStudyViewport";
+import { applySolarGreyscale } from "../lib/solarGreyscale";
 import { SunHoursLayer } from "./SunHoursLayer";
+import type { SunHoursDirectOverlay } from "../lib/sunHoursDirectAssess";
+import type { SunHoursGroundGrid } from "../lib/sunHoursGroundPlan";
 import { SectionKnifeScene } from "./SectionKnifeScene";
 import { selectedKnife, type SectionKnifeToolState } from "../lib/sectionKnife/state";
 import type { SectionKnifePose } from "../lib/sectionKnife/plane";
@@ -109,8 +111,6 @@ import {
   type SectionKnifeGizmoInteraction,
 } from "../lib/sectionKnife/gizmoHit";
 import type { WalkRippleBuildingTint } from "../lib/walkRippleBuildingTint";
-
-const SUN_HOURS_HEATMAP_ENABLED = false;
 import { SolarHeliodon, SolarLight, useMelbourneSunSample, type SolarViewSettings } from "./SolarHeliodon";
 import { GroundWindFlow } from "./GroundWindFlow";
 import { createWindPlanTransformStore, WindPlanOverlay, WindPlanProjector } from "./WindPlanOverlay";
@@ -120,6 +120,7 @@ import type { WindPeriodId } from "../lib/windRose";
 import type { SiteWindSelection } from "../lib/windRoseData";
 import { analyzeSiteWind } from "../lib/windRoseStats";
 import type { CityModel } from "../types";
+import { introAlreadyPlayedForCut, markIntroPlayedForCut, modelCutSiteId } from "../lib/introPlayed";
 
 export type SceneExporter = {
   png: () => Promise<Blob>;
@@ -282,7 +283,7 @@ function SceneDemandBootstrap() {
   return null;
 }
 
-function SceneFrameloopGate() {
+function SceneFrameloopGate({ introSkip }: { introSkip: boolean }) {
   const set = useThree((state) => state.set);
   const invalidate = useThree((state) => state.invalidate);
   const frameloopMode = () =>
@@ -290,27 +291,52 @@ function SceneFrameloopGate() {
       ? "always"
       : "demand";
   useLayoutEffect(() => {
-    if (!shouldRunIntroTransition()) {
+    if (!shouldRunIntroTransition() || introSkip) {
       set({ frameloop: frameloopMode() });
       invalidate();
     }
-  }, [set, invalidate]);
+  }, [set, invalidate, introSkip]);
   useEffect(() => {
-    if (!shouldRunIntroTransition()) return;
+    if (!shouldRunIntroTransition() || introSkip) return;
     const onIntroDone = () => {
       set({ frameloop: frameloopMode() });
       invalidate();
     };
     window.addEventListener("citycut:intro-done", onIntroDone);
     return () => window.removeEventListener("citycut:intro-done", onIntroDone);
-  }, [set, invalidate]);
+  }, [set, invalidate, introSkip]);
   return null;
 }
 
-function StudioCompassTracker({ onNeedle }: { onNeedle: (deg: number) => void }) {
+type SceneFrameloop = "always" | "demand" | "never";
+
+function ScenePause({ active }: { active: boolean }) {
+  const set = useThree((state) => state.set);
+  const invalidate = useThree((state) => state.invalidate);
+  const frameloop = useThree((state) => state.frameloop) as SceneFrameloop;
+  const resumeTo = useRef<SceneFrameloop | null>(null);
+  useLayoutEffect(() => {
+    if (!active) {
+      if (frameloop !== "never") {
+        resumeTo.current = frameloop;
+        set({ frameloop: "never" });
+      }
+      return;
+    }
+    if (resumeTo.current) {
+      const next = resumeTo.current;
+      resumeTo.current = null;
+      set({ frameloop: next });
+    }
+    invalidate();
+  }, [active, frameloop, set, invalidate]);
+  return null;
+}
+
+function StudioCompassTracker({ onHeading }: { onHeading: (deg: number) => void }) {
   const camera = useThree((state) => state.camera);
   useFrame(() => {
-    onNeedle(studioNorthNeedleDeg(camera));
+    onHeading(studioCameraHeadingDeg(camera));
   });
   return null;
 }
@@ -507,7 +533,10 @@ function City({
   colourBySource,
   highlightManual,
   solarDiagramOn,
+  directSunHoursOn,
   solarNeutralFill,
+  solarGreyscale,
+  solarShadowsActive,
   heightEditBuildingId,
   selectedBuildingIds,
   display,
@@ -523,13 +552,18 @@ function City({
   walkRippleTint,
   walkRippleArrivals,
   windFlowActive = false,
+  introSkip,
+  introPlayed,
 }: {
   model: CityModel;
   uniformBuildings: boolean;
   colourBySource: boolean;
   highlightManual: boolean;
   solarDiagramOn: boolean;
+  directSunHoursOn: boolean;
   solarNeutralFill: string;
+  solarGreyscale: boolean;
+  solarShadowsActive: boolean;
   heightEditBuildingId: number | null;
   selectedBuildingIds?: readonly number[];
   display: View3dDisplaySettings;
@@ -545,6 +579,8 @@ function City({
   walkRippleTint?: WalkRippleBuildingTint | null;
   walkRippleArrivals?: Map<number, number> | null;
   windFlowActive?: boolean;
+  introSkip: boolean;
+  introPlayed?: { current: string | null };
 }) {
   const onBoundsRef = useRef(onBounds);
   onBoundsRef.current = onBounds;
@@ -558,7 +594,7 @@ function City({
     [uniformBuildings, colourBySource],
   );
   const group = useMemo(() => {
-    const introStagger = shouldRunIntroTransition();
+    const introStagger = shouldRunIntroTransition() && !introSkip;
     const city = buildCityGroup(model, { uniformBuildings, colourBySource, highlightManual, introStagger });
     const plinth = city.getObjectByName("BasePlinth");
     const ground = city.getObjectByName("Ground");
@@ -621,6 +657,7 @@ function City({
     uniformBuildings,
     colourBySource,
     highlightManual,
+    introSkip,
   ]);
   useLayoutEffect(() => {
     onBoundsRef.current(measureCity(group));
@@ -635,7 +672,7 @@ function City({
     steadyFrames?: number;
     targets: Array<{ obj: THREE.Object3D; pivotY: number; kind: "building" | "tree"; bucket: number }>;
   } | null>(null);
-  const cutKey = `${model.center.lat.toFixed(5)},${model.center.lon.toFixed(5)},${model.sideM}`;
+  const cutKey = modelCutSiteId(model.center, model.sideM);
   const introScene = useThree((state) => state.scene);
   const invalidate = useThree((state) => state.invalidate);
   useLayoutEffect(() => {
@@ -676,7 +713,7 @@ function City({
       targets.push({ obj: object, pivotY, kind: "building", bucket });
     }
     const cutRingObj = group.getObjectByName("IntroCutRing") as THREE.LineSegments | undefined;
-    if (!shouldRunIntroTransition() || targets.length === 0) {
+    if (!shouldRunIntroTransition() || introSkip || targets.length === 0) {
       for (const { obj } of targets) {
         obj.scale.y = 1;
         obj.position.y = 0;
@@ -730,7 +767,7 @@ function City({
     introRef.current = { cutKey, elapsedSec: 0, frameCount: 0, done: false, webglReadyDispatched: false, targets };
     introScene.userData[INTRO_ACTIVE_KEY] = true;
     invalidate();
-  }, [group, cutKey, introScene, invalidate]);
+  }, [group, cutKey, introScene, invalidate, introSkip]);
   useFrame((state, delta) => {
     const intro = introRef.current;
     if (!intro || intro.done) return;
@@ -880,6 +917,7 @@ function City({
     ds.introTreeScale = treeScale.toFixed(3);
     if (done) {
       intro.done = true;
+      if (introPlayed) markIntroPlayedForCut(introPlayed, intro.cutKey);
       state.scene.userData[INTRO_ACTIVE_KEY] = false;
       if (typeof window !== "undefined") {
         window.dispatchEvent(new CustomEvent("citycut:intro-done"));
@@ -895,7 +933,7 @@ function City({
     snapshotPrimaryViewportColors(group, colourMode);
     snapshotWhiteCardTerrainColors(group);
     applySunStudySurfaceTint(group, false);
-    applyBuildingSolarNeutral(group, false, solarNeutralFill);
+    applyBuildingSolarNeutral(group, solarDiagramOn || directSunHoursOn, solarNeutralFill);
     applyPrimaryViewportTint(group, display.primaryView);
     if (display.primaryView) {
       applyWhiteCardGroundTint(group, false);
@@ -909,8 +947,21 @@ function City({
       applyCanvasRoadTint(group, "off");
       applyWhiteCardGroundTint(group, false);
     }
+    if (solarShadowsActive) applyCanvasRoadTint(group, "off");
+    applySolarGreyscale(group, solarGreyscale);
     invalidate();
-  }, [group, colourMode, solarDiagramOn, solarNeutralFill, colourTick, display.primaryView, invalidate]);
+  }, [
+    group,
+    colourMode,
+    solarDiagramOn,
+    directSunHoursOn,
+    solarNeutralFill,
+    solarGreyscale,
+    solarShadowsActive,
+    colourTick,
+    display.primaryView,
+    invalidate,
+  ]);
   const buildingsVisible = isLayer3dVisible(display, "buildings");
   const roadsVisible = isLayer3dVisible(display, "roads");
   const footpathsVisible = isLayer3dVisible(display, "footpaths");
@@ -1623,6 +1674,9 @@ function CameraReadout({
     const controls = orthoView ? orthoControls.current : perspControls.current;
     if (!controls) return;
     publishCamera(camera, controls.target, gl.domElement);
+    gl.domElement.dataset.camBearing = studioCameraHeadingDeg(camera).toFixed(4);
+    const dist = camera.position.distanceTo(controls.target);
+    gl.domElement.dataset.camDistance = dist.toFixed(4);
   });
   return null;
 }
@@ -2157,8 +2211,14 @@ export function Scene3D({
   onScenePoint = null,
   sectionKnife = null,
   onSectionKnifePoseChange = undefined,
-  onCompassNeedle = undefined,
+  onCompassHeading = undefined,
   quality = "high",
+  sunHoursGroundGrid = null,
+  sunHoursDirectOverlay = null,
+  sunHoursScaleMax = 0,
+  solarAnalysisActive = false,
+  introPlayed,
+  active = true,
 }: {
   model: CityModel;
   windModel?: CityModel;
@@ -2194,9 +2254,20 @@ export function Scene3D({
   onScenePoint?: ((east: number, north: number, up: number) => void) | null;
   sectionKnife?: SectionKnifeToolState | null;
   onSectionKnifePoseChange?: (pose: SectionKnifePose) => void;
-  onCompassNeedle?: (deg: number) => void;
+  onCompassHeading?: (deg: number) => void;
   quality?: RenderQuality;
+  sunHoursGroundGrid?: SunHoursGroundGrid | null;
+  sunHoursDirectOverlay?: SunHoursDirectOverlay | null;
+  sunHoursScaleMax?: number;
+  solarAnalysisActive?: boolean;
+  introPlayed?: { current: string | null };
+  active?: boolean;
 }) {
+  const sceneCutKey = modelCutSiteId(model.center, model.sideM);
+  const introSkip = useMemo(
+    () => introAlreadyPlayedForCut(introPlayed?.current ?? null, sceneCutKey),
+    [introPlayed, sceneCutKey],
+  );
   const boundsRef = useRef<Aabb | null>(null);
   const windPlanStore = useMemo(() => createWindPlanTransformStore(), []);
   const windPlanOn = windPlan?.active === true;
@@ -2241,16 +2312,14 @@ export function Scene3D({
     setGlContextLost(false);
     setGlEpoch((value) => value + 1);
   }, []);
-  const viewportLight = sunStudyViewportLighting({
-    showPath: solar.showPath && !display.primaryView,
+  const { fillKeyLight, fillAmbient, fillHemi, sunIntensity, noToneMapping } = studioSceneLighting({
+    primaryView: display.primaryView,
+    showPath: solar.showPath,
     castShadows: solar.castShadows,
+    solarAnalysisActive,
+    sunAboveHorizon: sunSample.aboveHorizon,
   });
-  const primaryLight = primaryViewportLighting(display.primaryView);
-  const fillKeyLight = display.primaryView ? primaryLight.fillKeyLight : viewportLight.fillKeyLight;
-  const fillAmbient = display.primaryView ? primaryLight.fillAmbient : viewportLight.fillAmbient;
-  const fillHemi = display.primaryView ? primaryLight.fillHemi : viewportLight.fillHemi;
-  const { sunIntensity, noToneMapping: sunStudyNoToneMapping } = viewportLight;
-  const noToneMapping = sunStudyNoToneMapping || display.primaryView;
+  const solarShadowsActive = solarAnalysisActive && solar.castShadows && sunSample.aboveHorizon;
   const heliodonRadius = heliodonRadiusM(model.sideM, solar.radiusFactor);
   const shadowTargetY = groundY;
   const siteTopY = useMemo(() => {
@@ -2292,7 +2361,8 @@ export function Scene3D({
         <ViewInset />
         <WebGlContextWatch onContextLost={onGlContextLost} onContextRestored={onGlContextRestored} />
         <SceneDemandBootstrap />
-        <SceneFrameloopGate />
+        <SceneFrameloopGate introSkip={introSkip} />
+        <ScenePause active={active} />
         <AdaptiveViewportDpr />
         <SceneContinuousBridge
           windAnimate={windEnabled && windAnimateStreaks && !windPlanOn}
@@ -2328,16 +2398,26 @@ export function Scene3D({
         targetY={shadowTargetY}
         topY={siteTopY}
       />
-      {SUN_HOURS_HEATMAP_ENABLED && solar.sunHours && (
-        <SunHoursLayer model={model} year={solar.year} month={solar.month} day={solar.day} groundY={groundY} />
-      )}
+      {solar.sunHours && sunHoursGroundGrid ? (
+        <SunHoursLayer
+          grid={sunHoursGroundGrid}
+          overlay={null}
+          scaleMaxHours={sunHoursScaleMax || sunHoursGroundGrid.maxSunHours}
+          model={model}
+          planView={projection === "plan"}
+          groundOnly
+        />
+      ) : null}
       <City
         model={model}
         uniformBuildings={uniformBuildings}
         colourBySource={colourBySource}
         highlightManual={showManualEdits && model.manualHeightEditCount !== undefined && model.manualHeightEditCount > 0}
         solarDiagramOn={solar.showPath}
+        directSunHoursOn={Boolean(solar.sunHours && sunHoursDirectOverlay)}
         solarNeutralFill={solarNeutralFill}
+        solarGreyscale={solarAnalysisActive}
+        solarShadowsActive={solarShadowsActive}
         onBounds={onBounds}
         onSceneInspectPick={onSceneInspectPick}
         onClearSceneInspect={onClearSceneInspect}
@@ -2353,7 +2433,19 @@ export function Scene3D({
         walkRippleTint={walkRippleTint}
         walkRippleArrivals={walkRippleArrivals}
         windFlowActive={windEnabled}
+        introSkip={introSkip}
+        introPlayed={introPlayed}
       />
+      {solar.sunHours && sunHoursGroundGrid && sunHoursDirectOverlay ? (
+        <SunHoursLayer
+          grid={sunHoursGroundGrid}
+          overlay={sunHoursDirectOverlay}
+          scaleMaxHours={sunHoursScaleMax || sunHoursGroundGrid.maxSunHours}
+          model={model}
+          planView={projection === "plan"}
+          surfacesOnly
+        />
+      ) : null}
       {importedMassing ? <primitive object={importedMassing} /> : null}
       {walkLayer ? <primitive object={walkLayer} /> : null}
       {walkRippleLayer ? <primitive object={walkRippleLayer} /> : null}
@@ -2371,7 +2463,7 @@ export function Scene3D({
         enabled={inspectAnchor != null}
         onScreen={onInspectHudScreen}
       />
-      {onCompassNeedle ? <StudioCompassTracker onNeedle={onCompassNeedle} /> : null}
+      {onCompassHeading ? <StudioCompassTracker onHeading={onCompassHeading} /> : null}
       <WindLayer
         model={windModel ?? model}
         siteWind={siteWind}
@@ -2399,7 +2491,7 @@ export function Scene3D({
         lat={model.center.lat}
         lon={model.center.lon}
         cameraMemory={cameraMemory}
-        introEnabled
+        introEnabled={!introSkip}
         gizmoOrbitLock={sectionKnifeGizmoInteraction.orbitLock}
       />
       </Canvas>

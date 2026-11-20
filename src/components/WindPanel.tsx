@@ -60,15 +60,6 @@ export function WindPanel({
             ))}
           </select>
         </label>
-        <label className="check-field">
-          <input
-            type="checkbox"
-            checked={settings.showRose}
-            disabled={!settings.enabled}
-            onChange={(event) => patch({ showRose: event.target.checked })}
-          />
-          Show rose
-        </label>
         {settings.enabled && streaksPaused && onAnimateAnyway && (
           <WindReducedMotionNote
             animateAnyway={animateAnyway}
