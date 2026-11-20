@@ -103,6 +103,7 @@ describe("WindPlanRows water note", () => {
     scaleMaxMs: 4,
     speed: null,
     comfort: null,
+    comfortShares: null,
   };
 
   it("makes no claim about wind over water, which the plan leaves unpainted", () => {

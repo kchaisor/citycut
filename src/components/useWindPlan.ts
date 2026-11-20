@@ -5,6 +5,8 @@ import type { SiteWindSelection, WindRoseSeasonId } from "../lib/windRoseData";
 import type { DesignWind, DesignWindId } from "../lib/windDesignWinds";
 import { seasonRecord } from "../lib/windRoseStats";
 import { windSeasonWeights, type WindSeasonWeights } from "../lib/windComfort";
+import { comfortShares, type ComfortShares } from "../lib/windComfortShares";
+import { windPlanSiteClip } from "../lib/windPlanSiteClip";
 import {
   cachedWindPlanComfort,
   cachedWindPlanScale,
@@ -58,6 +60,7 @@ export type WindPlanState = {
   scaleMaxMs: number | null;
   speed: WindPlanSpeed | null;
   comfort: WindPlanComfort | null;
+  comfortShares: ComfortShares | null;
 };
 
 function seasonKey(siteWind: SiteWindSelection, period: WindPeriodId | DesignWindId): string {
@@ -198,6 +201,7 @@ export function useWindPlan({
   }, [active, key, speedKey, weights, sector, referenceMs, mode, model, scaleViews]);
 
   const hasData = weights != null && weights.bins.length > 0;
+  const shares = useMemo(() => (comfort ? comfortShares(comfort, windPlanSiteClip(model).rings) : null), [comfort, model]);
   const ready = mode === "speed" ? speed != null || (hasData && referenceMs == null) : comfort != null;
 
   useEffect(() => {
@@ -235,5 +239,6 @@ export function useWindPlan({
     scaleMaxMs,
     speed,
     comfort,
+    comfortShares: shares,
   };
 }

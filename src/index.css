@@ -2075,27 +2075,56 @@ input[type="range"]::-moz-range-thumb {
 .wind-plan-unsafe.is-flagged {
   color: var(--status-failed);
 }
-.wind-plan-swatches {
-  margin: 0;
+.wind-plan-comfort-bar {
+  display: flex;
+  width: 100%;
+  height: 8px;
+  border-radius: 2px;
+  overflow: hidden;
+}
+.wind-plan-comfort-bar > span {
+  flex: 1 1 0;
+}
+.wind-plan-comfort-ticks > span {
+  transform: translateX(-50%);
+}
+.wind-plan-comfort-shares {
+  margin: 8px 0 0;
   padding: 0;
   list-style: none;
   display: grid;
-  gap: 4px;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 12px;
   font-family: var(--sans);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 500;
   line-height: 16px;
   color: var(--ink);
 }
-.wind-plan-swatches li {
+.wind-plan-comfort-shares li {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
+  min-width: 0;
+}
+.wind-plan-comfort-shares li:last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+}
+.wind-plan-comfort-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  white-space: nowrap;
+}
+.wind-plan-comfort-share {
+  flex: 0 0 auto;
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-2);
 }
 .wind-plan-swatch {
   flex: 0 0 auto;
-  width: 20px;
-  height: 12px;
+  width: 12px;
+  height: 8px;
   border-radius: 2px;
   box-sizing: border-box;
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--wind-plan-swatch-edge) calc(var(--wind-plan-swatch-edge-opacity) * 100%), transparent);

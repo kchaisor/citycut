@@ -1,6 +1,7 @@
 import { getColour, type ColourKey } from "../lib/colours";
 import { useColourRevision } from "../lib/useColourRevision";
-import { COMFORT_CLASSES, COMFORT_CLASS_LABELS, unsafeAreasLabel, type ComfortClass } from "../lib/windComfort";
+import { COMFORT_CLASSES, COMFORT_CLASS_LABELS, COMFORT_THRESHOLDS_MS, unsafeAreasLabel, type ComfortClass } from "../lib/windComfort";
+import { comfortShareLabel, type ComfortShares } from "../lib/windComfortShares";
 import { windPlanLegendGradient, windPlanSpeedTicks } from "../lib/windPlanField";
 import { monthPeriodLabel, sectorCenterDeg, sectorLabel, type WindPeriodId } from "../lib/windRose";
 import type { DesignWind } from "../lib/windDesignWinds";
@@ -81,20 +82,37 @@ export const COMFORT_SWATCH: Record<ComfortClass, ColourKey> = {
   uncomfortable: "--wind-plan-uncomfortable",
 };
 
-export function WindPlanLegend({ plan }: { plan: Pick<WindPlanState, "mode" | "scaleMaxMs"> }) {
+export function WindPlanLegend({ plan }: { plan: Pick<WindPlanState, "mode" | "scaleMaxMs" | "comfortShares"> }) {
   if (plan.mode === "speed") return <WindPlanVelocityLegend scaleMaxMs={plan.scaleMaxMs} />;
-  return <WindPlanComfortSwatches />;
+  return <WindPlanComfortKey shares={plan.comfortShares} />;
 }
 
-export function WindPlanComfortSwatches() {
+const COMFORT_LIMITS_MS = COMFORT_THRESHOLDS_MS.slice(0, COMFORT_CLASSES.length - 1);
+
+export function WindPlanComfortKey({ shares }: { shares: ComfortShares | null }) {
   return (
     <div className="wind-plan-legend wind-plan-comfort-legend" aria-label="Pedestrian comfort, Lawson">
-      <p className="wind-plan-legend-title">Comfort</p>
-      <ul className="wind-plan-swatches">
+      <p className="wind-plan-legend-title">
+        Comfort <span className="wind-plan-unit">(m/s, 5% of the time)</span>
+      </p>
+      <span className="wind-plan-comfort-bar" aria-hidden="true">
+        {COMFORT_CLASSES.map((cls) => (
+          <span key={cls} style={{ background: `var(${COMFORT_SWATCH[cls]})` }} />
+        ))}
+      </span>
+      <span className="wind-plan-velocity-ticks wind-plan-comfort-ticks mono" aria-hidden="true">
+        {COMFORT_LIMITS_MS.map((limit, k) => (
+          <span key={limit} style={{ left: `${((k + 1) / COMFORT_CLASSES.length) * 100}%` }}>
+            {limit}
+          </span>
+        ))}
+      </span>
+      <ul className="wind-plan-comfort-shares">
         {COMFORT_CLASSES.map((cls) => (
           <li key={cls}>
             <span className="wind-plan-swatch" aria-hidden="true" style={{ background: `var(${COMFORT_SWATCH[cls]})` }} />
-            {COMFORT_CLASS_LABELS[cls]}
+            <span className="wind-plan-comfort-name">{COMFORT_CLASS_LABELS[cls]}</span>
+            {shares ? <span className="wind-plan-comfort-share mono">{comfortShareLabel(shares[cls])}</span> : null}
           </li>
         ))}
       </ul>

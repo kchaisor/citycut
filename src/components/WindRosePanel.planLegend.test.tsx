@@ -13,7 +13,7 @@ const asset = JSON.parse(
 ) as WindRoseAsset;
 const pyrmont = siteWindSelection(asset, -33.86627, 151.18389)!;
 
-function stubPlan(mode: WindPlanState["mode"], scaleMaxMs: number | null): WindPlanState {
+function stubPlan(mode: WindPlanState["mode"], scaleMaxMs: number | null, comfortShares: WindPlanState["comfortShares"] = null): WindPlanState {
   return {
     active: true,
     mode,
@@ -32,6 +32,7 @@ function stubPlan(mode: WindPlanState["mode"], scaleMaxMs: number | null): WindP
     scaleMaxMs,
     speed: null,
     comfort: null,
+    comfortShares,
   };
 }
 
@@ -61,25 +62,35 @@ describe("WindRosePanel plan legend", () => {
     expect(legend.querySelector(".wind-plan-velocity-bar")).toBeTruthy();
     expect(card.lastElementChild).toBe(legend);
     expect(document.querySelector(".wind-plan-velocity.hud-card")).toBeNull();
-    expect(card.querySelector(".wind-plan-swatches")).toBeNull();
+    expect(card.querySelector(".wind-plan-comfort-shares")).toBeNull();
   });
 
-  it("puts the Lawson swatches in the left comfort card, after the rose, without a speed bar", () => {
-    const { container } = renderCard(stubPlan("comfort", 8));
+  it("puts the Lawson bar, limits and site shares in the left comfort card, after the rose", () => {
+    const shares = { sitting: 0.002, standing: 0.14, strolling: 0.71, walking: 0.148, uncomfortable: 0 };
+    const { container } = renderCard(stubPlan("comfort", 8, shares));
     const card = container.querySelector(".wind-rose-panel.is-plan")!;
-    const swatches = card.querySelector(".wind-plan-comfort-legend .wind-plan-swatches")!;
-    expect([...swatches.querySelectorAll("li")].map((li) => li.textContent)).toEqual([
-      "Sitting",
-      "Standing",
-      "Strolling",
-      "Walking",
-      "Uncomfortable",
+    const legend = card.querySelector(".wind-plan-comfort-legend")!;
+    expect(legend.querySelector(".wind-plan-legend-title")?.textContent).toBe("Comfort (m/s, 5% of the time)");
+    expect(legend.querySelectorAll(".wind-plan-comfort-bar > span")).toHaveLength(5);
+    expect([...legend.querySelectorAll(".wind-plan-comfort-ticks > span")].map((el) => el.textContent)).toEqual(["4", "6", "8", "10"]);
+    expect([...legend.querySelectorAll(".wind-plan-comfort-shares li")].map((li) => li.textContent)).toEqual([
+      "Sitting<1%",
+      "Standing14%",
+      "Strolling71%",
+      "Walking15%",
+      "Uncomfortable0%",
     ]);
-    expect(card.lastElementChild).toBe(swatches.parentElement);
-    expect(card.querySelector(".wind-rose-panel-svg")!.compareDocumentPosition(swatches) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(card.lastElementChild).toBe(legend);
+    expect(card.querySelector(".wind-rose-panel-svg")!.compareDocumentPosition(legend) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(card.querySelector(".wind-plan-comfort-legend.hud-card")).toBeNull();
     expect(card.querySelector(".wind-plan-velocity")).toBeNull();
-    expect(card.querySelector(".wind-plan-velocity-bar")).toBeNull();
+  });
+
+  it("names the comfort classes without shares until comfort is computed", () => {
+    const { container } = renderCard(stubPlan("comfort", 8));
+    const names = [...container.querySelectorAll(".wind-plan-comfort-shares li")].map((li) => li.textContent);
+    expect(names).toEqual(["Sitting", "Standing", "Strolling", "Walking", "Uncomfortable"]);
+    expect(container.querySelector(".wind-plan-comfort-share")).toBeNull();
   });
 
   it("fits the ticks to the site scale and hides them until it is known", () => {
