@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { BuildingHeightPopover } from "../BuildingHeightPopover";
 
 import { TreeInspectHud, TerrainInspectHud } from "../SceneInspectHud";import { DrawingPlan } from "../DrawingPlan";
@@ -6,12 +7,12 @@ import { DrawingExplodedAxo } from "../DrawingExplodedAxo";
 import { DrawingIsometric } from "../DrawingIsometric";
 import { SatellitePane } from "../SatellitePane";import { Scene3D } from "../Scene3D";
 
-import { StudioCompass } from "../StudioCompass";
-import { studioCompassVisible } from "../../lib/studioCompass";
 import { sceneSelectionBuildingId } from "../../lib/sceneInspectPick";
 import { qaHideHeightPopoverFromSearch } from "../../lib/qaCameraBridge";
 import { sunStudyMutedOn, toggleSelection } from "../../lib/sunStudyPlan";
 import { SceneBoundary } from "../SceneBoundary";
+import { SunHoursLegendDock } from "./SunHoursLegendDock";
+import { solarStudyViewActive } from "../../lib/solarStudyView";
 import { ViewLegend } from "../ViewPanel";
 
 import { SectionKnifeElevationPanel } from "../SectionKnifeElevationPanel";import { WalkRippleLegend } from "../WalkRipplePanel";
@@ -21,10 +22,11 @@ import { shouldShowIntroBridgePill } from "./shouldShowIntroBridgePill";
 
 export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").ModelPageViewModel }) {
   const {
+    analysisKind,
     axoSettings,
     cameraMemory,
+    introPlayed,
     colourByUse,
-    compassNeedleDeg,
     displayModel,
     windModel,
     windPlanOutlineModel,
@@ -41,6 +43,7 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
     inspectAnchor,
     inspectHudPosition,
     isoDrawingViewport,
+    leftOpen,
     lineStyles,
     massing,
     model,
@@ -63,7 +66,7 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
     sectionKnifeTool,
     selectForHide,
     setAxoLayerLift,
-    setCompassNeedleDeg,
+    setCompassHeadingDeg,
     setExplodedViewport,
     setHideSelection,
     setInspectHudScreen,
@@ -76,6 +79,7 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
     showSource,
     snapId,
     solar,
+    sunHoursGround,
     sunStudyDate,
     sunStudySelected,
     tab,
@@ -92,11 +96,16 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
     windPlan,
     siteWind,
   } = vm;
+  const sunHoursOnPlan = Boolean(solar.sunHours) && drawing === "site";
+  const [keep3d, setKeep3d] = useState(tab === "3d");
+  useEffect(() => {
+    if (tab === "3d") setKeep3d(true);
+  }, [tab]);
 
   return (
     <>
-        {tab === "3d" && (
-          <div className="fill">
+        {(tab === "3d" || keep3d) && (
+          <div className={tab === "3d" ? "fill" : "fill is-parked"} aria-hidden={tab === "3d" ? undefined : true}>
             {shouldShowIntroBridgePill() && (() => {
               const samples = typeof window !== "undefined" ? window.__citycutProgressSamples : undefined;
               const currentPct = Array.isArray(samples) && samples.length > 0 ? (samples[samples.length - 1] ?? 0) : 0;
@@ -155,7 +164,7 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
                 }}
                 inspectAnchor={inspectAnchor}
                 onInspectHudScreen={setInspectHudScreen}
-                onCompassNeedle={setCompassNeedleDeg}
+                onCompassHeading={setCompassHeadingDeg}
                 heightEditBuildingId={sceneSelectionBuildingId(sceneSelection)}
                 selectedBuildingIds={
                   hideSelection.length > 0
@@ -165,6 +174,8 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
                       : []
                 }
                 cameraMemory={cameraMemory}
+                introPlayed={introPlayed}
+                active={tab === "3d"}
                 display={view3dDisplay}
                 importedMassing={massing.group}
                 walkLayer={walk.layer.root}
@@ -182,6 +193,10 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
                 sectionKnife={sectionKnifeTool}
                 onSectionKnifePoseChange={onSectionKnifePoseChange}
                 quality={renderQuality}
+                sunHoursGroundGrid={solar.sunHours ? sunHoursGround.grid : null}
+                sunHoursDirectOverlay={solar.sunHours ? sunHoursGround.overlay : null}
+                sunHoursScaleMax={solar.sunHours ? sunHoursGround.scaleMaxHours : 0}
+                solarAnalysisActive={solarStudyViewActive(leftOpen, analysisKind)}
               />
               {tab === "3d" && sectionKnifeTool.active && (
                 <SectionKnifeElevationPanel model={displayModel} tool={sectionKnifeTool} />
@@ -193,9 +208,9 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
                   {walkRippleToast}
                 </p>
               ) : null}
-              {tab === "3d" && studioCompassVisible(view.projection, view.freeRotate) && (
-                <StudioCompass needleDeg={compassNeedleDeg} />
-              )}
+              {tab === "3d" && solar.sunHours ? (
+                <SunHoursLegendDock stackClassName="sun-hours-direct-dock-stack" sunHoursGround={sunHoursGround} />
+              ) : null}
               {pickedBuilding && !qaHideHeightPopoverFromSearch(window.location.search) && (
                 <BuildingHeightPopover
                   building={pickedBuilding}
@@ -298,8 +313,14 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
                 viewport={planViewport}
                 onViewportChange={setPlanViewport}
                 fitCounter={fitCounter}
+                sunHoursGroundGrid={sunHoursOnPlan ? sunHoursGround.grid : null}
+                sunHoursGroundScaleMax={sunHoursOnPlan ? sunHoursGround.scaleMaxHours : 0}
+                sunHoursRoofPlanRaster={sunHoursOnPlan ? (sunHoursGround.overlay?.roofPlanRaster ?? null) : null}
               />
             )}
+            {sunHoursOnPlan ? (
+              <SunHoursLegendDock stackClassName="plan-solar-dock-stack" sunHoursGround={sunHoursGround} />
+            ) : null}
           </div>
         )}
         {tab === "satellite" && (

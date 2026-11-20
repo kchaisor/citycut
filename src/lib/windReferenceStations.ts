@@ -7,9 +7,6 @@ export type WindReferenceStationRule = {
   skippedReason: string;
 };
 
-// Pyrmont and Blackwattle Bay pedestrian wind studies (Windtech WD758-22F01, June 2022; Windtech WD758-25F02,
-// Nov 2023; CPP Project 9079, Jan 2020; CPP City of Sydney Project 7224, June 2013) all use the Sydney Airport
-// anemometer as the regional wind climate for harbour sites.
 export const WIND_REFERENCE_STATION_RULES: readonly WindReferenceStationRule[] = [
   {
     stationId: "947670",

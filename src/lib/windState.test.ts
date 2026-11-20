@@ -37,7 +37,6 @@ describe("windSettingsForModelOpen", () => {
     const next = windSettingsForModelOpen(storage);
     expect(next.enabled).toBe(true);
     expect(next.period).toBe(DEFAULT_WIND_SETTINGS.period);
-    expect(next.showRose).toBe(true);
   });
 });
 

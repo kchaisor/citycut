@@ -1,10 +1,6 @@
 import { WIND_SECTOR_COUNT } from "./windRose";
 import type { WindRoseSeasonRecord } from "./windRoseData";
 
-// Lawson LDDC criteria as set out in City of London Corporation, "Wind Microclimate Guidelines for
-// Developments in the City of London" (2019): comfort uses the mean-hourly speed exceeded no more
-// than 5% of the time; safety flags more than 15 m/s for more than 0.022% of the year (about 2 hours).
-// Strolling is the 8 m/s leisure-walking band of the original LDDC criteria.
 export const LAWSON_EXCEEDANCE = 0.05;
 export const LAWSON_SITTING_MS = 4;
 export const LAWSON_STANDING_MS = 6;
@@ -63,9 +59,6 @@ export type WindSeasonWeights = {
   bins: WindSpeedBin[];
 };
 
-// Least-squares Weibull fit per direction on ln(-ln P(U > edge)) against ln(edge), the usual
-// representation of a directional wind climate in comfort assessments (NEN 8100:2006). Only the
-// open top bin uses it, so the tail above the last edge follows the station's own distribution.
 export function fitSectorWeibull(freqs: readonly number[], edgesMs: readonly number[]): WeibullTail | null {
   const total = freqs.reduce((sum, f) => sum + Math.max(0, f ?? 0), 0);
   if (!(total > 0)) return null;
@@ -119,9 +112,6 @@ export function windSeasonWeights(record: WindRoseSeasonRecord, edgesMs: readonl
   return { calm: Math.max(0, record.calmPct / 100) / total, calmTopMs: edgesMs[0] ?? 0, bins };
 }
 
-// The TMYx top bin is open-ended. Inside a closed bin the speed is spread evenly; above the top
-// edge the tail follows the direction's fitted Weibull, or, when the bins are too sparse to fit,
-// falls off exponentially with a mean excess of one bin width.
 export function binExceedance(bin: Pick<WindSpeedBin, "loMs" | "hiMs" | "openTop" | "tail">, speedMs: number): number {
   const { loMs, hiMs, openTop, tail } = bin;
   if (speedMs <= loMs) return 1;
@@ -228,8 +218,6 @@ export function unsafeMask(fields: ComfortFields, solid?: Uint8Array): Uint8Arra
 
 export type MaskComponent = { cells: number; minI: number; maxI: number; minJ: number; maxJ: number; sumI: number; sumJ: number };
 
-// Cells join an area through shared edges only (4-connected): two unsafe cells that touch only at
-// a corner count as two areas.
 export function maskComponents(mask: Uint8Array, cols: number, rows: number): MaskComponent[] {
   const seen = new Uint8Array(mask.length);
   const stack: number[] = [];

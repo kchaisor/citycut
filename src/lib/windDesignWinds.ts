@@ -19,8 +19,6 @@ export const DESIGN_WIND_MIN_SEPARATION_DEG = 67.5;
 const DESIGN_WIND_COUNT = 3;
 const COMPASS_8_SECTORS = [0, 2, 4, 6, 8, 10, 12, 14];
 
-// Pyrmont and Blackwattle Bay pedestrian wind studies (Windtech WD758-22F01, June 2022; CPP Project 9079,
-// Jan 2020) assess the three Sydney Airport design winds: north-east, south and west.
 const REGIONAL_DESIGN_HEADINGS: Readonly<Record<string, readonly number[]>> = {
   "947670": [45, 180, 270],
 };

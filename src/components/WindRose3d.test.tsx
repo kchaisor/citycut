@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { useState } from "react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import type { CityModel } from "../types";
 import { designWindsFor, findDesignWind, headingPeriodStats } from "../lib/windDesignWinds";
 import { sectorLabel } from "../lib/windRose";
@@ -11,7 +11,7 @@ import type { WindRoseAsset } from "../lib/windRoseData";
 import { analyzeSiteWind } from "../lib/windRoseStats";
 import { DEFAULT_WIND_SETTINGS, withDesignWind, type WindViewSettings } from "../lib/windState";
 import { siteWindSelection } from "../lib/windStation";
-import { toggleWindRoseChip, windRoseCardOn, windRoseChipOn } from "./model/windRoseCard";
+import { windRoseCardOn } from "./model/windRoseCard";
 import { useWindPlan } from "./useWindPlan";
 import { WindRosePanel } from "./WindRosePanel";
 
@@ -69,56 +69,24 @@ function FlowHarness({ initialDesign = null, flowHeading = true }: { initialDesi
   );
 }
 
-describe("console Wind Rose chip and the left card", () => {
-  const card = (windSettings: WindViewSettings, planActive = false) =>
-    windRoseCardOn({ leftOpen: "analysis", tab: "3d", analysisKind: "wind", siteWind: pyrmont, windSettings, planActive });
+describe("the left wind rose card", () => {
+  const card = (tab: string, analysisKind: string) => windRoseCardOn({ leftOpen: "analysis", tab, analysisKind, siteWind: pyrmont });
 
-  it("shows the left card exactly when the chip is pressed in 3D, and the chip toggles both ways", () => {
-    const on: WindViewSettings = { ...DEFAULT_WIND_SETTINGS, enabled: true, showRose: true };
-    expect(windRoseChipOn(on)).toBe(true);
-    expect(card(on)).toBe(true);
-    const off = toggleWindRoseChip(on);
-    expect(off.showRose).toBe(false);
-    expect(windRoseChipOn(off)).toBe(false);
-    expect(card(off)).toBe(false);
-    const back = toggleWindRoseChip(off);
-    expect(back.enabled).toBe(true);
-    expect(windRoseChipOn(back)).toBe(true);
-    expect(card(back)).toBe(true);
-    const flowOff: WindViewSettings = { ...DEFAULT_WIND_SETTINGS, enabled: false, showRose: true };
-    expect(windRoseChipOn(flowOff)).toBe(true);
-    expect(card(flowOff)).toBe(true);
-    const hidden = toggleWindRoseChip(flowOff);
-    expect(hidden.showRose).toBe(false);
-    expect(hidden.enabled).toBe(false);
-    const fromCold = toggleWindRoseChip({ ...DEFAULT_WIND_SETTINGS, enabled: false, showRose: false });
-    expect(fromCold.enabled).toBe(true);
-    expect(fromCold.showRose).toBe(true);
+  it("shows in wind analysis on the 3D and Drawing tabs", () => {
+    expect(card("3d", "wind")).toBe(true);
+    expect(card("drawing", "wind")).toBe(true);
   });
 
-  it("keeps the plan Pedestrian Comfort / Plan Wind card on even when the 3D rose chip is off", () => {
-    const off: WindViewSettings = { ...DEFAULT_WIND_SETTINGS, enabled: true, showRose: false };
-    expect(windRoseChipOn(off)).toBe(false);
-    expect(card(off, false)).toBe(false);
-    expect(card(off, true)).toBe(true);
-    const on: WindViewSettings = { ...DEFAULT_WIND_SETTINGS, enabled: true, showRose: true };
-    expect(card(on, true)).toBe(true);
+  it("hides the card outside wind analysis and on Satellite", () => {
+    expect(card("satellite", "wind")).toBe(false);
+    expect(card("3d", "solar")).toBe(false);
+    expect(windRoseCardOn({ leftOpen: null, tab: "3d", analysisKind: "wind", siteWind: pyrmont })).toBe(false);
   });
 
-  it("hides the card outside wind analysis", () => {
-    const on: WindViewSettings = { ...DEFAULT_WIND_SETTINGS, enabled: true, showRose: true };
-    expect(windRoseCardOn({ leftOpen: "analysis", tab: "satellite", analysisKind: "wind", siteWind: pyrmont, windSettings: on, planActive: false })).toBe(false);
-    expect(windRoseCardOn({ leftOpen: "analysis", tab: "3d", analysisKind: "solar", siteWind: pyrmont, windSettings: on, planActive: false })).toBe(false);
-    expect(windRoseCardOn({ leftOpen: "analysis", tab: "satellite", analysisKind: "wind", siteWind: pyrmont, windSettings: on, planActive: true })).toBe(false);
-  });
-
-  it("drives aria-pressed and the card from the same rule and mounts no 3D rose overlay", () => {
-    const footer = source("src/components/model/ModelPageViewportFooter.tsx");
-    expect(footer).toContain("aria-pressed={windRoseChipOn(windSettings)}");
-    expect(footer).toContain("toggleWindRoseChip(windSettings)");
+  it("has no Wind Rose chip and mounts no floating rose overlay", () => {
+    expect(source("src/components/model/ModelPageViewportFooter.tsx")).not.toMatch(/windRoseChipOn|toggleWindRoseChip|showRose/);
     expect(source("src/components/model/ModelPageView.tsx")).toContain("windRoseCardOn(");
-    const tabs = source("src/components/model/ModelPageViewportTabs.tsx");
-    expect(tabs).not.toContain("WindRoseOverlay");
+    expect(source("src/components/model/ModelPageViewportTabs.tsx")).not.toContain("WindRoseOverlay");
     expect(source("src/index.css")).not.toContain(".wind-rose-overlay");
   });
 });
@@ -174,30 +142,17 @@ describe("3D Wind Flow rose", () => {
 });
 
 describe("intro cut ring guard", () => {
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
-
-  it("plays on a first visit and stays hidden after the intro finished for that cut", async () => {
-    vi.stubGlobal("navigator", { userAgent: "Mozilla/5.0 Chrome/130" });
-    vi.stubGlobal("matchMedia", () => ({ matches: false }));
-    const { computeIntroCutRingOpacity, introCutKey, introPendingFor, markIntroPlayed } = await import("./Scene3D");
-    const cut = introCutKey({ center: { lat: -33.86627, lon: 151.18389 }, sideM: 240 });
-    const other = introCutKey({ center: { lat: -33.8, lon: 151.1 }, sideM: 240 });
-    expect(introPendingFor(cut)).toBe(true);
+  it("fades the cut ring out over the intro", async () => {
+    const { computeIntroCutRingOpacity } = await import("./Scene3D");
     expect(computeIntroCutRingOpacity(0)).toBe(1);
-    markIntroPlayed(cut);
-    expect(introPendingFor(cut)).toBe(false);
-    expect(introPendingFor(cut)).toBe(false);
-    expect(introPendingFor(other)).toBe(true);
     expect(computeIntroCutRingOpacity(10)).toBe(0);
   });
 
-  it("builds the ring and stagger only while the intro is pending for the cut", () => {
+  it("builds the ring and stagger only while the intro has not played for this cut", () => {
     const scene = source("src/components/Scene3D.tsx");
-    expect(scene).toContain("const introStagger = introPendingFor(cutKey);");
-    expect(scene).toContain("if (!introPendingFor(cutKey) || targets.length === 0) {");
-    expect(scene).toContain("markIntroPlayed(intro.cutKey);");
-    expect(scene).toContain("introEnabled={introOn}");
+    expect(scene).toContain("const introStagger = shouldRunIntroTransition() && !introSkip;");
+    expect(scene).toContain("if (!shouldRunIntroTransition() || introSkip || targets.length === 0) {");
+    expect(scene).toContain("if (introPlayed) markIntroPlayedForCut(introPlayed, intro.cutKey);");
+    expect(scene).toContain("introEnabled={!introSkip}");
   });
 });

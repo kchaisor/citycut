@@ -83,9 +83,6 @@ export const WIND_PLAN_BLUR_PASSES = 2;
 export const WIND_PLAN_DISPLAY_SIGMA_M = 6;
 export const WIND_PLAN_ROWS_PER_SLICE = 32;
 
-// Power-law wind profile u(z) = u(z_ref) * (z / z_ref)^alpha, taking the station's 10 m speed down to
-// 1.5 m pedestrian height with alpha = 0.25 for suburban terrain, as tabulated in Counihan (1975),
-// "Adiabatic atmospheric boundary layers", Atmospheric Environment 9(10), and standard wind-engineering texts.
 export const STATION_HEIGHT_M = 10;
 export const PEDESTRIAN_HEIGHT_M = 1.5;
 export const SUBURBAN_PROFILE_ALPHA = 0.25;
@@ -96,9 +93,6 @@ export function powerLawHeightFactor(fromM: number, toM: number, alpha: number):
 
 export const PEDESTRIAN_HEIGHT_FACTOR = powerLawHeightFactor(STATION_HEIGHT_M, PEDESTRIAN_HEIGHT_M, SUBURBAN_PROFILE_ALPHA);
 
-// Over open water alpha = 0.11, the near-neutral value measured at sea by Hsu, Meindl and Gilhousen (1994),
-// "Determining the power-law wind-profile exponent under near-neutral stability conditions at sea",
-// Journal of Applied Meteorology 33(6).
 export const OPEN_WATER_PROFILE_ALPHA = 0.11;
 export const WATER_PEDESTRIAN_HEIGHT_FACTOR = powerLawHeightFactor(STATION_HEIGHT_M, PEDESTRIAN_HEIGHT_M, OPEN_WATER_PROFILE_ALPHA);
 export const WATER_SHORE_BLEND_M = 60;

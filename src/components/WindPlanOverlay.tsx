@@ -2,7 +2,7 @@ import { useFrame, useThree } from "@react-three/fiber";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import type { CityModel, Pt } from "../types";
-import { colourRgb, getColour, type ColourKey } from "../lib/colours";
+import { colourRgb, getColour } from "../lib/colours";
 import { useColourRevision } from "../lib/useColourRevision";
 import {
   bilinearSample,
@@ -13,7 +13,9 @@ import {
   type WindPlanGeometry,
   type WindPlanSpeed,
 } from "../lib/windPlanField";
-import { windPlanComfortBands, windPlanSpeedContours, type ComfortBand, type WorldRing } from "../lib/windPlanContours";
+import { windPlanSpeedContours, windPlanUnsafeRings, type WorldRing } from "../lib/windPlanContours";
+import { COMFORT_CLASSES, lawsonClass, type ComfortClass } from "../lib/windComfort";
+import { COMFORT_SWATCH } from "./WindPlanCard";
 import { cutExtent, pointInClip, windPlanSiteClip } from "../lib/windPlanSiteClip";
 import { windPlanLineStyle, type WindPlanLineStyle, type WindPlanPen } from "../lib/windPlanStyle";
 import {
@@ -82,14 +84,6 @@ export function WindPlanProjector({ store }: { store: WindPlanTransformStore }) 
   return null;
 }
 
-const COMFORT_FILL: Record<ComfortBand, ColourKey> = {
-  standing: "--wind-plan-standing",
-  strolling: "--wind-plan-strolling",
-  walking: "--wind-plan-walking",
-  uncomfortable: "--wind-plan-uncomfortable",
-};
-
-const COMFORT_FEATHER_STEPS = [1, 2 / 3, 1 / 3];
 
 const speedImages = new WeakMap<WindPlanSpeed, { revision: number; scaleMaxMs: number; canvas: HTMLCanvasElement }>();
 
@@ -120,6 +114,50 @@ function speedImage(speed: WindPlanSpeed, scaleMaxMs: number, revision: number):
   }
   ctx.putImageData(image, 0, 0);
   speedImages.set(speed, { revision, scaleMaxMs, canvas });
+  return canvas;
+}
+
+const comfortImages = new WeakMap<WindPlanComfort, { revision: number; canvas: HTMLCanvasElement }>();
+
+function comfortImage(comfort: WindPlanComfort, revision: number): HTMLCanvasElement {
+  const cached = comfortImages.get(comfort);
+  if (cached && cached.revision === revision) return cached.canvas;
+  const { cols, rows } = comfort.geometry;
+  const { p4, p6, p8, p10 } = comfort.fields;
+  const up = windPlanImageUpscale(cols, rows);
+  const width = cols * up;
+  const height = rows * up;
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d")!;
+  const image = ctx.createImageData(width, height);
+  const palette = Object.fromEntries(COMFORT_CLASSES.map((cls) => [cls, colourRgb(COMFORT_SWATCH[cls])])) as Record<
+    ComfortClass,
+    { r: number; g: number; b: number }
+  >;
+  for (let py = 0; py < height; py++) {
+    const gy = (py + 0.5) / up - 0.5;
+    for (let px = 0; px < width; px++) {
+      const gx = (px + 0.5) / up - 0.5;
+      const colour =
+        palette[
+          lawsonClass({
+            p4: bilinearSample(p4, cols, rows, gx, gy),
+            p6: bilinearSample(p6, cols, rows, gx, gy),
+            p8: bilinearSample(p8, cols, rows, gx, gy),
+            p10: bilinearSample(p10, cols, rows, gx, gy),
+          })
+        ];
+      const at = (py * width + px) * 4;
+      image.data[at] = colour.r;
+      image.data[at + 1] = colour.g;
+      image.data[at + 2] = colour.b;
+      image.data[at + 3] = 255;
+    }
+  }
+  ctx.putImageData(image, 0, 0);
+  comfortImages.set(comfort, { revision, canvas });
   return canvas;
 }
 
@@ -242,20 +280,6 @@ function strokeInside(ctx: CanvasRenderingContext2D, path: Path2D, pen: WindPlan
   ctx.save();
   ctx.clip(path, "nonzero");
   strokePen(ctx, path, { ...pen, px: pen.px * 2 }, scale);
-  ctx.restore();
-}
-
-function featherEdge(ctx: CanvasRenderingContext2D, path: Path2D, colour: string, style: WindPlanLineStyle, scale: number) {
-  const { px, opacity } = style.comfortFeather;
-  if (!(px > 0) || !(opacity > 0)) return;
-  ctx.save();
-  ctx.strokeStyle = colour;
-  ctx.lineJoin = "round";
-  ctx.globalAlpha = opacity;
-  for (const share of COMFORT_FEATHER_STEPS) {
-    ctx.lineWidth = (px * share) / scale;
-    ctx.stroke(path);
-  }
   ctx.restore();
 }
 
@@ -407,23 +431,20 @@ export function WindPlanOverlay({
       const levels = windPlanSpeedContours(speed, scaleMaxMs);
       strokePen(ctx, cachedPath(levels, () => levels.flat()), style.contour, scale);
       ctx.restore();
+      ctx.fillStyle = getColour("--wind-plan-water");
+      ctx.fill(baseMap.water, "evenodd");
       if (vectorsOn) drawVectors(ctx, planVectors(speed, scaleMaxMs), t, { x: ox, y: oy }, scale, style, dpr);
     } else if (mode === "comfort" && comfort) {
       ctx.save();
       ctx.clip(site.path, "evenodd");
-      ctx.fillStyle = getColour("--wind-plan-sitting");
-      ctx.fillRect(cut.minE, cut.minN, cut.maxE - cut.minE, cut.maxN - cut.minN);
-      const layers = windPlanComfortBands(comfort);
-      for (const layer of layers.bands) {
-        if (layer.rings.length === 0) continue;
-        const path = cachedPath(layer, () => layer.rings);
-        const fill = getColour(COMFORT_FILL[layer.band]);
-        featherEdge(ctx, path, fill, style, scale);
-        ctx.fillStyle = fill;
-        ctx.fill(path, "evenodd");
-      }
-      if (layers.unsafe.length > 0) {
-        const path = cachedPath(layers.unsafe, () => layers.unsafe);
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(comfortImage(comfort, colourRevision), originE, originN, gridW, gridH);
+      ctx.imageSmoothingEnabled = true;
+      ctx.fillStyle = getColour("--wind-plan-water");
+      ctx.fill(baseMap.water, "evenodd");
+      const unsafe = windPlanUnsafeRings(comfort);
+      if (unsafe.length > 0) {
+        const path = cachedPath(unsafe, () => unsafe);
         ctx.save();
         ctx.clip(path, "evenodd");
         hatch(ctx, rect.width, rect.height, style, dpr);

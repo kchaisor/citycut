@@ -77,7 +77,6 @@ function hit(sector: number): SVGPathElement {
 }
 
 function computedOpacity(el: Element): string {
-  // happy-dom keeps an element's computed style cached across ancestor attribute changes; re-inserting it clears that.
   el.parentNode!.insertBefore(el, el.nextSibling);
   return getComputedStyle(el).opacity;
 }

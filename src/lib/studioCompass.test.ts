@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { describe, expect, it } from "vitest";
-import { studioNorthNeedleDeg } from "./studioCompass";
+import { studioCameraHeadingDeg, studioCompassNeedleDeg, studioNorthNeedleDeg } from "./studioCompass";
 
 describe("studioNorthNeedleDeg", () => {
   function cameraAt(x: number, y: number, z: number): THREE.PerspectiveCamera {
@@ -20,5 +20,13 @@ describe("studioNorthNeedleDeg", () => {
     const south = studioNorthNeedleDeg(cameraAt(0, 280, 420));
     const east = studioNorthNeedleDeg(cameraAt(420, 280, 0));
     expect(Math.abs(east - south)).toBeGreaterThan(45);
+  });
+
+  it("keeps needle rotation the negative of camera heading", () => {
+    const cam = cameraAt(420, 280, 0);
+    const heading = studioCameraHeadingDeg(cam);
+    const needle = studioNorthNeedleDeg(cam);
+    expect(needle).toBeCloseTo(studioCompassNeedleDeg(heading), 5);
+    expect(needle).toBeCloseTo(-heading, 5);
   });
 });

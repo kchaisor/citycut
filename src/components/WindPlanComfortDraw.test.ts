@@ -17,15 +17,14 @@ describe("plan comfort map drawing", () => {
     expect(overlay).toContain('ctx.clip(site.path, "evenodd");');
   });
 
-  it("feathers band edges in the band's own fill before filling it", () => {
-    const feather = overlay.indexOf("featherEdge(ctx, path, fill, style, scale);");
-    const fill = overlay.indexOf('ctx.fill(path, "evenodd");');
-    expect(feather).toBeGreaterThan(-1);
-    expect(fill).toBeGreaterThan(feather);
-    const style = windPlanLineStyle(() => "");
-    expect(style.comfortFeather.px).toBeGreaterThan(0);
-    expect(style.comfortFeather.opacity).toBeGreaterThan(0);
-    expect(style.comfortFeather.opacity).toBeLessThan(0.5);
+  it("draws comfort cell by cell from the Lawson class of each sampled pixel", () => {
+    expect(overlay).toContain("lawsonClass({");
+    expect(overlay).toContain("ctx.drawImage(comfortImage(comfort, colourRevision), originE, originN, gridW, gridH);");
+    expect(overlay).not.toContain("featherEdge");
+  });
+
+  it("paints water in its own colour over both plan maps", () => {
+    expect(overlay.split('ctx.fillStyle = getColour("--wind-plan-water");').length - 1).toBeGreaterThanOrEqual(2);
   });
 
   it("draws small unsafe patches as smaller, lighter hatched marks", () => {
@@ -50,8 +49,6 @@ describe("plan comfort map drawing", () => {
       "--wind-plan-unsafe-min-px",
       "--wind-plan-unsafe-mark-px",
       "--wind-plan-unsafe-mark-opacity",
-      "--wind-plan-comfort-feather-px",
-      "--wind-plan-comfort-feather-opacity",
     ]) {
       expect(drawingCss).toContain(`${token}:`);
       expect(theme).toContain(`\`${token}\``);

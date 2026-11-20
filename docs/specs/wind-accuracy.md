@@ -35,6 +35,12 @@ Sketch or screenshot:
 - Wind vector arrows on both plan maps, like his CFD reference: a staggered/diamond 22 m grid of thin black arrows following the local flow, longer where it is windier, none on buildings or water, with a default-on Arrows toggle beside the Wind speed | Comfort switch. Still indicative, not CFD (Kelvin's calls, 19 Nov 2026: 10:47 AM for the grid, 12:17 PM to keep them black, 12:37 PM picking the diagrid, 12:55 PM for 22 m spacing, longer shafts and 2px heads).
 - One wind-rose card, on the left. The console Wind Rose chip shows or hides it in 3D; in Plan the left Pedestrian Comfort / Plan Wind card stays visible even if that chip is off. 3D Wind Flow petals are clickable and share the heading with plan Wind speed; the 3D card uses the m/s Velocity legend. Comfort stays all-directions. Still indicative, not CFD (Kelvin's notes 19 Nov 2026, 5:18 PM AEDT; approved 5:27 PM AEDT).
 
+## Sources
+
+- Harbour sites use the Sydney Airport anemometer, as in the Pyrmont and Blackwattle Bay pedestrian wind studies: Windtech WD758-22F01 (June 2022), Windtech WD758-25F02 (Nov 2023), CPP Project 9079 (Jan 2020) and CPP City of Sydney Project 7224 (June 2013).
+- The NE, S and W design winds follow the three Sydney Airport design winds assessed in Windtech WD758-22F01 and CPP Project 9079.
+- Over open water the power-law exponent is α = 0.11, the near-neutral value measured at sea by Hsu, Meindl and Gilhousen (1994), "Determining the power-law wind-profile exponent under near-neutral stability conditions at sea", Journal of Applied Meteorology 33(6).
+
 ## How we'll know it works
 
 - [x] Pyrmont (−33.86627, 151.18389), 1.5 km cut: the panel names Sydney Airport, its distance (about 8.9 km), the years covered, and why Riverview and Observatory Hill were skipped.

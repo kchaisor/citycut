@@ -24,9 +24,10 @@ export function ModelPageView({ vm }: { vm: ModelPageViewModel }) {
     windMotion,
     windSettings,
     windPlan,
+    topbarLayout,
   } = vm;
 
-  const windCardOn = windRoseCardOn({ leftOpen, tab, analysisKind, siteWind, windSettings, planActive: windPlan.active });
+  const windCardOn = windRoseCardOn({ leftOpen, tab, analysisKind, siteWind });
   useWindPlanCardBounds(windCardOn && windPlan.active);
 
   return (
@@ -34,6 +35,7 @@ export function ModelPageView({ vm }: { vm: ModelPageViewModel }) {
       ref={modelRootRef}
       className="model"
       data-view-tab={tab}
+      data-topbar-layout={topbarLayout}
       data-cut-size-label={cutDimLabel}
       data-wind-plan={windPlan.active ? windPlan.mode : undefined}
       data-intro-hold={!introHoldReleasedRef.current && tab === "3d" && shouldShowIntroBridgePill() ? "true" : undefined}

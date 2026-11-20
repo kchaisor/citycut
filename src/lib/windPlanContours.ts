@@ -1,5 +1,5 @@
 import { contourRings, smoothRingPasses } from "./marchingSquares";
-import { LAWSON_EXCEEDANCE, LAWSON_UNSAFE_EXCEEDANCE } from "./windComfort";
+import { LAWSON_UNSAFE_EXCEEDANCE } from "./windComfort";
 import {
   windPlanContourLevels,
   type WindPlanComfort,
@@ -8,12 +8,6 @@ import {
 } from "./windPlanField";
 
 export type WorldRing = Float64Array;
-
-export type ComfortBand = "standing" | "strolling" | "walking" | "uncomfortable";
-
-export type ComfortBandLayer = { band: ComfortBand; rings: WorldRing[] };
-
-export type ComfortLayers = { bands: ComfortBandLayer[]; unsafe: WorldRing[] };
 
 export const SPEED_SMOOTH_PASSES = 1;
 export const COMFORT_SMOOTH_PASSES = 2;
@@ -36,7 +30,7 @@ export function worldRings(
 }
 
 const speedContours = new WeakMap<WindPlanSpeed, Map<number, WorldRing[][]>>();
-const comfortBands = new WeakMap<WindPlanComfort, ComfortLayers>();
+const unsafeRings = new WeakMap<WindPlanComfort, WorldRing[]>();
 
 export function windPlanSpeedContours(speed: WindPlanSpeed, scaleMaxMs: number): WorldRing[][] {
   let byScale = speedContours.get(speed);
@@ -52,20 +46,11 @@ export function windPlanSpeedContours(speed: WindPlanSpeed, scaleMaxMs: number):
   return rings;
 }
 
-export function windPlanComfortBands(comfort: WindPlanComfort): ComfortLayers {
-  let layers = comfortBands.get(comfort);
-  if (!layers) {
-    const { geometry, fields } = comfort;
-    layers = {
-      bands: [
-        { band: "standing", rings: worldRings(geometry, fields.p4, LAWSON_EXCEEDANCE, COMFORT_SMOOTH_PASSES) },
-        { band: "strolling", rings: worldRings(geometry, fields.p6, LAWSON_EXCEEDANCE, COMFORT_SMOOTH_PASSES) },
-        { band: "walking", rings: worldRings(geometry, fields.p8, LAWSON_EXCEEDANCE, COMFORT_SMOOTH_PASSES) },
-        { band: "uncomfortable", rings: worldRings(geometry, fields.p10, LAWSON_EXCEEDANCE, COMFORT_SMOOTH_PASSES) },
-      ],
-      unsafe: worldRings(geometry, fields.p15, LAWSON_UNSAFE_EXCEEDANCE, COMFORT_SMOOTH_PASSES),
-    };
-    comfortBands.set(comfort, layers);
+export function windPlanUnsafeRings(comfort: WindPlanComfort): WorldRing[] {
+  let rings = unsafeRings.get(comfort);
+  if (!rings) {
+    rings = worldRings(comfort.geometry, comfort.fields.p15, LAWSON_UNSAFE_EXCEEDANCE, COMFORT_SMOOTH_PASSES);
+    unsafeRings.set(comfort, rings);
   }
-  return layers;
+  return rings;
 }
