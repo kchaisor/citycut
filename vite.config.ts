@@ -23,5 +23,6 @@ export default defineConfig({
   test: {
     environment: "node",
     css: true,
+    exclude: ["node_modules/**", "dist/**", "src/e2e/**", "tests/visual/**"],
   },
 });
