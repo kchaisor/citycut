@@ -1914,37 +1914,6 @@ input[type="range"]::-moz-range-thumb {
   width: 100%;
   height: 100%;
 }
-.wind-plan-arrow {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  overflow: visible;
-}
-.wind-plan-arrow-shaft {
-  stroke: var(--ink);
-  stroke-width: var(--wind-plan-arrow-shaft-px);
-  stroke-linecap: round;
-}
-.wind-plan-arrow-head {
-  fill: var(--ink);
-}
-.wind-plan-arrow-chip {
-  position: absolute;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  box-sizing: border-box;
-  border-radius: 4px;
-  background: var(--bg-elev);
-  box-shadow: inset 0 0 0 1px var(--border-outer);
-  color: var(--ink);
-  font-family: var(--sans);
-  font-size: 11px;
-  font-weight: 600;
-  line-height: 16px;
-  white-space: nowrap;
-}
 
 .model[data-wind-plan] .wind-rose-analysis-card.is-plan {
   top: var(--wind-plan-card-top, 214px);
@@ -2080,54 +2049,25 @@ input[type="range"]::-moz-range-thumb {
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--wind-plan-swatch-edge) calc(var(--wind-plan-swatch-edge-opacity) * 100%), transparent);
 }
 
-.wind-plan-info,
 .wind-plan-velocity,
 .wind-plan-comfort {
-  position: fixed;
-  z-index: 6;
-  margin: 0;
-  box-sizing: border-box;
-  border-radius: 12px;
-  pointer-events: none;
-}
-.wind-plan-info {
-  top: 68px;
-  left: calc(14px + 236px + 8px);
-  width: 176px;
-  padding: 8px 12px;
-  display: grid;
-  gap: 2px;
-}
-.wind-plan-velocity {
-  right: var(--wind-plan-legend-right, 14px);
-  bottom: var(--wind-plan-legend-bottom, 86px);
-  width: max-content;
-  padding: 12px 12px 14px;
-}
-.wind-plan-comfort {
-  right: var(--wind-plan-legend-right, 14px);
-  bottom: var(--wind-plan-legend-bottom, 86px);
-  width: max-content;
-  padding: 12px;
+  margin: 14px 0 8px;
 }
 .wind-plan-unit {
   text-transform: none;
   letter-spacing: 0;
 }
-.wind-plan-velocity-scale {
-  display: flex;
-  gap: 8px;
-  padding-top: 8px;
-}
 .wind-plan-velocity-bar {
   display: block;
-  width: 14px;
-  height: var(--wind-plan-legend-bar, 200px);
+  width: 100%;
+  height: 10px;
   border-radius: 2px;
 }
 .wind-plan-velocity-ticks {
   position: relative;
-  width: 2ch;
+  display: block;
+  height: 16px;
+  margin-top: 2px;
   font-family: var(--mono);
   font-size: 11px;
   font-weight: 500;
@@ -2137,8 +2077,8 @@ input[type="range"]::-moz-range-thumb {
 }
 .wind-plan-velocity-ticks > span {
   position: absolute;
-  left: 0;
-  transform: translateY(50%);
+  top: 0;
+  transform: translateX(-50%);
 }
 
 .model .bottom-bar.env-console .wind-plan-switch {

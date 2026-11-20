@@ -428,7 +428,7 @@ export function windPlanRampStops(colourRgb: (token: ColourKey) => { r: number; 
 
 export function windPlanLegendGradient(colourOf: (token: ColourKey) => string): string {
   const stops = WIND_PLAN_SPEED_RAMP.map((s) => `${colourOf(s.token)} ${((s.ms / WIND_PLAN_SPEED_MAX_MS) * 100).toFixed(1)}%`);
-  return `linear-gradient(to top, ${stops.join(", ")})`;
+  return `linear-gradient(to right, ${stops.join(", ")})`;
 }
 
 export function windPlanImageUpscale(cols: number, rows: number): number {
