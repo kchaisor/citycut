@@ -5148,6 +5148,10 @@ body,
     min-width: 0;
   }
 
+  .model[data-topbar-layout="flow"][data-view-tab] .top-bar-left-meta > .place-chip.studio-breadcrumb-place {
+    flex: 0 1 auto;
+  }
+
   .model .topbar-export-compact {
     display: none !important;
   }
