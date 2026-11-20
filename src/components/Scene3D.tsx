@@ -304,6 +304,31 @@ function SceneFrameloopGate({ introSkip }: { introSkip: boolean }) {
   return null;
 }
 
+type SceneFrameloop = "always" | "demand" | "never";
+
+function ScenePause({ active }: { active: boolean }) {
+  const set = useThree((state) => state.set);
+  const invalidate = useThree((state) => state.invalidate);
+  const frameloop = useThree((state) => state.frameloop) as SceneFrameloop;
+  const resumeTo = useRef<SceneFrameloop | null>(null);
+  useLayoutEffect(() => {
+    if (!active) {
+      if (frameloop !== "never") {
+        resumeTo.current = frameloop;
+        set({ frameloop: "never" });
+      }
+      return;
+    }
+    if (resumeTo.current) {
+      const next = resumeTo.current;
+      resumeTo.current = null;
+      set({ frameloop: next });
+    }
+    invalidate();
+  }, [active, frameloop, set, invalidate]);
+  return null;
+}
+
 function StudioCompassTracker({ onHeading }: { onHeading: (deg: number) => void }) {
   const camera = useThree((state) => state.camera);
   useFrame(() => {
@@ -2182,6 +2207,7 @@ export function Scene3D({
   sunHoursScaleMax = 0,
   solarAnalysisActive = false,
   introPlayed,
+  active = true,
 }: {
   model: CityModel;
   uniformBuildings: boolean;
@@ -2221,6 +2247,7 @@ export function Scene3D({
   sunHoursScaleMax?: number;
   solarAnalysisActive?: boolean;
   introPlayed?: { current: string | null };
+  active?: boolean;
 }) {
   const sceneCutKey = modelCutSiteId(model.center, model.sideM);
   const introSkip = useMemo(
@@ -2319,6 +2346,7 @@ export function Scene3D({
         <WebGlContextWatch onContextLost={onGlContextLost} onContextRestored={onGlContextRestored} />
         <SceneDemandBootstrap />
         <SceneFrameloopGate introSkip={introSkip} />
+        <ScenePause active={active} />
         <AdaptiveViewportDpr />
         <SceneContinuousBridge
           windAnimate={windEnabled && windAnimateStreaks}
