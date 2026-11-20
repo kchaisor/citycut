@@ -28,6 +28,8 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
     introPlayed,
     colourByUse,
     displayModel,
+    windModel,
+    windPlanOutlineModel,
     drawing,
     drawingModel,
     effectiveSunStudyCasters,
@@ -90,6 +92,7 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
     walkRippleToast,
     windMotion,
     windSettings,
+    windPlan,
     siteWind,
   } = vm;
   const sunHoursOnPlan = Boolean(solar.sunHours) && drawing === "site";
@@ -126,6 +129,8 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
             <SceneBoundary>
               <Scene3D
                 model={displayModel}
+                windModel={windModel}
+                windPlanOutlineModel={windPlanOutlineModel}
                 uniformBuildings={!colourByUse && !showSource}
                 colourBySource={showSource}
                 showManualEdits={showManualEdits}
@@ -138,6 +143,7 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
                 siteWind={siteWind}
                 windPeriod={windSettings.period}
                 windAnimateStreaks={windMotion.animateStreaks}
+                windPlan={windPlan.active ? windPlan : null}
                 onExportReady={onExportReady}
                 onSceneInspectPick={(selection) => {
                   setSceneSelection(selection);

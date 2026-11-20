@@ -78,6 +78,8 @@ import { writeStoredView, writeViewSearch, ViewMemory } from "../../lib/viewMemo
 import { treeTierCounts } from "../../lib/trees";
 
 import { clearPlanShadowCache } from "../../lib/buildingShadows";
+import { useWindPlan } from "../useWindPlan";
+import { windObstacleModel, withImportedOutlines } from "../../lib/windObstacleModel";
 import {
   appendManualHeightCredit,
   applyHeightOverrides,
@@ -1350,6 +1352,20 @@ export function useModelPage({
     () => (siteWind ? analyzeSiteWind(siteWind, windSettings.period) : null),
     [siteWind, windSettings.period],
   );
+  const windModel = useMemo(
+    () => windObstacleModel(displayModel, massing.drawingBuildings),
+    [displayModel, massing.drawingBuildings],
+  );
+  const windPlanOutlineModel = useMemo(
+    () => withImportedOutlines(displayModel, massing.drawingBuildings),
+    [displayModel, massing.drawingBuildings],
+  );
+  const windPlan = useWindPlan({
+    model: windModel,
+    siteWind,
+    period: windSettings.period,
+    active: tab === "3d" && view.projection === "plan" && leftOpen === "analysis" && analysisKind === "wind" && siteWind != null,
+  });
 
   useEffect(() => {
     if (typeof document === "undefined") return;
@@ -2162,6 +2178,8 @@ export function useModelPage({
     defaultExplodedAxoGapM,
     defaultExplodedAxoSettings,
     displayModel,
+    windModel,
+    windPlanOutlineModel,
     dragReorderAxoLayer,
     draggedAxoLayer,
     drawing,
@@ -2352,6 +2370,7 @@ export function useModelPage({
     windMotion,
     windNote,
     windSettings,
+    windPlan,
     siteWind,
     writeStoredShowManualHeights,
   };

@@ -1,3 +1,4 @@
+import { useLayoutEffect } from "react";
 import { ShortcutCheatsheet } from "../ShortcutCheatsheet";
 import { WindRosePanel } from "../WindRosePanel";
 import { shouldShowIntroBridgePill } from "./shouldShowIntroBridgePill";
@@ -20,8 +21,12 @@ export function ModelPageView({ vm }: { vm: ModelPageViewModel }) {
     siteWind,
     tab,
     windSettings,
+    windPlan,
     topbarLayout,
   } = vm;
+
+  useWindPlanCardTop(windPlan.active);
+  const windCardOn = leftOpen === "analysis" && tab !== "satellite" && analysisKind === "wind" && siteWind != null;
 
   return (
     <div
@@ -30,6 +35,7 @@ export function ModelPageView({ vm }: { vm: ModelPageViewModel }) {
       data-view-tab={tab}
       data-topbar-layout={topbarLayout}
       data-cut-size-label={cutDimLabel}
+      data-wind-plan={windPlan.active ? windPlan.mode : undefined}
       data-intro-hold={!introHoldReleasedRef.current && tab === "3d" && shouldShowIntroBridgePill() ? "true" : undefined}
       data-intro-webgl-wait={!introWebglReadyRef.current && tab === "3d" && shouldShowIntroBridgePill() ? "true" : undefined}
     >
@@ -41,12 +47,16 @@ export function ModelPageView({ vm }: { vm: ModelPageViewModel }) {
       >
         <ModelPageViewportTabs vm={vm} />
         <ModelPageSidebar vm={vm} />
-        {leftOpen === "analysis" && tab !== "satellite" && analysisKind === "wind" && siteWind ? (
-          <div className="wind-rose-analysis-card hud-card" aria-label="Wind rose panel">
+        {windCardOn && siteWind ? (
+          <div
+            className={windPlan.active ? "wind-rose-analysis-card is-plan hud-card" : "wind-rose-analysis-card hud-card"}
+            aria-label="Wind rose panel"
+          >
             <WindRosePanel
               selection={siteWind}
               period={windSettings.period}
               showGroundWindLegend={windSettings.enabled && tab === "3d"}
+              plan={windPlan.active ? windPlan : null}
             />
           </div>
         ) : null}
@@ -55,4 +65,24 @@ export function ModelPageView({ vm }: { vm: ModelPageViewModel }) {
       <ShortcutCheatsheet open={shortcutCheatsheetOpen} onClose={() => setShortcutCheatsheetOpen(false)} />
     </div>
   );
+}
+const WIND_PLAN_CARD_GAP_PX = 8;
+
+function useWindPlanCardTop(active: boolean) {
+  useLayoutEffect(() => {
+    if (!active || typeof document === "undefined") return;
+    const root = document.documentElement;
+    const rail = document.querySelector<HTMLElement>(".model .left-tool-rail");
+    if (!rail) return;
+    const sync = () => root.style.setProperty("--wind-plan-card-top", `${Math.round(rail.getBoundingClientRect().bottom + WIND_PLAN_CARD_GAP_PX)}px`);
+    sync();
+    const observer = typeof ResizeObserver !== "undefined" ? new ResizeObserver(sync) : null;
+    observer?.observe(rail);
+    window.addEventListener("resize", sync);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener("resize", sync);
+      root.style.removeProperty("--wind-plan-card-top");
+    };
+  }, [active]);
 }

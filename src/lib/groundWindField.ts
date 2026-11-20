@@ -156,6 +156,8 @@ function boxBlur(values: Float32Array, cols: number, rows: number, radius: numbe
   return out;
 }
 
+export type GroundWindRasterGrid = { cols: number; rows: number; cellM: number; originE: number; originN: number };
+
 export function rasterGroundWindObstacles(model: CityModel): GroundWindObstacles {
   const w = model.widthM ?? model.sideM;
   const h = model.heightM ?? model.sideM;
@@ -169,6 +171,11 @@ export function rasterGroundWindObstacles(model: CityModel): GroundWindObstacles
   for (const tree of model.trees) {
     rasterDisc(tree.at[0], tree.at[1], tree.crown_diameter_m / 2, grid, Math.max(2, tree.height_m), canopy);
   }
+  return groundWindObstaclesFromRasters(grid, heights, canopy);
+}
+
+export function groundWindObstaclesFromRasters(grid: GroundWindRasterGrid, heights: Float32Array, canopy: Float32Array): GroundWindObstacles {
+  const { cols, rows, cellM } = grid;
   const solid = new Uint8Array(cols * rows);
   const obstacle = new Float32Array(cols * rows);
   const fluid: number[] = [];

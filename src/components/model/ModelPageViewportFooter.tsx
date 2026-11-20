@@ -41,7 +41,35 @@ export function ModelPageViewportFooter({ vm }: { vm: import("./useModelPage").M
     walkAt,
     walkRipple,
     windSettings,
+    windPlan,
   } = vm;
+  const planWind = windPlan.active && analysisKind === "wind";
+  const windTelemetry = (
+    <div className="solar-telemetry mono" aria-label="Live wind telemetry">
+      <div className="st-item">
+        <span className="st-k">PREVAILING</span>
+        <span className="st-v">{consoleWindStats ? consoleWindStats.prevailingLabel : "N, NNE"}</span>
+      </div>
+      <span className="st-dot" aria-hidden="true">·</span>
+      <div className="st-item">
+        <span className="st-k">MEDIAN</span>
+        <span className="st-v">
+          {planWind
+            ? consoleWindStats
+              ? `${(consoleWindStats.prevailingMeanSpeedMs ?? consoleWindStats.prevailingMedianKmh / 3.6).toFixed(1)} m/s`
+              : "—"
+            : consoleWindStats
+              ? `${Math.round(consoleWindStats.prevailingMedianKmh)} km/h`
+              : "18 km/h"}
+        </span>
+      </div>
+      <span className="st-dot" aria-hidden="true">·</span>
+      <div className="st-item">
+        <span className="st-k">CALM</span>
+        <span className="st-v">{consoleWindStats ? `${consoleWindStats.calmPercent.toFixed(1)}%` : "4.2%"}</span>
+      </div>
+    </div>
+  );
 
   return (
     <>
@@ -129,24 +157,7 @@ export function ModelPageViewportFooter({ vm }: { vm: import("./useModelPage").M
                 );
               })()}
 
-              {analysisKind === "wind" && (
-                <div className="solar-telemetry mono" aria-label="Live wind telemetry">
-                  <div className="st-item">
-                    <span className="st-k">PREVAILING</span>
-                    <span className="st-v">{consoleWindStats ? consoleWindStats.prevailingLabel : "N, NNE"}</span>
-                  </div>
-                  <span className="st-dot" aria-hidden="true">·</span>
-                  <div className="st-item">
-                    <span className="st-k">MEDIAN</span>
-                    <span className="st-v">{consoleWindStats ? `${Math.round(consoleWindStats.prevailingMedianKmh)} km/h` : "18 km/h"}</span>
-                  </div>
-                  <span className="st-dot" aria-hidden="true">·</span>
-                  <div className="st-item">
-                    <span className="st-k">CALM</span>
-                    <span className="st-v">{consoleWindStats ? `${consoleWindStats.calmPercent.toFixed(1)}%` : "4.2%"}</span>
-                  </div>
-                </div>
-              )}
+              {analysisKind === "wind" && !planWind && windTelemetry}
 
               {analysisKind === "view" && (
                 <div className="solar-telemetry mono" aria-label="Live viewshed telemetry">
@@ -188,134 +199,155 @@ export function ModelPageViewportFooter({ vm }: { vm: import("./useModelPage").M
                 </div>
               )}
 
-              <span className="v-sep hud-sep" aria-hidden="true" />
+              {!planWind && <span className="v-sep hud-sep" aria-hidden="true" />}
 
-              <div className="overlay-chips" role="group" aria-label="Scene overlay toggles">
-                {analysisKind === "solar" && (
-                  <>
-                    {tab !== "drawing" && (
+              {planWind ? (
+                <div className="wind-plan-switch" role="group" aria-label="Plan wind diagram">
+                  {(
+                    [
+                      ["speed", "Wind speed"],
+                      ["comfort", "Comfort"],
+                    ] as const
+                  ).map(([id, label]) => (
+                    <button
+                      key={id}
+                      type="button"
+                      className={windPlan.mode === id ? "wind-plan-switch-btn is-active" : "wind-plan-switch-btn"}
+                      aria-pressed={windPlan.mode === id}
+                      onClick={() => windPlan.setMode(id)}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="overlay-chips" role="group" aria-label="Scene overlay toggles">
+                  {analysisKind === "solar" && (
+                    <>
+                      {tab !== "drawing" && (
+                        <button
+                          type="button"
+                          className={solar.showPath ? "ov-chip on" : "ov-chip"}
+                          aria-pressed={solar.showPath}
+                          onClick={() => commitSolar({ ...solar, showPath: !solar.showPath })}
+                        >
+                          <span className="ov-dot" aria-hidden="true" />
+                          <span>3D Sun Dome</span>
+                        </button>
+                      )}
                       <button
                         type="button"
-                        className={solar.showPath ? "ov-chip on" : "ov-chip"}
-                        aria-pressed={solar.showPath}
-                        onClick={() => commitSolar({ ...solar, showPath: !solar.showPath })}
+                        className={solar.castShadows ? "ov-chip on" : "ov-chip"}
+                        aria-pressed={solar.castShadows}
+                        onClick={() => commitSolar({ ...solar, castShadows: !solar.castShadows })}
                       >
                         <span className="ov-dot" aria-hidden="true" />
-                        <span>3D Sun Dome</span>
+                        <span>Shadows</span>
                       </button>
-                    )}
-                    <button
-                      type="button"
-                      className={solar.castShadows ? "ov-chip on" : "ov-chip"}
-                      aria-pressed={solar.castShadows}
-                      onClick={() => commitSolar({ ...solar, castShadows: !solar.castShadows })}
-                    >
-                      <span className="ov-dot" aria-hidden="true" />
-                      <span>Shadows</span>
-                    </button>
-                    <button
-                      type="button"
-                      data-sun-hours-ground-chip
-                      className={solar.sunHours ? "ov-chip on" : "ov-chip"}
-                      aria-pressed={Boolean(solar.sunHours)}
-                      onClick={() => commitSolar({ ...solar, sunHours: !solar.sunHours })}
-                    >
-                      <span className="ov-dot" aria-hidden="true" />
-                      <span>Sun hours</span>
-                    </button>
-                    {tab === "drawing" && drawing === "site" && (
                       <button
                         type="button"
-                        className={solar.sunStudy ? "ov-chip on" : "ov-chip"}
-                        aria-pressed={Boolean(solar.sunStudy)}
-                        onClick={() =>
-                          commitSolar({
-                            ...solar,
-                            sunStudy: !solar.sunStudy,
-                            sunStudyCasters: sunStudySelected.length > 0 ? "selected" : "all",
-                          })
-                        }
+                        data-sun-hours-ground-chip
+                        className={solar.sunHours ? "ov-chip on" : "ov-chip"}
+                        aria-pressed={Boolean(solar.sunHours)}
+                        onClick={() => commitSolar({ ...solar, sunHours: !solar.sunHours })}
                       >
                         <span className="ov-dot" aria-hidden="true" />
-                        <span>9–3pm Plan Fan</span>
+                        <span>Sun hours</span>
                       </button>
-                    )}
-                    {tab === "drawing" && drawing === "site" && Boolean(solar.sunStudy) && sunStudySelected.length > 0 && (
+                      {tab === "drawing" && drawing === "site" && (
+                        <button
+                          type="button"
+                          className={solar.sunStudy ? "ov-chip on" : "ov-chip"}
+                          aria-pressed={Boolean(solar.sunStudy)}
+                          onClick={() =>
+                            commitSolar({
+                              ...solar,
+                              sunStudy: !solar.sunStudy,
+                              sunStudyCasters: sunStudySelected.length > 0 ? "selected" : "all",
+                            })
+                          }
+                        >
+                          <span className="ov-dot" aria-hidden="true" />
+                          <span>9–3pm Plan Fan</span>
+                        </button>
+                      )}
+                      {tab === "drawing" && drawing === "site" && Boolean(solar.sunStudy) && sunStudySelected.length > 0 && (
+                        <button
+                          type="button"
+                          className="ov-chip on"
+                          aria-label={`Clear ${sunStudySelected.length} selected shadow buildings`}
+                          onClick={() => {
+                            setSunStudySelected([]);
+                            commitSolar({ ...solar, sunStudyCasters: "all" });
+                          }}
+                        >
+                          <span>{sunStudySelected.length} selected ×</span>
+                        </button>
+                      )}
+                    </>
+                  )}
+
+                  {analysisKind === "wind" && (
+                    <>
                       <button
                         type="button"
-                        className="ov-chip on"
-                        aria-label={`Clear ${sunStudySelected.length} selected shadow buildings`}
-                        onClick={() => {
-                          setSunStudySelected([]);
-                          commitSolar({ ...solar, sunStudyCasters: "all" });
-                        }}
+                        className={windSettings.enabled ? "ov-chip on" : "ov-chip"}
+                        aria-pressed={windSettings.enabled}
+                        onClick={() => commitWind({ ...windSettings, enabled: !windSettings.enabled })}
                       >
-                        <span>{sunStudySelected.length} selected ×</span>
+                        <span className="ov-dot" aria-hidden="true" />
+                        <span>3D Wind Flow</span>
                       </button>
-                    )}
-                  </>
-                )}
+                    </>
+                  )}
 
-                {analysisKind === "wind" && (
-                  <>
-                    <button
-                      type="button"
-                      className={windSettings.enabled ? "ov-chip on" : "ov-chip"}
-                      aria-pressed={windSettings.enabled}
-                      onClick={() => commitWind({ ...windSettings, enabled: !windSettings.enabled })}
-                    >
-                      <span className="ov-dot" aria-hidden="true" />
-                      <span>3D Wind Flow</span>
-                    </button>
-                  </>
-                )}
+                  {analysisKind === "view" && (
+                    <>
+                      <button
+                        type="button"
+                        className={walk.drawing ? "ov-chip on" : "ov-chip"}
+                        aria-pressed={walk.drawing}
+                        onClick={() => walk.setDrawing(!walk.drawing)}
+                      >
+                        <span className="ov-dot" aria-hidden="true" />
+                        <span>{walk.drawing ? "Drawing Path…" : "Draw Path"}</span>
+                      </button>
+                      <button
+                        type="button"
+                        className={walk.status === "ready" ? "ov-chip on" : "ov-chip"}
+                        disabled={walk.sampleCount < 2 || walk.status === "computing"}
+                        onClick={() => walk.compute()}
+                      >
+                        <span className="ov-dot" aria-hidden="true" />
+                        <span>{walk.status === "ready" ? "Viewshed Ready" : "Compute View"}</span>
+                      </button>
+                    </>
+                  )}
 
-                {analysisKind === "view" && (
-                  <>
-                    <button
-                      type="button"
-                      className={walk.drawing ? "ov-chip on" : "ov-chip"}
-                      aria-pressed={walk.drawing}
-                      onClick={() => walk.setDrawing(!walk.drawing)}
-                    >
-                      <span className="ov-dot" aria-hidden="true" />
-                      <span>{walk.drawing ? "Drawing Path…" : "Draw Path"}</span>
-                    </button>
-                    <button
-                      type="button"
-                      className={walk.status === "ready" ? "ov-chip on" : "ov-chip"}
-                      disabled={walk.sampleCount < 2 || walk.status === "computing"}
-                      onClick={() => walk.compute()}
-                    >
-                      <span className="ov-dot" aria-hidden="true" />
-                      <span>{walk.status === "ready" ? "Viewshed Ready" : "Compute View"}</span>
-                    </button>
-                  </>
-                )}
-
-                {analysisKind === "walkRipple" && (
-                  <>
-                    <button
-                      type="button"
-                      className={walkRipple.placing ? "ov-chip on" : "ov-chip"}
-                      aria-pressed={walkRipple.placing}
-                      onClick={() => walkRipple.setPlacing(!walkRipple.placing)}
-                    >
-                      <span className="ov-dot" aria-hidden="true" />
-                      <span>{walkRipple.placing ? "Click ground…" : "Pick origin"}</span>
-                    </button>
-                    <button
-                      type="button"
-                      className={walkRipple.status === "ready" ? "ov-chip on" : "ov-chip"}
-                      disabled={!walkRipple.times}
-                      onClick={walkRipple.clear}
-                    >
-                      <span className="ov-dot" aria-hidden="true" />
-                      <span>Clear ripple</span>
-                    </button>
-                  </>
-                )}
-              </div>
+                  {analysisKind === "walkRipple" && (
+                    <>
+                      <button
+                        type="button"
+                        className={walkRipple.placing ? "ov-chip on" : "ov-chip"}
+                        aria-pressed={walkRipple.placing}
+                        onClick={() => walkRipple.setPlacing(!walkRipple.placing)}
+                      >
+                        <span className="ov-dot" aria-hidden="true" />
+                        <span>{walkRipple.placing ? "Click ground…" : "Pick origin"}</span>
+                      </button>
+                      <button
+                        type="button"
+                        className={walkRipple.status === "ready" ? "ov-chip on" : "ov-chip"}
+                        disabled={!walkRipple.times}
+                        onClick={walkRipple.clear}
+                      >
+                        <span className="ov-dot" aria-hidden="true" />
+                        <span>Clear ripple</span>
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
 
             </div>
 

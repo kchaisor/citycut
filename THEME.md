@@ -322,6 +322,23 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--ground-wind-rising` | `#d9a300` | 3D ground-wind line velocity ramp: speeding up (≈ 1.12×). |
 | `--ground-wind-fast` | `#e8670f` | 3D ground-wind line velocity ramp: speeding up (≈ 1.25×). |
 | `--ground-wind-speeding` | `#cc1f1f` | 3D ground-wind line velocity ramp: strongest speed-up at corners and gaps (≥ 1.4×). |
+| `--wind-plan-speed-still` | `#2e42d4` | Plan Wind speed map (CFD-style ramp, fixed 0–4 m/s, linear between stops): 0 m/s, deep royal blue for sheltered wakes. Plan only; the 3D streaks keep `--ground-wind-*`. |
+| `--wind-plan-speed-calm` | `#4f68de` | Plan Wind speed map: 1 m/s, mid blue (typical lee-side wakes). |
+| `--wind-plan-speed-breeze` | `#46d4e8` | Plan Wind speed map: 2 m/s, cyan (half scale). |
+| `--wind-plan-speed-brisk` | `#b5e35c` | Plan Wind speed map: 2.8 m/s, green-yellow. |
+| `--wind-plan-speed-strong` | `#f3dc3c` | Plan Wind speed map: 3.5 m/s, yellow. |
+| `--wind-plan-speed-fast` | `#ec6a2e` | Plan Wind speed map: 4 m/s and above, orange-red (top of the Velocity legend). |
+| `--wind-plan-sitting` | `#bdf8da` | Plan wind comfort map (Plan view, Wind Rose, Comfort): Lawson sitting band (4 m/s exceeded ≤ 5%), and its legend swatch. Sampled from Kelvin's Lawson reference, 19 Nov 2026. |
+| `--wind-plan-standing` | `#6adca0` | Plan wind comfort map: Lawson standing band (6 m/s). |
+| `--wind-plan-strolling` | `#f8d404` | Plan wind comfort map: Lawson strolling band (8 m/s). |
+| `--wind-plan-walking` | `#faa902` | Plan wind comfort map: Lawson walking band (10 m/s). |
+| `--wind-plan-uncomfortable` | `#f44333` | Plan wind comfort map: uncomfortable band. Unsafe has no fill of its own; unsafe patches keep their band colour and gain the hatch and outline (`--wind-plan-unsafe-stroke`). |
+| `--wind-plan-building` | `#ffffff` | Plan Wind speed map: building footprints drawn over the wind diagram. |
+| `--wind-plan-comfort-building` | `#c5c5c5` | Plan Comfort map: light-grey building footprints, inside and outside the site. |
+| `--wind-plan-basemap` | `#f3f3f3` | Plan Comfort map: muted grey ground inside the cut and outside the site clip. |
+| `--wind-plan-road` | `#e3e3e3` | Plan Comfort map: roads on the muted base map. |
+| `--wind-plan-water` | `#7FBFFF` | Plan wind maps (Wind speed and Comfort): water, the same blue as `--water-fill`. |
+| `--wind-plan-green` | `#e8ebe6` | Plan Comfort map: green space on the muted base map. |
 | `--wind-band-0` | `#9ec5e8` | Wind console swatch: 2–10 km/h. |
 | `--wind-band-1` | `#5b9bd5` | Wind console swatch: 10–20 km/h. |
 | `--wind-band-2` | `#2f6fd6` | Wind console swatch: 20–30 km/h. |
@@ -421,6 +438,18 @@ A dash is two lengths in millimetres: how long the mark is, then how long the ga
 | `--tram-dash` | Dash of a tram route | `1.2 0.6` | mm, on then off |
 | `--axo-guide-dash` | Dash of exploded axo vertical guides | `0.8 0.5` | mm, on then off |
 | `--building-edge` | Colour of the massing edge in the 3D view | `#000000` | colour |
+| `--wind-plan-contour-stroke` | Plan wind speed map: colour of the fine isolines every 0.25 m/s | `#5A5A5A` | colour |
+| `--wind-plan-contour-opacity` | Plan wind speed map: opacity of those isolines | `0.3` | 0–1 |
+| `--wind-plan-contour-px` | Plan wind speed map: isoline weight on screen | `0.75` | screen px |
+| `--wind-plan-building-edge` | Plan wind maps: building footprint edge colour | `#1A1A1A` | colour |
+| `--wind-plan-building-edge-opacity` | Plan wind maps: building edge opacity | `0.4` | 0–1 |
+| `--wind-plan-building-edge-px` | Plan wind maps: building edge weight | `1` | screen px |
+| `--wind-plan-unsafe-stroke` | Plan comfort map: unsafe hatch and outline colour | `#7A1A12` | colour |
+| `--wind-plan-unsafe-outline-px` | Plan comfort map: unsafe outline weight | `2` | screen px |
+| `--wind-plan-unsafe-hatch-px` | Plan comfort map: weight of the 45° unsafe hatch | `1` | screen px |
+| `--wind-plan-unsafe-hatch-spacing-px` | Plan comfort map: gap between hatch lines | `6` | screen px |
+| `--wind-plan-unsafe-min-px` | Plan comfort map: smallest drawn size of an unsafe area | `12` | screen px |
+| `--wind-plan-swatch-edge` / `--wind-plan-swatch-edge-opacity` | Plan wind card: 1px edge on the comfort legend swatches | `#1A1A1A` / `0.2` | colour / 0–1 |
 
 Green fills, water fills, tree fills, and the other fills are in the Fills table above. This list is the pens. The footpath fill stays named here because the Line styles panel still edits it, and the value itself is in `src/colours.css`.
 

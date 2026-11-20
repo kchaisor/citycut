@@ -113,6 +113,8 @@ import {
 import type { WalkRippleBuildingTint } from "../lib/walkRippleBuildingTint";
 import { SolarHeliodon, SolarLight, useMelbourneSunSample, type SolarViewSettings } from "./SolarHeliodon";
 import { GroundWindFlow } from "./GroundWindFlow";
+import { createWindPlanTransformStore, WindPlanOverlay, WindPlanProjector } from "./WindPlanOverlay";
+import type { WindPlanState } from "./useWindPlan";
 import { InspectHudProjector, type InspectHudScreen } from "./InspectHudProjector";
 import type { WindPeriodId } from "../lib/windRose";
 import type { SiteWindSelection } from "../lib/windRoseData";
@@ -2176,6 +2178,8 @@ function WindLayer({
 
 export function Scene3D({
   model,
+  windModel,
+  windPlanOutlineModel,
   uniformBuildings,
   colourBySource,
   showManualEdits,
@@ -2188,6 +2192,7 @@ export function Scene3D({
   siteWind,
   windPeriod,
   windAnimateStreaks,
+  windPlan = null,
   onExportReady,
   onSceneInspectPick,
   onClearSceneInspect,
@@ -2216,6 +2221,8 @@ export function Scene3D({
   active = true,
 }: {
   model: CityModel;
+  windModel?: CityModel;
+  windPlanOutlineModel?: CityModel;
   uniformBuildings: boolean;
   colourBySource: boolean;
   showManualEdits: boolean;
@@ -2228,6 +2235,7 @@ export function Scene3D({
   siteWind: SiteWindSelection | null;
   windPeriod: WindPeriodId;
   windAnimateStreaks: boolean;
+  windPlan?: WindPlanState | null;
   onExportReady: (exporter: SceneExporter | null) => void;
   onSceneInspectPick: (selection: SceneSelection) => void;
   onClearSceneInspect?: () => void;
@@ -2261,6 +2269,8 @@ export function Scene3D({
     [introPlayed, sceneCutKey],
   );
   const boundsRef = useRef<Aabb | null>(null);
+  const windPlanStore = useMemo(() => createWindPlanTransformStore(), []);
+  const windPlanOn = windPlan?.active === true;
   const onBounds = useCallback((bounds: Aabb) => {
     boundsRef.current = bounds;
     if (typeof document === "undefined") return;
@@ -2355,7 +2365,7 @@ export function Scene3D({
         <ScenePause active={active} />
         <AdaptiveViewportDpr />
         <SceneContinuousBridge
-          windAnimate={windEnabled && windAnimateStreaks}
+          windAnimate={windEnabled && windAnimateStreaks && !windPlanOn}
           walkRippleActive={walkRipplePlaying}
         />
         {qaModeFromSearch(typeof window === "undefined" ? "" : window.location.search) ? <QaPerfSampler /> : null}
@@ -2455,12 +2465,13 @@ export function Scene3D({
       />
       {onCompassHeading ? <StudioCompassTracker onHeading={onCompassHeading} /> : null}
       <WindLayer
-        model={model}
+        model={windModel ?? model}
         siteWind={siteWind}
         period={windPeriod}
-        enabled={windEnabled}
+        enabled={windEnabled && !windPlanOn}
         animateStreaks={windAnimateStreaks}
       />
+      {windPlanOn ? <WindPlanProjector store={windPlanStore} /> : null}
       <Cameras
         side={model.sideM}
         frameWidthM={model.widthM ?? model.sideM}
@@ -2484,6 +2495,7 @@ export function Scene3D({
         gizmoOrbitLock={sectionKnifeGizmoInteraction.orbitLock}
       />
       </Canvas>
+      {windPlanOn && windPlan ? <WindPlanOverlay model={windPlanOutlineModel ?? model} plan={windPlan} store={windPlanStore} /> : null}
     </div>
   );
 }
