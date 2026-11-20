@@ -19,7 +19,9 @@
       "Bash(gh pr list:*)",
       "Bash(gh pr diff:*)",
       "Bash(gh pr create:*)",
-      "Bash(gh pr checks:*)"
+      "Bash(gh pr checks:*)",
+      "Bash(gh api -X PUT repos/kchaisor/citycut/pulls/*/merge *)",
+      "Bash(gh api -X POST repos/kchaisor/citycut/pulls/*/ccr/ready_for_review*)"
     ],
     "deny": [
       "Bash(git push --force:*)",
