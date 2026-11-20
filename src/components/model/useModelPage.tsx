@@ -327,6 +327,7 @@ export function useModelPage({
   }, [tab, model]);
   const [snapId, setSnapId] = useState(0);
   const cameraMemory = useMemo<CameraMemoryRef>(() => ({ current: null }), [model]);
+  const introPlayed = useMemo<{ current: string | null }>(() => ({ current: null }), [model]);
   const [view3dDisplay, setView3dDisplay] = useState<View3dDisplaySettings>(() => {
     const next = view3dDisplayForModelOpen(window.localStorage);
     writeStoredView3dDisplay(window.localStorage, next);
@@ -2104,6 +2105,7 @@ export function useModelPage({
     buildingsAsMesh,
     busy,
     cameraMemory,
+    introPlayed,
     colourByUse,
     comFetchBounds,
     comFootprintFetchError,

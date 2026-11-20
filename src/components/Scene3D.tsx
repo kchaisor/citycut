@@ -116,6 +116,7 @@ import { GroundWindFlow } from "./GroundWindFlow";
 import { InspectHudProjector, type InspectHudScreen } from "./InspectHudProjector";
 import { analyzeWindPeriod, type WindPeriodId, type WindRoseTable } from "../lib/windRose";
 import type { CityModel } from "../types";
+import { introAlreadyPlayedForCut, markIntroPlayedForCut, modelCutSiteId } from "../lib/introPlayed";
 
 export type SceneExporter = {
   png: () => Promise<Blob>;
@@ -278,7 +279,7 @@ function SceneDemandBootstrap() {
   return null;
 }
 
-function SceneFrameloopGate() {
+function SceneFrameloopGate({ introSkip }: { introSkip: boolean }) {
   const set = useThree((state) => state.set);
   const invalidate = useThree((state) => state.invalidate);
   const frameloopMode = () =>
@@ -286,20 +287,20 @@ function SceneFrameloopGate() {
       ? "always"
       : "demand";
   useLayoutEffect(() => {
-    if (!shouldRunIntroTransition()) {
+    if (!shouldRunIntroTransition() || introSkip) {
       set({ frameloop: frameloopMode() });
       invalidate();
     }
-  }, [set, invalidate]);
+  }, [set, invalidate, introSkip]);
   useEffect(() => {
-    if (!shouldRunIntroTransition()) return;
+    if (!shouldRunIntroTransition() || introSkip) return;
     const onIntroDone = () => {
       set({ frameloop: frameloopMode() });
       invalidate();
     };
     window.addEventListener("citycut:intro-done", onIntroDone);
     return () => window.removeEventListener("citycut:intro-done", onIntroDone);
-  }, [set, invalidate]);
+  }, [set, invalidate, introSkip]);
   return null;
 }
 
@@ -521,6 +522,8 @@ function City({
   projection,
   walkRippleTint,
   walkRippleArrivals,
+  introSkip,
+  introPlayed,
 }: {
   model: CityModel;
   uniformBuildings: boolean;
@@ -545,6 +548,8 @@ function City({
   projection: ProjectionMode;
   walkRippleTint?: WalkRippleBuildingTint | null;
   walkRippleArrivals?: Map<number, number> | null;
+  introSkip: boolean;
+  introPlayed?: { current: string | null };
 }) {
   const onBoundsRef = useRef(onBounds);
   onBoundsRef.current = onBounds;
@@ -558,7 +563,7 @@ function City({
     [uniformBuildings, colourBySource],
   );
   const group = useMemo(() => {
-    const introStagger = shouldRunIntroTransition();
+    const introStagger = shouldRunIntroTransition() && !introSkip;
     const city = buildCityGroup(model, { uniformBuildings, colourBySource, highlightManual, introStagger });
     const plinth = city.getObjectByName("BasePlinth");
     const ground = city.getObjectByName("Ground");
@@ -621,6 +626,7 @@ function City({
     uniformBuildings,
     colourBySource,
     highlightManual,
+    introSkip,
   ]);
   useLayoutEffect(() => {
     onBoundsRef.current(measureCity(group));
@@ -635,7 +641,7 @@ function City({
     steadyFrames?: number;
     targets: Array<{ obj: THREE.Object3D; pivotY: number; kind: "building" | "tree"; bucket: number }>;
   } | null>(null);
-  const cutKey = `${model.center.lat.toFixed(5)},${model.center.lon.toFixed(5)},${model.sideM}`;
+  const cutKey = modelCutSiteId(model.center, model.sideM);
   const introScene = useThree((state) => state.scene);
   const invalidate = useThree((state) => state.invalidate);
   useLayoutEffect(() => {
@@ -676,7 +682,7 @@ function City({
       targets.push({ obj: object, pivotY, kind: "building", bucket });
     }
     const cutRingObj = group.getObjectByName("IntroCutRing") as THREE.LineSegments | undefined;
-    if (!shouldRunIntroTransition() || targets.length === 0) {
+    if (!shouldRunIntroTransition() || introSkip || targets.length === 0) {
       for (const { obj } of targets) {
         obj.scale.y = 1;
         obj.position.y = 0;
@@ -730,7 +736,7 @@ function City({
     introRef.current = { cutKey, elapsedSec: 0, frameCount: 0, done: false, webglReadyDispatched: false, targets };
     introScene.userData[INTRO_ACTIVE_KEY] = true;
     invalidate();
-  }, [group, cutKey, introScene, invalidate]);
+  }, [group, cutKey, introScene, invalidate, introSkip]);
   useFrame((state, delta) => {
     const intro = introRef.current;
     if (!intro || intro.done) return;
@@ -880,6 +886,7 @@ function City({
     ds.introTreeScale = treeScale.toFixed(3);
     if (done) {
       intro.done = true;
+      if (introPlayed) markIntroPlayedForCut(introPlayed, intro.cutKey);
       state.scene.userData[INTRO_ACTIVE_KEY] = false;
       if (typeof window !== "undefined") {
         window.dispatchEvent(new CustomEvent("citycut:intro-done"));
@@ -2174,6 +2181,7 @@ export function Scene3D({
   sunHoursDirectOverlay = null,
   sunHoursScaleMax = 0,
   solarAnalysisActive = false,
+  introPlayed,
 }: {
   model: CityModel;
   uniformBuildings: boolean;
@@ -2212,7 +2220,13 @@ export function Scene3D({
   sunHoursDirectOverlay?: SunHoursDirectOverlay | null;
   sunHoursScaleMax?: number;
   solarAnalysisActive?: boolean;
+  introPlayed?: { current: string | null };
 }) {
+  const sceneCutKey = modelCutSiteId(model.center, model.sideM);
+  const introSkip = useMemo(
+    () => introAlreadyPlayedForCut(introPlayed?.current ?? null, sceneCutKey),
+    [introPlayed, sceneCutKey],
+  );
   const boundsRef = useRef<Aabb | null>(null);
   const onBounds = useCallback((bounds: Aabb) => {
     boundsRef.current = bounds;
@@ -2304,7 +2318,7 @@ export function Scene3D({
         <ViewInset />
         <WebGlContextWatch onContextLost={onGlContextLost} onContextRestored={onGlContextRestored} />
         <SceneDemandBootstrap />
-        <SceneFrameloopGate />
+        <SceneFrameloopGate introSkip={introSkip} />
         <AdaptiveViewportDpr />
         <SceneContinuousBridge
           windAnimate={windEnabled && windAnimateStreaks}
@@ -2374,6 +2388,8 @@ export function Scene3D({
         projection={projection}
         walkRippleTint={walkRippleTint}
         walkRippleArrivals={walkRippleArrivals}
+        introSkip={introSkip}
+        introPlayed={introPlayed}
       />
       {solar.sunHours && sunHoursGroundGrid && sunHoursDirectOverlay ? (
         <SunHoursLayer
@@ -2429,7 +2445,7 @@ export function Scene3D({
         lat={model.center.lat}
         lon={model.center.lon}
         cameraMemory={cameraMemory}
-        introEnabled
+        introEnabled={!introSkip}
         gizmoOrbitLock={sectionKnifeGizmoInteraction.orbitLock}
       />
       </Canvas>

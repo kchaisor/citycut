@@ -24,6 +24,7 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
     analysisKind,
     axoSettings,
     cameraMemory,
+    introPlayed,
     colourByUse,
     displayModel,
     drawing,
@@ -159,6 +160,7 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
                       : []
                 }
                 cameraMemory={cameraMemory}
+                introPlayed={introPlayed}
                 display={view3dDisplay}
                 importedMassing={massing.group}
                 walkLayer={walk.layer.root}
