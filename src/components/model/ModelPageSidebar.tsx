@@ -1,4 +1,6 @@
-import { Download, RotateCcw } from "lucide-react";
+import { Download, PanelRight, RotateCcw } from "lucide-react";
+import { StudioCompass } from "../StudioCompass";
+import { studioCompassVisible } from "../../lib/studioCompass";
 import { Sidebar } from "../Sidebar";
 import { type DrawingKind } from "../DrawingPlan";
 import { mgaCrs } from "../../lib/crsZone";
@@ -21,7 +23,6 @@ export function ModelPageSidebar({ vm }: { vm: import("./useModelPage").ModelPag
     busy,
     comMeasuredHeightCount,
     commitView,
-    cutDimLabel,
     displayModel,
     drawing,
     items,
@@ -54,10 +55,14 @@ export function ModelPageSidebar({ vm }: { vm: import("./useModelPage").ModelPag
     setTab,
     setTopbarExportOpen,
     sidebarCollapsed,
+    siteIntelOpen,
+    setSiteIntelOpen,
     sourcesLoaded,
+    compassHeadingDeg,
     tab,
     topbarExportOpen,
     topbarExportRef,
+    topbarExportTriggerRef,
     view,
   } = vm;
 
@@ -78,6 +83,11 @@ export function ModelPageSidebar({ vm }: { vm: import("./useModelPage").ModelPag
             showNewCut
             onSelect={selectSection}
             onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
+            siteIntel={{
+              open: siteIntelOpen,
+              onToggle: () => setSiteIntelOpen(!siteIntelOpen),
+              icon: <PanelRight size={16} strokeWidth={1.75} aria-hidden="true" />,
+            }}
             rightMeta={`MGA${mgaCrs(model.center.lon).zone}`}
             brandMeta={
               <>
@@ -85,11 +95,13 @@ export function ModelPageSidebar({ vm }: { vm: import("./useModelPage").ModelPag
                 <span className="place-chip studio-breadcrumb-place" title={model.placeLabel}>
                   {model.placeLabel}
                 </span>
-                <span className="dim-chip studio-cut-pill mono">{cutDimLabel}</span>
               </>
             }
             headerCenter={
               <div className="header-center-cluster">
+                {tab === "3d" && studioCompassVisible(view.projection, view.freeRotate) && (
+                  <StudioCompass headingDeg={compassHeadingDeg} />
+                )}
                 <select
                   className="topbar-view-select"
                   aria-label="Model view"
@@ -341,6 +353,7 @@ export function ModelPageSidebar({ vm }: { vm: import("./useModelPage").ModelPag
                 </div>
                 <div className="topbar-export-compact" ref={topbarExportRef}>
                   <button
+                    ref={topbarExportTriggerRef}
                     type="button"
                     className="topbar-export-trigger studio-export-btn"
                     aria-label="Export"
@@ -387,7 +400,7 @@ export function ModelPageSidebar({ vm }: { vm: import("./useModelPage").ModelPag
                             else void saveSiteSvg();
                           }}
                         >
-                          SVG
+                          SVG (.svg)
                         </button>
                         <button
                           type="button"

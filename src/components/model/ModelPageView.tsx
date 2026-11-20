@@ -20,6 +20,7 @@ export function ModelPageView({ vm }: { vm: ModelPageViewModel }) {
     siteWind,
     tab,
     windSettings,
+    topbarLayout,
   } = vm;
 
   return (
@@ -27,6 +28,7 @@ export function ModelPageView({ vm }: { vm: ModelPageViewModel }) {
       ref={modelRootRef}
       className="model"
       data-view-tab={tab}
+      data-topbar-layout={topbarLayout}
       data-cut-size-label={cutDimLabel}
       data-intro-hold={!introHoldReleasedRef.current && tab === "3d" && shouldShowIntroBridgePill() ? "true" : undefined}
       data-intro-webgl-wait={!introWebglReadyRef.current && tab === "3d" && shouldShowIntroBridgePill() ? "true" : undefined}
