@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { BuildingHeightPopover } from "../BuildingHeightPopover";
 
 import { TreeInspectHud, TerrainInspectHud } from "../SceneInspectHud";import { DrawingPlan } from "../DrawingPlan";
@@ -24,6 +25,7 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
     analysisKind,
     axoSettings,
     cameraMemory,
+    introPlayed,
     colourByUse,
     displayModel,
     drawing,
@@ -91,11 +93,15 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
     windTable,
   } = vm;
   const sunHoursOnPlan = Boolean(solar.sunHours) && drawing === "site";
+  const [keep3d, setKeep3d] = useState(tab === "3d");
+  useEffect(() => {
+    if (tab === "3d") setKeep3d(true);
+  }, [tab]);
 
   return (
     <>
-        {tab === "3d" && (
-          <div className="fill">
+        {(tab === "3d" || keep3d) && (
+          <div className={tab === "3d" ? "fill" : "fill is-parked"} aria-hidden={tab === "3d" ? undefined : true}>
             {shouldShowIntroBridgePill() && (() => {
               const samples = typeof window !== "undefined" ? window.__citycutProgressSamples : undefined;
               const currentPct = Array.isArray(samples) && samples.length > 0 ? (samples[samples.length - 1] ?? 0) : 0;
@@ -159,6 +165,8 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
                       : []
                 }
                 cameraMemory={cameraMemory}
+                introPlayed={introPlayed}
+                active={tab === "3d"}
                 display={view3dDisplay}
                 importedMassing={massing.group}
                 walkLayer={walk.layer.root}
