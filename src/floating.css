@@ -4902,6 +4902,10 @@ body,
   max-width: none !important;
 }
 
+.model[data-topbar-layout="flow"] .top-bar-right.studio-header-right {
+  max-width: none !important;
+}
+
 @media (max-width: 1359px) {
   .model .topbar-export-wide {
     display: none !important;

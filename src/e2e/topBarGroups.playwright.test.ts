@@ -149,10 +149,13 @@ async function auditTopBar(page: Page): Promise<TopBarAudit> {
     }
 
     const meta = document.querySelector(".model .right-inspector .card-meta") as HTMLElement | null;
-    if (meta && expectedDim.length > 0) {
+    if (meta) {
       const actual = meta.textContent?.replace(/\s+/g, " ").trim() ?? "";
-      if (!actual.includes(expectedDim)) {
-        errors.push(`Site Intelligence meta "${actual}" missing cut size "${expectedDim}"`);
+      if (!/^MGA\d{2}$/.test(actual)) {
+        errors.push(`Site Intelligence meta "${actual}" is not an MGA zone`);
+      }
+      if (expectedDim.length > 0 && actual.includes(expectedDim)) {
+        errors.push(`Site Intelligence meta "${actual}" repeats the cut size`);
       }
       chipNotClipped(meta, "Site Intelligence meta");
     }
