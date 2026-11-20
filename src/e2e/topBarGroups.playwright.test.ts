@@ -301,7 +301,9 @@ async function auditTopBar(page: Page): Promise<TopBarAudit> {
         errors.push(`brand bar column gap ${barGap.toFixed(1)}px != expected ${expected}px (${layout})`);
       }
     } else if (leftGroup && centerGroup && rightGroup) {
-      const leftGap = centerGroup.getBoundingClientRect().left - leftGroup.getBoundingClientRect().right;
+      const compassEl = centerGroup.querySelector(".studio-compass") as HTMLElement | null;
+      const centerLeftEdge = compassEl ? compassEl.getBoundingClientRect().left : centerGroup.getBoundingClientRect().left;
+      const leftGap = centerLeftEdge - leftGroup.getBoundingClientRect().right;
       const rightGap = rightGroup.getBoundingClientRect().left - centerGroup.getBoundingClientRect().right;
       const gapDelta = Math.abs(leftGap - rightGap);
       const flowGap = Math.abs(leftGap - 8) <= 1.5 && Math.abs(rightGap - 8) <= 1.5;

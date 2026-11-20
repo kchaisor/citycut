@@ -5134,6 +5134,20 @@ body,
     margin-right: 50px;
   }
 
+  .model[data-topbar-layout="flow"][data-view-tab] .top-bar-left.studio-header-left {
+    flex: 0 1 auto;
+    min-width: 0;
+  }
+
+  .model[data-topbar-layout="flow"][data-view-tab] .top-bar-left.studio-header-left > * {
+    flex-shrink: 0;
+  }
+
+  .model[data-topbar-layout="flow"][data-view-tab] .top-bar-left.studio-header-left > .top-bar-left-meta {
+    flex-shrink: 1;
+    min-width: 0;
+  }
+
   .model .topbar-export-compact {
     display: none !important;
   }
