@@ -90,15 +90,8 @@
   --wind-plan-building-edge: #1A1A1A;
   --wind-plan-building-edge-opacity: 0.4;
   --wind-plan-building-edge-px: 1;
-  --wind-plan-unsafe-stroke: #7A1A12;
-  --wind-plan-unsafe-outline-px: 2;
-  --wind-plan-unsafe-hatch-px: 1;
-  --wind-plan-unsafe-hatch-spacing-px: 6;
-  --wind-plan-unsafe-min-px: 7;
-  --wind-plan-unsafe-mark-px: 1;
-  --wind-plan-unsafe-mark-opacity: 0.6;
-  --wind-plan-vector-stroke: #1A1A1A;
-  --wind-plan-vector-opacity: 0.7;
+  --wind-plan-vector-stroke: #FFFFFF;
+  --wind-plan-vector-opacity: 0.9;
   --wind-plan-vector-px: 1;
   --wind-plan-vector-head-px: 2;
   --wind-plan-vector-max-px: 18;

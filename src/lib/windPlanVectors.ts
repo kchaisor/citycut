@@ -1,7 +1,7 @@
 import type { WindPlanFlow, WindPlanGeometry } from "./windPlanField";
 import { windPlanFieldPercentile, windPlanPaintsCell, windPlanUnpaintedMask, WIND_PLAN_SCALE_PERCENTILE } from "./windPlanField";
 
-export const WIND_PLAN_VECTOR_SPACING_M = 22;
+export const WIND_PLAN_VECTOR_SPACING_M = 15.5;
 export const WIND_PLAN_VECTOR_CLEAR_M = 4;
 export const WIND_PLAN_VECTOR_MIN_GAP_PX = 7;
 export const WIND_PLAN_VECTOR_GAP_FILL = 0.88;

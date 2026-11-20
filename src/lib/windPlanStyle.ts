@@ -8,11 +8,6 @@ export type WindPlanPen = { colour: string; opacity: number; px: number };
 export type WindPlanLineStyle = {
   contour: WindPlanPen;
   buildingEdge: WindPlanPen;
-  unsafeOutline: WindPlanPen;
-  unsafeHatch: WindPlanPen;
-  unsafeMark: WindPlanPen;
-  hatchSpacingPx: number;
-  unsafeMinPx: number;
   vector: WindPlanPen;
   vectorHeadPx: number;
   vectorMaxPx: number;
@@ -33,7 +28,6 @@ function num(get: (name: string) => string, name: string): number {
 
 export function windPlanLineStyle(read?: (name: string) => string): WindPlanLineStyle {
   const get = reader(read);
-  const unsafe = get("--wind-plan-unsafe-stroke");
   return {
     contour: {
       colour: get("--wind-plan-contour-stroke"),
@@ -45,15 +39,6 @@ export function windPlanLineStyle(read?: (name: string) => string): WindPlanLine
       opacity: num(get, "--wind-plan-building-edge-opacity"),
       px: num(get, "--wind-plan-building-edge-px"),
     },
-    unsafeOutline: { colour: unsafe, opacity: 1, px: num(get, "--wind-plan-unsafe-outline-px") },
-    unsafeHatch: { colour: unsafe, opacity: 1, px: num(get, "--wind-plan-unsafe-hatch-px") },
-    unsafeMark: {
-      colour: unsafe,
-      opacity: num(get, "--wind-plan-unsafe-mark-opacity"),
-      px: num(get, "--wind-plan-unsafe-mark-px"),
-    },
-    hatchSpacingPx: num(get, "--wind-plan-unsafe-hatch-spacing-px"),
-    unsafeMinPx: num(get, "--wind-plan-unsafe-min-px"),
     vector: {
       colour: get("--wind-plan-vector-stroke"),
       opacity: num(get, "--wind-plan-vector-opacity"),

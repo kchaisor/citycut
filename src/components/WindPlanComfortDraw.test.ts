@@ -27,31 +27,12 @@ describe("plan comfort map drawing", () => {
     expect(overlay.split('ctx.fillStyle = getColour("--wind-plan-water");').length - 1).toBeGreaterThanOrEqual(2);
   });
 
-  it("draws small unsafe patches as smaller, lighter hatched marks", () => {
-    const style = windPlanLineStyle(() => "");
-    expect(style.unsafeMinPx).toBeLessThan(12);
-    expect(style.unsafeMinPx).toBeGreaterThan(0);
-    expect(style.unsafeMark.px).toBeLessThan(style.unsafeOutline.px);
-    expect(style.unsafeMark.opacity).toBeLessThan(1);
-    expect(style.unsafeMark.colour).toBe(style.unsafeOutline.colour);
-    expect(overlay).toContain("hatch(ctx, rect.width, rect.height, style, dpr, style.unsafeMark.opacity);");
-    expect(overlay).toContain("strokePen(ctx, disc, style.unsafeMark, scale);");
-  });
-
-  it("keeps unsafe as a hatch flag, not a sixth fill colour", () => {
+  it("draws no unsafe hatch, outline or mark on the map", () => {
+    expect(overlay).not.toMatch(/hatch|unsafe/i);
+    expect(drawingCss).not.toContain("--wind-plan-unsafe");
+    expect(theme).not.toContain("--wind-plan-unsafe");
+    expect(Object.keys(windPlanLineStyle(() => ""))).not.toContain("unsafeOutline");
     expect(COMFORT_CLASSES).toHaveLength(5);
     expect(Object.values(COMFORT_SWATCH)).not.toContain("--wind-plan-unsafe-stroke");
-    expect(overlay).not.toMatch(/--wind-plan-unsafe[a-z-]*"\)\s*;\s*\n\s*ctx\.fill\(/);
-  });
-
-  it("documents every new comfort token in THEME.md", () => {
-    for (const token of [
-      "--wind-plan-unsafe-min-px",
-      "--wind-plan-unsafe-mark-px",
-      "--wind-plan-unsafe-mark-opacity",
-    ]) {
-      expect(drawingCss).toContain(`${token}:`);
-      expect(theme).toContain(`\`${token}\``);
-    }
   });
 });

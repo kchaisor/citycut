@@ -332,7 +332,7 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--wind-plan-standing` | `#6adca0` | Plan wind comfort map: Lawson standing band (6 m/s). |
 | `--wind-plan-strolling` | `#f8d404` | Plan wind comfort map: Lawson strolling band (8 m/s). |
 | `--wind-plan-walking` | `#faa902` | Plan wind comfort map: Lawson walking band (10 m/s). |
-| `--wind-plan-uncomfortable` | `#f44333` | Plan wind comfort map: uncomfortable band. Unsafe has no fill of its own; unsafe patches keep their band colour and gain the hatch and outline (`--wind-plan-unsafe-stroke`). |
+| `--wind-plan-uncomfortable` | `#f44333` | Plan wind comfort map: uncomfortable band. Unsafe has no fill or mark on the map; it is reported as a count in the card. |
 | `--wind-plan-building` | `#ffffff` | Plan Wind speed map: building footprints drawn over the wind diagram. |
 | `--wind-plan-comfort-building` | `#c5c5c5` | Plan Comfort map: light-grey building footprints, inside and outside the site. |
 | `--wind-plan-basemap` | `#f3f3f3` | Plan Comfort map: muted grey ground inside the cut and outside the site clip. |
@@ -444,15 +444,8 @@ A dash is two lengths in millimetres: how long the mark is, then how long the ga
 | `--wind-plan-building-edge` | Plan wind maps: building footprint edge colour | `#1A1A1A` | colour |
 | `--wind-plan-building-edge-opacity` | Plan wind maps: building edge opacity | `0.4` | 0–1 |
 | `--wind-plan-building-edge-px` | Plan wind maps: building edge weight | `1` | screen px |
-| `--wind-plan-unsafe-stroke` | Plan comfort map: unsafe hatch and outline colour | `#7A1A12` | colour |
-| `--wind-plan-unsafe-outline-px` | Plan comfort map: unsafe outline weight | `2` | screen px |
-| `--wind-plan-unsafe-hatch-px` | Plan comfort map: weight of the 45° unsafe hatch | `1` | screen px |
-| `--wind-plan-unsafe-hatch-spacing-px` | Plan comfort map: gap between hatch lines | `6` | screen px |
-| `--wind-plan-unsafe-min-px` | Plan comfort map: smallest drawn size of an unsafe area; smaller patches get a small hatched mark | `7` | screen px |
-| `--wind-plan-unsafe-mark-px` | Plan comfort map: outline weight of the small unsafe mark | `1` | screen px |
-| `--wind-plan-unsafe-mark-opacity` | Plan comfort map: hatch and outline opacity of the small unsafe mark | `0.6` | 0–1 |
-| `--wind-plan-vector-stroke` | Plan wind maps (Wind speed and Comfort): colour of the flow vector arrows | `#1A1A1A` | colour |
-| `--wind-plan-vector-opacity` | Plan wind maps: opacity of the flow vector arrows | `0.7` | 0–1 |
+| `--wind-plan-vector-stroke` | Plan wind maps (Wind speed and Comfort): colour of the flow vector arrows | `#FFFFFF` | colour |
+| `--wind-plan-vector-opacity` | Plan wind maps: opacity of the flow vector arrows | `0.9` | 0–1 |
 | `--wind-plan-vector-px` | Plan wind maps: shaft and head weight of the flow vector arrows | `1` | screen px |
 | `--wind-plan-vector-head-px` | Plan wind maps: length of each arrowhead stroke | `2` | screen px |
 | `--wind-plan-vector-max-px` | Plan wind maps: longest arrow (the windiest cell); calm cells draw at 72% of it, and arrows never exceed 88% of the on-screen 22 m grid gap | `18` | screen px |

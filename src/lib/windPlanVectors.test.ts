@@ -192,7 +192,7 @@ describe("plan wind vector sizing", () => {
   });
 
   it("thins the grid when zoomed out so vectors keep a screen gap", () => {
-    expect(WIND_PLAN_VECTOR_SPACING_M).toBe(22);
+    expect(WIND_PLAN_VECTOR_SPACING_M).toBe(15.5);
     expect(WIND_PLAN_VECTOR_MIN_GAP_PX).toBe(7);
     expect(windPlanVectorStride(22, 1)).toBe(1);
     expect(windPlanVectorStride(22, 0.5)).toBe(1);
@@ -224,21 +224,21 @@ describe("plan wind vector sizing", () => {
     const gap = windPlanVectorGapPx(WIND_PLAN_VECTOR_SPACING_M, scale, stride);
     const mid = windPlanVectorLengthPx(0.5, gap, 18);
     const full = windPlanVectorLengthPx(1, gap, 18);
-    expect(mid).toBeGreaterThanOrEqual(8);
-    expect(mid).toBeLessThanOrEqual(10);
+    expect(mid).toBeGreaterThanOrEqual(6);
+    expect(mid).toBeLessThanOrEqual(8);
     expect(full).toBeLessThan(gap);
     expect(full).toBeGreaterThan(mid);
   });
 
-  it("uses the dark stroke tokens and the 2px head", () => {
+  it("uses the white stroke tokens and the 2px head", () => {
     const css = readFileSync(new URL("../drawing-style.css", import.meta.url), "utf8");
     const value = (name: string) => {
       const match = css.match(new RegExp(`${name}\\s*:\\s*([^;]+);`));
       expect(match, name).toBeTruthy();
       return match![1]!.trim();
     };
-    expect(value("--wind-plan-vector-stroke").toUpperCase()).toBe("#1A1A1A");
-    expect(value("--wind-plan-vector-opacity")).toBe("0.7");
+    expect(value("--wind-plan-vector-stroke").toUpperCase()).toBe("#FFFFFF");
+    expect(value("--wind-plan-vector-opacity")).toBe("0.9");
     expect(value("--wind-plan-vector-px")).toBe("1");
     expect(value("--wind-plan-vector-head-px")).toBe("2");
   });

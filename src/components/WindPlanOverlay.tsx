@@ -13,10 +13,10 @@ import {
   type WindPlanGeometry,
   type WindPlanSpeed,
 } from "../lib/windPlanField";
-import { windPlanSpeedContours, windPlanUnsafeRings, type WorldRing } from "../lib/windPlanContours";
+import { windPlanSpeedContours, type WorldRing } from "../lib/windPlanContours";
 import { COMFORT_CLASSES, lawsonClass, type ComfortClass } from "../lib/windComfort";
 import { COMFORT_SWATCH } from "./WindPlanCard";
-import { cutExtent, pointInClip, windPlanSiteClip } from "../lib/windPlanSiteClip";
+import { cutExtent, windPlanSiteClip } from "../lib/windPlanSiteClip";
 import { windPlanLineStyle, type WindPlanLineStyle, type WindPlanPen } from "../lib/windPlanStyle";
 import {
   WIND_PLAN_VECTOR_HEAD_DEG,
@@ -214,10 +214,6 @@ function buildingPath(model: CityModel): Path2D {
   return path;
 }
 
-function clampInside(value: number, lo: number, hi: number): number {
-  return lo > hi ? (lo + hi) / 2 : Math.min(hi, Math.max(lo, value));
-}
-
 type BaseMapShapes = { roads: Array<{ path: Path2D; width: number }>; water: Path2D; green: Path2D };
 
 function ptsPath(path: Path2D, ring: readonly Pt[], close: boolean) {
@@ -280,22 +276,6 @@ function strokeInside(ctx: CanvasRenderingContext2D, path: Path2D, pen: WindPlan
   ctx.save();
   ctx.clip(path, "nonzero");
   strokePen(ctx, path, { ...pen, px: pen.px * 2 }, scale);
-  ctx.restore();
-}
-
-function hatch(ctx: CanvasRenderingContext2D, width: number, height: number, style: WindPlanLineStyle, dpr: number, opacity = 1) {
-  ctx.save();
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  ctx.globalAlpha = opacity;
-  ctx.strokeStyle = style.unsafeHatch.colour;
-  ctx.lineWidth = style.unsafeHatch.px;
-  const step = style.hatchSpacingPx * Math.SQRT2;
-  ctx.beginPath();
-  for (let c = 0; c <= width + height; c += step) {
-    ctx.moveTo(c, 0);
-    ctx.lineTo(c - height, height);
-  }
-  ctx.stroke();
   ctx.restore();
 }
 
@@ -442,32 +422,6 @@ export function WindPlanOverlay({
       ctx.imageSmoothingEnabled = true;
       ctx.fillStyle = getColour("--wind-plan-water");
       ctx.fill(baseMap.water, "evenodd");
-      const unsafe = windPlanUnsafeRings(comfort);
-      if (unsafe.length > 0) {
-        const path = cachedPath(unsafe, () => unsafe);
-        ctx.save();
-        ctx.clip(path, "evenodd");
-        hatch(ctx, rect.width, rect.height, style, dpr);
-        ctx.restore();
-        strokePen(ctx, path, style.unsafeOutline, scale);
-      }
-      const minPx = style.unsafeMinPx;
-      for (const area of comfort.unsafeAreas) {
-        const extentM = Math.max(area.maxI - area.minI + 1, area.maxJ - area.minJ + 1) * cellM;
-        if (extentM * scale >= minPx) continue;
-        const radius = minPx / 2 / scale;
-        const inset = radius + style.unsafeMark.px / 2 / scale;
-        const e = clampInside(originE + (area.sumI / area.cells + 0.5) * cellM, cut.minE + inset, cut.maxE - inset);
-        const n = clampInside(originN + (area.sumJ / area.cells + 0.5) * cellM, cut.minN + inset, cut.maxN - inset);
-        if (!pointInClip(e, n, site.rings)) continue;
-        const disc = new Path2D();
-        disc.arc(e, n, radius, 0, Math.PI * 2);
-        ctx.save();
-        ctx.clip(disc);
-        hatch(ctx, rect.width, rect.height, style, dpr, style.unsafeMark.opacity);
-        ctx.restore();
-        strokePen(ctx, disc, style.unsafeMark, scale);
-      }
       if (vectorsOn) drawVectors(ctx, planVectors(comfort, null), t, { x: ox, y: oy }, scale, style, dpr);
       ctx.restore();
     }

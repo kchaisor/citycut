@@ -1,8 +1,6 @@
 import { contourRings, smoothRingPasses } from "./marchingSquares";
-import { LAWSON_UNSAFE_EXCEEDANCE } from "./windComfort";
 import {
   windPlanContourLevels,
-  type WindPlanComfort,
   type WindPlanGeometry,
   type WindPlanSpeed,
 } from "./windPlanField";
@@ -10,7 +8,6 @@ import {
 export type WorldRing = Float64Array;
 
 export const SPEED_SMOOTH_PASSES = 1;
-export const COMFORT_SMOOTH_PASSES = 2;
 
 export function worldRings(
   geometry: WindPlanGeometry,
@@ -30,7 +27,6 @@ export function worldRings(
 }
 
 const speedContours = new WeakMap<WindPlanSpeed, Map<number, WorldRing[][]>>();
-const unsafeRings = new WeakMap<WindPlanComfort, WorldRing[]>();
 
 export function windPlanSpeedContours(speed: WindPlanSpeed, scaleMaxMs: number): WorldRing[][] {
   let byScale = speedContours.get(speed);
@@ -42,15 +38,6 @@ export function windPlanSpeedContours(speed: WindPlanSpeed, scaleMaxMs: number):
   if (!rings) {
     rings = windPlanContourLevels(scaleMaxMs).map((level) => worldRings(speed.geometry, speed.speedMs, level));
     byScale.set(scaleMaxMs, rings);
-  }
-  return rings;
-}
-
-export function windPlanUnsafeRings(comfort: WindPlanComfort): WorldRing[] {
-  let rings = unsafeRings.get(comfort);
-  if (!rings) {
-    rings = worldRings(comfort.geometry, comfort.fields.p15, LAWSON_UNSAFE_EXCEEDANCE, COMFORT_SMOOTH_PASSES);
-    unsafeRings.set(comfort, rings);
   }
   return rings;
 }
