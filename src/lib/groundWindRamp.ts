@@ -11,8 +11,3 @@ export const GROUND_WIND_RAMP: readonly GroundWindRampStop[] = [
   { token: "--ground-wind-fast", speed: 1.25, legendAt: 0.84 },
   { token: "--ground-wind-speeding", speed: 1.4, legendAt: 1 },
 ];
-
-export function groundWindLegendGradient(colourOf: (token: ColourKey) => string): string {
-  const stops = GROUND_WIND_RAMP.map((s) => `${colourOf(s.token)} ${(s.legendAt * 100).toFixed(0)}%`);
-  return `linear-gradient(to right, ${stops.join(", ")})`;
-}

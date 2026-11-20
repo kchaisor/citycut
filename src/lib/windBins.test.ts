@@ -3,13 +3,10 @@ import {
   WIND_SPEED_CONSOLE_CHIP_LABELS,
   windRoseCalmCaption,
   windSpeedBinRangeLabel,
-  windSpeedLegendTickLine,
 } from "./windBins";
 
 describe("windBins", () => {
-  it("card legend ticks and console band labels share the same speed breakpoints", () => {
-    const ticks = windSpeedLegendTickLine();
-    expect(ticks).toBe("2 · 10 · 20 · 30 · 40+ km/h");
+  it("console band labels follow the speed breakpoints", () => {
     expect(windSpeedBinRangeLabel(0)).toBe(WIND_SPEED_CONSOLE_CHIP_LABELS[0]);
     expect(windSpeedBinRangeLabel(4)).toBe(WIND_SPEED_CONSOLE_CHIP_LABELS[4]);
     expect(WIND_SPEED_CONSOLE_CHIP_LABELS[0]).toMatch(/^2–10 km\/h$/);

@@ -524,7 +524,7 @@ export const COLOUR_LABELS: Record<ColourKey, string> = {
   "--wind-plan-speed-breeze": "Plan wind speed: 2 m/s",
   "--wind-plan-speed-brisk": "Plan wind speed: 2.8 m/s",
   "--wind-plan-speed-strong": "Plan wind speed: 3.5 m/s",
-  "--wind-plan-speed-fast": "Plan wind speed: 4 m/s and above",
+  "--wind-plan-speed-fast": "Plan wind speed: top of the site scale and above",
   "--wind-plan-sitting": "Plan wind comfort: sitting",
   "--wind-plan-standing": "Plan wind comfort: standing",
   "--wind-plan-strolling": "Plan wind comfort: strolling",

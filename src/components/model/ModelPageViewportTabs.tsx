@@ -92,6 +92,7 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
     walkRippleToast,
     windMotion,
     windSettings,
+    designWind,
     windPlan,
     siteWind,
   } = vm;
@@ -142,6 +143,8 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
                 windEnabled={windSettings.enabled}
                 siteWind={siteWind}
                 windPeriod={windSettings.period}
+                windDesignWind={designWind}
+                windSector={windPlan.sector}
                 windAnimateStreaks={windMotion.animateStreaks}
                 windPlan={windPlan.active ? windPlan : null}
                 onExportReady={onExportReady}

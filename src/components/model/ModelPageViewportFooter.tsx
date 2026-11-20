@@ -15,6 +15,9 @@ import {
   solarSliderSpan,
 } from "../../lib/solarSlider";
 import { WIND_PERIOD_LABELS, WindPeriodId } from "../../lib/windRose";
+import { withDesignWind, withWindSeason } from "../../lib/windState";
+import { DesignWindPresets } from "../DesignWindPresets";
+import { WindPlanSwitch } from "./WindPlanSwitch";
 
 
 export function ModelPageViewportFooter({ vm }: { vm: import("./useModelPage").ModelPageViewModel }) {
@@ -42,8 +45,11 @@ export function ModelPageViewportFooter({ vm }: { vm: import("./useModelPage").M
     walkRipple,
     windSettings,
     windPlan,
+    designWinds,
+    designWind,
   } = vm;
   const planWind = windPlan.active && analysisKind === "wind";
+  const seasonActive = (periodId: WindPeriodId) => designWind == null && windSettings.period === periodId;
   const windTelemetry = (
     <div className="solar-telemetry mono" aria-label="Live wind telemetry">
       <div className="st-item">
@@ -202,24 +208,7 @@ export function ModelPageViewportFooter({ vm }: { vm: import("./useModelPage").M
               {!planWind && <span className="v-sep hud-sep" aria-hidden="true" />}
 
               {planWind ? (
-                <div className="wind-plan-switch" role="group" aria-label="Plan wind diagram">
-                  {(
-                    [
-                      ["speed", "Wind speed"],
-                      ["comfort", "Comfort"],
-                    ] as const
-                  ).map(([id, label]) => (
-                    <button
-                      key={id}
-                      type="button"
-                      className={windPlan.mode === id ? "wind-plan-switch-btn is-active" : "wind-plan-switch-btn"}
-                      aria-pressed={windPlan.mode === id}
-                      onClick={() => windPlan.setMode(id)}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
+                <WindPlanSwitch plan={windPlan} />
               ) : (
                 <div className="overlay-chips" role="group" aria-label="Scene overlay toggles">
                   {analysisKind === "solar" && (
@@ -487,9 +476,9 @@ export function ModelPageViewportFooter({ vm }: { vm: import("./useModelPage").M
                       <button
                         key={periodId}
                         type="button"
-                        className={windSettings.period === periodId ? "p-pill active" : "p-pill"}
-                        aria-pressed={windSettings.period === periodId}
-                        onClick={() => commitWind({ ...windSettings, enabled: true, period: periodId as WindPeriodId })}
+                        className={seasonActive(periodId) ? "p-pill active" : "p-pill"}
+                        aria-pressed={seasonActive(periodId)}
+                        onClick={() => commitWind(withWindSeason(windSettings, periodId as WindPeriodId))}
                       >
                         {periodId === "annual"
                           ? "Annual"
@@ -503,14 +492,30 @@ export function ModelPageViewportFooter({ vm }: { vm: import("./useModelPage").M
                       </button>
                     ))}
                   </div>
-                  <div className="daylight-scrubber wind-console-bar mono">
-                    <span className="sun-bound">
-                      {WIND_PERIOD_LABELS[windSettings.period as keyof typeof WIND_PERIOD_LABELS] ?? "Annual"}
-                    </span>
-                    <span className="time-readout-pill">
-                      🌬 {consoleWindStats ? `${consoleWindStats.prevailingLabel} · ${Math.round(consoleWindStats.prevailingMedianKmh)} km/h` : "TMYx station wind"}
-                    </span>
-                  </div>
+                  <DesignWindPresets
+                    winds={designWinds}
+                    selectedId={designWind?.id ?? null}
+                    onSelect={(id) => commitWind(withDesignWind(windSettings, id))}
+                  />
+                  {planWind ? (
+                    windTelemetry
+                  ) : (
+                    <div className="daylight-scrubber wind-console-bar mono">
+                      <span className="sun-bound">
+                        {designWind
+                          ? `Design wind ${designWind.label}`
+                          : (WIND_PERIOD_LABELS[windSettings.period as keyof typeof WIND_PERIOD_LABELS] ?? "Annual")}
+                      </span>
+                      <span className="time-readout-pill">
+                        🌬{" "}
+                        {designWind
+                          ? `${designWind.headingDeg}° · ${Math.round(designWind.stationMs * 3.6)} km/h`
+                          : consoleWindStats
+                            ? `${consoleWindStats.prevailingLabel} · ${Math.round(consoleWindStats.prevailingMedianKmh)} km/h`
+                            : "TMYx station wind"}
+                      </span>
+                    </div>
+                  )}
                 </>
               )}
 

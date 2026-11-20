@@ -79,6 +79,7 @@ import { treeTierCounts } from "../../lib/trees";
 
 import { clearPlanShadowCache } from "../../lib/buildingShadows";
 import { useWindPlan } from "../useWindPlan";
+import { designWindsFor, findDesignWind } from "../../lib/windDesignWinds";
 import { windObstacleModel, withImportedOutlines } from "../../lib/windObstacleModel";
 import {
   appendManualHeightCredit,
@@ -143,7 +144,7 @@ import { useWalkRipple } from "../useWalkRipple";import { useWalkPlayback, useWa
 
 import { loadSiteWind } from "../../lib/windLoad";
 import type { SiteWindSelection } from "../../lib/windRoseData";
-import { sectorCenterDeg } from "../../lib/windRose";
+import { sectorCenterDeg, sectorIndex } from "../../lib/windRose";
 import { analyzeSiteWind, seasonRecord } from "../../lib/windRoseStats";
 
 import { daylightWindowMinutes, sunAtMelbourneLocal } from "../../lib/solar";
@@ -1360,11 +1361,17 @@ export function useModelPage({
     () => withImportedOutlines(displayModel, massing.drawingBuildings),
     [displayModel, massing.drawingBuildings],
   );
+  const designWinds = useMemo(() => (siteWind ? designWindsFor(siteWind) : []), [siteWind]);
+  const designWind = findDesignWind(designWinds, windSettings.designWind);
   const windPlan = useWindPlan({
     model: windModel,
     siteWind,
     period: windSettings.period,
+    designWind,
+    designWinds,
+    clearDesignWind: () => commitWind({ ...windSettings, designWind: null }),
     active: tab === "3d" && view.projection === "plan" && leftOpen === "analysis" && analysisKind === "wind" && siteWind != null,
+    scaleWanted: tab === "3d" && windSettings.enabled && leftOpen === "analysis" && analysisKind === "wind",
   });
 
   useEffect(() => {
@@ -1375,20 +1382,29 @@ export function useModelPage({
       root.setAttribute("data-wind-station", siteWind.station.name);
       root.setAttribute("data-wind-distance-km", String(siteWind.station.distanceKm ?? ""));
       root.setAttribute("data-wind-period", `${siteWind.station.periodStart}–${siteWind.station.periodEnd}`);
+      root.setAttribute("data-wind-years", String(siteWind.station.years ?? ""));
+      root.setAttribute("data-wind-reason", siteWind.station.reason);
       const record = seasonRecord(siteWind, windSettings.period);
       root.setAttribute(
         "data-ground-wind-deg",
-        String(record?.prevailingDirDeg ?? sectorCenterDeg(consoleWindStats.prevailingSector)),
+        String(
+          designWind?.headingDeg ??
+            (windPlan.sector != null && record && windPlan.sector !== sectorIndex(record.prevailingDirDeg)
+              ? sectorCenterDeg(windPlan.sector)
+              : (record?.prevailingDirDeg ?? sectorCenterDeg(consoleWindStats.prevailingSector))),
+        ),
       );
-      root.setAttribute("data-ground-wind-season", windSettings.period);
+      root.setAttribute("data-ground-wind-season", designWind?.id ?? windSettings.period);
     } else {
       root.removeAttribute("data-wind-station");
       root.removeAttribute("data-wind-distance-km");
       root.removeAttribute("data-wind-period");
+      root.removeAttribute("data-wind-years");
+      root.removeAttribute("data-wind-reason");
       root.removeAttribute("data-ground-wind-deg");
       root.removeAttribute("data-ground-wind-season");
     }
-  }, [siteWind, consoleWindStats, windSettings.period]);
+  }, [siteWind, consoleWindStats, windSettings.period, designWind, windPlan.sector]);
 
   useEffect(() => {
     if (!consolePlaying) return;
@@ -2371,6 +2387,8 @@ export function useModelPage({
     windNote,
     windSettings,
     windPlan,
+    designWinds,
+    designWind,
     siteWind,
     writeStoredShowManualHeights,
   };

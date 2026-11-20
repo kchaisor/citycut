@@ -1,6 +1,7 @@
 import { useLayoutEffect } from "react";
 import { ShortcutCheatsheet } from "../ShortcutCheatsheet";
 import { WindRosePanel } from "../WindRosePanel";
+import { windRoseCardOn } from "./windRoseCard";
 import { shouldShowIntroBridgePill } from "./shouldShowIntroBridgePill";
 import { ModelPageSidebar } from "./ModelPageSidebar";
 import { ModelPageViewportFooter } from "./ModelPageViewportFooter";
@@ -20,13 +21,14 @@ export function ModelPageView({ vm }: { vm: ModelPageViewModel }) {
     sidebarCollapsed,
     siteWind,
     tab,
+    windMotion,
     windSettings,
     windPlan,
     topbarLayout,
   } = vm;
 
-  useWindPlanCardTop(windPlan.active);
-  const windCardOn = leftOpen === "analysis" && tab !== "satellite" && analysisKind === "wind" && siteWind != null;
+  const windCardOn = windRoseCardOn({ leftOpen, tab, analysisKind, siteWind });
+  useWindPlanCardBounds(windCardOn && windPlan.active);
 
   return (
     <div
@@ -55,8 +57,13 @@ export function ModelPageView({ vm }: { vm: ModelPageViewModel }) {
             <WindRosePanel
               selection={siteWind}
               period={windSettings.period}
-              showGroundWindLegend={windSettings.enabled && tab === "3d"}
-              plan={windPlan.active ? windPlan : null}
+              plan={windPlan}
+              flowHeading={windSettings.enabled && tab === "3d"}
+              reducedMotion={
+                windSettings.enabled && tab === "3d" && windMotion.streaksPaused
+                  ? { animateAnyway: windMotion.animateAnyway, onAnimateAnyway: windMotion.setAnimateAnyway }
+                  : null
+              }
             />
           </div>
         ) : null}
@@ -67,22 +74,36 @@ export function ModelPageView({ vm }: { vm: ModelPageViewModel }) {
   );
 }
 const WIND_PLAN_CARD_GAP_PX = 8;
+const WIND_PLAN_CARD_INSET_PX = 14;
 
-function useWindPlanCardTop(active: boolean) {
+function useWindPlanCardBounds(active: boolean) {
   useLayoutEffect(() => {
     if (!active || typeof document === "undefined") return;
     const root = document.documentElement;
     const rail = document.querySelector<HTMLElement>(".model .left-tool-rail");
-    if (!rail) return;
-    const sync = () => root.style.setProperty("--wind-plan-card-top", `${Math.round(rail.getBoundingClientRect().bottom + WIND_PLAN_CARD_GAP_PX)}px`);
+    const card = document.querySelector<HTMLElement>(".model .wind-rose-analysis-card.is-plan");
+    const consoleBar = document.querySelector<HTMLElement>(".model .bottom-bar.env-console");
+    const sync = () => {
+      if (rail) root.style.setProperty("--wind-plan-card-top", `${Math.round(rail.getBoundingClientRect().bottom + WIND_PLAN_CARD_GAP_PX)}px`);
+      let bottom = WIND_PLAN_CARD_INSET_PX;
+      if (card && consoleBar) {
+        const c = card.getBoundingClientRect();
+        const b = consoleBar.getBoundingClientRect();
+        if (b.width > 0 && b.left < c.right + WIND_PLAN_CARD_GAP_PX && b.right > c.left - WIND_PLAN_CARD_GAP_PX) {
+          bottom = Math.max(bottom, Math.round(window.innerHeight - b.top + WIND_PLAN_CARD_GAP_PX));
+        }
+      }
+      root.style.setProperty("--wind-plan-card-bottom", `${bottom}px`);
+    };
     sync();
     const observer = typeof ResizeObserver !== "undefined" ? new ResizeObserver(sync) : null;
-    observer?.observe(rail);
+    for (const el of [rail, consoleBar]) if (el) observer?.observe(el);
     window.addEventListener("resize", sync);
     return () => {
       observer?.disconnect();
       window.removeEventListener("resize", sync);
       root.style.removeProperty("--wind-plan-card-top");
+      root.style.removeProperty("--wind-plan-card-bottom");
     };
   }, [active]);
 }

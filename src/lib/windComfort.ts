@@ -138,6 +138,12 @@ export function sectorReferenceSpeedMs(weights: WindSeasonWeights, sector: numbe
   return mass > 0 ? sum / mass : null;
 }
 
+export function sectorWindWeight(weights: WindSeasonWeights, sector: number): number {
+  let sum = 0;
+  for (const bin of weights.bins) if (bin.sector === sector) sum += bin.weight * binMeanMs(bin);
+  return sum;
+}
+
 export function exceedanceAt(weights: WindSeasonWeights, ratioOf: (sector: number) => number): ComfortExceedance {
   const out = COMFORT_THRESHOLDS_MS.map(() => 0);
   for (const bin of weights.bins) {
@@ -180,13 +186,13 @@ export function accumulateSectorExceedance(
   ratio: ArrayLike<number>,
   from = 0,
   to = fields.cols * fields.rows,
-  scale = 1,
+  scale: number | ArrayLike<number> = 1,
 ): void {
   const bins = weights.bins.filter((bin) => bin.sector === sector);
   if (bins.length === 0) return;
   const targets = [fields.p4, fields.p6, fields.p8, fields.p10, fields.p15];
   for (let idx = from; idx < to; idx++) {
-    const r = ratio[idx]! * scale;
+    const r = ratio[idx]! * (typeof scale === "number" ? scale : scale[idx]!);
     if (!(r > 0)) continue;
     for (let t = 0; t < COMFORT_THRESHOLDS_MS.length; t++) {
       const u = COMFORT_THRESHOLDS_MS[t]! / r;

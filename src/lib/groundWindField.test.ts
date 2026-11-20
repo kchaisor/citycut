@@ -113,6 +113,62 @@ describe("groundWindField", () => {
     expect(at(grid, 110, 0).speed).toBeGreaterThan(wake);
   });
 
+  it("keeps the lee slower than the windward side out to about 3H, easing off downwind", () => {
+    const height = 20;
+    const model = modelWith([{ ring: ring(-20, -30, 20, 30), height }], 400);
+    const grid = buildGroundWindGrid(model, WEST_SECTOR);
+    const open = at(grid, -150, 150).speed;
+    const windward = at(grid, -20 - height, 0).speed;
+    const lee = [1, 2, 3].map((k) => at(grid, 20 + k * height, 0).speed);
+    expect(lee[0]!).toBeLessThan(windward * 0.6);
+    expect(lee[2]!).toBeLessThan(windward * 0.8);
+    expect(lee[2]!).toBeLessThan(open * 0.8);
+    expect(lee[0]!).toBeLessThan(lee[1]!);
+    expect(lee[1]!).toBeLessThan(lee[2]!);
+    expect(at(grid, 20 + 5 * height, 0).speed).toBeCloseTo(open, 1);
+  });
+
+  it("reaches 3H behind a 60 m tower instead of stopping at 90 m", () => {
+    const model = modelWith([{ ring: ring(-20, -20, 20, 20), height: 60 }], 600);
+    const grid = buildGroundWindGrid(model, WEST_SECTOR);
+    expect(at(grid, 20 + 3 * 60, 0).speed).toBeLessThan(at(grid, -250, 250).speed * 0.8);
+  });
+
+  it("spreads the wake sideways into a tapered streak", () => {
+    const model = modelWith([{ ring: ring(-4, -4, 4, 4), height: 20 }], 400);
+    const grid = buildGroundWindGrid(model, WEST_SECTOR);
+    const centre = at(grid, 60, 0).speed;
+    const flank = at(grid, 60, 8).speed;
+    expect(flank).toBeLessThan(0.95);
+    expect(centre).toBeLessThan(flank);
+  });
+
+  it("speeds up the windward corners beyond open ground and the rest of the side", () => {
+    const model = modelWith([{ ring: ring(-20, -30, 20, 30), height: 20 }], 400);
+    const grid = buildGroundWindGrid(model, WEST_SECTOR);
+    const open = at(grid, -150, 150).speed;
+    for (const n of [36, -36]) {
+      const corner = at(grid, -10, n).speed;
+      expect(corner).toBeGreaterThan(open * 1.2);
+      expect(corner).toBeGreaterThan(at(grid, 14, n).speed);
+    }
+  });
+
+  it("funnels wind along a street aligned with it", () => {
+    const model = modelWith(
+      [
+        { ring: ring(-100, 8, 100, 60), height: 18 },
+        { ring: ring(-100, -60, 100, -8), height: 18 },
+      ],
+      400,
+    );
+    const along = buildGroundWindGrid(model, WEST_SECTOR);
+    const open = at(along, -170, 170).speed;
+    for (const e of [-60, 0, 60]) expect(at(along, e, 0).speed).toBeGreaterThan(open * 1.25);
+    const across = buildGroundWindGrid(model, 0);
+    expect(at(across, 0, 0).speed).toBeLessThan(at(along, 0, 0).speed);
+  });
+
   it("caches each heading so a season swap does not rebuild", () => {
     const model = modelWith([{ ring: ring(-30, -30, 30, 30), height: 12 }]);
     const cache = groundWindFieldCache(model);

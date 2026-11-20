@@ -1,8 +1,10 @@
 import { getColour, type ColourKey } from "../lib/colours";
 import { useColourRevision } from "../lib/useColourRevision";
-import { COMFORT_CLASSES, COMFORT_CLASS_LABELS, unsafeAreasLabel, type ComfortClass } from "../lib/windComfort";
-import { WIND_PLAN_SPEED_MAX_MS, WIND_PLAN_SPEED_TICKS_MS, windPlanLegendGradient } from "../lib/windPlanField";
-import { monthPeriodLabel, type WindPeriodId } from "../lib/windRose";
+import { COMFORT_CLASSES, COMFORT_CLASS_LABELS, COMFORT_THRESHOLDS_MS, unsafeAreasLabel, type ComfortClass } from "../lib/windComfort";
+import { comfortShareLabel, type ComfortShares } from "../lib/windComfortShares";
+import { windPlanLegendGradient, windPlanSpeedTicks } from "../lib/windPlanField";
+import { monthPeriodLabel, sectorCenterDeg, sectorLabel, type WindPeriodId } from "../lib/windRose";
+import type { DesignWind } from "../lib/windDesignWinds";
 import type { WindPlanState } from "./useWindPlan";
 
 const SEASON_SHORT: Record<string, string> = {
@@ -18,37 +20,33 @@ export function windPlanSeasonLabel(period: WindPeriodId): string {
   return SEASON_SHORT[period] ?? period;
 }
 
+export function designWindValue(wind: DesignWind): string {
+  return `${wind.label} · ${Math.round(wind.sharePct)}% of hours`;
+}
+
 export function windPlanTitle(plan: Pick<WindPlanState, "mode">): string {
   return plan.mode === "comfort" ? "Pedestrian comfort" : "Plan wind";
 }
 
+export function windPlanDirectionValue(plan: Pick<WindPlanState, "mode" | "sector" | "dirLabel">): string {
+  if (plan.mode !== "speed" || plan.sector == null) return plan.dirLabel;
+  return `${sectorLabel(plan.sector)} · ${sectorCenterDeg(plan.sector)}°`;
+}
+
 export function WindPlanRows({ plan, period }: { plan: WindPlanState; period: WindPeriodId }) {
   const speedMode = plan.mode === "speed";
+  const design = speedMode ? plan.designWind : null;
   return (
     <div className="wind-plan-rows" aria-label={windPlanTitle(plan)}>
       <p className="wind-plan-title">{windPlanTitle(plan)}</p>
       <dl className="wind-plan-list">
         <div className="wind-plan-row">
-          <dt>Season</dt>
-          <dd>{windPlanSeasonLabel(period)}</dd>
+          <dt>{design ? "Design wind" : "Season"}</dt>
+          <dd>{design ? designWindValue(design) : windPlanSeasonLabel(period)}</dd>
         </div>
         <div className="wind-plan-row">
           <dt>Direction</dt>
-          <dd>
-            {speedMode && plan.sector != null ? (
-              <span className="wind-plan-stepper">
-                <button type="button" aria-label="Previous wind direction" onClick={() => plan.stepSector(-1)}>
-                  ‹
-                </button>
-                <span className="wind-plan-dir">{plan.dirLabel}</span>
-                <button type="button" aria-label="Next wind direction" onClick={() => plan.stepSector(1)}>
-                  ›
-                </button>
-              </span>
-            ) : (
-              plan.dirLabel
-            )}
-          </dd>
+          <dd className={speedMode ? "wind-plan-dir mono" : undefined}>{windPlanDirectionValue(plan)}</dd>
         </div>
         <div className="wind-plan-row">
           <dt>{speedMode ? "Reference" : "Criteria"}</dt>
@@ -57,8 +55,8 @@ export function WindPlanRows({ plan, period }: { plan: WindPlanState; period: Wi
           </dd>
         </div>
       </dl>
-      {speedMode ? <WindPlanVelocityLegend /> : <WindPlanComfortLegend />}
       <p className="wind-plan-note">Indicative only, not a CFD study</p>
+      {plan.designWind && !speedMode ? <p className="wind-plan-note">Comfort uses all winds (annual)</p> : null}
       {!plan.hasData ? (
         <p className="wind-plan-note">No wind records for this season.</p>
       ) : speedMode && plan.referenceMs == null ? (
@@ -84,15 +82,37 @@ export const COMFORT_SWATCH: Record<ComfortClass, ColourKey> = {
   uncomfortable: "--wind-plan-uncomfortable",
 };
 
-export function WindPlanComfortLegend() {
+export function WindPlanLegend({ plan }: { plan: Pick<WindPlanState, "mode" | "scaleMaxMs" | "comfortShares"> }) {
+  if (plan.mode === "speed") return <WindPlanVelocityLegend scaleMaxMs={plan.scaleMaxMs} />;
+  return <WindPlanComfortKey shares={plan.comfortShares} />;
+}
+
+const COMFORT_LIMITS_MS = COMFORT_THRESHOLDS_MS.slice(0, COMFORT_CLASSES.length - 1);
+
+export function WindPlanComfortKey({ shares }: { shares: ComfortShares | null }) {
   return (
-    <div className="wind-plan-comfort" aria-label="Pedestrian comfort, Lawson">
-      <p className="wind-plan-legend-title">Comfort</p>
-      <ul className="wind-plan-swatches">
+    <div className="wind-plan-legend wind-plan-comfort-legend" aria-label="Pedestrian comfort, Lawson">
+      <p className="wind-plan-legend-title">
+        Comfort <span className="wind-plan-unit">(m/s, 5% of the time)</span>
+      </p>
+      <span className="wind-plan-comfort-bar" aria-hidden="true">
+        {COMFORT_CLASSES.map((cls) => (
+          <span key={cls} style={{ background: `var(${COMFORT_SWATCH[cls]})` }} />
+        ))}
+      </span>
+      <span className="wind-plan-velocity-ticks wind-plan-comfort-ticks mono" aria-hidden="true">
+        {COMFORT_LIMITS_MS.map((limit, k) => (
+          <span key={limit} style={{ left: `${((k + 1) / COMFORT_CLASSES.length) * 100}%` }}>
+            {limit}
+          </span>
+        ))}
+      </span>
+      <ul className="wind-plan-comfort-shares">
         {COMFORT_CLASSES.map((cls) => (
           <li key={cls}>
             <span className="wind-plan-swatch" aria-hidden="true" style={{ background: `var(${COMFORT_SWATCH[cls]})` }} />
-            {COMFORT_CLASS_LABELS[cls]}
+            <span className="wind-plan-comfort-name">{COMFORT_CLASS_LABELS[cls]}</span>
+            {shares ? <span className="wind-plan-comfort-share mono">{comfortShareLabel(shares[cls])}</span> : null}
           </li>
         ))}
       </ul>
@@ -104,20 +124,25 @@ export function windPlanReferenceLabel(referenceMs: number | null): string {
   return referenceMs != null ? `${referenceMs.toFixed(1)} m/s` : "—";
 }
 
-export function WindPlanVelocityLegend() {
+export function WindPlanVelocityLegend({ scaleMaxMs }: { scaleMaxMs: number | null }) {
   useColourRevision();
   return (
-    <div className="wind-plan-velocity" aria-label="Wind speed, metres per second">
+    <div className="wind-plan-legend wind-plan-velocity" aria-label="Wind speed, metres per second">
       <p className="wind-plan-legend-title">
         Velocity <span className="wind-plan-unit">(m/s)</span>
       </p>
-      <span className="wind-plan-velocity-bar" aria-hidden="true" style={{ background: windPlanLegendGradient(getColour) }} />
+      <span className="wind-plan-velocity-bar" aria-hidden="true" style={{ background: windPlanLegendGradient(getColour, scaleMaxMs ?? undefined) }} />
       <span className="wind-plan-velocity-ticks mono" aria-hidden="true">
-        {WIND_PLAN_SPEED_TICKS_MS.map((tick) => (
-          <span key={tick} style={{ left: `${(tick / WIND_PLAN_SPEED_MAX_MS) * 100}%` }}>
-            {tick}
-          </span>
-        ))}
+        {scaleMaxMs != null
+          ? windPlanSpeedTicks(scaleMaxMs).map((tick) => {
+              const pct = (tick / scaleMaxMs) * 100;
+              return (
+                <span key={tick} style={{ left: `${pct}%`, transform: `translateX(-${pct}%)` }}>
+                  {tick}
+                </span>
+              );
+            })
+          : null}
       </span>
     </div>
   );

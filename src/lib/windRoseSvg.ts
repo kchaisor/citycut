@@ -8,6 +8,7 @@ import {
   type WindRoseTable,
 } from "./windRose";
 import type { SiteWindSelection } from "./windRoseData";
+import { formatStationYears, plainWindCaption } from "./windRoseCaptions";
 import { analyzeSiteWind, stackedSectorArmLength } from "./windRoseStats";
 
 const BAND_VARS = ["--wind-band-0", "--wind-band-1", "--wind-band-2", "--wind-band-3", "--wind-band-4"] as const;
@@ -70,7 +71,7 @@ export function windRoseStationCaption(selection: SiteWindSelection, period: Win
   const s = selection.station;
   const dist = s.distanceKm != null ? `${s.distanceKm.toFixed(1)} km` : "—";
   const label = stats?.prevailingLabel ?? "—";
-  return `${s.name} · ${dist} · ${s.periodStart}–${s.periodEnd} · ${label} · ${selection.asset.source}`;
+  return plainWindCaption(`${s.name} · ${dist} · ${formatStationYears(selection)} · ${label} · ${selection.asset.source}`);
 }
 
 export function windRoseCaption(table: WindRoseTable, period: WindPeriodId): string {

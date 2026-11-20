@@ -119,6 +119,7 @@ import { InspectHudProjector, type InspectHudScreen } from "./InspectHudProjecto
 import type { WindPeriodId } from "../lib/windRose";
 import type { SiteWindSelection } from "../lib/windRoseData";
 import { analyzeSiteWind } from "../lib/windRoseStats";
+import { headingPeriodStats, type DesignWind } from "../lib/windDesignWinds";
 import type { CityModel } from "../types";
 import { introAlreadyPlayedForCut, markIntroPlayedForCut, modelCutSiteId } from "../lib/introPlayed";
 
@@ -593,6 +594,7 @@ function City({
     }),
     [uniformBuildings, colourBySource],
   );
+  const cutKey = modelCutSiteId(model.center, model.sideM);
   const group = useMemo(() => {
     const introStagger = shouldRunIntroTransition() && !introSkip;
     const city = buildCityGroup(model, { uniformBuildings, colourBySource, highlightManual, introStagger });
@@ -637,6 +639,7 @@ function City({
     }
     return city;
   }, [
+    cutKey,
     model.center,
     model.sideM,
     model.frameShape,
@@ -672,7 +675,6 @@ function City({
     steadyFrames?: number;
     targets: Array<{ obj: THREE.Object3D; pivotY: number; kind: "building" | "tree"; bucket: number }>;
   } | null>(null);
-  const cutKey = modelCutSiteId(model.center, model.sideM);
   const introScene = useThree((state) => state.scene);
   const invalidate = useThree((state) => state.invalidate);
   useLayoutEffect(() => {
@@ -2154,12 +2156,16 @@ function WindLayer({
   model,
   siteWind,
   period,
+  designWind,
+  sector,
   enabled,
   animateStreaks,
 }: {
   model: CityModel;
   siteWind: SiteWindSelection | null;
   period: WindPeriodId;
+  designWind: DesignWind | null;
+  sector: number | null;
   enabled: boolean;
   animateStreaks: boolean;
 }) {
@@ -2170,7 +2176,8 @@ function WindLayer({
     return () => document.removeEventListener("visibilitychange", onVis);
   }, []);
   if (!enabled) return null;
-  const stats = siteWind ? analyzeSiteWind(siteWind, period) : null;
+  const seasonStats = siteWind ? analyzeSiteWind(siteWind, period) : null;
+  const stats = seasonStats ? headingPeriodStats(seasonStats, designWind, sector) : null;
   return (
     <GroundWindFlow model={model} stats={stats} animate={visible && animateStreaks} />
   );
@@ -2191,6 +2198,8 @@ export function Scene3D({
   windEnabled,
   siteWind,
   windPeriod,
+  windDesignWind = null,
+  windSector = null,
   windAnimateStreaks,
   windPlan = null,
   onExportReady,
@@ -2234,6 +2243,8 @@ export function Scene3D({
   windEnabled: boolean;
   siteWind: SiteWindSelection | null;
   windPeriod: WindPeriodId;
+  windDesignWind?: DesignWind | null;
+  windSector?: number | null;
   windAnimateStreaks: boolean;
   windPlan?: WindPlanState | null;
   onExportReady: (exporter: SceneExporter | null) => void;
@@ -2468,6 +2479,8 @@ export function Scene3D({
         model={windModel ?? model}
         siteWind={siteWind}
         period={windPeriod}
+        designWind={windDesignWind}
+        sector={windSector}
         enabled={windEnabled && !windPlanOn}
         animateStreaks={windAnimateStreaks}
       />

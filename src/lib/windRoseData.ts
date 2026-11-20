@@ -1,7 +1,8 @@
 import type { WindPeriodId } from "./windRose";
 import { CALM_SPEED_MS, WIND_SPEED_BIN_EDGES_MS } from "./windBins";
 
-export const WIND_ROSE_ASSET_VERSION = 1;
+export const WIND_ROSE_ASSET_VERSION = 2;
+export const WIND_ROSE_SUPPORTED_ASSET_VERSIONS: readonly number[] = [1, WIND_ROSE_ASSET_VERSION];
 export { CALM_SPEED_MS, WIND_SPEED_BIN_EDGES_MS };
 export const WIND_ROSE_SOURCE = "climate.onebuilding.org TMYx EPW";
 
@@ -39,6 +40,7 @@ export type WindRoseSeasonRecord = {
   prevailingDirDeg: number;
   meanSpeedMs: number;
   sectors: number[][];
+  sectorMeanSpeedMs?: number[];
 };
 
 export type WindRoseStationRecord = {
@@ -49,6 +51,8 @@ export type WindRoseStationRecord = {
   heightM?: number;
   periodStart: string;
   periodEnd: string;
+  years?: number;
+  sourceZip?: string;
   seasons: Record<WindRoseSeasonId, WindRoseSeasonRecord>;
 };
 
@@ -59,7 +63,19 @@ export type WindRoseAsset = {
   stations: WindRoseStationRecord[];
 };
 
+export type WindStationSkip = {
+  name: string;
+  distanceKm: number;
+  reason: string;
+};
+
+export type SiteWindStationMeta = WindRoseStationMeta & {
+  years?: number;
+  reason: string;
+  skippedCloser: WindStationSkip[];
+};
+
 export type SiteWindSelection = {
-  station: WindRoseStationMeta;
+  station: SiteWindStationMeta;
   asset: WindRoseAsset;
 };

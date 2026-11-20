@@ -8,6 +8,10 @@ const READABLE: Record<string, string> = {
   "958730": "La Trobe University",
   "958740": "Viewbank",
   "948650": "RAAF Laverton",
+  "947670": "Sydney Airport",
+  "947680": "Sydney Observatory Hill",
+  "957640": "Riverview Observatory",
+  "947660": "Canterbury Park Racecourse",
 };
 
 export function readableWindStationName(epwName: string, stationId?: string): string {

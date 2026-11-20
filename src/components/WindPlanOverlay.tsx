@@ -10,15 +10,25 @@ import {
   windPlanImageUpscale,
   windPlanRampStops,
   type WindPlanComfort,
+  type WindPlanGeometry,
   type WindPlanSpeed,
 } from "../lib/windPlanField";
-import { windPlanSpeedContours, windPlanUnsafeRings, type WorldRing } from "../lib/windPlanContours";
+import { windPlanSpeedContours, type WorldRing } from "../lib/windPlanContours";
 import { COMFORT_CLASSES, lawsonClass, type ComfortClass } from "../lib/windComfort";
 import { COMFORT_SWATCH } from "./WindPlanCard";
-import { cutExtent, pointInClip, windPlanSiteClip } from "../lib/windPlanSiteClip";
-import { dashSegments, readDrawingStyle } from "../lib/drawingStyle";
-import { screenDashPx, screenPx } from "../lib/lineweights";
+import { cutExtent, windPlanSiteClip } from "../lib/windPlanSiteClip";
 import { windPlanLineStyle, type WindPlanLineStyle, type WindPlanPen } from "../lib/windPlanStyle";
+import {
+  WIND_PLAN_VECTOR_HEAD_DEG,
+  WIND_PLAN_VECTOR_SPACING_M,
+  windPlanVectorGapPx,
+  windPlanVectorLengthPx,
+  windPlanVectors,
+  windPlanVectorScaleMs,
+  windPlanVectorSites,
+  windPlanVectorStride,
+  type WindPlanVector,
+} from "../lib/windPlanVectors";
 import type { WindPlanState } from "./useWindPlan";
 
 export type WindPlanTransform = { ox: number; oy: number; exX: number; exY: number; enX: number; enY: number };
@@ -75,11 +85,11 @@ export function WindPlanProjector({ store }: { store: WindPlanTransformStore }) 
 }
 
 
-const speedImages = new WeakMap<WindPlanSpeed, { revision: number; canvas: HTMLCanvasElement }>();
+const speedImages = new WeakMap<WindPlanSpeed, { revision: number; scaleMaxMs: number; canvas: HTMLCanvasElement }>();
 
-function speedImage(speed: WindPlanSpeed, revision: number): HTMLCanvasElement {
+function speedImage(speed: WindPlanSpeed, scaleMaxMs: number, revision: number): HTMLCanvasElement {
   const cached = speedImages.get(speed);
-  if (cached && cached.revision === revision) return cached.canvas;
+  if (cached && cached.revision === revision && cached.scaleMaxMs === scaleMaxMs) return cached.canvas;
   const { cols, rows } = speed.geometry;
   const up = windPlanImageUpscale(cols, rows);
   const width = cols * up;
@@ -89,7 +99,7 @@ function speedImage(speed: WindPlanSpeed, revision: number): HTMLCanvasElement {
   canvas.height = height;
   const ctx = canvas.getContext("2d")!;
   const image = ctx.createImageData(width, height);
-  const stops = windPlanRampStops(colourRgb);
+  const stops = windPlanRampStops(colourRgb, scaleMaxMs);
   const rgb: [number, number, number] = [0, 0, 0];
   for (let py = 0; py < height; py++) {
     const gy = (py + 0.5) / up - 0.5;
@@ -103,7 +113,7 @@ function speedImage(speed: WindPlanSpeed, revision: number): HTMLCanvasElement {
     }
   }
   ctx.putImageData(image, 0, 0);
-  speedImages.set(speed, { revision, canvas });
+  speedImages.set(speed, { revision, scaleMaxMs, canvas });
   return canvas;
 }
 
@@ -182,11 +192,8 @@ function signedArea(ring: readonly Pt[]): number {
   return sum / 2;
 }
 
-type BuildingShapes = { path: Path2D; boxes: Array<[number, number, number, number]> };
-
-function buildingShapes(model: CityModel): BuildingShapes {
+function buildingPath(model: CityModel): Path2D {
   const path = new Path2D();
-  const boxes: Array<[number, number, number, number]> = [];
   const trace = (ring: readonly Pt[], reverse: boolean) => {
     const points = reverse ? [...ring].reverse() : ring;
     points.forEach(([e, n], k) => {
@@ -198,28 +205,13 @@ function buildingShapes(model: CityModel): BuildingShapes {
   for (const building of model.buildings) {
     const ring = building.ring;
     if (ring.length < 3) continue;
-    let minE = Infinity;
-    let minN = Infinity;
-    let maxE = -Infinity;
-    let maxN = -Infinity;
-    for (const [e, n] of ring) {
-      minE = Math.min(minE, e);
-      maxE = Math.max(maxE, e);
-      minN = Math.min(minN, n);
-      maxN = Math.max(maxN, n);
-    }
     const outerSign = Math.sign(signedArea(ring));
     trace(ring, false);
     for (const hole of building.holes ?? []) {
       if (hole.length >= 3) trace(hole, Math.sign(signedArea(hole)) === outerSign);
     }
-    boxes.push([minE, minN, maxE, maxN]);
   }
-  return { path, boxes };
-}
-
-function clampInside(value: number, lo: number, hi: number): number {
-  return lo > hi ? (lo + hi) / 2 : Math.min(hi, Math.max(lo, value));
+  return path;
 }
 
 type BaseMapShapes = { roads: Array<{ path: Path2D; width: number }>; water: Path2D; green: Path2D };
@@ -251,6 +243,13 @@ function baseMapShapes(model: CityModel): BaseMapShapes {
   return { roads, water, green };
 }
 
+function clipToLand(ctx: CanvasRenderingContext2D, shapes: BaseMapShapes, cut: { minE: number; minN: number; maxE: number; maxN: number }) {
+  const land = new Path2D();
+  land.rect(cut.minE, cut.minN, cut.maxE - cut.minE, cut.maxN - cut.minN);
+  land.addPath(shapes.water);
+  ctx.clip(land, "evenodd");
+}
+
 function drawBaseMap(ctx: CanvasRenderingContext2D, shapes: BaseMapShapes) {
   ctx.fillStyle = getColour("--wind-plan-green");
   ctx.fill(shapes.green, "evenodd");
@@ -263,17 +262,6 @@ function drawBaseMap(ctx: CanvasRenderingContext2D, shapes: BaseMapShapes) {
     ctx.lineWidth = road.width;
     ctx.stroke(road.path);
   }
-}
-
-function strokeSiteBoundary(ctx: CanvasRenderingContext2D, path: Path2D, scale: number) {
-  const pen = readDrawingStyle().siteBoundary;
-  const segments = dashSegments(pen.dash);
-  ctx.strokeStyle = getColour("--site-boundary");
-  ctx.lineWidth = Math.max(1, screenPx(pen.mm)) / scale;
-  ctx.lineJoin = "round";
-  ctx.lineCap = segments?.some((segment, index) => segment === 0 && index % 2 === 0) ? "round" : "butt";
-  ctx.setLineDash(segments ? segments.map((mm) => screenDashPx(mm) / scale) : []);
-  ctx.stroke(path);
 }
 
 function strokePen(ctx: CanvasRenderingContext2D, path: Path2D, pen: WindPlanPen, scale: number) {
@@ -291,17 +279,64 @@ function strokeInside(ctx: CanvasRenderingContext2D, path: Path2D, pen: WindPlan
   ctx.restore();
 }
 
-function hatch(ctx: CanvasRenderingContext2D, width: number, height: number, style: WindPlanLineStyle, dpr: number) {
+const vectorSites = new WeakMap<WindPlanGeometry, ReturnType<typeof windPlanVectorSites>>();
+const vectorFields = new WeakMap<object, { scaleMs: number; vectors: WindPlanVector[] }>();
+
+function planVectors(data: WindPlanSpeed | WindPlanComfort, scaleMs: number | null): WindPlanVector[] {
+  const cached = vectorFields.get(data);
+  const top = scaleMs ?? (cached ? cached.scaleMs : windPlanVectorScaleMs(data.flow, data.geometry));
+  if (cached && cached.scaleMs === top) return cached.vectors;
+  let sites = vectorSites.get(data.geometry);
+  if (!sites) {
+    sites = windPlanVectorSites(data.geometry);
+    vectorSites.set(data.geometry, sites);
+  }
+  const vectors = windPlanVectors(sites, data.flow, top);
+  vectorFields.set(data, { scaleMs: top, vectors });
+  return vectors;
+}
+
+function drawVectors(
+  ctx: CanvasRenderingContext2D,
+  vectors: readonly WindPlanVector[],
+  t: WindPlanTransform,
+  origin: { x: number; y: number },
+  scale: number,
+  style: WindPlanLineStyle,
+  dpr: number,
+) {
+  const stride = windPlanVectorStride(WIND_PLAN_VECTOR_SPACING_M, scale);
+  const gapPx = windPlanVectorGapPx(WIND_PLAN_VECTOR_SPACING_M, scale, stride);
+  const head = style.vectorHeadPx;
+  const cos = Math.cos((WIND_PLAN_VECTOR_HEAD_DEG * Math.PI) / 180);
+  const sin = Math.sin((WIND_PLAN_VECTOR_HEAD_DEG * Math.PI) / 180);
   ctx.save();
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  ctx.strokeStyle = style.unsafeHatch.colour;
-  ctx.lineWidth = style.unsafeHatch.px;
-  const step = style.hatchSpacingPx * Math.SQRT2;
   ctx.beginPath();
-  for (let c = 0; c <= width + height; c += step) {
-    ctx.moveTo(c, 0);
-    ctx.lineTo(c - height, height);
+  for (const v of vectors) {
+    if (v.gi % stride !== 0 || v.gj % stride !== 0) continue;
+    const x = origin.x + t.exX * v.east + t.enX * v.north;
+    const y = origin.y + t.exY * v.east + t.enY * v.north;
+    const sx = t.exX * v.dirE + t.enX * v.dirN;
+    const sy = t.exY * v.dirE + t.enY * v.dirN;
+    const sLen = Math.hypot(sx, sy) || 1;
+    const dx = sx / sLen;
+    const dy = sy / sLen;
+    const half = windPlanVectorLengthPx(v.strength, gapPx, style.vectorMaxPx) / 2;
+    const tipX = x + dx * half;
+    const tipY = y + dy * half;
+    ctx.moveTo(x - dx * half, y - dy * half);
+    ctx.lineTo(tipX, tipY);
+    ctx.moveTo(tipX - head * (dx * cos - dy * sin), tipY - head * (dy * cos + dx * sin));
+    ctx.lineTo(tipX, tipY);
+    ctx.lineTo(tipX - head * (dx * cos + dy * sin), tipY - head * (dy * cos - dx * sin));
   }
+  ctx.globalAlpha = style.vector.opacity;
+  ctx.strokeStyle = style.vector.colour;
+  ctx.lineWidth = style.vector.px;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  ctx.setLineDash([]);
   ctx.stroke();
   ctx.restore();
 }
@@ -318,14 +353,14 @@ export function WindPlanOverlay({
   const hostRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const colourRevision = useColourRevision();
-  const buildings = useMemo(() => buildingShapes(model), [model]);
+  const buildings = useMemo(() => buildingPath(model), [model]);
   const cut = useMemo(() => cutExtent(model), [model]);
   const site = useMemo(() => {
     const clip = windPlanSiteClip(model);
     return { ...clip, path: ringsPath(clip.rings) };
   }, [model]);
   const baseMap = useMemo(() => baseMapShapes(model), [model]);
-  const { mode, speed, comfort } = plan;
+  const { mode, speed, comfort, scaleMaxMs, vectorsOn } = plan;
 
   const draw = useCallback(() => {
     const host = hostRef.current;
@@ -342,7 +377,7 @@ export function WindPlanOverlay({
     if (!ctx) return;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, width, height);
-    const data: WindPlanSpeed | WindPlanComfort | null = mode === "speed" ? speed : comfort;
+    const data: WindPlanSpeed | WindPlanComfort | null = mode === "speed" ? (scaleMaxMs != null ? speed : null) : comfort;
     if (!data) return;
     const style = windPlanLineStyle();
     const ox = t.ox - rect.left;
@@ -359,23 +394,27 @@ export function WindPlanOverlay({
     ctx.rect(cut.minE, cut.minN, cut.maxE - cut.minE, cut.maxN - cut.minN);
     ctx.clip();
 
-    if (mode === "speed" && speed) {
+    ctx.fillStyle = getColour("--wind-plan-basemap");
+    ctx.fillRect(cut.minE, cut.minN, cut.maxE - cut.minE, cut.maxN - cut.minN);
+    drawBaseMap(ctx, baseMap);
+    ctx.save();
+    clipToLand(ctx, baseMap, cut);
+
+    if (mode === "speed" && speed && scaleMaxMs != null) {
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = "high";
-      ctx.drawImage(speedImage(speed, colourRevision), originE, originN, gridW, gridH);
+      ctx.drawImage(speedImage(speed, scaleMaxMs, colourRevision), originE, originN, gridW, gridH);
       ctx.save();
       ctx.beginPath();
       ctx.rect(originE + cellM / 2, originN + cellM / 2, gridW - cellM, gridH - cellM);
       ctx.clip();
-      const levels = windPlanSpeedContours(speed);
+      const levels = windPlanSpeedContours(speed, scaleMaxMs);
       strokePen(ctx, cachedPath(levels, () => levels.flat()), style.contour, scale);
       ctx.restore();
       ctx.fillStyle = getColour("--wind-plan-water");
       ctx.fill(baseMap.water, "evenodd");
+      if (vectorsOn) drawVectors(ctx, planVectors(speed, scaleMaxMs), t, { x: ox, y: oy }, scale, style, dpr);
     } else if (mode === "comfort" && comfort) {
-      ctx.fillStyle = getColour("--wind-plan-basemap");
-      ctx.fillRect(cut.minE, cut.minN, cut.maxE - cut.minE, cut.maxN - cut.minN);
-      drawBaseMap(ctx, baseMap);
       ctx.save();
       ctx.clip(site.path, "evenodd");
       ctx.imageSmoothingEnabled = false;
@@ -383,46 +422,16 @@ export function WindPlanOverlay({
       ctx.imageSmoothingEnabled = true;
       ctx.fillStyle = getColour("--wind-plan-water");
       ctx.fill(baseMap.water, "evenodd");
-      const unsafe = windPlanUnsafeRings(comfort);
-      if (unsafe.length > 0) {
-        const path = cachedPath(unsafe, () => unsafe);
-        ctx.save();
-        ctx.clip(path, "evenodd");
-        hatch(ctx, rect.width, rect.height, style, dpr);
-        ctx.restore();
-        strokePen(ctx, path, style.unsafeOutline, scale);
-      }
-      const minPx = style.unsafeMinPx;
-      for (const area of comfort.unsafeAreas) {
-        const extentM = Math.max(area.maxI - area.minI + 1, area.maxJ - area.minJ + 1) * cellM;
-        if (extentM * scale >= minPx) continue;
-        const radius = minPx / 2 / scale;
-        const inset = radius + style.unsafeOutline.px / 2 / scale;
-        const e = clampInside(originE + (area.sumI / area.cells + 0.5) * cellM, cut.minE + inset, cut.maxE - inset);
-        const n = clampInside(originN + (area.sumJ / area.cells + 0.5) * cellM, cut.minN + inset, cut.maxN - inset);
-        if (!pointInClip(e, n, site.rings)) continue;
-        const disc = new Path2D();
-        disc.arc(e, n, radius, 0, Math.PI * 2);
-        ctx.save();
-        ctx.clip(disc);
-        hatch(ctx, rect.width, rect.height, style, dpr);
-        ctx.restore();
-        strokePen(ctx, disc, style.unsafeOutline, scale);
-      }
+      if (vectorsOn) drawVectors(ctx, planVectors(comfort, null), t, { x: ox, y: oy }, scale, style, dpr);
       ctx.restore();
     }
+    ctx.restore();
 
     ctx.fillStyle = getColour(mode === "comfort" ? "--wind-plan-comfort-building" : "--wind-plan-building");
-    ctx.fill(buildings.path, "nonzero");
-    strokeInside(ctx, buildings.path, style.buildingEdge, scale);
+    ctx.fill(buildings, "nonzero");
+    strokeInside(ctx, buildings, style.buildingEdge, scale);
     ctx.restore();
-    if (mode === "comfort") {
-      ctx.save();
-      worldTransform();
-      strokeSiteBoundary(ctx, site.path, scale);
-      ctx.restore();
-    }
-  }, [store, mode, speed, comfort, buildings, cut, site, baseMap, colourRevision]);
+  }, [store, mode, speed, comfort, scaleMaxMs, vectorsOn, buildings, cut, site, baseMap, colourRevision]);
 
   const frame = useRef<number | null>(null);
   const schedule = useCallback(() => {
@@ -453,7 +462,7 @@ export function WindPlanOverlay({
   }, [store, schedule]);
 
   return (
-    <div ref={hostRef} className="wind-plan-overlay" aria-hidden="true" data-wind-plan-mode={mode}>
+    <div ref={hostRef} className="wind-plan-overlay" aria-hidden="true" data-wind-plan-mode={mode} data-wind-plan-vectors={vectorsOn ? "on" : "off"}>
       <canvas ref={canvasRef} className="wind-plan-canvas" />
     </div>
   );

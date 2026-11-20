@@ -4,24 +4,39 @@ import type { SiteWindSelection } from "../lib/windRoseData";
 import { formatCalmPercent, windRoseCalmCaption } from "../lib/windBins";
 import { analyzeSiteWind } from "../lib/windRoseStats";
 import { windRoseStationLines } from "../lib/windRoseCaptions";
+import { windRoseSectorSharePct, windRoseSectorTip } from "../lib/windRoseChart";
 import { getColour } from "../lib/colours";
-import { WindRoseSvgChart } from "./WindRoseSvgChart";
-import { WindRoseSpeedLegend } from "./WindRoseSpeedLegend";
-import { GroundWindSpeedLegend } from "./GroundWindSpeedLegend";
-import { WindPlanRows } from "./WindPlanCard";
+import { WindNearbyStations } from "./WindSkippedCloser";
+import { WindRoseSvgChart, type WindRosePicker } from "./WindRoseSvgChart";
+import { WindReducedMotionNote } from "./WindReducedMotionNote";
+import { WindPlanLegend, WindPlanRows, WindPlanVelocityLegend, windPlanSeasonLabel } from "./WindPlanCard";
 import type { WindPlanState } from "./useWindPlan";
-import { readableWindStationName } from "../lib/windStationNames";
+
+export type WindRoseReducedMotion = {
+  animateAnyway: boolean;
+  onAnimateAnyway: (value: boolean) => void;
+};
+
+export function windRosePickerOn(
+  plan: Pick<WindPlanState, "active" | "mode"> | null,
+  flowHeading: boolean,
+): boolean {
+  if (!plan) return false;
+  return plan.active ? plan.mode === "speed" : flowHeading;
+}
 
 export function WindRosePanel({
   selection,
   period,
-  showGroundWindLegend = false,
   plan = null,
+  flowHeading = false,
+  reducedMotion = null,
 }: {
   selection: SiteWindSelection;
   period: WindPeriodId;
-  showGroundWindLegend?: boolean;
   plan?: WindPlanState | null;
+  flowHeading?: boolean;
+  reducedMotion?: WindRoseReducedMotion | null;
 }) {
   const stats = useMemo(() => analyzeSiteWind(selection, period), [selection, period]);
   const lines = useMemo(() => windRoseStationLines(selection), [selection]);
@@ -29,14 +44,40 @@ export function WindRosePanel({
     () => (stats ? windRoseCalmCaption(stats.calmPercent) : ""),
     [stats],
   );
-  const regionalNote = "Regional station wind, not site wind.";
+  const pickerOn = windRosePickerOn(plan, flowHeading);
+  const picker = useMemo<WindRosePicker | undefined>(() => {
+    if (!plan || !pickerOn || !stats) return undefined;
+    return {
+      selected: plan.sector,
+      onSelect: plan.selectSector,
+      onStep: plan.stepSector,
+      tip: (sector) => {
+        const design = plan.designWind;
+        if (design && design.sector === sector) return windRoseSectorTip(sector, design.sharePct, design.referenceMs);
+        return windRoseSectorTip(
+          sector,
+          windRoseSectorSharePct(stats, sector),
+          plan.sectorReferenceMs(sector),
+          windPlanSeasonLabel(period),
+        );
+      },
+    };
+  }, [
+    pickerOn,
+    plan?.sector,
+    plan?.selectSector,
+    plan?.stepSector,
+    plan?.sectorReferenceMs,
+    plan?.designWind,
+    stats,
+    period,
+  ]);
 
   if (!stats) {
     return <p className="field-note">Wind data is not available for this period.</p>;
   }
 
   if (plan?.active) {
-    const station = readableWindStationName(selection.station.name, selection.station.id);
     return (
       <div className="wind-rose-panel is-plan" aria-label={lines.line1}>
         <WindPlanRows plan={plan} period={period} />
@@ -44,26 +85,38 @@ export function WindRosePanel({
           stats={stats}
           hubFill={getColour("--wind-rose-card-surface")}
           className="wind-rose-panel-svg"
+          picker={picker}
         />
         <p className="wind-rose-calm-caption">{calmCaption}</p>
-        <p className="wind-rose-meta wind-rose-meta-source">{station} · Regional station wind</p>
+        <p className="wind-rose-meta wind-rose-meta-source wind-rose-meta-station" title={lines.line1}>
+          {lines.line1}
+        </p>
+        <WindNearbyStations selection={selection} className="wind-rose-meta" />
+        <p className="wind-rose-meta wind-rose-meta-note">Regional station wind</p>
+        <WindPlanLegend plan={plan} />
       </div>
     );
   }
 
   return (
-    <div className="wind-rose-panel" aria-label={lines.line1}>
+    <div className="wind-rose-panel is-flow" aria-label={lines.line1}>
       <WindRoseSvgChart
         stats={stats}
         hubFill={getColour("--wind-rose-card-surface")}
         className="wind-rose-panel-svg"
+        picker={picker}
       />
       <p className="wind-rose-calm-caption">{calmCaption}</p>
-      <WindRoseSpeedLegend />
-      {showGroundWindLegend && <GroundWindSpeedLegend />}
-      <p className="wind-rose-meta">{lines.line1}</p>
-      <p className="wind-rose-meta wind-rose-meta-source">{lines.line2}</p>
-      <p className="wind-rose-meta wind-rose-meta-note">{regionalNote}</p>
+      <p className="wind-rose-meta wind-rose-meta-source wind-rose-meta-station" title={lines.line1}>
+        {lines.line1}
+      </p>
+      <WindNearbyStations selection={selection} className="wind-rose-meta" />
+      <p className="wind-rose-meta">{lines.line2}</p>
+      <p className="wind-rose-meta wind-rose-meta-note">Regional station wind, not site wind.</p>
+      {reducedMotion ? (
+        <WindReducedMotionNote animateAnyway={reducedMotion.animateAnyway} onAnimateAnyway={reducedMotion.onAnimateAnyway} />
+      ) : null}
+      <WindPlanVelocityLegend scaleMaxMs={plan?.scaleMaxMs ?? null} />
     </div>
   );
 }

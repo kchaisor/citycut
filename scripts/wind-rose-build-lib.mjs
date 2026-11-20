@@ -1,3 +1,5 @@
+import { areWindSeasonsSane, isCalmConsistentWithRecent } from "../src/lib/windStationSanity.ts";
+
 export const WIND_ROSE_SOURCE = "climate.onebuilding.org TMYx EPW";
 export const CALM_SPEED_KMH = 2;
 export const CALM_SPEED_MS = CALM_SPEED_KMH / 3.6;
@@ -45,7 +47,8 @@ export function parseEpwPeriodComment(line) {
   if (!line.startsWith("COMMENTS 1,")) return null;
   const match = /Period of Record=(\d{4})-(\d{4})/.exec(line);
   if (!match) return null;
-  return { periodStart: match[1], periodEnd: match[2] };
+  const years = /#years=\[(\d+)\]/.exec(line);
+  return { periodStart: match[1], periodEnd: match[2], years: years ? Number(years[1]) : null };
 }
 
 export function parseEpwDataRow(line) {
@@ -89,6 +92,8 @@ export function aggregateEpwSeason(rows, season) {
   let calm = 0;
   let speedSum = 0;
   let speedCount = 0;
+  const sectorSpeedSums = new Array(WIND_SECTOR_COUNT).fill(0);
+  const sectorSpeedCounts = new Array(WIND_SECTOR_COUNT).fill(0);
   for (const row of rows) {
     if (!months.has(row.month)) continue;
     total += 1;
@@ -99,6 +104,8 @@ export function aggregateEpwSeason(rows, season) {
     speedSum += row.speedMs;
     speedCount += 1;
     const sector = sectorIndex(row.dirDeg);
+    sectorSpeedSums[sector] += row.speedMs;
+    sectorSpeedCounts[sector] += 1;
     const band = speedBinIndexMs(row.speedMs);
     if (band < 0) continue;
     counts[sector][band] += 1;
@@ -120,6 +127,7 @@ export function aggregateEpwSeason(rows, season) {
     prevailingDirDeg: sectorCenterDeg(maxSector),
     meanSpeedMs: speedCount > 0 ? speedSum / speedCount : 0,
     sectors,
+    sectorMeanSpeedMs: sectorSpeedSums.map((sum, s) => (sectorSpeedCounts[s] > 0 ? sum / sectorSpeedCounts[s] : 0)),
   };
 }
 
@@ -138,16 +146,52 @@ export function stationIdFromZipName(zipName) {
   return match?.[1] ?? zipName.replace(/\.zip$/i, "");
 }
 
-export function preferTmyxZipName(names) {
-  const tmyx = names.filter((n) => /_TMYx/i.test(n) && n.endsWith(".zip"));
-  if (!tmyx.length) return null;
-  const ranked = (name) => {
-    if (name.includes("2009-2023")) return 0;
-    if (name.includes("2011-2025")) return 1;
-    if (name.includes("2007-2021")) return 2;
-    if (/\.(\d{4})-(\d{4})\.zip$/.test(name)) return 3;
-    if (/_TMYx\.zip$/i.test(name)) return 4;
-    return 5;
+const DATED_TMYX_ZIP = /_TMYx\.(\d{4})-(\d{4})\.zip$/i;
+const FULL_RECORD_TMYX_ZIP = /_TMYx\.zip$/i;
+
+export function orderTmyxCandidates(names) {
+  const tmyx = names.filter((n) => FULL_RECORD_TMYX_ZIP.test(n) || DATED_TMYX_ZIP.test(n));
+  const datedEnd = (name) => Number(DATED_TMYX_ZIP.exec(name)?.[2] ?? 0);
+  const fullRecord = tmyx.filter((n) => FULL_RECORD_TMYX_ZIP.test(n)).sort();
+  const dated = tmyx.filter((n) => DATED_TMYX_ZIP.test(n)).sort((a, b) => datedEnd(b) - datedEnd(a));
+  return [...fullRecord, ...dated];
+}
+
+export function isFullRecordTmyxZip(name) {
+  return FULL_RECORD_TMYX_ZIP.test(name);
+}
+
+export function mostRecentDatedRecord(candidates) {
+  const dated = candidates.filter((c) => DATED_TMYX_ZIP.test(c.zipName));
+  const span = (c) => DATED_TMYX_ZIP.exec(c.zipName).slice(1, 3).map(Number);
+  dated.sort((a, b) => span(b)[1] - span(a)[1] || span(b)[0] - span(a)[0]);
+  return dated[0] ?? null;
+}
+
+export function isUsableRecord(candidate, recent) {
+  if (!candidate.sane) return false;
+  if (!recent?.sane || candidate === recent) return true;
+  return isCalmConsistentWithRecent(candidate.seasons, recent.seasons);
+}
+
+export function chooseLongestUsableRecord(candidates) {
+  if (!candidates.length) return null;
+  const recent = mostRecentDatedRecord(candidates);
+  const longestFirst = [...candidates].sort(
+    (a, b) => (b.years ?? 0) - (a.years ?? 0) || Number(b.periodEnd) - Number(a.periodEnd),
+  );
+  return longestFirst.find((c) => isUsableRecord(c, recent)) ?? longestFirst[0];
+}
+
+export { areWindSeasonsSane, isCalmConsistentWithRecent };
+
+const roundTo = (value, digits) => Number(value.toFixed(digits));
+const roundSignificant = (value, digits) => (value === 0 ? 0 : Number(value.toPrecision(digits)));
+
+export function compactSeasonRecord(season) {
+  return {
+    ...season,
+    sectors: season.sectors.map((bands) => bands.map((f) => roundSignificant(f, 5))),
+    sectorMeanSpeedMs: season.sectorMeanSpeedMs.map((v) => roundTo(v, 2)),
   };
-  return [...tmyx].sort((a, b) => ranked(a) - ranked(b))[0] ?? null;
 }
