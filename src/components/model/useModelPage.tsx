@@ -181,6 +181,8 @@ export type ModelPageProps = {
   commandBarOpen?: boolean;
 };
 
+const SITE_INTEL_STORAGE_KEY = "citycut.siteIntelligence";
+
 export function useModelPage({
   model,
   onHome,
@@ -270,6 +272,20 @@ export function useModelPage({
   const [sidebar, dispatchSidebar] = useReducer(reduceSidebar, undefined, initialSidebarState);
   const [hiddenBuildingUses, setHiddenBuildingUses] = useState<Set<BuildingUse>>(() => new Set());
   const [sidebarCollapsed, setSidebarCollapsed] = useSidebarCollapsed();
+  const [siteIntelOpen, setSiteIntelOpen] = useState<boolean>(() => {
+    try {
+      return window.localStorage.getItem(SITE_INTEL_STORAGE_KEY) !== "off";
+    } catch {
+      return true;
+    }
+  });
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(SITE_INTEL_STORAGE_KEY, siteIntelOpen ? "on" : "off");
+    } catch {
+      return;
+    }
+  }, [siteIntelOpen]);
   const sidebarModelRef = useRef(model);
   useEffect(() => {
     if (sidebarModelRef.current === model) return;
@@ -2273,6 +2289,8 @@ export function useModelPage({
     showTrees,
     sidebar,
     sidebarCollapsed,
+    siteIntelOpen,
+    setSiteIntelOpen,
     sidebarModelRef,
     sitePlanExportOptions,
     snapId,

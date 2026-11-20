@@ -1,4 +1,4 @@
-import { Download, RotateCcw } from "lucide-react";
+import { Download, PanelRight, RotateCcw } from "lucide-react";
 import { StudioCompass } from "../StudioCompass";
 import { studioCompassVisible } from "../../lib/studioCompass";
 import { Sidebar } from "../Sidebar";
@@ -55,6 +55,8 @@ export function ModelPageSidebar({ vm }: { vm: import("./useModelPage").ModelPag
     setTab,
     setTopbarExportOpen,
     sidebarCollapsed,
+    siteIntelOpen,
+    setSiteIntelOpen,
     sourcesLoaded,
     compassHeadingDeg,
     tab,
@@ -81,6 +83,11 @@ export function ModelPageSidebar({ vm }: { vm: import("./useModelPage").ModelPag
             showNewCut
             onSelect={selectSection}
             onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
+            siteIntel={{
+              open: siteIntelOpen,
+              onToggle: () => setSiteIntelOpen(!siteIntelOpen),
+              icon: <PanelRight size={16} strokeWidth={1.75} aria-hidden="true" />,
+            }}
             rightMeta={`MGA${mgaCrs(model.center.lon).zone}`}
             brandMeta={
               <>
