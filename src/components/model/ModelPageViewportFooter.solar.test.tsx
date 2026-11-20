@@ -33,6 +33,7 @@ function SolarFooter({ onSolar }: { onSolar: (next: SolarViewSettings) => void }
     walk: {},
     walkRipple: {},
     windSettings: {},
+    windPlan: { active: false },
   } as unknown as ModelPageViewModel;
   return <ModelPageViewportFooter vm={vm} />;
 }
