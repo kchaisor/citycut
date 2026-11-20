@@ -1,4 +1,4 @@
-import { useEffect, useId, useState, type KeyboardEvent, type ReactNode } from "react";
+import { Fragment, useEffect, useId, useState, type KeyboardEvent, type ReactNode } from "react";
 import { Crop, PanelLeftClose, PanelLeftOpen, Plus } from "lucide-react";
 import { NARROW_PANEL_QUERY } from "../lib/panelCollapse";
 import { Mark } from "./Mark";
@@ -56,6 +56,7 @@ export function Sidebar({
   headerCenter,
   headerRight,
   rightMeta = "MGA55",
+  siteIntel,
   children,
   rightChildren,
 }: {
@@ -82,6 +83,7 @@ export function Sidebar({
   headerCenter?: ReactNode;
   headerRight?: ReactNode;
   rightMeta?: ReactNode;
+  siteIntel?: { open: boolean; onToggle: () => void; icon: ReactNode };
   children: ReactNode;
   rightChildren?: ReactNode;
 }) {
@@ -224,7 +226,31 @@ export function Sidebar({
               <span className="sidebar-rail-sep rail-sep" aria-hidden="true" />
             </span>
           ) : null}
-          {items.map((item) => renderRailButton(item, false))}
+          {items.map((item) =>
+            item.id === "analysis" && siteIntel ? (
+              <Fragment key={item.id}>
+                {renderRailButton(item, false)}
+                <span className="sidebar-rail-slot">
+                  <button
+                    type="button"
+                    className={siteIntel.open ? "rail-btn site-intel-toggle active is-active" : "rail-btn site-intel-toggle"}
+                    data-rail-item=""
+                    aria-label="Site Intelligence"
+                    aria-pressed={siteIntel.open}
+                    title={siteIntel.open ? "Hide Site Intelligence" : "Show Site Intelligence"}
+                    onClick={siteIntel.onToggle}
+                  >
+                    {siteIntel.icon}
+                    <span className="rail-tip" aria-hidden="true">
+                      Site
+                    </span>
+                  </button>
+                </span>
+              </Fragment>
+            ) : (
+              renderRailButton(item, false)
+            ),
+          )}
           {narrow && rightItems && rightItems.length > 0
             ? rightItems.map((item) => renderRailButton(item, true))
             : null}
@@ -266,7 +292,7 @@ export function Sidebar({
           <div className="sidebar-body">{children}</div>
           {footer && <div className="sidebar-foot">{footer}</div>}
         </section>
-        {(!narrow && rightItems && rightItems.length > 0) || rightChildren !== undefined ? (
+        {(siteIntel?.open ?? true) && ((!narrow && rightItems && rightItems.length > 0) || rightChildren !== undefined) ? (
           <div className="right-inspector hud-card">
             <div className="insp-head">
               <span className="card-title">Site Intelligence</span>
