@@ -49,9 +49,6 @@ export const WIND_PLAN_BLUR_PASSES = 2;
 export const WIND_PLAN_DISPLAY_SIGMA_M = 6;
 export const WIND_PLAN_ROWS_PER_SLICE = 32;
 
-// Power-law wind profile u(z) = u(z_ref) * (z / z_ref)^alpha, taking the station's 10 m speed down to
-// 1.5 m pedestrian height with alpha = 0.25 for suburban terrain, as tabulated in Counihan (1975),
-// "Adiabatic atmospheric boundary layers", Atmospheric Environment 9(10), and standard wind-engineering texts.
 export const STATION_HEIGHT_M = 10;
 export const PEDESTRIAN_HEIGHT_M = 1.5;
 export const SUBURBAN_PROFILE_ALPHA = 0.25;

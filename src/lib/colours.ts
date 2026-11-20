@@ -534,7 +534,7 @@ export const COLOUR_LABELS: Record<ColourKey, string> = {
   "--wind-plan-comfort-building": "Plan wind comfort: building footprints",
   "--wind-plan-basemap": "Plan wind comfort: base map around the site",
   "--wind-plan-road": "Plan wind comfort: base-map roads",
-  "--wind-plan-water": "Plan wind comfort: base-map water",
+  "--wind-plan-water": "Plan wind maps: water",
   "--wind-plan-green": "Plan wind comfort: base-map green space",
   "--wind-band-0": "Wind console: 2–10 km/h swatch",
   "--wind-band-1": "Wind console: 10–20 km/h swatch",

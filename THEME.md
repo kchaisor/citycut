@@ -337,7 +337,7 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--wind-plan-comfort-building` | `#c5c5c5` | Plan Comfort map: light-grey building footprints, inside and outside the site. |
 | `--wind-plan-basemap` | `#f3f3f3` | Plan Comfort map: muted grey ground inside the cut and outside the site clip. |
 | `--wind-plan-road` | `#e3e3e3` | Plan Comfort map: roads on the muted base map. |
-| `--wind-plan-water` | `#dfe7ed` | Plan Comfort map: soft grey-blue water on the muted base map. |
+| `--wind-plan-water` | `#7FBFFF` | Plan wind maps (Wind speed and Comfort): water, the same blue as `--water-fill`. |
 | `--wind-plan-green` | `#e8ebe6` | Plan Comfort map: green space on the muted base map. |
 | `--wind-band-0` | `#9ec5e8` | Wind console swatch: 2–10 km/h. |
 | `--wind-band-1` | `#5b9bd5` | Wind console swatch: 10–20 km/h. |
