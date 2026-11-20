@@ -11,7 +11,7 @@ on:
       jobs:
         description: "Which builds to run"
         type: choice
-        options: [all, buildings, trees]
+        options: [all, buildings, trees, wikidata]
         default: all
       force_trees:
         description: "Rebuild trees even when the sources are unchanged"
@@ -39,7 +39,7 @@ jobs:
 
   build-tiles:
     needs: gate
-    if: needs.gate.outputs.run == 'true' && (github.event_name != 'workflow_dispatch' || inputs.jobs != 'trees')
+    if: needs.gate.outputs.run == 'true' && (github.event_name != 'workflow_dispatch' || inputs.jobs == 'all' || inputs.jobs == 'buildings')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -115,7 +115,7 @@ jobs:
   # the trees-prebake-test pre-release; the site reads trees-latest, which only main updates.
   build-trees:
     needs: gate
-    if: needs.gate.outputs.run == 'true' && (github.event_name != 'workflow_dispatch' || inputs.jobs != 'buildings')
+    if: needs.gate.outputs.run == 'true' && (github.event_name != 'workflow_dispatch' || inputs.jobs == 'all' || inputs.jobs == 'trees')
     runs-on: ubuntu-latest
     timeout-minutes: 120
     permissions:
@@ -186,3 +186,46 @@ jobs:
             && gh release upload trees-prebake-test public/trees.pmtiles public/trees-manifest.json --clobber \
             || gh release create trees-prebake-test public/trees.pmtiles public/trees-manifest.json --prerelease \
               --title "Trees PMTiles (branch test)" --notes "Branch test build. Not read by the live site."
+
+  # Greater Melbourne Wikidata landmarks (buildings and structures with coordinates). Wikidata is CC0.
+  # Branch runs publish only to the wikidata-landmarks-test pre-release; main updates wikidata-landmarks-latest.
+  build-wikidata:
+    needs: gate
+    if: needs.gate.outputs.run == 'true' && (github.event_name != 'workflow_dispatch' || inputs.jobs == 'all' || inputs.jobs == 'wikidata')
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Test Wikidata bake
+        run: npx vitest run scripts/wikidata-landmarks-lib.test.mjs
+      - name: Build Wikidata landmarks
+        run: node scripts/build-wikidata-landmarks.mjs
+      - name: Log manifest
+        run: cat public/wikidata-landmarks-manifest.json
+      - name: Publish Wikidata release (main)
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="wikidata-landmarks-$(date -u +%Y%m%d)"
+          gh release create "$tag" public/wikidata-landmarks.json public/wikidata-landmarks-manifest.json \
+            --title "Wikidata landmarks" --notes "Greater Melbourne Wikidata buildings and structures (CC0). Manifest has the query date and item count." \
+            || gh release upload "$tag" public/wikidata-landmarks.json public/wikidata-landmarks-manifest.json --clobber
+          gh release view wikidata-landmarks-latest >/dev/null 2>&1 \
+            && gh release upload wikidata-landmarks-latest public/wikidata-landmarks.json public/wikidata-landmarks-manifest.json --clobber \
+            || gh release create wikidata-landmarks-latest public/wikidata-landmarks.json public/wikidata-landmarks-manifest.json \
+              --title "Wikidata landmarks (latest)" --notes "Rolling latest Wikidata landmarks file."
+      - name: Publish test pre-release (non-main branches)
+        if: github.ref != 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view wikidata-landmarks-test >/dev/null 2>&1 \
+            && gh release upload wikidata-landmarks-test public/wikidata-landmarks.json public/wikidata-landmarks-manifest.json --clobber \
+            || gh release create wikidata-landmarks-test public/wikidata-landmarks.json public/wikidata-landmarks-manifest.json --prerelease \
+              --title "Wikidata landmarks (branch test)" --notes "Branch test build. Not read by the live site."
