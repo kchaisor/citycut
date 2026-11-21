@@ -38,7 +38,7 @@ const wktPoint = (lon, lat) => `"Point(${lon} ${lat})"^^geo:wktLiteral`;
 
 export function landmarkQuery(cell, classQid = ARCHITECTURAL_STRUCTURE) {
   return `SELECT ?item ?label ?coord ?height ?floors ?inception ?opened ?article
-  ?architect ?architectLabel ?style ?styleLabel ?heritage ?heritageLabel WHERE {
+  ?architect ?architectLabel ?style ?styleLabel ?heritage ?heritageLabel ?osmWay WHERE {
   SERVICE wikibase:box {
     ?item wdt:P625 ?coord .
     bd:serviceParam wikibase:cornerSouthWest ${wktPoint(cell.west, cell.south)} .
@@ -53,6 +53,7 @@ export function landmarkQuery(cell, classQid = ARCHITECTURAL_STRUCTURE) {
   OPTIONAL { ?item wdt:P84 ?architect . OPTIONAL { ?architect rdfs:label ?architectLabel FILTER(LANG(?architectLabel) = "en") } }
   OPTIONAL { ?item wdt:P149 ?style . OPTIONAL { ?style rdfs:label ?styleLabel FILTER(LANG(?styleLabel) = "en") } }
   OPTIONAL { ?item wdt:P1435 ?heritage . OPTIONAL { ?heritage rdfs:label ?heritageLabel FILTER(LANG(?heritageLabel) = "en") } }
+  OPTIONAL { ?item wdt:P10689 ?osmWay }
   OPTIONAL { ?article schema:about ?item ; schema:isPartOf <https://en.wikipedia.org/> }
 }`;
 }
@@ -110,6 +111,7 @@ function emptyItem(qid) {
     inception: new Set(),
     opened: new Set(),
     articles: new Set(),
+    osmWays: new Set(),
     architects: new Map(),
     styles: new Map(),
     heritage: new Map(),
@@ -140,6 +142,8 @@ export function groupBindings(rows, accumulator = new Map()) {
     add(item.inception, yearFromWikidataDate(bindingValue(row, "inception")));
     add(item.opened, yearFromWikidataDate(bindingValue(row, "opened")));
     add(item.articles, bindingValue(row, "article"));
+    const osmWay = numberOrNull(bindingValue(row, "osmWay"));
+    if (osmWay !== null && Number.isInteger(osmWay) && osmWay > 0) item.osmWays.add(osmWay);
     for (const [key, field] of MULTI_FIELDS) {
       const linked = qidFromUri(bindingValue(row, key));
       if (!linked) continue;
@@ -173,6 +177,7 @@ export function finaliseItem(item, bbox) {
       styles: linkedList(item.styles),
       heritage: linkedList(item.heritage),
       wikipedia: [...item.articles].sort()[0] ?? null,
+      osmWayIds: [...item.osmWays].sort((a, b) => a - b),
     },
     reason: null,
   };

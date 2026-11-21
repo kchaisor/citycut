@@ -92,6 +92,30 @@ describe("Wikidata landmark matching", () => {
     expect(result.status === "ok" && result.matches.map((m) => [m.buildingId, m.item.qid])).toEqual([[1, "Q1"]]);
   });
 
+  it("matches through Wikidata's OSM way id when the point misses the footprint", () => {
+    const tower = { ...square(1, [0, 0], 10), osmWayIds: [555] };
+    const neighbour = square(2, [40, 0], 10);
+    const onStreet = { ...item("Q1", center.lon + 20 / 87900, center.lat), osmWayIds: [555] };
+    const result = matchLandmarks(model([tower, neighbour]), [onStreet], "baked", null);
+    expect(result.status === "ok" && result.matches.map((m) => [m.buildingId, m.item.qid])).toEqual([[1, "Q1"]]);
+  });
+
+  it("prefers the OSM way over a different footprint the point falls in", () => {
+    const tower = { ...square(1, [0, 0], 10), osmWayIds: [555] };
+    const neighbour = square(2, [40, 0], 10);
+    const onNeighbour = { ...item("Q1", center.lon + 40 / 87900, center.lat), osmWayIds: [555] };
+    const result = matchLandmarks(model([tower, neighbour]), [onNeighbour], "baked", null);
+    expect(result.status === "ok" && result.matches.map((m) => m.buildingId)).toEqual([1]);
+  });
+
+  it("falls back to the footprint among buildings that share the OSM way", () => {
+    const partA = { ...square(1, [0, 0], 10), osmWayIds: [555] };
+    const partB = { ...square(2, [30, 0], 10), osmWayIds: [555] };
+    const inB = { ...item("Q1", center.lon + 30 / 87900, center.lat), osmWayIds: [555] };
+    const result = matchLandmarks(model([partA, partB]), [inB], "baked", null);
+    expect(result.status === "ok" && result.matches.map((m) => m.buildingId)).toEqual([2]);
+  });
+
   it("reports zero landmarks, not an error, for a cut with none", () => {
     expect(matchLandmarks(model([square(1, [0, 0], 20)]), [], "baked", null)).toMatchObject({ status: "ok", matches: [], inCut: 0 });
   });

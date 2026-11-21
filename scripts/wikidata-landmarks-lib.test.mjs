@@ -46,7 +46,7 @@ describe("SPARQL query", () => {
     expect(q).toContain('wikibase:cornerNorthEast "Point(145.1 -37.7)"^^geo:wktLiteral');
     expect(q).toContain("?item wdt:P31/wdt:P279* wd:Q811979 .");
     expect(landmarkQuery({ west: 144, south: -38, east: 145, north: -37 }, "Q55488")).toContain("?item wdt:P31/wdt:P279* wd:Q55488 .");
-    for (const p of ["P625", "P2048", "P1101", "P571", "P1619", "P84", "P149", "P1435"]) expect(q).toContain(p);
+    for (const p of ["P625", "P2048", "P1101", "P571", "P1619", "P84", "P149", "P1435", "P10689"]) expect(q).toContain(p);
     expect(q).toContain("<https://en.wikipedia.org/>");
   });
   it("reads heights normalised to metres from best-rank statements", () => {
@@ -102,6 +102,7 @@ describe("baking the sample answer", () => {
       styles: [{ qid: "Q900201", name: "Fixture modernism" }],
       heritage: [],
       wikipedia: "https://en.wikipedia.org/wiki/Fixture_Tower",
+      osmWayIds: [700001],
     });
   });
   it("leaves missing facts empty instead of guessing", () => {
@@ -110,6 +111,7 @@ describe("baking the sample answer", () => {
     expect(hall.floorsAboveGround).toBeNull();
     expect(hall.yearOpened).toBeNull();
     expect(hall.wikipedia).toBeNull();
+    expect(hall.osmWayIds).toEqual([]);
     expect(hall.heritage).toEqual([{ qid: "Q900301", name: "Fixture heritage register" }]);
   });
   it("drops and counts items without an English label or a point in the box", () => {

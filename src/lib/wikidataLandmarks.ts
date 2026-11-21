@@ -12,7 +12,7 @@ import {
 } from "../../shared/wikidataLandmarks.js";
 import { M_PER_DEG_LAT, mPerDegLon, toLocal } from "./geo";
 import { pointInPolygon } from "./useCascade";
-import type { CityModel } from "../types";
+import type { BuildingFeat, CityModel } from "../types";
 
 export type { WikidataLandmark } from "../../shared/wikidataLandmarks.js";
 
@@ -102,6 +102,14 @@ function inBbox(item: Pick<WikidataLandmark, "lon" | "lat">, bbox: WikidataBbox)
   return item.lon >= bbox.west && item.lon <= bbox.east && item.lat >= bbox.south && item.lat <= bbox.north;
 }
 
+function buildingsForItem(model: Pick<CityModel, "center" | "buildings">, item: WikidataLandmark): BuildingFeat[] {
+  const ways = new Set(item.osmWayIds ?? []);
+  const byWay = ways.size > 0 ? model.buildings.filter((b) => b.osmWayIds?.some((id) => ways.has(id))) : [];
+  if (byWay.length === 1) return byWay;
+  const at = toLocal(item.lat, item.lon, model.center);
+  return (byWay.length > 1 ? byWay : model.buildings).filter((b) => pointInPolygon(at, b.ring, b.holes));
+}
+
 export function matchLandmarks(
   model: Pick<CityModel, "center" | "sideM" | "widthM" | "heightM" | "buildings">,
   items: readonly WikidataLandmark[],
@@ -116,8 +124,7 @@ export function matchLandmarks(
   for (const item of items) {
     if (!inBbox(item, bbox)) continue;
     inCut += 1;
-    const at = toLocal(item.lat, item.lon, model.center);
-    const containing = model.buildings.filter((b) => pointInPolygon(at, b.ring, b.holes));
+    const containing = buildingsForItem(model, item);
     if (containing.length === 0) noFootprint += 1;
     else if (containing.length > 1) manyFootprints += 1;
     else matches.push({ buildingId: containing[0]!.id, item });

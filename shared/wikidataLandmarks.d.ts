@@ -15,6 +15,7 @@ export type WikidataLandmark = {
   styles: WikidataLinked[];
   heritage: WikidataLinked[];
   wikipedia: string | null;
+  osmWayIds?: number[];
 };
 
 export type WikidataLandmarksDocument = {
