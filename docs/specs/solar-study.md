@@ -34,7 +34,7 @@ These replace the earlier idea that Solar Study is the default and is implied by
 ### 3D Sun Dome look (Designbot review, 21 Nov 2026)
 
 12. **Size and place.** The dome sits on the centre of the site cut. Its radius is 0.6 × the cut's half-diagonal, kept between 120 m and 350 m: a 1 km square gets 350 m, a 400 m square about 170 m, a 200 m square 120 m. The radius is worked out from the cut; there is no radius slider for the 3D dome.
-13. **Camera.** When the dome turns on, the camera eases (250 ms) so the dome fits in the part of the view that is not covered by the on-screen panels, with 16 px to spare. Reduced motion jumps straight there. Any drag stops the ease.
+13. **Camera.** When the dome turns on, the camera eases (250 ms) so the dome itself (its radius and height, not the whole cut) fits in the part of the view that is not covered by the on-screen panels, with 16 px to spare. Reduced motion jumps straight there. Any drag stops the ease.
 14. **Lines and labels stay the same size on screen** at every zoom. Lines are fixed-pixel and labels are a constant screen size.
 15. **Three line styles only.** The selected date's sun path is solid 2 px `--ink`. The other key dates are 1 px `--ink-3`: 21 Jun dashed 6/4, 22 Dec dotted 2/3, the equinox dashed 2/4. Hour lines are 0.75 px `--ink` at 35%. When the selected date is a key date, it is drawn once, in the selected style.
 16. **Hour labels** are only on the selected date's path, and only 09h, 12h and 15h, in Geist Mono 11/600 with tabular figures, 6 px outside the path, with a 2 px background-coloured halo.

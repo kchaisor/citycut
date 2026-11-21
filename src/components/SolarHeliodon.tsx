@@ -40,6 +40,7 @@ import { meanTerrainElevation } from "../lib/terrain";
 import { themeColor } from "../lib/themeColor";
 import type { TerrainField } from "../types";
 import { markScreenOnly } from "../lib/screenOnly";
+import { moveToPostOverlay, retainPostOverlay, setPostOverlayDeferred } from "../lib/postOverlay";
 import { useColourRevision } from "../lib/useColourRevision";
 import {
   daylightHourMarks,
@@ -630,8 +631,8 @@ export function SolarHeliodon({
   const ground = useMemo<GroundHeight>(() => flatDialGround(dialPlaneY), [dialPlaneY]);
   const centre = useMemo(() => new THREE.Vector3(0, ground(0, 0) + HELIODON_LIFT_M, 0), [ground]);
   const bounds = useMemo(
-    () => sunDomeBounds({ lat, lon, year, selected: { month, day }, sideM, radiusM: radius, groundY: dialPlaneY }),
-    [lat, lon, year, month, day, sideM, radius, dialPlaneY],
+    () => sunDomeBounds({ lat, lon, year, selected: { month, day }, radiusM: radius, groundY: dialPlaneY }),
+    [lat, lon, year, month, day, radius, dialPlaneY],
   );
 
   const root = useDisposable(() => {
@@ -644,6 +645,7 @@ export function SolarHeliodon({
     buildSunPaths(group, ink, lat, lon, year, { month, day }, radius, ground, centre);
     group.userData.labels.sort((a, b) => a.priority - b.priority);
     markScreenOnly(group);
+    moveToPostOverlay(group);
     return group;
   }, [show, lat, lon, year, month, day, radius, ground, centre, colourTick, fontsTick, pixelRatio]);
 
@@ -663,6 +665,7 @@ export function SolarHeliodon({
     group.add(line, dot);
     group.userData = { dot, drop, material };
     markScreenOnly(group);
+    moveToPostOverlay(group);
     return group;
   }, [colourTick, pixelRatio]);
 
@@ -680,6 +683,13 @@ export function SolarHeliodon({
     const material = marker.userData.material as LineMaterial | undefined;
     material?.resolution.set(gl.domElement.clientWidth || size.width, size.height);
   });
+  const scene = useThree((state) => state.scene);
+  const camera = useThree((state) => state.camera);
+  useEffect(() => {
+    if (!show) return;
+    setPostOverlayDeferred(camera, false);
+    return retainPostOverlay(scene);
+  }, [show, scene, camera]);
   useSunDomeFrame(show ? root : null, sunVisible ? dot : null, centre);
   useSunDomeAutoFit(show, bounds);
 

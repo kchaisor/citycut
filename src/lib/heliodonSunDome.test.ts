@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
+import { HELIODON_LIFT_M } from "./heliodonGeometry";
+import { sunDomeRadiusM } from "./heliodonRadius";
 import {
   SUN_DOME_HOUR_LABELS,
   easeInOutCubic,
   hudSafeArea,
   sunDomeArcs,
   sunDomeBearingLabels,
+  sunDomeBounds,
   sunDomeDateLabel,
   sunDomeHourLabel,
   sunDomeKeyItems,
@@ -78,6 +81,18 @@ describe("sun dome camera fit", () => {
 
   it("ignores panels outside the viewport", () => {
     expect(hudSafeArea(viewport, [{ left: 1500, top: 0, right: 1600, bottom: 100 }])).toEqual(viewport);
+  });
+
+  it("frames the dome radius and height, not the whole cut", () => {
+    const sideM = 1000;
+    const radiusM = sunDomeRadiusM(sideM);
+    expect(radiusM).toBeLessThan(sideM / 2);
+    const bounds = sunDomeBounds({ lat: -37.81, lon: 144.96, year: 2026, selected: { month: 12, day: 22 }, radiusM, groundY: 10 });
+    expect(bounds.min).toEqual([-radiusM, 10, -radiusM]);
+    expect(bounds.max[0]).toBe(radiusM);
+    expect(bounds.max[2]).toBe(radiusM);
+    expect(bounds.max[1]).toBeGreaterThan(10 + HELIODON_LIFT_M + radiusM * 0.9);
+    expect(bounds.max[1]).toBeLessThanOrEqual(10 + HELIODON_LIFT_M + radiusM);
   });
 
   it("eases in and out", () => {

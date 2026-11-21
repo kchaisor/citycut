@@ -137,11 +137,10 @@ export function sunDomeBounds(input: {
   lon: number;
   year: number;
   selected: { month: number; day: number };
-  sideM: number;
   radiusM: number;
   groundY: number;
 }): Aabb {
-  const half = Math.max(input.radiusM, input.sideM / 2);
+  const half = input.radiusM;
   let peak = 0;
   for (const arc of sunDomeArcs(input.selected)) {
     for (const direction of horizonArcDirections(input.lat, input.lon, input.year, arc.month, arc.day, 15)) {
