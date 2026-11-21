@@ -93,7 +93,6 @@ export function ModelPageSidebarRight({ vm }: { vm: import("./useModelPage").Mod
                   </div>
                 </div>
               </div>
-              {model.terrainError && <p className="error">{model.terrainError}</p>}
               {showBuildings && heightBar.total > 0 && (
                 <>
                   <div className="outliner-divider" aria-hidden="true" />

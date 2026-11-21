@@ -139,7 +139,9 @@ describe("3D Wind Flow rose", () => {
     expect(panel.textContent).not.toContain("sheltered");
     expect(panel.textContent).not.toContain("Pedestrian comfort");
     expect(panel.querySelector("details.wind-rose-nearby")).toBeTruthy();
-    expect(panel.textContent).toContain("Regional station wind, not site wind.");
+    expect(panel.querySelector(".wind-rose-footnote")?.textContent).toContain("Regional station, not site wind · TMYx ↗");
+    expect(panel.querySelector(".wind-rose-calm-caption")).toBeNull();
+    expect(panel.querySelector(".wind-rose-chart .wind-rose-calm")?.textContent).toMatch(/^Calm \d+\.\d%$/);
   });
 });
 

@@ -27,3 +27,13 @@ export function windStreaksSliderOn({
 }): boolean {
   return tab === "3d" && windFlowActive(windEnabled, analysisKind) && !planActive;
 }
+
+export const WIND_ROSE_CARD_ROOMY_WIDTH_PX = 1440;
+
+export function windRoseCardAutoCollapsed(rightOpen: string, viewportWidth: number): boolean {
+  return (rightOpen === "buildings" || rightOpen === "trees") && viewportWidth < WIND_ROSE_CARD_ROOMY_WIDTH_PX;
+}
+
+export function windRoseCardMeta(periodLabel: string, years: number | null | undefined): string {
+  return years != null ? `${periodLabel} · ${years} yrs` : periodLabel;
+}

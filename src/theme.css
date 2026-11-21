@@ -86,10 +86,13 @@
   --fs-sm: 12px;
   --fs-body: 13px;
   --lh-sm: 16px;
+  --fs-title: 16px;
+  --lh-title: 20px;
 
   --control-sm: 28px;
   --control-md: 32px;
   --row-imported-building: 48px;
+  --hud-card-head: 48px;
   --radius-xs: 4px;
   --radius-sm: 6px;
   --radius-md: 8px;
@@ -105,6 +108,7 @@
   --ink-3: #6B6963;
   --border-outer: rgb(20 20 19 / 13%);
   --shadow-raised: 0 1px 2px rgb(20 20 19 / 8%);
+  --slider-track: rgb(20 20 19 / 15%);
 
   --space-0-5: 2px;
   --space-1: 4px;

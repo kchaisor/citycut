@@ -2,10 +2,12 @@ export const RIGHT_HUD_TOP_PX = 68;
 export const RIGHT_HUD_RIGHT_PX = 14;
 export const RIGHT_HUD_WIDTH_PX = 304;
 export const RIGHT_HUD_GAP_PX = 12;
-export const HUD_CLEARANCE_PX = 8;
+export const HUD_GUTTER_PX = 16;
 export const ENV_CONSOLE_EDGE_PX = 16;
+export const ENV_CONSOLE_MAX_PREFERRED_PX = 720;
 
 export type HudBox = { left: number; right: number; top: number; bottom: number };
+export type EnvConsoleLanes = { left: number; right: number };
 
 function overlapsX(a: HudBox, b: HudBox, pad: number): boolean {
   return a.left < b.right + pad && a.right > b.left - pad;
@@ -20,10 +22,10 @@ function sized(box: HudBox | null): box is HudBox {
 }
 
 export function rightHudMaxHeight(viewportHeight: number, stack: HudBox, below: readonly (HudBox | null)[]): number {
-  let floor = viewportHeight - HUD_CLEARANCE_PX;
+  let floor = viewportHeight - HUD_GUTTER_PX;
   for (const box of below) {
-    if (!sized(box) || box.top <= stack.top || !overlapsX(box, stack, HUD_CLEARANCE_PX)) continue;
-    floor = Math.min(floor, box.top - HUD_CLEARANCE_PX);
+    if (!sized(box) || box.top <= stack.top || !overlapsX(box, stack, 0)) continue;
+    floor = Math.min(floor, box.top - HUD_GUTTER_PX);
   }
   return Math.max(0, Math.floor(floor - stack.top));
 }
@@ -33,14 +35,31 @@ export function envConsoleLanes(
   consoleBox: HudBox,
   leftObstacles: readonly (HudBox | null)[],
   rightStack: HudBox | null,
-): { left: number; right: number } {
+): EnvConsoleLanes {
   let left = ENV_CONSOLE_EDGE_PX;
   for (const box of leftObstacles) {
-    if (!sized(box) || !overlapsY(box, consoleBox, HUD_CLEARANCE_PX)) continue;
-    left = Math.max(left, Math.ceil(box.right + HUD_CLEARANCE_PX));
+    if (!sized(box) || !overlapsY(box, consoleBox, HUD_GUTTER_PX)) continue;
+    left = Math.max(left, Math.ceil(box.right + HUD_GUTTER_PX));
   }
   const right = sized(rightStack)
-    ? Math.max(ENV_CONSOLE_EDGE_PX, Math.ceil(viewportWidth - rightStack.left + HUD_CLEARANCE_PX))
+    ? Math.max(ENV_CONSOLE_EDGE_PX, Math.ceil(viewportWidth - rightStack.left + HUD_GUTTER_PX))
     : ENV_CONSOLE_EDGE_PX;
   return { left, right };
+}
+
+export function envConsoleMaxWidth(viewportWidth: number, lanes: EnvConsoleLanes): number {
+  return Math.max(0, viewportWidth - lanes.left - lanes.right);
+}
+
+export function envConsoleBox(
+  viewportWidth: number,
+  lanes: EnvConsoleLanes,
+  contentWidth: number,
+  top: number,
+  bottom: number,
+): HudBox {
+  const lane = envConsoleMaxWidth(viewportWidth, lanes);
+  const width = Math.min(Math.max(contentWidth, Math.min(ENV_CONSOLE_MAX_PREFERRED_PX, lane)), lane);
+  const centre = lanes.left + lane / 2;
+  return { left: centre - width / 2, right: centre + width / 2, top, bottom };
 }
