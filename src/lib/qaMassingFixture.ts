@@ -1,5 +1,6 @@
 import { projectLocal } from "./crs";
 import { cutCentrePlacement } from "./massingImport";
+import { wholeFileBuildings } from "./massingBuildings";
 import type { ImportedMassing } from "./massingImport";
 import type { LonLat } from "../types";
 
@@ -52,16 +53,20 @@ export function qaPodiumTowerMassing(center: LonLat, zone: number, base: number)
   vtx = meshBox(positions, indices, -15, -10, 15, 10, 0, 12, vtx);
   vtx = meshBox(positions, indices, -8, 2, -2, 8, 12, 38, vtx);
   vtx = meshBox(positions, indices, 4, -6, 10, 0, 12, 28, vtx);
+  const name = "qa-podium-towers.3dm";
+  const triangles = indices.length / 3;
+  const packed = new Float32Array(positions);
   return {
     id: "qa-podium-towers",
-    name: "qa-podium-towers.3dm",
+    name,
     fileBytes: 1,
     mode: "click",
     visible: true,
-    positions: new Float32Array(positions),
+    positions: packed,
     indices: new Uint32Array(indices),
-    triangles: indices.length / 3,
-    partTriangleStarts: [0, indices.length / 3],
+    triangles,
+    partTriangleStarts: [0, triangles],
+    buildings: wholeFileBuildings({ positions: packed, triangles }, name),
     anchor: { e: anchorE, n: anchorN, z: base },
     halfExtent: { x: 15, y: 10 },
     sourceUnits: "Meters",

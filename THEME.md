@@ -69,6 +69,13 @@ The name is `--background`. The value is `#EBEBEB`.
 | `--sidebar-panel-w` | Width of the sidebar panel next to the rail. | `320px` |
 | `--z-studio-inspector` | Stacking order of the fixed Site Intelligence panel. | `30` |
 | `--z-studio-topbar` | Stacking order of the floating top-bar HUD (menus paint above the inspector). | `40` |
+| `--fs-micro` | Micro caps: the IMPORT, scheme and COLOUR headers in Buildings › Import. | `10px` |
+| `--fs-body` | Body type: rows in the imported building popover. | `13px` |
+| `--control-sm` | 28 px control: the Set use select in the imported building popover. | `28px` |
+| `--control-md` | 32 px control: eye toggles in Buildings › Import, the imported-building checkbox row. | `32px` |
+| `--row-imported-building` | Height of one imported building row in Buildings › Import. | `48px` |
+| `--radius-xs` / `--radius-sm` / `--radius-md` | Swatches and checkboxes / rows and segments / segment tracks and selects, in Buildings › Import and the imported building popover. | `4px` / `6px` / `8px` |
+| `--space-0-5` … `--space-3` | 4 pt spacing steps (2, 4, 6, 8, 12 px) used by Buildings › Import and the imported building popover. | `2px` … `12px` |
 | `--fs-caption` / `--lh-caption` | Caption type: landmark label pills, the LANDMARK header, the Wikidata link and Buildings helper captions. | `11px` / `16px` |
 | `--fs-sm` / `--lh-sm` | Small type: Landmark block rows in the building popover and the Landmark labels toggle row. | `12px` / `16px` |
 | `--bg-elev` | Raised white surface: landmark label pills and selected sub-options. | `#FFFFFF` |

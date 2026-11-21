@@ -205,21 +205,24 @@ export function planPaths(
     colourBySource: false,
   };
   const highlightManual = Boolean(planOptions.highlightManual);
+  type PlanBuildingPath = { id: number; rings: Pt[][]; fill: string; site: boolean; imported?: boolean; topZ?: number };
   const buildings = model.buildings
-    .map((building) => {
+    .map((building): PlanBuildingPath | null => {
       if (building.importedMassingShadowCaster) return null;
       const rings = clipRings(building.ring, building.holes, model.sideM, frameShape, frameSize);
       if (!rings) return null;
       const site = isSiteBuilding(model, building.id);
       const fill = planBuildingFill(model, building, colourMode, highlightManual);
       return building.importedMassing
-        ? { id: building.id, rings, fill, site: false, imported: true }
+        ? { id: building.id, rings, fill, site: false, imported: true, topZ: building.importedTopZ ?? 0 }
         : { id: building.id, rings, fill, site };
     })
-    .filter(
-      (building): building is { id: number; rings: Pt[][]; fill: string; site: boolean; imported?: boolean } =>
-        building !== null,
-    );
+    .filter((building): building is PlanBuildingPath => building !== null);
+  const importedSlots = buildings.flatMap((building, index) => (building.imported ? [index] : []));
+  const tallestLast = importedSlots.map((index) => buildings[index]!).sort((a, b) => a.topZ! - b.topZ!);
+  importedSlots.forEach((slot, index) => {
+    buildings[slot] = tallestLast[index]!;
+  });
 
   let pathFill: MultiPolygon = footpaths.polygons;
   if (pathFilletM > 0 && carriageway.polygons.length > 0) {

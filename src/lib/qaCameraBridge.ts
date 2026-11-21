@@ -98,6 +98,7 @@ export function qaMassingFromSearch(search: string): string | null {
   const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
   const value = params.get("qaMassing");
   if (!value) return null;
+  if (value === "scheme") return params.get("qa") === "1" ? "scheme" : null;
   return value === "podium" ? "podium" : null;
 }
 

@@ -12,6 +12,7 @@ import {
   parseMassing3dm,
   placedLocal,
   placedMga,
+  toImportedMassing,
   type ImportedMassing,
 } from "./massingImport";
 import type { CityModel, Pt } from "../types";
@@ -67,7 +68,7 @@ function addBox(rhino: Rhino, doc: InstanceType<Rhino["File3dm"]>, min: number[]
 }
 
 function asImported(parsed: ReturnType<typeof parseMassing3dm>, bytes: number): ImportedMassing {
-  return { ...parsed, id: "t", name: "box", fileBytes: bytes, mode: "mga", placement: mgaPlacement(parsed), visible: true };
+  return toImportedMassing(parsed, { id: "t", name: "box", fileBytes: bytes, mode: "mga", placement: mgaPlacement(parsed), visible: true });
 }
 
 describe(".3dm massing import", () => {

@@ -1197,15 +1197,50 @@ export function useModelPage({
       ? (displayModel.trees.find((tree) => tree.id === sceneSelection.treeId) ?? null)
       : null;
 
+  const pickedImported = useMemo(() => {
+    if (sceneSelection?.kind !== "imported") return null;
+    const massingItem = massing.imported.find((item) => item.id === sceneSelection.fileId);
+    const building = massingItem?.buildings.find((item) => item.id === sceneSelection.buildingId);
+    return massingItem && building ? { massing: massingItem, building } : null;
+  }, [massing.imported, sceneSelection]);
+
+  function selectImportedBuilding(fileId: string, buildingId: string, clientX: number, clientY: number) {
+    const footprint = massing.drawingBuildings.find(
+      (building) =>
+        !building.importedMassingShadowCaster &&
+        building.importedBuilding?.fileId === fileId &&
+        building.importedBuilding.buildingId === buildingId,
+    );
+    const at = footprint ? interiorPoint(footprint.ring, footprint.holes) : null;
+    const top = footprint?.importedTopZ ?? 0;
+    setSceneSelection({
+      kind: "imported",
+      fileId,
+      buildingId,
+      clientX,
+      clientY,
+      world: at ? { east: at[0], north: at[1], up: top - (footprint?.height ?? 0) * 0.45 } : { east: 0, north: 0, up: 0 },
+    });
+    setInspectHudScreen({ clientX, clientY, inView: true });
+    setHideSelection([]);
+  }
+
+  function clearImportedSelection() {
+    if (sceneSelection?.kind !== "imported") return;
+    setSceneSelection(null);
+    setInspectHudScreen(null);
+  }
+
   const inspectAnchor = useMemo((): SceneInspectWorld | null => {
     if (!sceneSelection) return null;
+    if (sceneSelection.kind === "imported") return pickedImported?.building.visible && pickedImported.massing.visible ? sceneSelection.world : null;
     if (sceneSelection.kind === "terrain" || sceneSelection.kind === "tree") return sceneSelection.world;
     const building = displayModel.buildings.find((item) => item.id === sceneSelection.buildingId);
     if (!building) return sceneSelection.world;
     const at = interiorPoint(building.ring, building.holes);
     const base = sceneSelection.world.up;
     return { east: at[0], north: at[1], up: base + building.height * 0.55 };
-  }, [displayModel.buildings, sceneSelection]);
+  }, [displayModel.buildings, sceneSelection, pickedImported]);
 
   const inspectHudPosition = useMemo(() => {
     const anchor = inspectHudScreen;
@@ -2295,6 +2330,9 @@ export function useModelPage({
     planViewport,
     pickedBuilding,
     pickedTree,
+    pickedImported,
+    selectImportedBuilding,
+    clearImportedSelection,
     planWidth,
     presentBuildingUses,
     qaDisplayBuildingsRef,
