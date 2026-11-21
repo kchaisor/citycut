@@ -19,7 +19,7 @@ describe("imported building selection and storage", () => {
   });
 
   it("keeps a use set in the popover and a hidden building across reloads", () => {
-    const massing = qaSchemeMassing(origin, zone, 0);
+    const massing = qaSchemeMassing(0);
     const edited = massing.buildings.map((building) =>
       building.name === "Podium" ? { ...building, use: "retail" as const, visible: false } : building,
     );
@@ -39,7 +39,7 @@ describe("imported building selection and storage", () => {
   });
 
   it("picks the imported building under the pointer in 3D", () => {
-    const group = buildMassingGroup([qaSchemeMassing(origin, zone, 0)], origin, zone)!;
+    const group = buildMassingGroup([qaSchemeMassing(0)], origin, zone)!;
     group.updateMatrixWorld(true);
     const towerB = group.children.find((child) => child.name === "Tower B")! as THREE.Mesh;
     towerB.geometry.computeBoundingBox();

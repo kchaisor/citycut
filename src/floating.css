@@ -5451,6 +5451,9 @@ body,
   color: var(--ink);
 }
 .import-massing-panel .massing-building-meta {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
   font-size: var(--fs-sm);
   line-height: var(--lh-sm);
   color: var(--ink-3);
@@ -5479,7 +5482,12 @@ body,
   cursor: pointer;
 }
 .import-massing-panel .massing-placement-summary:hover { background: var(--bg-sub); }
-.import-massing-panel .massing-placement-part { white-space: pre; }
+.import-massing-panel .massing-placement-text {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
 .import-massing-panel .massing-chevron { flex: none; transition: transform var(--dur-fast) ease-out; }
 .import-massing-panel .massing-placement-summary[aria-expanded="true"] .massing-chevron { transform: rotate(90deg); }
 .import-massing-panel .massing-placement { padding: 0 var(--space-1-5); }
@@ -5525,7 +5533,6 @@ body,
   color: var(--ink);
   cursor: pointer;
 }
-.import-massing-panel .massing-check input { accent-color: var(--ink); width: 16px; height: 16px; margin: 0; }
 .import-massing-panel .massing-remove {
   display: flex;
   justify-content: flex-end;

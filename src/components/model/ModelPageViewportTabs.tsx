@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { BuildingHeightPopover, ImportedBuildingPopover } from "../BuildingHeightPopover";
 import { LandmarkLabelLayer } from "../LandmarkLabelLayer";
+import { ImportedLabelLayer } from "../ImportedLabelLayer";
+import type { ImportedLabelState } from "../ImportedLabelProjector";
 
 import { TreeInspectHud, TerrainInspectHud } from "../SceneInspectHud";import { DrawingPlan } from "../DrawingPlan";
 
@@ -108,6 +110,7 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
   } = vm;
   const sunHoursOnPlan = Boolean(solar.sunHours) && drawing === "site";
   const [keep3d, setKeep3d] = useState(tab === "3d");
+  const [importedLabels, setImportedLabels] = useState<ImportedLabelState | null>(null);
   useEffect(() => {
     if (tab === "3d") setKeep3d(true);
   }, [tab]);
@@ -220,7 +223,14 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
                 landmarkSources={landmarkSources}
                 landmarkLabelsOn={landmarkLabelsOn}
                 onLandmarkScreens={setLandmarkScreens}
+                onImportedLabels={setImportedLabels}
               />
+              {tab === "3d" && (
+                <ImportedLabelLayer
+                  state={importedLabels}
+                  onSelect={(label) => selectImportedBuilding(label.fileId, label.buildingId, label.x, label.y)}
+                />
+              )}
               {tab === "3d" && landmarkLabelsOn && (
                 <LandmarkLabelLayer
                   state={landmarkScreens}

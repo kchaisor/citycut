@@ -6,7 +6,7 @@ import { qaSchemeMassing } from "../lib/qaSchemeFixture";
 
 afterEach(cleanup);
 
-const massing = qaSchemeMassing({ lon: 144.9645, lat: -37.8216 }, 55, 0);
+const massing = qaSchemeMassing(0);
 const byName = (name: string) => massing.buildings.find((building) => building.name === name)!;
 
 function setup(name: string, overrides = {}) {
@@ -43,7 +43,7 @@ describe("imported building popover", () => {
 
   it("shows height in metres and levels as — Not in model when the file has none", () => {
     const { container } = setup("Podium");
-    expect(row(container, "Height")!.querySelector(".imported-popover-value")?.textContent).toBe("9 m");
+    expect(row(container, "Height")!.querySelector(".imported-popover-value")?.textContent).toBe("18 m");
     expect(row(container, "Levels")!.querySelector(".imported-popover-value")?.textContent).toBe("—");
     expect(container.textContent).toContain("Not in model");
   });
@@ -65,7 +65,7 @@ describe("imported building popover", () => {
   });
 
   it("names the source file and has no map-building rows", () => {
-    const { container, onClose } = setup("Tower A Residential");
+    const { container, onClose } = setup("Tower A");
     expect(container.querySelector(".imported-popover-source")?.textContent).toBe(
       "Source: your model (rhino-three-buildings.3dm)",
     );

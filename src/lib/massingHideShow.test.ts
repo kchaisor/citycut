@@ -15,11 +15,11 @@ import type { BuildingFeat, CityModel } from "../types";
 
 const origin = { lon: 144.9645, lat: -37.8216 };
 const zone = mgaCrs(origin.lon).zone;
-const ALL = ["Tower A Residential", "Podium", "Tower B"];
-const WITHOUT_PODIUM = ["Tower A Residential", "Tower B"];
+const ALL = ["Tower A", "Podium", "Tower B"];
+const WITHOUT_PODIUM = ["Tower A", "Tower B"];
 
 function scheme(): ImportedMassing {
-  return qaSchemeMassing(origin, zone, 0);
+  return qaSchemeMassing(0);
 }
 
 function hide(massing: ImportedMassing, name: string): ImportedMassing {
@@ -75,12 +75,12 @@ describe("one building per part", () => {
 describe("hiding one of three imported buildings", () => {
   it("3D: draws one mesh per visible building, tagged for picking", () => {
     const meshes = (massing: ImportedMassing) =>
-      buildMassingGroup([massing], origin, zone)!.children.filter((child) => (child as { isMesh?: boolean }).isMesh);
+      buildMassingGroup([massing], origin, zone)!.children.filter((child) => child.userData.importedBuildingId != null);
     expect(meshes(scheme()).map((mesh) => mesh.name)).toEqual(ALL);
     const shown = meshes(hide(scheme(), "Podium"));
     expect(shown.map((mesh) => mesh.name)).toEqual(WITHOUT_PODIUM);
     expect(shown.map((mesh) => mesh.userData.importedBuildingId)).toEqual([
-      "layer:Scheme A::Tower A Residential",
+      "layer:Scheme A::Tower A",
       "text:Tower B",
     ]);
     expect(shown.every((mesh) => mesh.userData.importedMassingId === "qa-scheme")).toBe(true);
@@ -92,7 +92,7 @@ describe("hiding one of three imported buildings", () => {
     expect(plan).toHaveLength(2);
     expect(names(plan)).toEqual(WITHOUT_PODIUM);
     expect(plan.map((building) => building.importedBuilding?.buildingId)).toEqual([
-      "layer:Scheme A::Tower A Residential",
+      "layer:Scheme A::Tower A",
       "text:Tower B",
     ]);
   });
@@ -121,6 +121,16 @@ describe("hiding one of three imported buildings", () => {
     const hidden = hide(scheme(), "Podium");
     const plan = planPaths(model(massingDrawingBuildings([hidden], origin, zone), [hidden]));
     expect(plan.buildings.filter((building) => building.imported)).toHaveLength(2);
+  });
+
+  it("plan: draws the tallest imported footprint last so a tower reads over its podium", () => {
+    const imported = massingDrawingBuildings([scheme()], origin, zone);
+    const fill = (id: number) => imported.find((building) => building.id === id)!;
+    const map: BuildingFeat = { ...footprints(imported)[0]!, id: 1, importedMassing: undefined, importedBuilding: undefined };
+    const plan = planPaths(model([map, ...imported]));
+    expect(plan.buildings[0]!.id).toBe(1);
+    const order = plan.buildings.filter((building) => building.imported).map((building) => fill(building.id).overtureName);
+    expect(order).toEqual(["Podium", "Tower B", "Tower A"]);
   });
 
   it(".3dm export: one named object per visible building", async () => {

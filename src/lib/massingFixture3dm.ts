@@ -222,12 +222,16 @@ export type LayeredMassingBox = {
 };
 
 export const THREE_BUILDINGS_FIXTURE: LayeredMassingBox[] = [
-  { layer: "Scheme A::Tower A Residential", box: [0, 0, 0, 20, 20, 45] },
-  { layer: "Scheme A::Podium", box: [30, 0, 0, 70, 15, 9] },
+  {
+    layer: "Scheme A::Tower A",
+    userText: { use: "residential" },
+    box: [320_838, 5_812_092, 0, 320_858, 5_812_122, 86],
+  },
+  { layer: "Scheme A::Podium", box: [320_830, 5_812_085, 0, 320_890, 5_812_110, 18] },
   {
     layer: "Scheme A::Tower B",
     userText: { building: "Tower B", use: "commercial", levels: "12" },
-    box: [80, 0, 0, 95, 20, 38.4],
+    box: [320_898, 5_812_088, 0, 320_916, 5_812_108, 62],
   },
 ];
 

@@ -1,4 +1,4 @@
-import { Fragment, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { ChevronRight, Eye, EyeOff } from "lucide-react";
 import type { ImportedMassing, ImportedMassingBuilding, MassingPlacement } from "../lib/massingImport";
 import {
@@ -90,12 +90,12 @@ export function formatFileSize(bytes: number): string {
   return bytes < 102_400 ? `${Math.max(1, Math.round(bytes / 1024))} KB` : `${(bytes / 1048576).toFixed(1)} MB`;
 }
 
-export function placementSummary(item: Pick<ImportedMassing, "mode" | "placement">): string[] {
+export function placementSummary(item: Pick<ImportedMassing, "mode" | "placement">): string {
   return [
-    item.mode === "mga" ? "MGA 2020" : "Placed",
+    item.mode === "mga" ? "MGA 2020" : "Placed by click",
     `E ${item.placement.e.toFixed(2)}`,
     `N ${item.placement.n.toFixed(2)}`,
-  ];
+  ].join(" · ");
 }
 
 function BuildingRow({
@@ -135,7 +135,9 @@ function BuildingRow({
         />
         <span className="massing-building-text">
           <span className="massing-building-name">{building.name}</span>
-          <span className="massing-building-meta">{massingBuildingMeta(building)}</span>
+          <span className="massing-building-meta" title={massingBuildingMeta(building)}>
+            {massingBuildingMeta(building)}
+          </span>
         </span>
       </button>
       <EyeToggle on={building.visible} label={building.name} onToggle={() => onVisible?.(!building.visible)} />
@@ -246,13 +248,8 @@ export function ImportMassingPanel(props: Props) {
               }
             >
               <ChevronRight size={14} strokeWidth={1.75} aria-hidden="true" className="massing-chevron" />
-              <span className="massing-placement-text">
-                {placementSummary(item).map((part, index) => (
-                  <Fragment key={part}>
-                    {index > 0 ? " · " : ""}
-                    <span className="massing-placement-part">{part}</span>
-                  </Fragment>
-                ))}
+              <span className="massing-placement-text" title={placementSummary(item)}>
+                {placementSummary(item)}
               </span>
             </button>
             {open && (

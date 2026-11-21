@@ -15,7 +15,7 @@ import {
   THREE_BUILDINGS_FIXTURE,
 } from "./massingFixture3dm";
 import { massingBuildingFootprint } from "./massingFootprint";
-import { mgaPlacement, parseMassing3dm, toImportedMassing, type ParsedMassing } from "./massingImport";
+import { looksLocal, mgaPlacement, parseMassing3dm, toImportedMassing, type ParsedMassing } from "./massingImport";
 import { importedMassingFromStored, storedBuildingState, type StoredMassing } from "./massingStore";
 import { loadRhino } from "./rhinoExport";
 import type { Pt } from "../types";
@@ -42,25 +42,27 @@ function digest(view: ArrayBufferView): string {
 }
 
 function expectThreeBuildings(parsed: ParsedMassing) {
-  expect(parsed.buildings.map((building) => building.name)).toEqual(["Tower A Residential", "Podium", "Tower B"]);
+  expect(parsed.buildings.map((building) => building.name)).toEqual(["Tower A", "Podium", "Tower B"]);
   expect(parsed.buildings.map((building) => building.scheme)).toEqual(["Scheme A", "Scheme A", "Scheme A"]);
   expect(parsed.buildings.map((building) => building.layerPath)).toEqual([
-    "Scheme A::Tower A Residential",
+    "Scheme A::Tower A",
     "Scheme A::Podium",
     "Scheme A::Tower B",
   ]);
   expect(parsed.buildings.map((building) => building.use)).toEqual(["residential", null, "commercial"]);
   expect(parsed.buildings.map((building) => building.levels)).toEqual([null, null, 12]);
   expect(parsed.buildings.map((building) => building.groupedBy)).toEqual(["layer", "layer", "userText"]);
-  expect(byName(parsed, "Tower A Residential").height).toBeCloseTo(45, 4);
-  expect(byName(parsed, "Podium").height).toBeCloseTo(9, 4);
-  expect(byName(parsed, "Tower B").height).toBeCloseTo(38.4, 4);
+  expect(byName(parsed, "Tower A").height).toBeCloseTo(86, 4);
+  expect(byName(parsed, "Podium").height).toBeCloseTo(18, 4);
+  expect(byName(parsed, "Tower B").height).toBeCloseTo(62, 4);
   for (const building of parsed.buildings) {
     expect(building.baseZ).toBeCloseTo(0, 4);
     expect(building.height).toBeCloseTo(building.topZ - building.baseZ, 9);
   }
   expect(new Set(parsed.buildings.map((building) => building.id)).size).toBe(3);
   expect(parsed.notes).toContain("3 buildings from layers and user text");
+  expect(looksLocal(parsed)).toBe(false);
+  expect(parsed.anchor).toEqual({ e: 320_873, n: 5_812_103.5, z: 0 });
 }
 
 describe("Rhino import buildings", () => {
@@ -110,14 +112,14 @@ describe("Rhino import buildings", () => {
     );
     expect(footprints.map((footprint) => footprint.polygons.length)).toEqual([1, 1, 1]);
     expect(footprints.map((footprint) => ringArea(footprint.polygons[0]![0] as Pt[]))).toEqual([
-      expect.closeTo(400, 0),
       expect.closeTo(600, 0),
-      expect.closeTo(300, 0),
+      expect.closeTo(1500, 0),
+      expect.closeTo(360, 0),
     ]);
     expect(footprints.map((footprint) => footprint.topZ)).toEqual([
-      expect.closeTo(55, 3),
-      expect.closeTo(19, 3),
-      expect.closeTo(48.4, 3),
+      expect.closeTo(96, 3),
+      expect.closeTo(28, 3),
+      expect.closeTo(72, 3),
     ]);
   });
 
@@ -228,9 +230,9 @@ describe("Rhino import buildings", () => {
     const parsed = await parse(await buildLayeredMassingBytes(THREE_BUILDINGS_FIXTURE, "Millimeters"));
     expect(parsed.unitScale).toBe(0.001);
     expect(parsed.buildings.map((building) => building.height)).toEqual([
-      expect.closeTo(45, 3),
-      expect.closeTo(9, 3),
-      expect.closeTo(38.4, 3),
+      expect.closeTo(86, 3),
+      expect.closeTo(18, 3),
+      expect.closeTo(62, 3),
     ]);
   });
 });
@@ -261,7 +263,7 @@ describe("saved models", () => {
       triStart: 0,
       triEnd: parsed.triangles,
     });
-    expect(item.buildings[0]!.height).toBeCloseTo(45, 4);
+    expect(item.buildings[0]!.height).toBeCloseTo(86, 4);
     expect(item.colour).toBe("#3366CC");
     expect(item.placement).toEqual(row.placement);
     expect(item.notes.some((note) => note.startsWith("3 buildings"))).toBe(false);

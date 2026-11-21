@@ -1,6 +1,5 @@
 import snapshot from "./__fixtures__/rhino-three-buildings.parsed.json";
-import { cutCentrePlacement, toImportedMassing, type ImportedMassing, type ParsedMassing } from "./massingImport";
-import type { LonLat } from "../types";
+import { mgaPlacement, toImportedMassing, type ImportedMassing, type ParsedMassing } from "./massingImport";
 
 export const QA_SCHEME_FILE_NAME = "rhino-three-buildings.3dm";
 
@@ -24,14 +23,15 @@ export function parsedFromSnapshot(value: ParsedMassingSnapshot): ParsedMassing 
   return { ...rest, positions: new Float32Array(value.positions), indices: new Uint32Array(value.indices) };
 }
 
-export function qaSchemeMassing(center: LonLat, zone: number, base: number): ImportedMassing {
+export function qaSchemeMassing(base: number): ImportedMassing {
   const value = snapshot as ParsedMassingSnapshot;
-  return toImportedMassing(parsedFromSnapshot(value), {
+  const parsed = parsedFromSnapshot(value);
+  return toImportedMassing(parsed, {
     id: "qa-scheme",
     name: QA_SCHEME_FILE_NAME,
     fileBytes: value.fileBytes,
-    mode: "click",
-    placement: cutCentrePlacement({ center }, zone, base),
+    mode: "mga",
+    placement: { ...mgaPlacement(parsed), base },
     visible: true,
   });
 }

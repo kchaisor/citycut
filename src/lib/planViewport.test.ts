@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { defaultExplodedAxoSettings, explodedAxoBounds } from "./explodedAxo";
-import { explodedAxoViewportExtent, planViewportEqual, planViewportExtent } from "./planViewport";
+import { explodedAxoViewportExtent, planViewportEqual, planViewportExtent, planViewportForBounds } from "./planViewport";
 import { model } from "./aiExport.test";
 
 describe("planViewportExtent", () => {
@@ -34,5 +34,16 @@ describe("planViewportExtent", () => {
     expect(view.y).toBeCloseTo(-half - sideM * 0.09, 5);
     expect(view.w).toBeCloseTo(sideM + sideM * 0.12, 5);
     expect(view.h).toBeCloseTo(sideM + sideM * 0.2, 5);
+  });
+});
+
+describe("planViewportForBounds", () => {
+  it("frames north as up: the SVG y of a box north of centre is negative", () => {
+    const view = planViewportForBounds(-15, 55, 75, 100, 0);
+    expect(view.x).toBe(-15);
+    expect(view.w).toBe(90);
+    expect(view.y).toBeLessThan(-100);
+    expect(view.y + view.h).toBeGreaterThan(-55);
+    expect(view.y + view.h).toBeLessThan(0);
   });
 });

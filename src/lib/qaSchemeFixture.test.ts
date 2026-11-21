@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync, writeFileSync } from "node:fs";
-import { parseMassing3dm } from "./massingImport";
+import { looksLocal, parseMassing3dm } from "./massingImport";
 import { loadRhino } from "./rhinoExport";
 import { parsedMassingSnapshot, QA_SCHEME_FILE_NAME, qaSchemeMassing } from "./qaSchemeFixture";
 import snapshot from "./__fixtures__/rhino-three-buildings.parsed.json";
@@ -16,10 +16,12 @@ describe("qaMassing=scheme fixture", () => {
     expect(JSON.parse(JSON.stringify(fresh))).toEqual(snapshot);
   });
 
-  it("loads three visible buildings placed at the cut centre", () => {
-    const massing = qaSchemeMassing({ lon: 144.9645, lat: -37.8216 }, 55, 3);
-    expect(massing.buildings.map((building) => building.name)).toEqual(["Tower A Residential", "Podium", "Tower B"]);
+  it("loads three visible buildings at their own MGA 2020 coordinates", () => {
+    const massing = qaSchemeMassing(3);
+    expect(massing.buildings.map((building) => building.name)).toEqual(["Tower A", "Podium", "Tower B"]);
+    expect(massing.mode).toBe("mga");
+    expect(massing.placement).toEqual({ e: 320_873, n: 5_812_103.5, base: 3, rotDeg: 0 });
+    expect(looksLocal(massing)).toBe(false);
     expect(massing.buildings.every((building) => building.visible)).toBe(true);
-    expect(massing.placement.base).toBe(3);
   });
 });

@@ -1,5 +1,7 @@
 // @vitest-environment happy-dom
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ImportMassingPanel } from "./ImportMassingPanel";
 import { qaSchemeMassing } from "../lib/qaSchemeFixture";
@@ -10,8 +12,6 @@ import { LEGACY_SINGLE_BUILDING_NOTE, schemeHeading } from "../lib/massingBuildi
 import type { ImportedMassing } from "../lib/massingImport";
 
 afterEach(cleanup);
-
-const origin = { lon: 144.9645, lat: -37.8216 };
 
 function setup(imported: ImportedMassing[], selected: { fileId: string; buildingId: string } | null = null) {
   const handlers = {
@@ -48,10 +48,10 @@ function rows(container: HTMLElement) {
 
 describe("Import panel buildings", () => {
   it("groups buildings under a scheme heading with a count and short names", () => {
-    const { container } = setup([qaSchemeMassing(origin, 55, 0)]);
+    const { container } = setup([qaSchemeMassing(0)]);
     expect(container.querySelector(".massing-scheme-title")?.textContent).toBe("Scheme A · 3");
     expect(rows(container).map((row) => row.querySelector(".massing-building-name")?.textContent)).toEqual([
-      "Tower A Residential",
+      "Tower A",
       "Podium",
       "Tower B",
     ]);
@@ -64,7 +64,7 @@ describe("Import panel buildings", () => {
     const long = schemeHeading("Site::A very long scheme name indeed::Stage one of three");
     expect(long).toHaveLength(28);
     expect(long).toContain("…");
-    const massing = qaSchemeMassing(origin, 55, 0);
+    const massing = qaSchemeMassing(0);
     const deep = {
       ...massing,
       buildings: massing.buildings.map((building) => ({ ...building, scheme: "Site::Scheme A::Stage 1" })),
@@ -74,17 +74,17 @@ describe("Import panel buildings", () => {
   });
 
   it("marks unclassified with a hatch swatch and omits levels when absent", () => {
-    const { container } = setup([qaSchemeMassing(origin, 55, 0)]);
+    const { container } = setup([qaSchemeMassing(0)]);
     const [towerA, podium, towerB] = rows(container);
     expect(podium!.querySelector(".massing-swatch")?.classList.contains("is-unclassified")).toBe(true);
-    expect(podium!.querySelector(".massing-building-meta")?.textContent).toBe("Unclassified · 9 m");
+    expect(podium!.querySelector(".massing-building-meta")?.textContent).toBe("Unclassified · 18 m");
     expect(towerA!.querySelector(".massing-swatch")?.classList.contains("is-unclassified")).toBe(false);
-    expect(towerA!.querySelector(".massing-building-meta")?.textContent).toBe("Residential · 45 m");
-    expect(towerB!.querySelector(".massing-building-meta")?.textContent).toBe("Commercial · 38 m · 12 levels");
+    expect(towerA!.querySelector(".massing-building-meta")?.textContent).toBe("Residential · 86 m");
+    expect(towerB!.querySelector(".massing-building-meta")?.textContent).toBe("Commercial · 62 m · 12 levels");
   });
 
   it("toggles a row, a scheme and the model with their eyes", () => {
-    const massing = qaSchemeMassing(origin, 55, 0);
+    const massing = qaSchemeMassing(0);
     const { container, handlers } = setup([massing]);
     fireEvent.click(within(rows(container)[1]!).getByRole("button", { name: "Hide Podium" }));
     expect(handlers.onBuildingsVisible).toHaveBeenLastCalledWith("qa-scheme", ["layer:Scheme A::Podium"], false);
@@ -100,7 +100,7 @@ describe("Import panel buildings", () => {
   });
 
   it("shows a hidden building with an eye-off and selects a row on click", () => {
-    const massing = qaSchemeMassing(origin, 55, 0);
+    const massing = qaSchemeMassing(0);
     const hidden = {
       ...massing,
       buildings: massing.buildings.map((building) => (building.name === "Tower B" ? { ...building, visible: false } : building)),
@@ -115,7 +115,7 @@ describe("Import panel buildings", () => {
   });
 
   it("switches colour mode: Single colour sets the file colour, By use clears it", () => {
-    const massing = qaSchemeMassing(origin, 55, 0);
+    const massing = qaSchemeMassing(0);
     const byUse = setup([massing]);
     expect(byUse.container.querySelector('input[type="color"]')).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Single colour" }));
@@ -131,9 +131,10 @@ describe("Import panel buildings", () => {
   });
 
   it("collapses placement into one summary line and keeps today's controls inside", () => {
-    const { container } = setup([qaSchemeMassing(origin, 55, 0)]);
+    const { container } = setup([qaSchemeMassing(0)]);
     const summary = container.querySelector(".massing-placement-summary")!;
-    expect(summary.textContent).toMatch(/^Placed · E \d+\.\d\d · N \d+\.\d\d$/);
+    expect(summary.textContent).toBe("MGA 2020 · E 320873.00 · N 5812103.50");
+    expect(summary.querySelector(".massing-placement-text")?.getAttribute("title")).toBe(summary.textContent);
     expect(container.querySelector(".massing-file-meta")?.textContent).toBe("11 KB · 42 triangles");
     expect(screen.queryByText("Snap base to ground")).toBeNull();
     fireEvent.click(summary);
@@ -141,8 +142,37 @@ describe("Import panel buildings", () => {
     expect(screen.getByLabelText("Rotation (°)")).toBeTruthy();
   });
 
+  it("says how a clicked model was placed", () => {
+    const massing = qaSchemeMassing(0);
+    const { container } = setup([{ ...massing, mode: "click", placement: { e: 320847.038, n: 5812026.657, base: 0, rotDeg: 0 } }]);
+    expect(container.querySelector(".massing-placement-summary")?.textContent).toBe(
+      "Placed by click · E 320847.04 · N 5812026.66",
+    );
+  });
+
+  it("keeps the full building meta in a title so a clipped line can still be read", () => {
+    const { container } = setup([qaSchemeMassing(0)]);
+    const meta = rows(container)[2]!.querySelector(".massing-building-meta")!;
+    expect(meta.getAttribute("title")).toBe("Commercial · 62 m · 12 levels");
+  });
+
+  it("keeps the row meta and the placement line on one line each, clipped with an ellipsis", () => {
+    const css = readFileSync(join(__dirname, "..", "floating.css"), "utf8");
+    for (const selector of [".massing-building-meta", ".massing-placement-text"]) {
+      const rule = css.match(new RegExp(`\\.import-massing-panel \\${selector} \\{([^}]*)\\}`))?.[1] ?? "";
+      expect(rule).toContain("white-space: nowrap");
+      expect(rule).toContain("text-overflow: ellipsis");
+      expect(rule).toContain("overflow: hidden");
+    }
+  });
+
+  it("leaves the show switch at the sidebar's switch size", () => {
+    const css = readFileSync(join(__dirname, "..", "floating.css"), "utf8");
+    expect(css).not.toMatch(/\.massing-check input[^{]*\{[^}]*(width|height)\s*:/);
+  });
+
   it("asks before removing a model", () => {
-    const { handlers } = setup([qaSchemeMassing(origin, 55, 0)]);
+    const { handlers } = setup([qaSchemeMassing(0)]);
     fireEvent.click(screen.getByRole("button", { name: "Remove" }));
     expect(handlers.onRemove).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Remove" }));

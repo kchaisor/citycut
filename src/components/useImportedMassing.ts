@@ -68,7 +68,7 @@ export function useImportedMassing(model: Pick<CityModel, "center" | "sideM" | "
         const base = model.terrain ? groundAt(0, 0) : 0;
         setImported([
           qaMassing === "scheme"
-            ? qaSchemeMassing(model.center, zone, base)
+            ? qaSchemeMassing(base)
             : qaPodiumTowerMassing(model.center, zone, base),
         ]);
       });

@@ -117,6 +117,7 @@ import { createWindPlanTransformStore, WindPlanOverlay, WindPlanProjector } from
 import type { WindPlanState } from "./useWindPlan";
 import { InspectHudProjector, type InspectHudScreen } from "./InspectHudProjector";
 import { LandmarkLabelProjector, type LandmarkExportLabels, type LandmarkScreenState } from "./LandmarkLabelProjector";
+import { ImportedLabelProjector, type ImportedLabelState } from "./ImportedLabelProjector";
 import type { LandmarkLabelSource } from "../lib/landmarkLabels";
 import type { WindPeriodId } from "../lib/windRose";
 import type { SiteWindSelection } from "../lib/windRoseData";
@@ -2247,6 +2248,7 @@ export function Scene3D({
   landmarkSources = NO_LANDMARKS,
   landmarkLabelsOn = false,
   onLandmarkScreens,
+  onImportedLabels,
 }: {
   model: CityModel;
   windModel?: CityModel;
@@ -2295,6 +2297,7 @@ export function Scene3D({
   landmarkSources?: readonly LandmarkLabelSource[];
   landmarkLabelsOn?: boolean;
   onLandmarkScreens?: (state: LandmarkScreenState | null) => void;
+  onImportedLabels?: (state: ImportedLabelState | null) => void;
 }) {
   const landmarkExportRef = useRef<LandmarkExportLabels | null>(null);
   const sceneCutKey = modelCutSiteId(model.center, model.sideM);
@@ -2505,6 +2508,9 @@ export function Scene3D({
           onScreens={onLandmarkScreens}
           exportRef={landmarkExportRef}
         />
+      ) : null}
+      {onImportedLabels ? (
+        <ImportedLabelProjector group={importedMassing} enabled={active} onScreens={onImportedLabels} />
       ) : null}
       {onCompassHeading ? <StudioCompassTracker onHeading={onCompassHeading} /> : null}
       <WindLayer
