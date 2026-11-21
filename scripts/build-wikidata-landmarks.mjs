@@ -59,6 +59,7 @@ async function main() {
       label: `Wikidata ${classQid ?? "structures"} cell ${cell.west.toFixed(4)},${cell.south.toFixed(4)},${cell.east.toFixed(4)},${cell.north.toFixed(4)}`,
       headers: UA,
       attempts: 2,
+      retryAfter429: true,
       timeoutMs: 70_000,
       backoffMs: [10_000],
     });

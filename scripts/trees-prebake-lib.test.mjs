@@ -11,6 +11,7 @@ import {
   fetchWithRetry,
   halfMetreUnits,
   osmSizeTags,
+  retryAfterMs,
   shouldSkip,
   sizeCheck,
   sourceStamps,
@@ -156,5 +157,57 @@ describe("kept fields", () => {
   });
   it("hashes ids like the app", () => {
     expect(stableNumericId("abc")).toBe(440920331);
+  });
+});
+
+describe("waiting out Wikidata-style rate limits", () => {
+  const ok = (body) => ({
+    status: 200,
+    ok: true,
+    headers: new Headers({ "content-type": "application/json" }),
+    arrayBuffer: async () => new TextEncoder().encode(JSON.stringify(body)).buffer,
+  });
+  const limited = (retryAfter) => ({
+    status: 429,
+    ok: false,
+    headers: new Headers(retryAfter === undefined ? {} : { "retry-after": retryAfter }),
+    arrayBuffer: async () => new ArrayBuffer(0),
+  });
+  const parse = (b) => JSON.parse(new TextDecoder().decode(b));
+
+  it("reads Retry-After as seconds or an HTTP date, with a default and a cap", () => {
+    const now = Date.parse("2026-11-21T03:00:00Z");
+    expect(retryAfterMs("30", now)).toBe(30_000);
+    expect(retryAfterMs("Sat, 21 Nov 2026 03:02:00 GMT", now)).toBe(120_000);
+    expect(retryAfterMs(null, now)).toBe(60_000);
+    expect(retryAfterMs("soon", now)).toBe(60_000);
+    expect(retryAfterMs("3600", now)).toBe(300_000);
+    expect(retryAfterMs("0", now)).toBe(1_000);
+  });
+
+  it("waits the time asked for and tries once more when opted in", async () => {
+    const sleep = vi.fn(async () => {});
+    const fetchImpl = vi.fn().mockResolvedValueOnce(limited("45")).mockResolvedValueOnce(ok({ fine: true }));
+    const body = await fetchWithRetry("https://example.test", parse, { fetchImpl, sleep, retryAfter429: true });
+    expect(body).toEqual({ fine: true });
+    expect(sleep).toHaveBeenCalledWith(45_000);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
+  it("stops on a second 429 after waiting", async () => {
+    const sleep = vi.fn(async () => {});
+    const fetchImpl = vi.fn().mockResolvedValue(limited("5"));
+    await expect(fetchWithRetry("https://example.test", parse, { fetchImpl, sleep, retryAfter429: true, label: "cell" })).rejects.toThrow(
+      /cell answered HTTP 429 again after waiting/,
+    );
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
+  it("still stops at once on a 429 when not opted in", async () => {
+    const sleep = vi.fn(async () => {});
+    const fetchImpl = vi.fn().mockResolvedValue(limited("5"));
+    await expect(fetchWithRetry("https://example.test", parse, { fetchImpl, sleep })).rejects.toBeInstanceOf(FatalHttpError);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(sleep).not.toHaveBeenCalled();
   });
 });

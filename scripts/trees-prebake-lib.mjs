@@ -121,6 +121,19 @@ const sleepMs = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
  * at once. Other HTTP errors, timeouts, network failures and `parse` errors (e.g. an
  * ArcGIS error body) are retried up to `attempts` times, then rethrown.
  */
+export const DEFAULT_RETRY_AFTER_MS = 60_000;
+
+export function retryAfterMs(header, nowMs, maxMs = 300_000) {
+  const value = (header ?? "").trim();
+  let ms = DEFAULT_RETRY_AFTER_MS;
+  if (/^\d+$/.test(value)) ms = Number(value) * 1000;
+  else if (value) {
+    const at = Date.parse(value);
+    if (Number.isFinite(at)) ms = at - nowMs;
+  }
+  return Math.min(Math.max(ms, 1000), maxMs);
+}
+
 export async function fetchWithRetry(url, parse, options = {}) {
   const {
     attempts = 3,
@@ -130,15 +143,28 @@ export async function fetchWithRetry(url, parse, options = {}) {
     sleep = sleepMs,
     label = "request",
     headers = {},
+    retryAfter429 = false,
+    maxRetryAfterMs = 300_000,
+    now = Date.now,
   } = options;
   let lastError = null;
+  let waitedFor429 = false;
   for (let attempt = 1; attempt <= attempts; attempt++) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(new Error(`${label} timed out after ${timeoutMs} ms`)), timeoutMs);
     try {
       const response = await fetchImpl(url, { signal: controller.signal, headers });
+      if (response.status === 429 && retryAfter429 && !waitedFor429) {
+        waitedFor429 = true;
+        const waitMs = retryAfterMs(response.headers.get("retry-after"), now(), maxRetryAfterMs);
+        clearTimeout(timer);
+        await sleep(waitMs);
+        attempt -= 1;
+        continue;
+      }
       if (isFatalStatus(response.status)) {
-        throw new FatalHttpError(`${label} answered HTTP ${response.status}; stopping without retry.`, response.status);
+        const again = response.status === 429 && waitedFor429 ? " again after waiting" : "";
+        throw new FatalHttpError(`${label} answered HTTP ${response.status}${again}; stopping without retry.`, response.status);
       }
       if (!response.ok) throw new Error(`${label} answered HTTP ${response.status}.`);
       const bytes = new Uint8Array(await response.arrayBuffer());
