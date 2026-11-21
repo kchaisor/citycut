@@ -42,7 +42,7 @@ export function planViewportForBounds(
   const extraBottom = spanN * 0.14;
   return {
     x: minE - padE,
-    y: minN - padN - extraTop,
+    y: -maxN - padN - extraTop,
     w: spanE + padE * 2,
     h: spanN + padN * 2 + extraTop + extraBottom,
   };

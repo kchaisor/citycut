@@ -16,6 +16,8 @@ export function ModelPageSidebarLeftB({ vm }: { vm: import("./useModelPage").Mod
     layerBits,
     leftOpen,
     massing,
+    sceneSelection,
+    selectImportedBuilding,
     planScaleOptions,
     save3dm,
     saveExplodedAxoAi,
@@ -50,6 +52,14 @@ export function ModelPageSidebarLeftB({ vm }: { vm: import("./useModelPage").Mod
                 onSnap={massing.snapToGround}
                 onResetMga={massing.resetToMga}
                 onToggleVisible={massing.toggleVisible}
+                onAllVisible={massing.setAllVisible}
+                onBuildingsVisible={massing.setBuildingsVisible}
+                selected={
+                  sceneSelection?.kind === "imported"
+                    ? { fileId: sceneSelection.fileId, buildingId: sceneSelection.buildingId }
+                    : null
+                }
+                onSelectBuilding={selectImportedBuilding}
                 onColour={massing.setColour}
                 onRemove={massing.remove}
               />

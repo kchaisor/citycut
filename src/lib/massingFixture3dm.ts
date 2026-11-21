@@ -1,8 +1,9 @@
 import type { CityModel, Pt } from "../types";
 import { projectLocal } from "./crs";
 import { loadRhino } from "./rhinoExport";
-import { parseMassing3dm, mgaPlacement, type ImportedMassing } from "./massingImport";
+import { parseMassing3dm, mgaPlacement, toImportedMassing, type ImportedMassing } from "./massingImport";
 import { massingUpperLevelOutlines } from "./massingFootprint";
+import { DEFAULT_LAYER_NAME } from "./massingBuildings";
 
 type Rhino = Awaited<ReturnType<typeof loadRhino>>;
 type RhinoDoc = InstanceType<Rhino["File3dm"]>;
@@ -17,6 +18,7 @@ function meshBox(
   z0: number,
   z1: number,
   invertRoof = false,
+  attributes = new r.ObjectAttributes(),
 ) {
   const mesh = new r.Mesh();
   for (const z of [z0, z1])
@@ -47,7 +49,7 @@ function meshBox(
   }
   mesh.faces().addTriFace(0, 3, 2);
   mesh.faces().addTriFace(0, 2, 1);
-  doc.objects().addMesh(mesh, new r.ObjectAttributes());
+  doc.objects().addMesh(mesh, attributes);
 }
 
 function meshGableHouse(
@@ -213,6 +215,64 @@ export async function buildMassingFixtureBytes(
   return doc.toByteArray();
 }
 
+export type LayeredMassingBox = {
+  layer?: string;
+  userText?: Record<string, string>;
+  box: [x0: number, y0: number, z0: number, x1: number, y1: number, z1: number];
+};
+
+export const THREE_BUILDINGS_FIXTURE: LayeredMassingBox[] = [
+  {
+    layer: "Scheme A::Tower A",
+    userText: { use: "residential" },
+    box: [320_838, 5_812_092, 0, 320_858, 5_812_122, 86],
+  },
+  { layer: "Scheme A::Podium", box: [320_830, 5_812_085, 0, 320_890, 5_812_110, 18] },
+  {
+    layer: "Scheme A::Tower B",
+    userText: { building: "Tower B", use: "commercial", levels: "12" },
+    box: [320_898, 5_812_088, 0, 320_916, 5_812_108, 62],
+  },
+];
+
+function ensureLayerPath(r: Rhino, doc: RhinoDoc, path: string, layers: Map<string, number>): number {
+  const known = layers.get(path);
+  if (known != null) return known;
+  const segments = path.split("::");
+  const layer = new r.Layer();
+  layer.name = segments[segments.length - 1]!;
+  if (segments.length > 1) {
+    const parent = ensureLayerPath(r, doc, segments.slice(0, -1).join("::"), layers);
+    layer.parentLayerId = doc.layers().get(parent).id;
+  }
+  const index = doc.layers().add(layer);
+  layers.set(path, index);
+  return index;
+}
+
+export async function buildLayeredMassingBytes(
+  boxes: LayeredMassingBox[],
+  units: "Meters" | "Millimeters" = "Meters",
+): Promise<Uint8Array> {
+  const r = await loadRhino();
+  const doc = new r.File3dm();
+  try {
+    doc.settings().modelUnitSystem = r.UnitSystem[units];
+    const scale = units === "Millimeters" ? 1000 : 1;
+    const layers = new Map<string, number>();
+    for (const { layer, userText, box } of boxes) {
+      const attributes = new r.ObjectAttributes();
+      attributes.layerIndex = ensureLayerPath(r, doc, layer ?? DEFAULT_LAYER_NAME, layers);
+      for (const [key, value] of Object.entries(userText ?? {})) attributes.setUserString(key, value);
+      const [x0, y0, z0, x1, y1, z1] = box.map((value) => value * scale) as LayeredMassingBox["box"];
+      meshBox(r, doc, x0, y0, x1, y1, z0, z1, false, attributes);
+    }
+    return doc.toByteArray();
+  } finally {
+    doc.destroy();
+  }
+}
+
 export async function importMassingFixture(
   kind: MassingFixtureKind,
   center: CityModel["center"],
@@ -220,16 +280,16 @@ export async function importMassingFixture(
 ): Promise<ImportedMassing> {
   const r = await loadRhino();
   const bytes = await buildMassingFixtureBytes(kind, center, zone);
-  const parsed = parseMassing3dm(r, bytes);
-  return {
-    ...parsed,
+  const name = `${kind}.3dm`;
+  const parsed = parseMassing3dm(r, bytes, name);
+  return toImportedMassing(parsed, {
     id: `fixture-${kind}`,
-    name: `${kind}.3dm`,
+    name,
     fileBytes: bytes.byteLength,
     mode: "mga",
     visible: true,
     placement: mgaPlacement(parsed),
-  };
+  });
 }
 
 export function towerOutlineCount(item: ImportedMassing, origin: CityModel["center"], zone: number): number {

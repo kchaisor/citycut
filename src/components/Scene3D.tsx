@@ -117,6 +117,7 @@ import { createWindPlanTransformStore, WindPlanOverlay, WindPlanProjector } from
 import type { WindPlanState } from "./useWindPlan";
 import { InspectHudProjector, type InspectHudScreen } from "./InspectHudProjector";
 import { LandmarkLabelProjector, type LandmarkExportLabels, type LandmarkScreenState } from "./LandmarkLabelProjector";
+import { ImportedLabelProjector, type ImportedLabelState } from "./ImportedLabelProjector";
 import type { LandmarkLabelSource } from "../lib/landmarkLabels";
 import type { WindPeriodId } from "../lib/windRose";
 import type { SiteWindSelection } from "../lib/windRoseData";
@@ -375,6 +376,7 @@ function SceneInspectPickLayer({
   enabled,
   buildingsPickable,
   treesPickable,
+  importedMassing = null,
   onPick,
   onClear,
 }: {
@@ -383,6 +385,7 @@ function SceneInspectPickLayer({
   enabled: boolean;
   buildingsPickable: boolean;
   treesPickable: boolean;
+  importedMassing?: THREE.Object3D | null;
   onPick: (selection: SceneSelection) => void;
   onClear?: () => void;
 }) {
@@ -400,10 +403,12 @@ function SceneInspectPickLayer({
         sideM: model.sideM,
         buildingsPickable,
         treesPickable,
+        extraRoots: importedMassing ? [importedMassing] : [],
       },
       { onPick, onClear },
     );
   }, [
+    importedMassing,
     buildingsPickable,
     camera,
     enabled,
@@ -559,6 +564,7 @@ function City({
   windFlowActive = false,
   introSkip,
   introPlayed,
+  importedMassing = null,
 }: {
   model: CityModel;
   uniformBuildings: boolean;
@@ -586,6 +592,7 @@ function City({
   windFlowActive?: boolean;
   introSkip: boolean;
   introPlayed?: { current: string | null };
+  importedMassing?: THREE.Object3D | null;
 }) {
   const onBoundsRef = useRef(onBounds);
   onBoundsRef.current = onBounds;
@@ -1084,6 +1091,7 @@ function City({
         enabled={!sectionKnife?.active && !onScenePoint}
         buildingsPickable={pickBuildings && buildingsVisible}
         treesPickable={Boolean(model.layers.trees) && treesVisible}
+        importedMassing={importedMassing}
         onPick={onSceneInspectPick}
         onClear={onClearSceneInspect}
       />
@@ -2240,6 +2248,7 @@ export function Scene3D({
   landmarkSources = NO_LANDMARKS,
   landmarkLabelsOn = false,
   onLandmarkScreens,
+  onImportedLabels,
 }: {
   model: CityModel;
   windModel?: CityModel;
@@ -2288,6 +2297,7 @@ export function Scene3D({
   landmarkSources?: readonly LandmarkLabelSource[];
   landmarkLabelsOn?: boolean;
   onLandmarkScreens?: (state: LandmarkScreenState | null) => void;
+  onImportedLabels?: (state: ImportedLabelState | null) => void;
 }) {
   const landmarkExportRef = useRef<LandmarkExportLabels | null>(null);
   const sceneCutKey = modelCutSiteId(model.center, model.sideM);
@@ -2462,6 +2472,7 @@ export function Scene3D({
         windFlowActive={windEnabled}
         introSkip={introSkip}
         introPlayed={introPlayed}
+        importedMassing={importedMassing}
       />
       {solar.sunHours && sunHoursGroundGrid && sunHoursDirectOverlay ? (
         <SunHoursLayer
@@ -2497,6 +2508,9 @@ export function Scene3D({
           onScreens={onLandmarkScreens}
           exportRef={landmarkExportRef}
         />
+      ) : null}
+      {onImportedLabels ? (
+        <ImportedLabelProjector group={importedMassing} enabled={active} onScreens={onImportedLabels} />
       ) : null}
       {onCompassHeading ? <StudioCompassTracker onHeading={onCompassHeading} /> : null}
       <WindLayer

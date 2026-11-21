@@ -1,7 +1,20 @@
 import type rhino3dm from "rhino3dm/rhino3dm.module.js";
 import { mgaToLocal, projectLocal } from "./crs";
 import { mgaZone } from "./crsZone";
-import type { CityModel, LonLat } from "../types";
+import {
+  buildingGroupingNote,
+  isDefaultLayerPath,
+  layerLeafName,
+  layerScheme,
+  levelsFromUserText,
+  modelNameFromFile,
+  useFromLayerPath,
+  useFromUserText,
+  visibleBuildings,
+} from "./massingBuildings";
+import type { BuildingUse, CityModel, LonLat } from "../types";
+
+export { normaliseMassingColour } from "./massingBuildings";
 
 type Rhino = Awaited<ReturnType<typeof rhino3dm>>;
 type RhinoDoc = InstanceType<Rhino["File3dm"]>;
@@ -18,7 +31,29 @@ export type MassingPlacementMode = "mga" | "click";
 
 export type MassingPlacement = { e: number; n: number; base: number; rotDeg: number };
 
+export type MassingBuildingUse = Exclude<BuildingUse, "outbuilding" | "unclassified">;
+
+export type ParsedMassingBuilding = {
+  id: string;
+  name: string;
+  layerPath: string | null;
+  scheme: string | null;
+  use: MassingBuildingUse | null;
+  levels: number | null;
+  groupedBy: "userText" | "layer" | "file";
+  triStart: number;
+  triEnd: number;
+  vertexStart: number;
+  vertexEnd: number;
+  baseZ: number;
+  topZ: number;
+  height: number;
+};
+
+export type ImportedMassingBuilding = ParsedMassingBuilding & { visible: boolean; colour?: string };
+
 export type ParsedMassing = {
+  buildings: ParsedMassingBuilding[];
   positions: Float32Array;
   indices: Uint32Array;
   triangles: number;
@@ -40,10 +75,15 @@ export type ImportedMassing = {
   placement: MassingPlacement;
   visible: boolean;
   colour?: string;
-} & ParsedMassing;
+} & Omit<ParsedMassing, "buildings"> & { buildings: ImportedMassingBuilding[] };
 
-export function normaliseMassingColour(value: unknown): string | null {
-  return typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value) ? value.toUpperCase() : null;
+export type ImportedMassingFileFields = Pick<
+  ImportedMassing,
+  "id" | "name" | "fileBytes" | "mode" | "placement" | "visible" | "colour"
+>;
+
+export function toImportedMassing(parsed: ParsedMassing, file: ImportedMassingFileFields): ImportedMassing {
+  return { ...parsed, ...file, buildings: visibleBuildings(parsed.buildings) };
 }
 
 export class MassingImportError extends Error {}
@@ -102,12 +142,55 @@ type MeshLike = {
   faces(): { count: number; get(index: number): number[] };
 };
 
+type RhinoObject = ReturnType<ReturnType<RhinoDoc["objects"]>["get"]>;
+
+type BuildingGroup = Omit<
+  ParsedMassingBuilding,
+  "triStart" | "triEnd" | "vertexStart" | "vertexEnd" | "baseZ" | "topZ" | "height"
+>;
+
+function userText(object: RhinoObject): Map<string, string> {
+  const out = new Map<string, string>();
+  const attributes = object.attributes() as unknown as { getUserStrings?: () => [string, string][] };
+  for (const [key, value] of attributes.getUserStrings?.() ?? []) {
+    const trimmed = typeof value === "string" ? value.trim() : "";
+    if (trimmed && !out.has(key.trim().toLowerCase())) out.set(key.trim().toLowerCase(), trimmed);
+  }
+  return out;
+}
+
+function layerPathOf(doc: RhinoDoc, object: RhinoObject): string | null {
+  const index = object.attributes().layerIndex;
+  const layers = doc.layers();
+  if (!Number.isInteger(index) || index < 0 || index >= layers.count) return null;
+  return layers.get(index)?.fullPath || null;
+}
+
+type BuildingGroupCandidate = BuildingGroup & { textUse: MassingBuildingUse | null; layerUse: MassingBuildingUse | null };
+
+function buildingGroupFor(doc: RhinoDoc, object: RhinoObject, modelName: string): BuildingGroupCandidate {
+  const text = userText(object);
+  const layerPath = layerPathOf(doc, object);
+  const textUse = useFromUserText(text.get("use"));
+  const layerUse = useFromLayerPath(isDefaultLayerPath(layerPath) ? null : layerPath);
+  const levels = levelsFromUserText(text.get("levels"));
+  const named = text.get("building");
+  const base = { layerPath, scheme: layerScheme(layerPath), use: null, levels, textUse, layerUse };
+  if (named) return { ...base, id: `text:${named}`, name: named, groupedBy: "userText" };
+  if (!isDefaultLayerPath(layerPath)) {
+    return { ...base, id: `layer:${layerPath}`, name: layerLeafName(layerPath!), groupedBy: "layer" };
+  }
+  return { ...base, id: "file", name: modelName, layerPath: null, scheme: null, groupedBy: "file" };
+}
+
 /**
- * Read a Rhino .3dm into one triangle soup. Meshes are used as is; Extrusions and Breps use their
- * cached render meshes. A surface without a render mesh is rejected (rhino3dm cannot mesh NURBS),
- * with a note to run _Mesh in Rhino. Coordinates are scaled to metres and kept in the file's frame.
+ * Read a Rhino .3dm into one triangle soup, grouped into buildings by `building` user text, then
+ * by layer, else one building for the whole file. Meshes are used as is; Extrusions and Breps use
+ * their cached render meshes. A surface without a render mesh is rejected (rhino3dm cannot mesh
+ * NURBS), with a note to run _Mesh in Rhino. Coordinates are scaled to metres and kept in the
+ * file's frame.
  */
-export function parseMassing3dm(rhino: Rhino, bytes: Uint8Array): ParsedMassing {
+export function parseMassing3dm(rhino: Rhino, bytes: Uint8Array, fileName?: string): ParsedMassing {
   if (bytes.byteLength > MASSING_MAX_FILE_BYTES) {
     throw new MassingImportError("This file is over 50 MB. Reduce the model or mesh it more coarsely in Rhino.");
   }
@@ -116,22 +199,37 @@ export function parseMassing3dm(rhino: Rhino, bytes: Uint8Array): ParsedMassing 
   try {
     const units = unitInfo(rhino, doc);
     const fileZone = fileZoneOf(doc);
-    const meshes: MeshLike[] = [];
+    const modelName = modelNameFromFile(fileName);
+    const groups = new Map<string, BuildingGroupCandidate>();
+    const groupMeshes = new Map<string, MeshLike[]>();
+    const addMeshes = (object: RhinoObject, found: MeshLike[]) => {
+      const candidate = buildingGroupFor(doc, object, modelName);
+      const group = groups.get(candidate.id);
+      if (group) {
+        group.textUse ??= candidate.textUse;
+        group.layerUse ??= candidate.layerUse;
+        group.levels ??= candidate.levels;
+      } else {
+        groups.set(candidate.id, candidate);
+      }
+      groupMeshes.set(candidate.id, [...(groupMeshes.get(candidate.id) ?? []), ...found]);
+    };
     let rejectedSurfaces = 0;
     let blocks = 0;
     const objects = doc.objects();
     for (let i = 0; i < objects.count; i++) {
-      const geometry = objects.get(i).geometry() as unknown as {
+      const object = objects.get(i);
+      const geometry = object.geometry() as unknown as {
         objectType: unknown;
         getMesh?: (type: unknown) => MeshLike | null;
         faces?: () => { count: number; get(index: number): { getMesh(type: unknown): MeshLike | null } };
       };
       const type = geometry.objectType;
       if (sameEnum(type, rhino.ObjectType.Mesh)) {
-        meshes.push(geometry as unknown as MeshLike);
+        addMeshes(object, [geometry as unknown as MeshLike]);
       } else if (sameEnum(type, rhino.ObjectType.Extrusion)) {
         const mesh = geometry.getMesh?.(rhino.MeshType.Any) ?? null;
-        if (mesh) meshes.push(mesh);
+        if (mesh) addMeshes(object, [mesh]);
         else rejectedSurfaces++;
       } else if (sameEnum(type, rhino.ObjectType.Brep)) {
         const faces = geometry.faces!();
@@ -142,7 +240,7 @@ export function parseMassing3dm(rhino: Rhino, bytes: Uint8Array): ParsedMassing 
           if (mesh) parts.push(mesh);
           else ok = false;
         }
-        if (ok) meshes.push(...parts);
+        if (ok) addMeshes(object, parts);
         else rejectedSurfaces++;
       } else if (sameEnum(type, rhino.ObjectType.Surface) || sameEnum(type, rhino.ObjectType.SubD)) {
         rejectedSurfaces++;
@@ -152,11 +250,13 @@ export function parseMassing3dm(rhino: Rhino, bytes: Uint8Array): ParsedMassing 
     }
 
     let triangles = 0;
-    for (const mesh of meshes) {
-      const faces = mesh.faces();
-      for (let f = 0; f < faces.count; f++) {
-        const [, , c, d] = faces.get(f);
-        triangles += c === d ? 1 : 2;
+    for (const meshes of groupMeshes.values()) {
+      for (const mesh of meshes) {
+        const faces = mesh.faces();
+        for (let f = 0; f < faces.count; f++) {
+          const [, , c, d] = faces.get(f);
+          triangles += c === d ? 1 : 2;
+        }
       }
     }
     if (triangles > MASSING_MAX_TRIANGLES) {
@@ -175,27 +275,33 @@ export function parseMassing3dm(rhino: Rhino, bytes: Uint8Array): ParsedMassing 
     const world: number[] = [];
     const indices = new Uint32Array(triangles * 3);
     const partTriangleStarts: number[] = [];
+    const ranges: { triStart: number; triEnd: number; vertexStart: number; vertexEnd: number }[] = [];
     let t = 0;
-    for (const mesh of meshes) {
-      partTriangleStarts.push(t / 3);
-      const base = world.length / 3;
-      const vertices = mesh.vertices();
-      for (let v = 0; v < vertices.count; v++) {
-        const [x, y, z] = vertices.point3dAt(v);
-        world.push(x * units.scale, y * units.scale, z * units.scale);
-      }
-      const faces = mesh.faces();
-      for (let f = 0; f < faces.count; f++) {
-        const [a, b, c, d] = faces.get(f);
-        indices[t++] = base + a;
-        indices[t++] = base + b;
-        indices[t++] = base + c;
-        if (c !== d) {
+    for (const group of groups.values()) {
+      const triStart = t / 3;
+      const vertexStart = world.length / 3;
+      for (const mesh of groupMeshes.get(group.id)!) {
+        partTriangleStarts.push(t / 3);
+        const base = world.length / 3;
+        const vertices = mesh.vertices();
+        for (let v = 0; v < vertices.count; v++) {
+          const [x, y, z] = vertices.point3dAt(v);
+          world.push(x * units.scale, y * units.scale, z * units.scale);
+        }
+        const faces = mesh.faces();
+        for (let f = 0; f < faces.count; f++) {
+          const [a, b, c, d] = faces.get(f);
           indices[t++] = base + a;
+          indices[t++] = base + b;
           indices[t++] = base + c;
-          indices[t++] = base + d;
+          if (c !== d) {
+            indices[t++] = base + a;
+            indices[t++] = base + c;
+            indices[t++] = base + d;
+          }
         }
       }
+      ranges.push({ triStart, triEnd: t / 3, vertexStart, vertexEnd: world.length / 3 });
     }
     partTriangleStarts.push(t / 3);
 
@@ -215,6 +321,17 @@ export function parseMassing3dm(rhino: Rhino, bytes: Uint8Array): ParsedMassing 
       positions[i + 2] = world[i + 2]! - anchor.z;
     }
 
+    const buildings: ParsedMassingBuilding[] = [...groups.values()].map(({ textUse, layerUse, ...group }, index) => {
+      const range = ranges[index]!;
+      let baseZ = Infinity;
+      let topZ = -Infinity;
+      for (let v = range.vertexStart; v < range.vertexEnd; v++) {
+        baseZ = Math.min(baseZ, world[v * 3 + 2]! - anchor.z);
+        topZ = Math.max(topZ, world[v * 3 + 2]! - anchor.z);
+      }
+      return { ...group, use: textUse ?? layerUse, ...range, baseZ, topZ, height: topZ - baseZ };
+    }).filter((building) => building.triEnd > building.triStart);
+
     const notes: string[] = [];
     if (units.name === "unset") notes.push("File units are not set. Read as metres.");
     else if (units.scale !== 1) notes.push(`File units are ${units.name.toLowerCase()}. Scaled ×${units.scale} to metres.`);
@@ -224,7 +341,9 @@ export function parseMassing3dm(rhino: Rhino, bytes: Uint8Array): ParsedMassing 
       );
     }
     if (blocks > 0) notes.push(`${blocks} block instance${blocks === 1 ? "" : "s"} left out. Explode blocks in Rhino first.`);
+    notes.push(buildingGroupingNote(buildings));
     return {
+      buildings,
       positions,
       indices,
       triangles,

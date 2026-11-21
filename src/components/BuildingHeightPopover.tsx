@@ -16,6 +16,15 @@ import { fromLocal } from "../lib/geo";
 import type { DamFloorRecord } from "../lib/comDevelopmentFloors";
 import { footprintArea } from "../lib/useCascade";
 import type { BuildingFeat, LonLat } from "../types";
+import type { ImportedMassingBuilding, MassingBuildingUse } from "../lib/massingImport";
+import {
+  formatMassingHeight,
+  isMassingBuildingUse,
+  massingBuildingUses,
+  massingLayerDisplay,
+  massingSourceLine,
+  massingUseLabel,
+} from "../lib/massingBuildings";
 
 type Props = {
   building: BuildingFeat;
@@ -262,6 +271,104 @@ export function BuildingHeightPopover({
           )}
         </div>
       )}
+    </aside>
+  );
+}
+
+function floatingStyle(floatingScreen: { left: number; top: number } | null) {
+  return floatingScreen
+    ? {
+        left: floatingScreen.left,
+        top: floatingScreen.top,
+        right: "auto",
+        bottom: "auto",
+        maxHeight: `min(72vh, 460px, calc(100vh - ${floatingScreen.top + INSPECT_HUD_MARGIN}px))`,
+      }
+    : undefined;
+}
+
+export function ImportedBuildingPopover({
+  building,
+  fileName,
+  onSetUse,
+  onClose,
+  floatingScreen = null,
+}: {
+  building: ImportedMassingBuilding;
+  fileName: string;
+  onSetUse: (use: MassingBuildingUse) => void;
+  onClose: () => void;
+  floatingScreen?: { left: number; top: number } | null;
+}) {
+  useEffect(() => {
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  const layer = massingLayerDisplay(building);
+  return (
+    <aside
+      className={["building-detail-panel", "is-imported", floatingScreen ? "is-floating inspect-hud" : ""]
+        .filter(Boolean)
+        .join(" ")}
+      role="dialog"
+      aria-label={`${building.name} details`}
+      style={floatingStyle(floatingScreen)}
+    >
+      <header>
+        <strong className="imported-popover-title">{building.name}</strong>
+        <button type="button" className="icon-close" aria-label="Close" title="Close" onClick={onClose}>
+          <X size={16} strokeWidth={1.75} aria-hidden="true" />
+        </button>
+      </header>
+      <div className="building-detail-panel-body">
+        <div className="imported-popover-row">
+          <span className="imported-popover-label">Use</span>
+          <span className={building.use ? "imported-popover-value" : "imported-popover-value is-empty"}>
+            {building.use ? massingUseLabel(building.use) : "Not set"}
+          </span>
+        </div>
+        <div className="imported-popover-aside">
+          <select
+            className="imported-popover-select"
+            aria-label={building.use ? "Change use" : "Set use"}
+            value=""
+            onChange={(event) => {
+              if (isMassingBuildingUse(event.target.value)) onSetUse(event.target.value);
+            }}
+          >
+            <option value="" disabled>
+              {building.use ? "Change use" : "Set use"}
+            </option>
+            {massingBuildingUses().map((use) => (
+              <option key={use} value={use}>
+                {massingUseLabel(use)}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="imported-popover-row">
+          <span className="imported-popover-label">Height</span>
+          <span className="imported-popover-value is-numeric">{formatMassingHeight(building.height)}</span>
+        </div>
+        <div className="imported-popover-row">
+          <span className="imported-popover-label">Levels</span>
+          <span className={building.levels != null ? "imported-popover-value is-numeric" : "imported-popover-value is-numeric is-empty"}>
+            {building.levels != null ? building.levels : "—"}
+          </span>
+        </div>
+        {building.levels == null && <p className="imported-popover-aside imported-popover-caption">Not in model</p>}
+        {layer && (
+          <div className="imported-popover-row">
+            <span className="imported-popover-label">Layer</span>
+            <span className="imported-popover-value">{layer}</span>
+          </div>
+        )}
+        <p className="imported-popover-source">{massingSourceLine(fileName)}</p>
+      </div>
     </aside>
   );
 }

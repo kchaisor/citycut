@@ -2574,6 +2574,57 @@ async function main() {
       podiumPlan3dmDetail,
     );
     await podiumCtx.close();
+    const schemeCtx = await browser.newContext({
+      viewport: VIEWPORT,
+      deviceScaleFactor: 1,
+      reducedMotion: "reduce",
+    });
+    await schemeCtx.addInitScript(() => {
+      window.__citycutMinSilentLoadMs = 0;
+    });
+    const schemePage = await schemeCtx.newPage();
+    await schemePage.goto(`${baseUrl}/?qa=1&lat=-37.8216&lon=144.9645&km=0.5&qaMassing=scheme`, {
+      waitUntil: "domcontentloaded",
+      timeout: 120_000,
+    });
+    await schemePage.waitForSelector("button.create-fab", { timeout: 30_000 });
+    await schemePage.click("button.create-fab");
+    await schemePage.waitForFunction(() => Boolean(document.querySelector(".model canvas")), null, {
+      timeout: 300_000,
+    });
+    await schemePage.getByRole("button", { name: "Import", exact: true }).first().click({ timeout: 60_000 });
+    await schemePage.waitForSelector(".massing-building-row", { timeout: 60_000 });
+    const schemeTitle = await schemePage.locator(".massing-scheme-title").first().textContent();
+    const schemeRows = await schemePage.locator(".massing-building-row .massing-building-name").allTextContents();
+    assertCheck(
+      "qa-scheme-import-panel",
+      "qaMassing=scheme lists three buildings under SCHEME A · 3 in the Import panel",
+      /^Scheme A · 3$/i.test(schemeTitle?.trim() ?? "") && schemeRows.length === 3,
+      `title=${schemeTitle}, rows=${schemeRows.join("|")}`,
+    );
+    await schemePage.getByRole("tab", { name: "Drawing" }).click({ timeout: 60_000 });
+    await schemePage.getByRole("button", { name: "Site plan" }).click({ timeout: 60_000 });
+    await schemePage.waitForSelector("svg.plan", { timeout: 120_000 });
+    await schemePage
+      .waitForFunction(() => document.querySelectorAll("svg.plan [data-imported-podium]").length >= 3, null, {
+        timeout: 120_000,
+      })
+      .catch(() => {});
+    const schemeAll = await schemePage.locator("svg.plan [data-imported-podium]").count();
+    await schemePage.getByRole("button", { name: "Hide Tower B" }).click({ timeout: 60_000 });
+    await schemePage
+      .waitForFunction(() => document.querySelectorAll("svg.plan [data-imported-podium]").length === 2, null, {
+        timeout: 60_000,
+      })
+      .catch(() => {});
+    const schemeHidden = await schemePage.locator("svg.plan [data-imported-podium]").count();
+    assertCheck(
+      "qa-scheme-plan-footprints",
+      "qaMassing=scheme draws three imported footprints on the site plan, and two after hiding Tower B",
+      schemeAll === 3 && schemeHidden === 2,
+      `all=${schemeAll}, afterHide=${schemeHidden}`,
+    );
+    await schemeCtx.close();
     const rozelleFixturePath = path.join(cursorArtifacts, "rozelle-import-massing.3dm");
     const rozelleFixtureMmPath = path.join(cursorArtifacts, "rozelle-import-massing-mm.3dm");
     execFileSync(

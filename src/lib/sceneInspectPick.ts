@@ -28,6 +28,14 @@ export type SceneSelection =
       world: SceneInspectWorld;
     }
   | {
+      kind: "imported";
+      fileId: string;
+      buildingId: string;
+      clientX: number;
+      clientY: number;
+      world: SceneInspectWorld;
+    }
+  | {
       kind: "terrain";
       clientX: number;
       clientY: number;
@@ -63,7 +71,21 @@ export type SceneInspectPickContext = {
   sideM: number;
   buildingsPickable?: boolean;
   treesPickable?: boolean;
+  extraRoots?: THREE.Object3D[];
 };
+
+export function importedBuildingFromObject(
+  object: THREE.Object3D | null,
+): { fileId: string; buildingId: string } | null {
+  let node = object;
+  while (node) {
+    const fileId = node.userData.importedMassingId;
+    const buildingId = node.userData.importedBuildingId;
+    if (typeof fileId === "string" && typeof buildingId === "string") return { fileId, buildingId };
+    node = node.parent;
+  }
+  return null;
+}
 
 function isHeightEditOverlayObject(object: THREE.Object3D): boolean {
   let node: THREE.Object3D | null = object;
@@ -85,6 +107,16 @@ export function pickSceneSelectionFromHits(
   const buildingsPickable = context.buildingsPickable !== false;
   const treesPickable = context.treesPickable !== false;
   for (const hit of hits) {
+    const imported = (hit.object as THREE.Mesh).isMesh ? importedBuildingFromObject(hit.object) : null;
+    if (imported) {
+      return {
+        kind: "imported",
+        ...imported,
+        clientX,
+        clientY,
+        world: { east: hit.point.x, north: -hit.point.z, up: hit.point.y },
+      };
+    }
     if (isHeightEditOverlayObject(hit.object)) {
       const overlayId = buildingIdFromIntersection(hit);
       if (overlayId != null && buildingsPickable) {
@@ -184,7 +216,7 @@ export function attachSceneInspectPick(
     if (event.timeStamp - downAt > 800) return;
     setPointer(event);
     raycaster.setFromCamera(pointer, camera);
-    const hits = raycaster.intersectObject(root, true);
+    const hits = raycaster.intersectObjects([root, ...(context.extraRoots ?? [])], true);
     const selection = pickSceneSelectionFromHits(hits, context, event.clientX, event.clientY, event.shiftKey);
     if (selection) {
       handlers.onPick(selection);

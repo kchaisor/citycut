@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
-import { BuildingHeightPopover } from "../BuildingHeightPopover";
+import { BuildingHeightPopover, ImportedBuildingPopover } from "../BuildingHeightPopover";
 import { LandmarkLabelLayer } from "../LandmarkLabelLayer";
+import { ImportedLabelLayer } from "../ImportedLabelLayer";
+import type { ImportedLabelState } from "../ImportedLabelProjector";
 
 import { TreeInspectHud, TerrainInspectHud } from "../SceneInspectHud";import { DrawingPlan } from "../DrawingPlan";
 
@@ -62,6 +64,9 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
     planShadowInput,
     pickedBuilding,
     pickedTree,
+    pickedImported,
+    selectImportedBuilding,
+    clearImportedSelection,
     planViewport,
     renderQuality,
     resetBuildingHeight,
@@ -101,9 +106,20 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
   } = vm;
   const sunHoursOnPlan = Boolean(solar.sunHours) && drawing === "site";
   const [keep3d, setKeep3d] = useState(tab === "3d");
+  const [importedLabels, setImportedLabels] = useState<ImportedLabelState | null>(null);
   useEffect(() => {
     if (tab === "3d") setKeep3d(true);
   }, [tab]);
+
+  const importedPopover = pickedImported ? (
+    <ImportedBuildingPopover
+      building={pickedImported.building}
+      fileName={pickedImported.massing.name}
+      onSetUse={(use) => massing.setBuildingUse(pickedImported.massing.id, pickedImported.building.id, use)}
+      onClose={clearImportedSelection}
+      floatingScreen={inspectHudPosition}
+    />
+  ) : null;
 
   return (
     <>
@@ -193,7 +209,14 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
                 landmarkSources={landmarkSources}
                 landmarkLabelsOn={landmarkLabelsOn}
                 onLandmarkScreens={setLandmarkScreens}
+                onImportedLabels={setImportedLabels}
               />
+              {tab === "3d" && (
+                <ImportedLabelLayer
+                  state={importedLabels}
+                  onSelect={(label) => selectImportedBuilding(label.fileId, label.buildingId, label.x, label.y)}
+                />
+              )}
               {tab === "3d" && landmarkLabelsOn && (
                 <LandmarkLabelLayer
                   state={landmarkScreens}
@@ -240,6 +263,7 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
                   floatingScreen={inspectHudPosition}
                 />
               )}
+              {tab === "3d" && importedPopover}
               {pickedTree && (
                 <TreeInspectHud
                   tree={pickedTree}
@@ -326,8 +350,12 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
                 sunHoursGroundScaleMax={sunHoursOnPlan ? sunHoursGround.scaleMaxHours : 0}
                 sunHoursRoofPlanRaster={sunHoursOnPlan ? (sunHoursGround.overlay?.roofPlanRaster ?? null) : null}
                 landmarkLabels={drawing === "site" || drawing === "figure-ground" ? drawingLandmarkSources : []}
+                onImportedPick={(ref, clientX, clientY) =>
+                  selectImportedBuilding(ref.fileId, ref.buildingId, clientX, clientY)
+                }
               />
             )}
+            {importedPopover}
             {sunHoursOnPlan ? (
               <SunHoursLegendDock stackClassName="plan-solar-dock-stack" sunHoursGround={sunHoursGround} />
             ) : null}

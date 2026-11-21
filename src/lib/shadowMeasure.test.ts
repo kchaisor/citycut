@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import rhino3dm from "rhino3dm";
-import { parseMassing3dm, mgaPlacement, placedLocal, type ImportedMassing } from "./massingImport";
+import { parseMassing3dm, mgaPlacement, toImportedMassing, placedLocal, type ImportedMassing } from "./massingImport";
 import { massingDrawingBuildings } from "./massingFootprint";
 import { clearPlanShadowCache, planShadowOffset, planShadowRings } from "./buildingShadows";
 import { footprintBase, sampleTerrain } from "./terrain";
@@ -47,7 +47,7 @@ async function importFile(boxes: [number, number, number, number, number][]): Pr
     doc.objects().addMesh(mesh, null);
   }
   const parsed = parseMassing3dm(r, doc.toByteArray());
-  return { ...parsed, id: "k", name: "kelvin.3dm", fileBytes: 1, mode: "mga", visible: true, placement: mgaPlacement(parsed) };
+  return toImportedMassing(parsed, { id: "k", name: "kelvin.3dm", fileBytes: 1, mode: "mga", visible: true, placement: mgaPlacement(parsed) });
 }
 
 function model(buildings: BuildingFeat[]): CityModel {
