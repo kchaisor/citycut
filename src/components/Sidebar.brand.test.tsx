@@ -53,7 +53,7 @@ describe("sidebar brand bar", () => {
     expect(onHome).toHaveBeenCalledTimes(1);
   });
 
-  it("shows New cut as text when open and as a labelled rail icon when collapsed", async () => {
+  it("shows New cut as an icon-only top-bar button when open and as a labelled rail icon when collapsed", async () => {
     const user = userEvent.setup();
     const onNewCut = vi.fn();
     const { rerender } = render(
@@ -75,6 +75,11 @@ describe("sidebar brand bar", () => {
     const openBtn = screen.getByRole("button", { name: "New cut" });
     expect(openBtn.className).toContain("sidebar-new-cut");
     expect(openBtn.className).not.toContain("sidebar-new-cut-icon");
+    expect(openBtn.getAttribute("aria-label")).toBe("New cut");
+    expect(openBtn.getAttribute("title")).toBe("New cut");
+    expect(openBtn.textContent?.trim()).toBe("");
+    expect(openBtn.querySelector(".topbar-compact-label")).toBeNull();
+    expect(openBtn.querySelector(".topbar-compact-icon")).toBeTruthy();
     await user.click(openBtn);
     expect(onNewCut).toHaveBeenCalledTimes(1);
 

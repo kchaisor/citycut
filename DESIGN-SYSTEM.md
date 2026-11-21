@@ -125,7 +125,7 @@ Control heights: `--control-xs` 24 · `--control-sm` 28 · `--control-md` 32 · 
 
 | Region | Position / size (measured) | Rule |
 |---|---|---|
-| Header islands (left, centre, right) | top 14, height 42; left and right at 14 from the edges; centre centred | ≥ 8 gap between them (1280 measures exactly 8; don't add width at 1280) |
+| Header islands (left, centre, right) | top 14, height 42; left and right at 14 from the edges; centre centred | ≥ 8 gap between them (1280 measures exactly 8; don't add width at 1280). New cut and Reset are icon-only with tooltips (32×32 icon buttons at every width; Kelvin's go 21 Nov 2026, idea from 19 Nov 2026) |
 | Left tool rail | x 14, y 68, w 52 | 8 to the outliner |
 | Left outliner | x 74, y 68, w 248, max-h `100vh − 134` | scrolls inside itself; padding 12 |
 | Right inspector (SITE INTELLIGENCE) | right 14, y 68, w 268, max-h `100vh − 134` | border 0, uniform `--bg-card`, no inner borders, no legacy `#DBDBDB`/`#EBEBEB` |

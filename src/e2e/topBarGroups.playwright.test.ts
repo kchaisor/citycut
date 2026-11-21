@@ -70,12 +70,7 @@ async function auditTopBar(page: Page): Promise<TopBarAudit> {
 
     const boxNotClipped = (el: HTMLElement, name: string) => {
       if (!isVisible(el)) return;
-      const label = el.querySelector(".topbar-compact-label") as HTMLElement | null;
-      const compactIcon =
-        el.classList.contains("topbar-compact-icon-btn") &&
-        label &&
-        getComputedStyle(label).display === "none";
-      if (compactIcon) return;
+      if (el.classList.contains("topbar-compact-icon-btn")) return;
       if (el.scrollWidth > el.clientWidth + 1 || el.scrollHeight > el.clientHeight + 1) {
         errors.push(`"${name}" clips inside its box (${el.scrollWidth}×${el.scrollHeight} > ${el.clientWidth}×${el.clientHeight})`);
       }
@@ -172,29 +167,28 @@ async function auditTopBar(page: Page): Promise<TopBarAudit> {
       ? ["Quick export Adobe Illustrator .ai", "Quick export SVG", "Quick export 3dm"]
       : ["Quick export Rhino .3dm", "Quick export 2x PNG"];
 
-    if (vw < 1360) {
-      const compactChecks: Array<[string, string]> = [
-        [".model .top-bar-center .cam-reset.topbar-compact-icon-btn", "Reset view"],
-        [".model .top-bar-left .sidebar-new-cut.topbar-compact-icon-btn", "New cut"],
-      ];
-      for (const [sel, name] of compactChecks) {
-        const el = document.querySelector(sel) as HTMLElement | null;
-        if (!el || !isVisible(el)) {
-          errors.push(`compact control "${name}" not visible below 1360`);
-          continue;
-        }
-        const label = el.querySelector(".topbar-compact-label") as HTMLElement | null;
-        const labelHidden =
-          !label ||
-          getComputedStyle(label).display === "none" ||
-          Number(getComputedStyle(label).opacity) < 0.05;
-        if (!labelHidden) continue;
-        const r = el.getBoundingClientRect();
-        if (Math.abs(r.width - 32) > 1 || Math.abs(r.height - 32) > 1) {
-          errors.push(
-            `compact "${name}" bbox ${r.width.toFixed(1)}×${r.height.toFixed(1)}px, expected 32×32`,
-          );
-        }
+    const compactChecks: Array<[string, string]> = [
+      [".model .top-bar-center .cam-reset.topbar-compact-icon-btn", "Reset view"],
+      [".model .top-bar-left .sidebar-new-cut.topbar-compact-icon-btn", "New cut"],
+    ];
+    for (const [sel, name] of compactChecks) {
+      const el = document.querySelector(sel) as HTMLElement | null;
+      if (!el || !isVisible(el)) {
+        errors.push(`icon-only control "${name}" not visible`);
+        continue;
+      }
+      if (el.getAttribute("aria-label") !== name) {
+        errors.push(`icon-only "${name}" aria-label is "${el.getAttribute("aria-label") ?? ""}"`);
+      }
+      if (el.getAttribute("title") !== name) {
+        errors.push(`icon-only "${name}" missing "${name}" tooltip`);
+      }
+      if ((el.innerText ?? "").trim().length > 0) {
+        errors.push(`icon-only "${name}" shows text "${el.innerText.trim()}"`);
+      }
+      const r = el.getBoundingClientRect();
+      if (Math.abs(r.width - 32) > 1 || Math.abs(r.height - 32) > 1) {
+        errors.push(`icon-only "${name}" bbox ${r.width.toFixed(1)}×${r.height.toFixed(1)}px, expected 32×32`);
       }
     }
 
