@@ -1,6 +1,11 @@
 import type { MultiPolygon, Polygon } from "./safePolygonClip";
 import { clipUnion as unionFnLoaded } from "./safePolygonClip";
-import { placedLocal, type ImportedMassing, type MassingPlacement } from "./massingImport";
+import {
+  placedLocal,
+  type ImportedMassing,
+  type MassingPlacement,
+  type ParsedMassingBuilding,
+} from "./massingImport";
 import type { BuildingFeat, LonLat, Pt } from "../types";
 
 const unionFn = unionFnLoaded;
@@ -79,6 +84,16 @@ export function massingFootprint(
     return Number.isFinite(top) ? top : topZ;
   });
   return { polygons: merged, topZ, polygonTops };
+}
+
+export function massingBuildingFootprint(
+  massing: Pick<ImportedMassing, "positions" | "indices" | "placement">,
+  building: Pick<ParsedMassingBuilding, "triStart" | "triEnd" | "topZ">,
+  origin: LonLat,
+  zone: number,
+): { polygons: MultiPolygon; topZ: number; polygonTops: number[] } {
+  const footprint = massingFootprint(sliceMassingTriangles(massing, building.triStart, building.triEnd), origin, zone);
+  return { ...footprint, topZ: massing.placement.base + building.topZ };
 }
 
 function pointInRing(x: number, y: number, ring: ReadonlyArray<readonly [number, number] | number[]>): boolean {

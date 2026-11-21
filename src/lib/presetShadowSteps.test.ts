@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import rhino3dm from "rhino3dm";
-import { parseMassing3dm, mgaPlacement, type ImportedMassing } from "./massingImport";
+import { parseMassing3dm, mgaPlacement, toImportedMassing, type ImportedMassing } from "./massingImport";
 import { massingDrawingBuildings } from "./massingFootprint";
 import { clearPlanShadowCache, planShadowRings } from "./buildingShadows";
 import { sampleTerrain } from "./terrain";
@@ -30,7 +30,7 @@ async function twoPart(): Promise<ImportedMassing> {
     doc.objects().addMesh(mesh, null);
   }
   const parsed = parseMassing3dm(r, doc.toByteArray());
-  return { ...parsed, id: "two", name: "two-part-base27m.3dm", fileBytes: 1, mode: "mga", visible: true, placement: mgaPlacement(parsed) };
+  return toImportedMassing(parsed, { id: "two", name: "two-part-base27m.3dm", fileBytes: 1, mode: "mga", visible: true, placement: mgaPlacement(parsed) });
 }
 
 function model(buildings: BuildingFeat[]): CityModel {

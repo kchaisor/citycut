@@ -4,9 +4,11 @@ import { disposeObject } from "../lib/buildCity";
 import { normaliseMassingColour, type ImportedMassing, type MassingPlacement } from "../lib/massingImport";
 import {
   deleteStoredMassing,
+  importedMassingFromStored,
   loadStoredMassing,
   massingCutKey,
   saveStoredMassing,
+  storedBuildingState,
   updateStoredMassing,
 } from "../lib/massingStore";
 import { sampleTerrain } from "../lib/terrain";
@@ -23,9 +25,9 @@ function loadRuntime(): Promise<Runtime> {
 
 const MAX_FILE_BYTES = 50 * 1024 * 1024;
 
-async function parseBytes(bytes: Uint8Array) {
+async function parseBytes(bytes: Uint8Array, fileName: string) {
   const runtime = await loadRuntime();
-  return runtime.parseMassing3dm(await runtime.loadRhino(), bytes);
+  return runtime.parseMassing3dm(await runtime.loadRhino(), bytes, fileName);
 }
 
 export function useImportedMassing(model: Pick<CityModel, "center" | "sideM" | "terrain">) {
@@ -68,8 +70,8 @@ export function useImportedMassing(model: Pick<CityModel, "center" | "sideM" | "
       const out: ImportedMassing[] = [];
       for (const row of rows) {
         try {
-          const parsed = await parseBytes(new Uint8Array(row.bytes));
-          out.push({ ...parsed, id: row.id, name: row.name, fileBytes: row.bytes.byteLength, mode: row.mode, placement: row.placement, visible: row.visible, ...(normaliseMassingColour(row.colour) ? { colour: normaliseMassingColour(row.colour)! } : {}) });
+          const parsed = await parseBytes(new Uint8Array(row.bytes), row.name);
+          out.push(importedMassingFromStored(parsed, row));
         } catch {
         }
       }
@@ -94,21 +96,20 @@ export function useImportedMassing(model: Pick<CityModel, "center" | "sideM" | "
       setBusy(true);
       try {
         const buffer = await file.arrayBuffer();
-        const parsed = await parseBytes(new Uint8Array(buffer));
+        const parsed = await parseBytes(new Uint8Array(buffer), file.name);
         const runtime = await loadRuntime();
         setRt(runtime);
         const limit = runtime.canAddMassing(imported, parsed.triangles);
         if (limit) throw new runtime.MassingImportError(limit);
         const local = runtime.looksLocal(parsed);
-        const item: ImportedMassing = {
-          ...parsed,
+        const item = runtime.toImportedMassing(parsed, {
           id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
           name: file.name,
           fileBytes: file.size,
           mode: local ? "click" : "mga",
           placement: local ? runtime.cutCentrePlacement(model, zone, groundAt(0, 0)) : runtime.mgaPlacement(parsed),
           visible: true,
-        };
+        });
         setImported((prev) => [...prev, item]);
         if (local) setPlacingId(item.id);
         await saveStoredMassing({
@@ -119,6 +120,7 @@ export function useImportedMassing(model: Pick<CityModel, "center" | "sideM" | "
           mode: item.mode,
           placement: item.placement,
           visible: true,
+          buildings: storedBuildingState(item.buildings),
           addedAt: new Date().toISOString(),
         });
       } catch (err) {
