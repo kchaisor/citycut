@@ -20,7 +20,7 @@ import { planPaths, svgPolyline, svgRings } from "../lib/svgPlan";
 import { getColour } from "../lib/colours";
 import { themeColor } from "../lib/themeColor";
 import { useColourRevision } from "../lib/useColourRevision";
-import type { CityModel } from "../types";
+import type { CityModel, ImportedBuildingRef } from "../types";
 import type { SectionKnifeToolState } from "../lib/sectionKnife/state";
 import { SectionKnifePlanMarkers } from "./SectionKnifePlanMarkers";
 import { HeliodonPlanOverlay } from "./HeliodonPlanOverlay";
@@ -94,6 +94,7 @@ export function DrawingPlan({
   sunStudyCasters = "all",
   sunStudySelected = NO_SELECTION,
   onSunStudyPick,
+  onImportedPick,
   sectionKnife,
   sunHoursGroundGrid = null,
   sunHoursGroundScaleMax = 0,
@@ -119,6 +120,7 @@ export function DrawingPlan({
   sunStudyCasters?: SunStudyCasters;
   sunStudySelected?: readonly number[];
   onSunStudyPick?: (buildingId: number) => void;
+  onImportedPick?: (ref: ImportedBuildingRef, clientX: number, clientY: number) => void;
   sectionKnife?: SectionKnifeToolState | null;
   sunHoursGroundGrid?: SunHoursGroundGrid | null;
   sunHoursGroundScaleMax?: number;
@@ -411,7 +413,9 @@ export function DrawingPlan({
         const start = drag.current;
         drag.current = null;
         const svg = svgRef.current;
-        if (!start || !svg || !study || !onSunStudyPick) return;
+        if (!start || !svg) return;
+        const pickSunStudy = study && onSunStudyPick;
+        if (!pickSunStudy && !onImportedPick) return;
         if (!isClick(event.clientX - start.px, event.clientY - start.py)) return;
         const ctm = svg.getScreenCTM?.();
         let x: number;
@@ -427,6 +431,14 @@ export function DrawingPlan({
         }
         if (onViewportChange) onViewportChange(start.view);
         else setInternalView(start.view);
+        if (!pickSunStudy) {
+          const importedHit = pickBuilding(
+            model.buildings.filter((building) => building.importedBuilding && !building.importedMassingShadowCaster),
+            [x, -y],
+          );
+          if (importedHit?.importedBuilding) onImportedPick!(importedHit.importedBuilding, event.clientX, event.clientY);
+          return;
+        }
         const hit = pickBuilding(model.buildings, [x, -y]);
         if (hit) onSunStudyPick(hit.id);
       }}

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { BuildingHeightPopover } from "../BuildingHeightPopover";
+import { BuildingHeightPopover, ImportedBuildingPopover } from "../BuildingHeightPopover";
 import { LandmarkLabelLayer } from "../LandmarkLabelLayer";
 
 import { TreeInspectHud, TerrainInspectHud } from "../SceneInspectHud";import { DrawingPlan } from "../DrawingPlan";
@@ -63,6 +63,9 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
     planShadowInput,
     pickedBuilding,
     pickedTree,
+    pickedImported,
+    selectImportedBuilding,
+    clearImportedSelection,
     planViewport,
     renderQuality,
     resetBuildingHeight,
@@ -108,6 +111,16 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
   useEffect(() => {
     if (tab === "3d") setKeep3d(true);
   }, [tab]);
+
+  const importedPopover = pickedImported ? (
+    <ImportedBuildingPopover
+      building={pickedImported.building}
+      fileName={pickedImported.massing.name}
+      onSetUse={(use) => massing.setBuildingUse(pickedImported.massing.id, pickedImported.building.id, use)}
+      onClose={clearImportedSelection}
+      floatingScreen={inspectHudPosition}
+    />
+  ) : null;
 
   return (
     <>
@@ -260,6 +273,7 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
                   floatingScreen={inspectHudPosition}
                 />
               )}
+              {tab === "3d" && importedPopover}
               {pickedTree && (
                 <TreeInspectHud
                   tree={pickedTree}
@@ -346,8 +360,12 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
                 sunHoursGroundScaleMax={sunHoursOnPlan ? sunHoursGround.scaleMaxHours : 0}
                 sunHoursRoofPlanRaster={sunHoursOnPlan ? (sunHoursGround.overlay?.roofPlanRaster ?? null) : null}
                 landmarkLabels={drawing === "site" || drawing === "figure-ground" ? drawingLandmarkSources : []}
+                onImportedPick={(ref, clientX, clientY) =>
+                  selectImportedBuilding(ref.fileId, ref.buildingId, clientX, clientY)
+                }
               />
             )}
+            {importedPopover}
             {sunHoursOnPlan ? (
               <SunHoursLegendDock stackClassName="plan-solar-dock-stack" sunHoursGround={sunHoursGround} />
             ) : null}

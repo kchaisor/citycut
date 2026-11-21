@@ -1,7 +1,14 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { mgaCrs } from "../lib/crsZone";
 import { disposeObject } from "../lib/buildCity";
-import { normaliseMassingColour, type ImportedMassing, type MassingPlacement } from "../lib/massingImport";
+import {
+  normaliseMassingColour,
+  type ImportedMassing,
+  type ImportedMassingBuilding,
+  type MassingBuildingUse,
+  type MassingPlacement,
+} from "../lib/massingImport";
+import { massingExportParts, visibleMassingBuildings } from "../lib/massingBuildings";
 import {
   deleteStoredMassing,
   importedMassingFromStored,
@@ -14,6 +21,7 @@ import {
 import { sampleTerrain } from "../lib/terrain";
 import { qaMassingFromSearch } from "../lib/qaCameraBridge";
 import { qaPodiumTowerMassing } from "../lib/qaMassingFixture";
+import { qaSchemeMassing } from "../lib/qaSchemeFixture";
 import type { CityModel } from "../types";
 
 type Runtime = typeof import("../lib/massingRuntime");
@@ -52,13 +60,17 @@ export function useImportedMassing(model: Pick<CityModel, "center" | "sideM" | "
     typeof window !== "undefined" ? qaMassingFromSearch(window.location.search) : null;
 
   useEffect(() => {
-    if (qaMassing === "podium") {
+    if (qaMassing === "podium" || qaMassing === "scheme") {
       let cancelled = false;
       void loadRuntime().then((runtime) => {
         if (cancelled) return;
         setRt(runtime);
         const base = model.terrain ? groundAt(0, 0) : 0;
-        setImported([qaPodiumTowerMassing(model.center, zone, base)]);
+        setImported([
+          qaMassing === "scheme"
+            ? qaSchemeMassing(model.center, zone, base)
+            : qaPodiumTowerMassing(model.center, zone, base),
+        ]);
       });
       return () => {
         cancelled = true;
@@ -179,11 +191,47 @@ export function useImportedMassing(model: Pick<CityModel, "center" | "sideM" | "
   );
 
   const setColour = useCallback(
-    (id: string, colour: string) => {
+    (id: string, colour: string | null) => {
+      if (colour == null) {
+        patch(id, { colour: undefined });
+        return;
+      }
       const next = normaliseMassingColour(colour);
       if (next) patch(id, { colour: next });
     },
     [patch],
+  );
+
+  const patchBuildings = useCallback(
+    (id: string, update: (building: ImportedMassingBuilding) => ImportedMassingBuilding) => {
+      const item = imported.find((entry) => entry.id === id);
+      if (!item) return;
+      const buildings = item.buildings.map(update);
+      setImported((prev) => prev.map((entry) => (entry.id === id ? { ...entry, buildings } : entry)));
+      void updateStoredMassing(id, { buildings: storedBuildingState(buildings) });
+    },
+    [imported],
+  );
+
+  const setBuildingsVisible = useCallback(
+    (id: string, buildingIds: string[], visible: boolean) => {
+      const ids = new Set(buildingIds);
+      patchBuildings(id, (building) => (ids.has(building.id) ? { ...building, visible } : building));
+    },
+    [patchBuildings],
+  );
+
+  const setBuildingUse = useCallback(
+    (id: string, buildingId: string, use: MassingBuildingUse) =>
+      patchBuildings(id, (building) => (building.id === buildingId ? { ...building, use } : building)),
+    [patchBuildings],
+  );
+
+  const setAllVisible = useCallback(
+    (visible: boolean) => {
+      for (const item of imported) if (item.visible !== visible) patch(item.id, { visible });
+    },
+    [imported, patch],
   );
 
   const remove = useCallback((id: string) => {
@@ -220,9 +268,11 @@ export function useImportedMassing(model: Pick<CityModel, "center" | "sideM" | "
     return out;
   }, [rt, imported, model, zone]);
 
+  const visible = useMemo(() => visibleMassingBuildings(imported), [imported]);
+
   const drawingBuildings = useMemo(
     () => {
-      if (!rt || !imported.some((item) => item.visible)) return [];
+      if (!rt || visible.length === 0) return [];
       try {
         return rt.massingDrawingBuildings(imported, model.center, zone, model.terrain ? groundAt : undefined);
       } catch (err) {
@@ -230,24 +280,20 @@ export function useImportedMassing(model: Pick<CityModel, "center" | "sideM" | "
         return [];
       }
     },
-    [rt, imported, model.center, zone, model.terrain, groundAt],
+    [rt, visible, imported, model.center, zone, model.terrain, groundAt],
   );
 
   const drawingUpperLevels = useMemo(() => {
-    if (!rt || !imported.some((item) => item.visible)) return [];
+    if (!rt || visible.length === 0) return [];
     try {
-      return rt.massingUpperLevelPlanLines(
-        imported.filter((item) => item.visible),
-        model.center,
-        zone,
-      );
+      return rt.massingUpperLevelPlanLines(imported, model.center, zone);
     } catch (err) {
       console.warn("[CityCut] imported massing upper levels failed", err);
       return [];
     }
-  }, [rt, imported, model.center, zone]);
+  }, [rt, visible, imported, model.center, zone]);
 
-  const forExport = useMemo(() => imported.filter((item) => item.visible), [imported]);
+  const forExport = useMemo(() => massingExportParts(imported), [imported]);
 
   return {
     imported,
@@ -265,6 +311,9 @@ export function useImportedMassing(model: Pick<CityModel, "center" | "sideM" | "
     snapToGround,
     resetToMga,
     toggleVisible,
+    setAllVisible,
+    setBuildingsVisible,
+    setBuildingUse,
     setColour,
     remove,
     onScenePoint,

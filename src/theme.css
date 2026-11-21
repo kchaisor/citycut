@@ -79,10 +79,24 @@
   --sidebar-rail-w: 56px;
   --sidebar-panel-w: 320px;
 
+  --fs-micro: 10px;
   --fs-caption: 11px;
   --lh-caption: 16px;
   --fs-sm: 12px;
+  --fs-body: 13px;
   --lh-sm: 16px;
+
+  --control-sm: 28px;
+  --control-md: 32px;
+  --row-imported-building: 48px;
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --space-0-5: 2px;
+  --space-1: 4px;
+  --space-1-5: 6px;
+  --space-2: 8px;
+  --space-3: 12px;
 
   --bg-elev: #FFFFFF;
   --ink: #141413;

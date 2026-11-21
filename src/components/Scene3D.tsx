@@ -375,6 +375,7 @@ function SceneInspectPickLayer({
   enabled,
   buildingsPickable,
   treesPickable,
+  importedMassing = null,
   onPick,
   onClear,
 }: {
@@ -383,6 +384,7 @@ function SceneInspectPickLayer({
   enabled: boolean;
   buildingsPickable: boolean;
   treesPickable: boolean;
+  importedMassing?: THREE.Object3D | null;
   onPick: (selection: SceneSelection) => void;
   onClear?: () => void;
 }) {
@@ -400,10 +402,12 @@ function SceneInspectPickLayer({
         sideM: model.sideM,
         buildingsPickable,
         treesPickable,
+        extraRoots: importedMassing ? [importedMassing] : [],
       },
       { onPick, onClear },
     );
   }, [
+    importedMassing,
     buildingsPickable,
     camera,
     enabled,
@@ -559,6 +563,7 @@ function City({
   windFlowActive = false,
   introSkip,
   introPlayed,
+  importedMassing = null,
 }: {
   model: CityModel;
   uniformBuildings: boolean;
@@ -586,6 +591,7 @@ function City({
   windFlowActive?: boolean;
   introSkip: boolean;
   introPlayed?: { current: string | null };
+  importedMassing?: THREE.Object3D | null;
 }) {
   const onBoundsRef = useRef(onBounds);
   onBoundsRef.current = onBounds;
@@ -1084,6 +1090,7 @@ function City({
         enabled={!sectionKnife?.active && !onScenePoint}
         buildingsPickable={pickBuildings && buildingsVisible}
         treesPickable={Boolean(model.layers.trees) && treesVisible}
+        importedMassing={importedMassing}
         onPick={onSceneInspectPick}
         onClear={onClearSceneInspect}
       />
@@ -2462,6 +2469,7 @@ export function Scene3D({
         windFlowActive={windEnabled}
         introSkip={introSkip}
         introPlayed={introPlayed}
+        importedMassing={importedMassing}
       />
       {solar.sunHours && sunHoursGroundGrid && sunHoursDirectOverlay ? (
         <SunHoursLayer

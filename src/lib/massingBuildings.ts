@@ -148,3 +148,159 @@ export function massingBuildingColour(
   const use: BuildingUse = building.use ?? "unclassified";
   return getColour(BUILDING_USE_META[use].key);
 }
+
+const MASSING_BUILDING_USES: readonly MassingBuildingUse[] = [
+  "residential",
+  "commercial",
+  "retail",
+  "mixed_use",
+  "industrial",
+  "civic",
+  "recreation",
+];
+
+export function massingBuildingUses(): readonly MassingBuildingUse[] {
+  return MASSING_BUILDING_USES;
+}
+
+export function isMassingBuildingUse(value: unknown): value is MassingBuildingUse {
+  return typeof value === "string" && (MASSING_BUILDING_USES as readonly string[]).includes(value);
+}
+
+export function massingUseLabel(use: MassingBuildingUse | null): string {
+  return BUILDING_USE_META[use ?? "unclassified"].label;
+}
+
+export function formatMassingHeight(height: number): string {
+  return `${Math.round(height)} m`;
+}
+
+export function massingBuildingMeta(building: Pick<ParsedMassingBuilding, "use" | "height" | "levels">): string {
+  const parts = [massingUseLabel(building.use), formatMassingHeight(building.height)];
+  if (building.levels != null) parts.push(`${building.levels} level${building.levels === 1 ? "" : "s"}`);
+  return parts.join(" · ");
+}
+
+export const LAYER_DISPLAY_SEPARATOR = " › ";
+
+export function middleTruncate(text: string, max: number): string {
+  if (text.length <= max) return text;
+  const keep = max - 1;
+  const head = Math.ceil(keep / 2);
+  return `${text.slice(0, head)}…${text.slice(text.length - (keep - head))}`;
+}
+
+export const SCHEME_HEADING_MAX_CHARS = 28;
+
+export function schemeHeading(scheme: string): string {
+  return middleTruncate(splitLayerPath(scheme).slice(-2).join(LAYER_DISPLAY_SEPARATOR), SCHEME_HEADING_MAX_CHARS);
+}
+
+export function massingLayerDisplay(building: Pick<ParsedMassingBuilding, "name" | "layerPath">): string | null {
+  if (isDefaultLayerPath(building.layerPath)) return null;
+  if (layerLeafName(building.layerPath!) === building.name) return null;
+  return splitLayerPath(building.layerPath!).join(LAYER_DISPLAY_SEPARATOR);
+}
+
+export type MassingBuildingGroup<T extends Pick<ParsedMassingBuilding, "scheme">> = {
+  scheme: string | null;
+  buildings: T[];
+};
+
+export function groupMassingBuildings<T extends Pick<ParsedMassingBuilding, "scheme">>(
+  buildings: T[],
+): MassingBuildingGroup<T>[] {
+  const groups = new Map<string | null, T[]>();
+  for (const building of buildings) {
+    const list = groups.get(building.scheme) ?? [];
+    list.push(building);
+    groups.set(building.scheme, list);
+  }
+  return [...groups.entries()]
+    .sort(([a], [b]) => (a == null ? -1 : b == null ? 1 : 0))
+    .map(([scheme, list]) => ({ scheme, buildings: list }));
+}
+
+export function massingSourceLine(fileName: string): string {
+  return `Source: your model (${fileName})`;
+}
+
+export type MassingBuildingPart = Omit<ImportedMassing, "buildings"> & { buildings: [ImportedMassingBuilding] };
+
+export function massingBuildingPart(
+  massing: ImportedMassing,
+  building: ImportedMassingBuilding,
+): MassingBuildingPart {
+  const indices = new Uint32Array((building.triEnd - building.triStart) * 3);
+  for (let i = 0; i < indices.length; i++) {
+    indices[i] = massing.indices[building.triStart * 3 + i]! - building.vertexStart;
+  }
+  const starts = massing.partTriangleStarts
+    .filter((start) => start >= building.triStart && start < building.triEnd)
+    .map((start) => start - building.triStart);
+  if (starts[0] !== 0) starts.unshift(0);
+  starts.push(building.triEnd - building.triStart);
+  return {
+    ...massing,
+    positions: massing.positions.subarray(building.vertexStart * 3, building.vertexEnd * 3),
+    indices,
+    triangles: building.triEnd - building.triStart,
+    partTriangleStarts: starts,
+    buildings: [building],
+  };
+}
+
+export type VisibleMassingBuilding = {
+  massing: ImportedMassing;
+  building: ImportedMassingBuilding;
+  part: MassingBuildingPart;
+  colour: string;
+};
+
+const partCache = new WeakMap<ImportedMassingBuilding, { massing: ImportedMassing; part: MassingBuildingPart }>();
+
+function cachedPart(massing: ImportedMassing, building: ImportedMassingBuilding): MassingBuildingPart {
+  const hit = partCache.get(building);
+  if (
+    hit &&
+    hit.massing.positions === massing.positions &&
+    hit.massing.indices === massing.indices &&
+    hit.massing.placement === massing.placement &&
+    hit.massing.colour === massing.colour &&
+    hit.massing.id === massing.id
+  ) {
+    return hit.part;
+  }
+  const part = massingBuildingPart(massing, building);
+  partCache.set(building, { massing, part });
+  return part;
+}
+
+export function visibleMassingBuildings(imported: ImportedMassing[]): VisibleMassingBuilding[] {
+  const out: VisibleMassingBuilding[] = [];
+  for (const massing of imported) {
+    if (!massing.visible) continue;
+    for (const building of massing.buildings) {
+      if (!building.visible) continue;
+      out.push({
+        massing,
+        building,
+        part: cachedPart(massing, building),
+        colour: massingBuildingColour(massing, building),
+      });
+    }
+  }
+  return out;
+}
+
+export type MassingBuildingExport = Pick<ImportedMassing, "name" | "positions" | "indices" | "placement" | "colour">;
+
+export function massingExportParts(imported: ImportedMassing[]): MassingBuildingExport[] {
+  return visibleMassingBuildings(imported).map(({ building, part, colour }) => ({
+    name: building.name,
+    positions: part.positions,
+    indices: part.indices,
+    placement: part.placement,
+    colour,
+  }));
+}
