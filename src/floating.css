@@ -1754,14 +1754,26 @@ body,
   gap: 6px;
 }
 
-.model .right-inspector {
+.model .right-hud-stack {
   position: fixed;
   top: 68px;
   right: 14px;
   z-index: var(--z-studio-inspector);
-  width: 268px;
-  max-height: calc(100vh - 134px);
-  border-radius: 13px;
+  width: 304px;
+  max-height: var(--right-hud-max-height, calc(100vh - 76px));
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  pointer-events: none;
+}
+
+.model .right-inspector {
+  position: relative;
+  flex: 0 1 auto;
+  min-height: 0;
+  box-sizing: border-box;
+  width: 100%;
+  border-radius: var(--radius-lg);
   padding: 11px 12px;
   display: flex;
   flex-direction: column;
@@ -3889,14 +3901,15 @@ body,
 }
 
 .model .bottom-bar.env-console {
+  --env-console-lane: calc(100vw - var(--env-console-lane-left, 16px) - var(--env-console-lane-right, 16px));
   position: fixed !important;
   bottom: 14px !important;
-  left: 50% !important;
+  left: calc(var(--env-console-lane-left, 16px) + var(--env-console-lane) / 2) !important;
   transform: translateX(-50%) !important;
   z-index: 32 !important;
   width: max-content !important;
-  min-width: min(720px, calc(100vw - 32px)) !important;
-  max-width: calc(100vw - 32px) !important;
+  min-width: min(720px, var(--env-console-lane)) !important;
+  max-width: var(--env-console-lane) !important;
   height: auto !important;
   min-height: 76px !important;
   padding: var(--space-2) var(--space-3) !important;

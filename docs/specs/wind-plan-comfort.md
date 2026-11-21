@@ -6,7 +6,7 @@ In Plan view with Wind Rose on, the ground becomes a top-down wind diagram. A **
 
 ## What it looks like
 
-Screens this touches: Plan view of the 3D model with Analysis → Wind Rose on; the wind-rose card (left), which holds the Velocity and Comfort legends; the bottom wind console; Site Intelligence (right, collapse only).
+Screens this touches: Plan view of the 3D model with Analysis → Wind Rose on; the wind-rose card (right, stacked under Site Intelligence since 22 Nov 2026), which holds the Velocity and Comfort legends and, in 3D, the Wind streaks slider; the bottom wind console; Site Intelligence (right).
 
 Sketch or screenshot (Paper mock-ups v2, approved by Designbot on 17 Nov 2026):
 
@@ -75,28 +75,29 @@ These replace the hover tooltip, selected mark and guide-label details above whe
   - The field is clipped to the site parcel, with no dashed red site stroke on the comfort map (Kelvin's call, 19 Nov 2026). Where there is no parcel (for example NSW cuts with no Vicmap parcel), the clip falls back to the cut rectangle.
   - Inside the cut but outside the site: a muted grey base map (#F3F3F3) with soft grey roads, water in the app blue (#7FBFFF, Kelvin's call, 20 Nov 2026) and grey-green parks. No map tiles, street labels or wind roses.
   - Buildings are light grey (#C5C5C5) with the same light ink edge, inside and outside the site.
-  - The Comfort swatches in the left Pedestrian comfort card (see Panels).
+  - The Comfort swatches in the Pedestrian comfort card (see Panels).
 - The four time-of-day wind roses in the reference are left out for now.
 - The card shows "Unsafe: N areas" or "Unsafe: none". Direction reads "All".
-- Preference: comfort map styled like the reference: five Lawson colours (Sitting, Standing, Strolling, Walking, Uncomfortable), opaque fill drawn cell by cell (since 20 Nov 2026), clipped to the site (cut fallback when no parcel), muted grey base map with light-grey buildings (Kelvin's yes, 19 Nov 2026). Since 5:27 PM that day: no dashed red site stroke, swatches in the left card.
+- Preference: comfort map styled like the reference: five Lawson colours (Sitting, Standing, Strolling, Walking, Uncomfortable), opaque fill drawn cell by cell (since 20 Nov 2026), clipped to the site (cut fallback when no parcel), muted grey base map with light-grey buildings (Kelvin's yes, 19 Nov 2026). Since 5:27 PM that day: no dashed red site stroke, swatches in the wind-rose card (then on the left; on the right since 22 Nov 2026).
 
 ### Panels and console
-- The plan rows (Season, Direction, Reference in m/s or Criteria "Lawson", "Indicative only, not a CFD study") sit at the top of the existing wind-rose card, with "Unsafe: N areas" in Comfort. In Wind speed the card footer holds the horizontal Velocity (m/s) bar and ticks; in Comfort it holds the Lawson swatches. The card is 272px wide with 16px padding, and the rose fills the 240px content width (up from 160px in a 236px card with 12px padding; Designbot, 18 Nov 2026). The card stays at least 8px clear of the bottom console, the left rail and the compass, and scrolls rather than covering the console when space runs short. At 1280 wide or less the console starts 8px right of the 272px card.
+- The plan rows (Season, Direction, Reference in m/s or Criteria "Lawson", "Indicative only, not a CFD study") sit at the top of the existing wind-rose card, with "Unsafe: N areas" in Comfort. In Wind speed the card footer holds the horizontal Velocity (m/s) bar and ticks; in Comfort it holds the Lawson swatches. The card has 16px padding; in Plan the rose fills the content width (270px in the 304px card since 22 Nov 2026; it was 240px in the 272px card, Designbot, 18 Nov 2026). Since 22 Nov 2026 (Kelvin's go) the card sits on the right, directly under Site Intelligence with a 12px gap; both are 304px wide (Site Intelligence was 268, the card 272) with the same right edge, 14px from the viewport edge, and the column starts at y 68. The two cards share one column that stops at least 8px above the Analysis console when the console is under it, otherwise 8px above the bottom, and stays clear of the compass; when they don't both fit they share the height and each scrolls inside rather than covering the console. The console is centred between the left rail (or open outliner) and the right column, at least 8px from each, at 1280 and 1440.
 - The closer stations in "Nearby stations" each keep their distance ("7.9 km") as one unbreakable unit, never clipped or split. The disclosure's tooltip keeps the full single-line "Closer:" text.
-- In Comfort the legend sits in the left Pedestrian comfort card footer, below the rose and station lines (Kelvin's call, 19 Nov 2026; there is no bottom-right legend card): a "COMFORT (m/s, 5% of the time)" title (10px/700 uppercase, ink-3, unit in normal case), then an 8px bar of five equal colour segments (Sitting to Uncomfortable) with the Lawson limits 4, 6, 8 and 10 m/s as mono ticks on the boundaries, then a two-column list of the five classes, each a 12×8px swatch, an 11px/500 ink name and the class's share of the site's land in mono ink-2 (whole percent, "<1%" for slivers; Uncomfortable spans both columns). Shares count land cells inside the site clip, leaving out buildings and water, and appear once Comfort has computed. Kelvin's call, 20 Nov 2026, after a look at how published Lawson comfort maps label their bands (speed limit and exceedance stated with the colours). No Unsafe row. The card scrolls rather than covering the console.
+- In Comfort the legend sits in the Pedestrian comfort card footer, below the rose and station lines (Kelvin's call, 19 Nov 2026; there is no bottom-right legend card): a "COMFORT (m/s, 5% of the time)" title (10px/700 uppercase, ink-3, unit in normal case), then an 8px bar of five equal colour segments (Sitting to Uncomfortable) with the Lawson limits 4, 6, 8 and 10 m/s as mono ticks on the boundaries, then a two-column list of the five classes, each a 12×8px swatch, an 11px/500 ink name and the class's share of the site's land in mono ink-2 (whole percent, "<1%" for slivers; Uncomfortable spans both columns). Shares count land cells inside the site clip, leaving out buildings and water, and appear once Comfort has computed. Kelvin's call, 20 Nov 2026, after a look at how published Lawson comfort maps label their bands (speed limit and exceedance stated with the colours). No Unsafe row. The card scrolls rather than covering the console.
 - The switch uses the white raised sub-option style. Wind Rose stays the one yellow active.
 - Plan wind views use m/s only (no km/h in the console) and the console has no DIR readout.
 - Buildings have a 1px #1A1A1A edge at 40% opacity: white footprints on Wind speed, light grey on Comfort. Tree dots are hidden in wind plan views.
-- At 1280 wide or less, Site Intelligence collapses to its header while a wind plan is showing.
+- Site Intelligence no longer collapses to its header in wind plan views; it shares the right column with the wind-rose card (22 Nov 2026).
+- In 3D with Wind Rose on (when the ground streaks run), a **Wind streaks** slider sits pinned at the foot of the card, below the Velocity legend: a 10px/700 uppercase ink-3 "WIND STREAKS" label with "Default" on the right at 1.0×, "Fewer" and "More" in 11px ink-3 either side of the 1px-track range input. It multiplies the area-scaled streak count from 0.5× to 2.5× (default 1.0×, steps of 0.1); the result is clamped to 400–8,000 streaks, so a 1 km² cut stays 2,500 at 1.0× and reaches 5,000 at 2.0×. The multiplier persists in the browser; raw counts are never shown. It is hidden in Drawing, in Plan wind views and when the streaks are off (Kelvin's go, 22 Nov 2026).
 - Colours come from tokens only (DESIGN-SYSTEM.md); any deviation is listed in the PR body.
 
 ### Kelvin's 19 Nov 2026 notes (5:18 PM AEDT, approved 5:27 PM AEDT)
-- No duplicate rose card under Site Intelligence: the only wind-rose card is the left one. The console Wind Rose chip (3D only) shows or hides it (on by default). In Plan the Pedestrian Comfort / Plan Wind card stays visible even if that chip is off.
+- One wind-rose card only. Since 22 Nov 2026 it sits on the right, stacked under Site Intelligence (one card, not a second rose). The console Wind Rose chip (3D only) shows or hides it (on by default). In Plan the Pedestrian Comfort / Plan Wind card stays visible even if that chip is off.
 - 3D Wind Flow petals are clickable with the same hover, selected arc and tooltip as plan Wind speed, and share the heading with plan: picking a petal in either view turns the 3D streaks and the plan map to that sector, and leaves a design wind the same way.
 - The 3D card uses the m/s Velocity legend on the site's scale, not the old km/h bar or the sheltered / open legend, and has no Pedestrian comfort rows.
 - Comfort stays all-directions, with no picker.
 - The comfort map has no red dashed site stroke; the site clip stays.
-- The Comfort swatches live in the left Pedestrian comfort card, not a bottom-right HUD.
+- The Comfort swatches live in the Pedestrian comfort card (right column since 22 Nov 2026), not a bottom-right HUD.
 - Band edges are slightly softer and smoother, and tiny unsafe patches are smaller, lighter marks. Lawson colours and thresholds are unchanged. Still indicative, not CFD.
 
 ## How we'll know it works
@@ -114,7 +115,7 @@ These replace the hover tooltip, selected mark and guide-label details above whe
 - [ ] Comfort: five Lawson bands (Sitting, Standing, Strolling at 8 m/s, Walking, Uncomfortable) in the reference colours, drawn cell by cell as in the Wind speed map and no isolines; no Unsafe hatch, outline or mark on the map; the card reads "Unsafe: N areas" or "Unsafe: none"; Direction reads "All".
 - [ ] Comfort: the fill stops at the site parcel with no dashed red stroke; with no parcel it fills the cut.
 - [ ] Comfort: outside the site the cut shows a muted grey base map with light-grey buildings, grey roads, and soft water and park tones; no tiles or labels.
-- [ ] Comfort: the colour bar with 4/6/8/10 m/s limits and the five classes with their site shares (no Unsafe row) sit in the left Pedestrian comfort card; no bottom-right legend card; the card does not overflow the console.
+- [ ] Comfort: the colour bar with 4/6/8/10 m/s limits and the five classes with their site shares (no Unsafe row) sit in the Pedestrian comfort card on the right, under Site Intelligence; no bottom-right legend card; the card does not overflow the console.
 - [ ] A windy station (Sydney Airport, for example White Bay) no longer flags open ground as Unsafe; Unsafe stays limited to strong speed-ups.
 - [ ] Water (Pyrmont's bays) shows in the app blue on Wind speed and Comfort, never a speed colour or comfort band, and never Unsafe; it does not lift the speed scale.
 - [ ] Tall buildings leave long, tapered sheltered streaks on the lee side; windward corners and wind-aligned streets read faster than open ground on both maps.
@@ -122,7 +123,8 @@ These replace the hover tooltip, selected mark and guide-label details above whe
 - [ ] "Nearby stations" reads each distance whole ("7.9 km", never "79 km").
 - [ ] Console shows m/s only in plan wind views, with no DIR readout.
 - [ ] Buildings with a light ink edge, white on Wind speed and light grey on Comfort; no tree dots in wind plan views.
-- [ ] At ≤1280 Site Intelligence collapses to its header; zero overlap and gaps of at least 8px at 1024, 1280 and 1440.
+- [ ] Site Intelligence and the wind-rose card stack on the right (304px, 12px gap, Site Intelligence on top); the column clears the console and the console clears the left rail and the column by at least 8px at 1280 and 1440.
+- [ ] In 3D with Wind Rose on, the Wind streaks slider shows at the card foot (Default at 1.0×), stays visible when the card scrolls, and changes the streak density; it is hidden in Drawing and Plan wind views.
 - [ ] Import a block: wind recomputes, the lee calms and the corners speed up; hiding or removing the import restores the previous field.
 - [ ] Import a block: its footprint appears on both plan wind maps (white on Wind speed, light grey on Comfort) and updates when the import is moved, hidden or removed.
 - [ ] Hiding a map building with Hide selected (or hiding its use) drops it from the wind field.

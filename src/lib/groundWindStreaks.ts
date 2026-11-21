@@ -12,7 +12,7 @@ export const GROUND_WIND_INDICES_PER_STREAK = (GROUND_WIND_TRAIL_POINTS - 1) * 6
 export const GROUND_WIND_VERTEX_STRIDE = 8;
 export const GROUND_WIND_STREAKS_DEFAULT = 2500;
 export const GROUND_WIND_STREAKS_MIN = 400;
-export const GROUND_WIND_STREAKS_MAX = 3000;
+export const GROUND_WIND_STREAKS_MAX = 8000;
 export const GROUND_WIND_DEFAULT_AREA_M2 = 1000 * 1000;
 export const GROUND_WIND_LIFE_MIN_S = 3;
 export const GROUND_WIND_LIFE_MAX_S = 5;
@@ -54,9 +54,12 @@ export type GroundWindStreaks = {
   edgeRespawns: number;
 };
 
-export function groundWindStreakCount(model: Pick<CityModel, "sideM" | "widthM" | "heightM">): number {
+export function groundWindStreakCount(
+  model: Pick<CityModel, "sideM" | "widthM" | "heightM">,
+  density = 1,
+): number {
   const area = (model.widthM ?? model.sideM) * (model.heightM ?? model.sideM);
-  const scaled = Math.round((GROUND_WIND_STREAKS_DEFAULT * area) / GROUND_WIND_DEFAULT_AREA_M2);
+  const scaled = Math.round((GROUND_WIND_STREAKS_DEFAULT * area * density) / GROUND_WIND_DEFAULT_AREA_M2);
   return Math.min(GROUND_WIND_STREAKS_MAX, Math.max(GROUND_WIND_STREAKS_MIN, scaled));
 }
 

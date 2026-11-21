@@ -7,6 +7,7 @@ import {
   GROUND_WIND_INDICES_PER_STREAK,
   GROUND_WIND_STREAKS_DEFAULT,
   GROUND_WIND_STREAKS_MAX,
+  GROUND_WIND_STREAKS_MIN,
   GROUND_WIND_VERTEX_STRIDE,
   GROUND_WIND_VERTS_PER_STREAK,
   groundWindLifeAlpha,
@@ -64,6 +65,17 @@ describe("groundWindStreaks", () => {
     expect(groundWindStreakCount({ sideM: 1000 })).toBe(GROUND_WIND_STREAKS_DEFAULT);
     expect(groundWindStreakCount({ sideM: 500 })).toBeLessThan(GROUND_WIND_STREAKS_DEFAULT);
     expect(groundWindStreakCount({ sideM: 3000 })).toBe(GROUND_WIND_STREAKS_MAX);
+  });
+
+  it("multiplies the area count by the Wind streaks density and clamps it", () => {
+    expect(GROUND_WIND_STREAKS_MIN).toBe(400);
+    expect(GROUND_WIND_STREAKS_MAX).toBe(8000);
+    expect(groundWindStreakCount({ sideM: 1000 }, 1)).toBe(2500);
+    expect(groundWindStreakCount({ sideM: 1000 }, 2)).toBe(5000);
+    expect(groundWindStreakCount({ sideM: 1000 }, 0.5)).toBe(1250);
+    expect(groundWindStreakCount({ sideM: 2000 }, 2.5)).toBe(8000);
+    expect(groundWindStreakCount({ sideM: 250 }, 0.5)).toBe(400);
+    expect(groundWindStreakCount({ sideM: 1000, widthM: 1500, heightM: 1000 }, 1.5)).toBe(5625);
   });
 
   it("fades in and out over the life", () => {

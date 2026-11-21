@@ -70,7 +70,7 @@ function FlowHarness({ initialDesign = null, flowHeading = true }: { initialDesi
   );
 }
 
-describe("the left wind rose card", () => {
+describe("the wind rose card", () => {
   const card = (tab: string, analysisKind: ActiveAnalysis) => windRoseCardOn({ tab, analysisKind, siteWind: pyrmont });
 
   it("shows in wind analysis on the 3D and Drawing tabs", () => {
@@ -87,7 +87,7 @@ describe("the left wind rose card", () => {
 
   it("has no Wind Rose chip and mounts no floating rose overlay", () => {
     expect(source("src/components/model/ModelPageViewportFooter.tsx")).not.toMatch(/windRoseChipOn|toggleWindRoseChip|showRose/);
-    expect(source("src/components/model/ModelPageView.tsx")).toContain("windRoseCardOn(");
+    expect(source("src/components/model/ModelPageSidebar.tsx")).toContain("windRoseCardOn(");
     expect(source("src/components/model/ModelPageViewportTabs.tsx")).not.toContain("WindRoseOverlay");
     expect(source("src/index.css")).not.toContain(".wind-rose-overlay");
   });
