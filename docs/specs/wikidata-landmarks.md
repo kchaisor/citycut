@@ -31,7 +31,7 @@ Sketch or screenshot:
 
 ### PR 2 notes (21 Nov 2026)
 
-- The query also takes railway stations (Q55488), not only buildings and structures (Q811979), so stations like Flinders Street come through. Kelvin's go, 20 Nov 2026.
+- Railway stations (Q55488) are fetched too, so stations like Flinders Street come through (Kelvin's go, 20 Nov 2026). They come from a second, separate query over the whole area. On 21 Nov a single query covering both classes made the busiest CBD cell hit Wikidata's rate limit (HTTP 429), so the building query stays exactly as in PR 1. The live fallback runs the same two queries for the cut.
 - Matching is by point in footprint only for now. Overture does not carry the OpenStreetMap `wikidata` tag through to CityCut's buildings, so the tag match in step 2 is not used yet.
 - Several Wikidata items can sit on one building (Eureka Tower and Eureka Skydeck, for example). PR 2 keeps them all; PR 3 decides which one the popover shows.
 - Of the 23 towers in `landmark-heights.json`, 18 have a Wikidata item and 5 do not (Prima Pearl, 405 Bourke Street, 35 Spring Street, Ernst & Young Plaza, HWT Tower). Crown Towers' Wikidata point is about 135 m from the tower, so it will not match its footprint. A test pins all of this.

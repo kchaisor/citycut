@@ -36,7 +36,7 @@ export function bboxCells(bbox, stepDeg) {
 
 const wktPoint = (lon, lat) => `"Point(${lon} ${lat})"^^geo:wktLiteral`;
 
-export function landmarkQuery(cell) {
+export function landmarkQuery(cell, classQid = ARCHITECTURAL_STRUCTURE) {
   return `SELECT ?item ?label ?coord ?height ?floors ?inception ?opened ?article
   ?architect ?architectLabel ?style ?styleLabel ?heritage ?heritageLabel WHERE {
   SERVICE wikibase:box {
@@ -44,7 +44,7 @@ export function landmarkQuery(cell) {
     bd:serviceParam wikibase:cornerSouthWest ${wktPoint(cell.west, cell.south)} .
     bd:serviceParam wikibase:cornerNorthEast ${wktPoint(cell.east, cell.north)} .
   }
-  ${LANDMARK_CLASSES.map((qid) => `{ ?item wdt:P31/wdt:P279* wd:${qid} . }`).join(" UNION ")}
+  ?item wdt:P31/wdt:P279* wd:${classQid} .
   OPTIONAL { ?item rdfs:label ?label FILTER(LANG(?label) = "en") }
   OPTIONAL { ?item p:P2048 ?heightStatement . ?heightStatement a wikibase:BestRank ; psn:P2048/wikibase:quantityAmount ?height . }
   OPTIONAL { ?item wdt:P1101 ?floors }
@@ -57,9 +57,9 @@ export function landmarkQuery(cell) {
 }`;
 }
 
-export function landmarkQueryUrl(cell) {
+export function landmarkQueryUrl(cell, classQid = ARCHITECTURAL_STRUCTURE) {
   const url = new URL(WIKIDATA_SPARQL_URL);
-  url.searchParams.set("query", landmarkQuery(cell));
+  url.searchParams.set("query", landmarkQuery(cell, classQid));
   url.searchParams.set("format", "json");
   return url.toString();
 }

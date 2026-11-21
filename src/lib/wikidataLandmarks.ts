@@ -3,6 +3,7 @@ import {
   finaliseItems,
   groupBindings,
   landmarkQueryUrl,
+  LANDMARK_CLASSES,
   WIKIDATA_LANDMARKS_NAME,
   WIKIDATA_SCHEMA_VERSION,
   type WikidataBbox,
@@ -79,8 +80,12 @@ export function loadBakedLandmarks(fetchImpl: Fetch = fetch): Promise<BakedLoad>
 }
 
 export async function fetchLiveLandmarks(bbox: WikidataBbox, fetchImpl: Fetch = fetch): Promise<WikidataLandmark[]> {
-  const body = await fetchJson(fetchImpl, landmarkQueryUrl(bbox), { headers: { Accept: "application/sparql-results+json" } });
-  return finaliseItems(groupBindings(checkSparqlJson(body)), bbox).items;
+  const grouped = new Map<string, unknown>();
+  for (const classQid of LANDMARK_CLASSES) {
+    const body = await fetchJson(fetchImpl, landmarkQueryUrl(bbox, classQid), { headers: { Accept: "application/sparql-results+json" } });
+    groupBindings(checkSparqlJson(body), grouped);
+  }
+  return finaliseItems(grouped, bbox).items;
 }
 
 export function cutBbox(model: Pick<CityModel, "center" | "sideM" | "widthM" | "heightM">): WikidataBbox {

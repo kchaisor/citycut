@@ -14,6 +14,7 @@ import {
   landmarksManifest,
   minimumItemsCheck,
   queryCells,
+  RAILWAY_STATION,
   WIKIDATA_LANDMARKS_NAME,
   WIKIDATA_MANIFEST_NAME,
 } from "../shared/wikidataLandmarks.js";
@@ -45,25 +46,26 @@ async function main() {
   let rows = 0;
   let queried = 0;
   const pause = () => (PAUSE_MS > 0 ? new Promise((r) => setTimeout(r, PAUSE_MS)) : Promise.resolve());
-  const fetchCell = async (cell) => {
+  const fetchCell = (classQid) => async (cell) => {
     if (queried > 0) await pause();
     queried += 1;
-    return fetchWithRetry(landmarkQueryUrl(cell), (b) => checkSparqlJson(parseJsonBytes(b)), {
-      label: `Wikidata cell ${cell.west.toFixed(4)},${cell.south.toFixed(4)},${cell.east.toFixed(4)},${cell.north.toFixed(4)}`,
+    return fetchWithRetry(landmarkQueryUrl(cell, classQid), (b) => checkSparqlJson(parseJsonBytes(b)), {
+      label: `Wikidata ${classQid ?? "structures"} cell ${cell.west.toFixed(4)},${cell.south.toFixed(4)},${cell.east.toFixed(4)},${cell.north.toFixed(4)}`,
       headers: UA,
       attempts: 2,
       timeoutMs: 70_000,
       backoffMs: [10_000],
     });
   };
-  const { splits } = await queryCells(cells, fetchCell, {
-    minCellDeg: MIN_CELL_DEG,
-    onCell: ({ rows: bindings, remaining, splits: splitCount }) => {
-      rows += bindings.length;
-      groupBindings(bindings, grouped);
-      log(`${queried} queries, ${remaining} cells left, ${splitCount} splits: ${bindings.length} rows, ${grouped.size} items so far`);
-    },
-  });
+  const onCell = ({ rows: bindings, remaining, splits: splitCount }) => {
+    rows += bindings.length;
+    groupBindings(bindings, grouped);
+    log(`${queried} queries, ${remaining} cells left, ${splitCount} splits: ${bindings.length} rows, ${grouped.size} items so far`);
+  };
+  const structures = await queryCells(cells, fetchCell(undefined), { minCellDeg: MIN_CELL_DEG, onCell });
+  log("railway stations over the whole area");
+  const stations = await queryCells([bbox], fetchCell(RAILWAY_STATION), { minCellDeg: MIN_CELL_DEG, onCell });
+  const splits = structures.splits + stations.splits;
   const { items, dropped } = finaliseItems(grouped, bbox);
   log(`kept ${items.length} items; dropped ${dropped.noEnglishLabel} without an English label, ${dropped.noCoordinateInBbox} without a coordinate in the box`);
   minimumItemsCheck(items.length, MIN_ITEMS);

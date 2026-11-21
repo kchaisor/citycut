@@ -39,8 +39,8 @@ export const RAILWAY_STATION: string;
 export const LANDMARK_CLASSES: string[];
 export const GREATER_MELBOURNE_BBOX: WikidataBbox;
 
-export function landmarkQuery(cell: WikidataBbox): string;
-export function landmarkQueryUrl(cell: WikidataBbox): string;
+export function landmarkQuery(cell: WikidataBbox, classQid?: string): string;
+export function landmarkQueryUrl(cell: WikidataBbox, classQid?: string): string;
 export function checkSparqlJson(body: unknown): WikidataBinding[];
 export function groupBindings(rows: WikidataBinding[], accumulator?: Map<string, unknown>): Map<string, unknown>;
 export function finaliseItems(grouped: Map<string, unknown>, bbox: WikidataBbox): { items: WikidataLandmark[]; dropped: WikidataDropped };
