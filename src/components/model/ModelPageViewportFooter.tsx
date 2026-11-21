@@ -91,6 +91,7 @@ export function ModelPageViewportFooter({ vm }: { vm: import("./useModelPage").M
           >
             <div className="env-top-row">
               <span className="env-console-title">Analysis</span>
+              <span className="v-sep hud-sep" aria-hidden="true" />
               <div className="env-mode-seg" role="group" aria-label="Analysis modes">
                 {(
                   [
@@ -300,6 +301,8 @@ export function ModelPageViewportFooter({ vm }: { vm: import("./useModelPage").M
                         );
                       })}
                     </div>
+
+                    <span className="v-sep hud-sep" aria-hidden="true" />
 
                     <button
                       type="button"

@@ -172,6 +172,21 @@ describe("Analysis bar", () => {
     expect(calls.at(-1)?.showPath).toBe(true);
   });
 
+  it("marks the active mode with the accent class and styles it as an accent mode chip", () => {
+    render(<Footer initialKind="solar" />);
+    expect(modeButton("Solar Study").className).toBe("env-mode-btn active");
+    expect(modeButton("Wind Rose").className).toBe("env-mode-btn");
+    const css = readFileSync(resolve(__dirname, "../../floating.css"), "utf8");
+    const rule = (sel: string) => css.match(new RegExp(`^${sel.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} \\{([^}]*)\\}`, "m"))?.[1] ?? "";
+    const active = rule(".model .bottom-bar.env-console .env-mode-btn.active");
+    expect(active).toContain("background: var(--accent)");
+    expect(active).toContain("inset 0 0 0 1px var(--ink)");
+    expect(active).toContain("font-weight: 700");
+    expect(rule(".model .bottom-bar.env-console .env-console-title")).toContain("font-size: var(--fs-micro)");
+    expect(rule(".model .bottom-bar.env-console .p-pill")).toContain("white-space: nowrap");
+    expect(rule(".model .bottom-bar.env-console .date-presets")).toContain("flex-shrink: 0");
+  });
+
   it("stays hidden on Satellite", () => {
     render(<Footer initialKind="solar" tab="satellite" />);
     expect(screen.queryByRole("region", { name: "Environmental analysis console" })).toBeNull();

@@ -3899,8 +3899,8 @@ body,
   max-width: calc(100vw - 32px) !important;
   height: auto !important;
   min-height: 76px !important;
-  padding: 7px 11px !important;
-  border-radius: 12px !important;
+  padding: var(--space-2) var(--space-3) !important;
+  border-radius: var(--radius-lg) !important;
   background: var(--bg-card) !important;
   backdrop-filter: blur(18px) saturate(150%) !important;
   -webkit-backdrop-filter: blur(18px) saturate(150%) !important;
@@ -3909,7 +3909,7 @@ body,
   display: flex !important;
   flex-direction: column !important;
   align-items: stretch !important;
-  gap: 6px !important;
+  gap: var(--space-2) !important;
   box-sizing: border-box !important;
 }
 
@@ -3923,73 +3923,75 @@ body,
 
 .model .bottom-bar.env-console .env-console-title {
   font-family: var(--sans) !important;
-  font-size: 9.5px !important;
-  font-weight: 600 !important;
+  font-size: var(--fs-micro) !important;
+  line-height: var(--lh-micro) !important;
+  font-weight: 700 !important;
   color: var(--ink-3) !important;
   letter-spacing: 0.08em !important;
   text-transform: uppercase !important;
-  padding: 0 4px !important;
+  padding: 0 var(--space-1) !important;
   flex-shrink: 0 !important;
 }
 
 .model .bottom-bar.env-console .env-top-row {
   display: flex !important;
+  flex-wrap: wrap !important;
   align-items: center !important;
-  justify-content: space-between !important;
-  gap: 8px !important;
-  min-height: 30px !important;
+  justify-content: flex-start !important;
+  gap: var(--space-2) !important;
+  min-height: var(--control-sm) !important;
 }
 
 .model .bottom-bar.env-console .env-mode-seg {
   display: inline-flex !important;
   align-items: center !important;
-  background: var(--hud-track-bg) !important;
-  padding: 2.5px !important;
-  border-radius: 7px !important;
-  gap: 2px !important;
+  background: transparent !important;
+  padding: 0 !important;
+  border-radius: 0 !important;
+  gap: var(--space-1) !important;
   flex-shrink: 0 !important;
 }
 
 .model .bottom-bar.env-console .env-mode-btn {
-  height: 25px !important;
-  padding: 0 9px !important;
-  border-radius: 5px !important;
+  height: var(--control-sm) !important;
+  padding: 0 var(--space-2) !important;
+  border-radius: var(--radius-sm) !important;
   border: 0 !important;
-  background: transparent !important;
+  background: var(--bg-sub) !important;
   font-family: var(--sans) !important;
-  font-size: 11px !important;
-  font-weight: 500 !important;
+  font-size: var(--fs-sm) !important;
+  font-weight: 600 !important;
   color: var(--ink-2) !important;
   display: inline-flex !important;
   align-items: center !important;
-  gap: 5px !important;
+  gap: var(--space-1-5) !important;
   cursor: pointer !important;
   white-space: nowrap !important;
   box-shadow: none !important;
 }
 
 .model .bottom-bar.env-console .env-mode-btn.active {
-  background: var(--ink) !important;
-  color: var(--bg-elev) !important;
-  font-weight: 600 !important;
-  box-shadow: 0 1px 2px rgb(20 20 19 / 16%) !important;
+  background: var(--accent) !important;
+  color: var(--ink) !important;
+  font-weight: 700 !important;
+  box-shadow: inset 0 0 0 1px var(--ink) !important;
 }
 
 .model .bottom-bar.env-console .env-mode-btn.active svg {
-  color: var(--accent) !important;
+  color: var(--ink) !important;
 }
 
 .model .bottom-bar.env-console .solar-telemetry {
   display: inline-flex !important;
   align-items: center !important;
-  gap: 8px !important;
-  padding: 0 10px !important;
-  height: 27px !important;
-  border-radius: 6px !important;
-  background: var(--hud-kpi-bg) !important;
-  border: 1px solid var(--border-subtle) !important;
+  gap: var(--space-2) !important;
+  padding: 0 var(--space-1) !important;
+  height: var(--control-sm) !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  border: 0 !important;
   font-family: var(--mono) !important;
-  font-size: 11px !important;
+  font-size: var(--fs-sm) !important;
   font-variant-numeric: tabular-nums !important;
   white-space: nowrap !important;
 }
@@ -3997,14 +3999,15 @@ body,
 .model .bottom-bar.env-console .st-item {
   display: inline-flex !important;
   align-items: baseline !important;
-  gap: 4px !important;
+  gap: var(--space-1-5) !important;
 }
 
 .model .bottom-bar.env-console .st-k {
-  font-size: 9.5px !important;
+  font-size: var(--fs-micro) !important;
   font-weight: 600 !important;
   color: var(--ink-3) !important;
-  letter-spacing: 0.04em !important;
+  letter-spacing: 0.08em !important;
+  text-transform: uppercase !important;
 }
 
 .model .bottom-bar.env-console .st-v {
@@ -4015,51 +4018,78 @@ body,
 
 .model .bottom-bar.env-console .st-dot {
   color: var(--ink-3) !important;
-  opacity: 0.55 !important;
 }
 
 .model .bottom-bar.env-console .overlay-chips {
   display: inline-flex !important;
   align-items: center !important;
-  gap: 5px !important;
+  gap: var(--space-1) !important;
 }
 
 .model .bottom-bar.env-console .ov-chip {
-  height: 26px !important;
-  padding: 0 8.5px !important;
-  border-radius: 6px !important;
+  height: var(--control-sm) !important;
+  padding: 0 var(--space-2) !important;
+  border-radius: var(--radius-sm) !important;
   font-family: var(--sans) !important;
-  font-size: 11px !important;
-  font-weight: 500 !important;
+  font-size: var(--fs-sm) !important;
+  font-weight: 600 !important;
   color: var(--ink-2) !important;
-  background: var(--hud-kpi-bg) !important;
-  border: 1px solid var(--border-subtle) !important;
+  background: var(--bg-sub) !important;
+  border: 0 !important;
   display: inline-flex !important;
   align-items: center !important;
-  gap: 5px !important;
+  gap: var(--space-1-5) !important;
   cursor: pointer !important;
   white-space: nowrap !important;
   box-shadow: none !important;
 }
 
 .model .bottom-bar.env-console .ov-chip.on {
-  background: rgb(255 245 0 / 28%) !important;
-  border-color: var(--ink) !important;
+  background: var(--accent) !important;
   color: var(--ink) !important;
-  font-weight: 600 !important;
+  font-weight: 700 !important;
+  box-shadow: inset 0 0 0 1px var(--ink) !important;
 }
 
 .model .bottom-bar.env-console .ov-dot {
-  width: 6px !important;
-  height: 6px !important;
-  border-radius: 999px !important;
+  width: var(--space-1-5) !important;
+  height: var(--space-1-5) !important;
+  border-radius: 50% !important;
   background: var(--ink-3) !important;
   display: inline-block !important;
+  flex-shrink: 0 !important;
 }
 
 .model .bottom-bar.env-console .ov-chip.on .ov-dot {
   background: var(--ink) !important;
-  box-shadow: 0 0 0 2px var(--accent) !important;
+  box-shadow: none !important;
+}
+
+.model .bottom-bar.env-console .env-mode-btn:not(.active):hover,
+.model .bottom-bar.env-console .ov-chip:not(.on):not(:disabled):hover,
+.model .bottom-bar.env-console .p-pill:not(.active):hover {
+  background: var(--bg-elev) !important;
+  color: var(--ink) !important;
+}
+
+.model .bottom-bar.env-console .env-mode-btn.active:hover,
+.model .bottom-bar.env-console .ov-chip.on:hover {
+  background: var(--accent-hover) !important;
+}
+
+.model .bottom-bar.env-console .env-mode-btn:focus-visible,
+.model .bottom-bar.env-console .ov-chip:focus-visible,
+.model .bottom-bar.env-console .p-pill:focus-visible,
+.model .bottom-bar.env-console .play-pill:focus-visible {
+  outline: 2px solid var(--ink) !important;
+  outline-offset: 2px !important;
+}
+
+.model .bottom-bar.env-console .hud-sep {
+  width: 1px !important;
+  height: var(--space-4) !important;
+  background: var(--border-subtle) !important;
+  flex-shrink: 0 !important;
 }
 
 .model .bottom-bar.env-console .cam-mini-group {
@@ -4073,19 +4103,19 @@ body,
 .model .bottom-bar.env-console .env-bottom-row {
   display: flex !important;
   align-items: center !important;
-  gap: 7px !important;
-  padding-top: 5px !important;
-  border-top: 1px solid var(--border-subtle) !important;
-  min-height: 31px !important;
+  gap: var(--space-2) !important;
+  padding-top: 0 !important;
+  border-top: 0 !important;
+  min-height: var(--control-sm) !important;
 }
 
 .model .bottom-bar.env-console .date-presets {
   display: inline-flex !important;
   align-items: center !important;
-  background: var(--hud-track-bg) !important;
-  padding: 2px !important;
-  border-radius: 6px !important;
-  gap: 2px !important;
+  background: var(--bg-sub) !important;
+  padding: var(--space-0-5) !important;
+  border-radius: var(--radius-md) !important;
+  gap: var(--space-0-5) !important;
   flex-shrink: 0 !important;
 }
 
@@ -4100,13 +4130,13 @@ body,
 }
 
 .model .bottom-bar.env-console .p-pill {
-  height: 23px !important;
-  padding: 0 7.5px !important;
-  border-radius: 4px !important;
+  height: var(--control-xs) !important;
+  padding: 0 var(--space-2) !important;
+  border-radius: var(--radius-sm) !important;
   border: 0 !important;
   background: transparent !important;
   font-family: var(--sans) !important;
-  font-size: 10.5px !important;
+  font-size: var(--fs-caption) !important;
   font-weight: 500 !important;
   color: var(--ink-2) !important;
   display: inline-flex !important;
@@ -4120,22 +4150,22 @@ body,
   background: var(--bg-elev) !important;
   color: var(--ink) !important;
   font-weight: 600 !important;
-  box-shadow: 0 1px 2px rgb(20 20 19 / 10%) !important;
+  box-shadow: var(--shadow-raised) !important;
 }
 
 .model .bottom-bar.env-console .play-pill {
-  height: 27px !important;
-  padding: 0 8px !important;
-  border-radius: 6px !important;
-  background: var(--hud-kpi-bg) !important;
-  border: 1px solid var(--border-subtle) !important;
+  height: var(--control-sm) !important;
+  padding: 0 var(--space-2) !important;
+  border-radius: var(--radius-sm) !important;
+  background: var(--bg-sub) !important;
+  border: 0 !important;
   font-family: var(--mono) !important;
-  font-size: 10.5px !important;
+  font-size: var(--fs-caption) !important;
   font-weight: 600 !important;
   color: var(--ink) !important;
   display: inline-flex !important;
   align-items: center !important;
-  gap: 4px !important;
+  gap: var(--space-1) !important;
   cursor: pointer !important;
   flex-shrink: 0 !important;
   box-shadow: none !important;
@@ -4143,19 +4173,19 @@ body,
 
 .model .bottom-bar.env-console .play-pill.active {
   background: var(--accent) !important;
-  border-color: var(--ink) !important;
+  box-shadow: inset 0 0 0 1px var(--ink) !important;
 }
 
 .model .bottom-bar.env-console .daylight-scrubber {
   flex: 1 !important;
-  height: 28px !important;
-  border-radius: 7px !important;
-  background: var(--hud-kpi-bg) !important;
-  border: 1px solid var(--border-subtle) !important;
+  height: var(--control-sm) !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  border: 0 !important;
   display: flex !important;
   align-items: center !important;
-  padding: 0 8px !important;
-  gap: 7px !important;
+  padding: 0 !important;
+  gap: var(--space-2) !important;
   position: relative !important;
   overflow: hidden !important;
   min-width: 0 !important;
@@ -4163,12 +4193,12 @@ body,
 
 .model .bottom-bar.env-console .sun-bound {
   font-family: var(--mono) !important;
-  font-size: 9.5px !important;
+  font-size: var(--fs-micro) !important;
   font-weight: 500 !important;
   color: var(--ink-3) !important;
   display: inline-flex !important;
   align-items: center !important;
-  gap: 3px !important;
+  gap: var(--space-1) !important;
   flex-shrink: 0 !important;
   white-space: nowrap !important;
   font-variant-numeric: tabular-nums !important;
@@ -4275,17 +4305,17 @@ body,
 }
 
 .model .bottom-bar.env-console .time-readout-pill {
-  height: 22px !important;
-  padding: 0 8px !important;
-  border-radius: 5px !important;
+  height: var(--control-xs) !important;
+  padding: 0 var(--space-2) !important;
+  border-radius: var(--radius-sm) !important;
   background: var(--ink) !important;
   color: var(--accent) !important;
   font-family: var(--mono) !important;
-  font-size: 11px !important;
+  font-size: var(--fs-caption) !important;
   font-weight: 600 !important;
   display: inline-flex !important;
   align-items: center !important;
-  gap: 5px !important;
+  gap: var(--space-1) !important;
   flex-shrink: 0 !important;
   white-space: nowrap !important;
   font-variant-numeric: tabular-nums !important;

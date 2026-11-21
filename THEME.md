@@ -69,6 +69,7 @@ The name is `--background`. The value is `#EBEBEB`.
 | `--sidebar-panel-w` | Width of the sidebar panel next to the rail. | `320px` |
 | `--z-studio-inspector` | Stacking order of the fixed Site Intelligence panel. | `30` |
 | `--z-studio-topbar` | Stacking order of the floating top-bar HUD (menus paint above the inspector). | `40` |
+| `--fs-micro` / `--lh-micro` | Micro caps type: the ANALYSIS header and the ALT / AZ / DAYLIGHT labels in the Analysis bar. | `10px` / `12px` |
 | `--fs-caption` / `--lh-caption` | Caption type: landmark label pills, the LANDMARK header, the Wikidata link and Buildings helper captions. | `11px` / `16px` |
 | `--fs-sm` / `--lh-sm` | Small type: Landmark block rows in the building popover and the Landmark labels toggle row. | `12px` / `16px` |
 | `--bg-elev` | Raised white surface: landmark label pills and selected sub-options. | `#FFFFFF` |
@@ -77,6 +78,10 @@ The name is `--background`. The value is `#EBEBEB`.
 | `--ink-3` | Muted text: section headers, meta, counts, the LANDMARK header, the Wikidata link, Buildings helper captions. Darkened from `#787670` for contrast (DESIGN-SYSTEM.md). | `#6B6963` |
 | `--border-outer` | 1 px edge of HUD islands and landmark label pills. | `rgb(20 20 19 / 13%)` |
 | `--shadow-raised` | Small lift under landmark label pills. | `0 1px 2px rgb(20 20 19 / 8%)` |
+| `--space-0-5` / `--space-1` / `--space-1-5` | 2 / 4 / 6 px gaps inside controls: the Analysis bar date track and the gaps between its chips and icons. | `2px` / `4px` / `6px` |
+| `--space-2` / `--space-3` / `--space-4` | 8 / 12 / 16 px layout spacing: Analysis bar padding, row and group gaps, divider height. | `8px` / `12px` / `16px` |
+| `--radius-sm` / `--radius-md` / `--radius-lg` | Corner radius of chips (6), the date track (8) and the Analysis bar island (12). | `6px` / `8px` / `12px` |
+| `--control-xs` / `--control-sm` | Control heights: date options and the time readout (24), mode and overlay chips and the play button (28). | `24px` / `28px` |
 | `--z-hud` | Stacking band of the HUD islands. | `30` |
 | `--z-landmark-labels` | Landmark label pills in 3D and plan, just below `--z-hud`. | `29` |
 | `--dur-fast` | Landmark label fade in and out. | `120ms` |
