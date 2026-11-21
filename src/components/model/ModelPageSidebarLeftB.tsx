@@ -1,22 +1,13 @@
 import { sunStudyDateText } from "../../lib/sunStudyExport";
 import { ImportMassingPanel } from "../ImportMassingPanel";
-import { SolarPanel } from "../SolarPanel";
-import { WindPanel } from "../WindPanel";
 import { ExportTiles } from "../ExportTiles";
-import { ViewPanel } from "../ViewPanel";
-import { WalkRipplePanel } from "../WalkRipplePanel";
 import { CRS_NOTE } from "../../lib/crsZone";
 import { exportTiles } from "../../lib/exportTiles";
-import { SITE_ANALYSIS_KINDS, SITE_ANALYSIS_LABELS } from "../../lib/sidebarSections";
-import { ANALYSIS_ICONS } from "./modelPageConstants";
 
 export function ModelPageSidebarLeftB({ vm }: { vm: import("./useModelPage").ModelPageViewModel }) {
   const {
-    analysisKind,
     buildingsAsMesh,
     busy,
-    commitSolar,
-    commitWind,
     crs,
     drawing,
     exportError,
@@ -25,7 +16,6 @@ export function ModelPageSidebarLeftB({ vm }: { vm: import("./useModelPage").Mod
     layerBits,
     leftOpen,
     massing,
-    model,
     planScaleOptions,
     save3dm,
     saveExplodedAxoAi,
@@ -37,74 +27,15 @@ export function ModelPageSidebarLeftB({ vm }: { vm: import("./useModelPage").Mod
     saveSiteAi,
     saveSiteSvg,
     saveSunStudyAi,
-    setAnalysisKind,
     setBuildingsAsMesh,
     setFigureScale,
-    setSunStudySelected,
     solar,
     sunStudyProgress,
-    sunStudySelected,
     tab,
-    walk,
-    walkRipple,
-    windMotion,
-    windNote,
-    windSettings,
   } = vm;
 
   return (
     <>
-            <div className="drawer-section" hidden={leftOpen !== "analysis"}>
-              <div className="tabs site-analysis-tabs" role="tablist" aria-label="Site Analysis">
-                {SITE_ANALYSIS_KINDS.map((kind) => {
-                  const Icon = ANALYSIS_ICONS[kind];
-                  const active = analysisKind === kind;
-                  return (
-                    <button
-                      key={kind}
-                      type="button"
-                      role="tab"
-                      data-analysis={kind}
-                      aria-selected={active}
-                      className={active ? "site-analysis-tab is-active" : "site-analysis-tab"}
-                      onClick={() => setAnalysisKind(kind)}
-                    >
-                      <Icon size={15} strokeWidth={1.75} aria-hidden="true" />
-                      <span>{SITE_ANALYSIS_LABELS[kind]}</span>
-                    </button>
-                  );
-                })}
-              </div>
-              <div hidden={analysisKind !== "solar"}>
-                <SolarPanel
-                  embedded
-                  settings={solar}
-                  onChange={commitSolar}
-                  sideM={model.sideM}
-                  site={{ lat: model.center.lat, lon: model.center.lon }}
-                  selectedCount={sunStudySelected.length}
-                  onClearSelection={() => setSunStudySelected([])}
-                />
-              </div>
-              <div hidden={analysisKind !== "wind"}>
-                <WindPanel
-                  embedded
-                  settings={windSettings}
-                  onChange={commitWind}
-                  note={windNote}
-                  streaksPaused={windMotion.streaksPaused}
-                  animateAnyway={windMotion.animateAnyway}
-                  onAnimateAnyway={windMotion.setAnimateAnyway}
-                />
-              </div>
-              <div hidden={analysisKind !== "view"}>
-                <ViewPanel walk={walk} />
-              </div>
-              <div hidden={analysisKind !== "walkRipple"}>
-                <WalkRipplePanel ripple={walkRipple} />
-              </div>
-            </div>
-
             <div className="drawer-section" hidden={leftOpen !== "import"}>
               <ImportMassingPanel
                 imported={massing.imported}

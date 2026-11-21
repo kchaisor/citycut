@@ -69,7 +69,7 @@ import {
 import { resolveBuildingHeightsAfterCom } from "../../lib/buildingHeightPipeline";import { formatLengthKm } from "../../lib/geo";
 
 import { useSidebarCollapsed } from "../../lib/sidebarCollapse";
-import { cutSizeLabel } from "../../lib/placeLabel";import { SIDEBAR_SECTION_LABELS, availableSidebarSections, initialSidebarState, isRightSidebarSection, reduceSidebar, resolveLeftSidebarSection, resolveRightSidebarSection, resolveSidebarSection, LeftSidebarSectionId, RightSidebarSectionId, SiteAnalysisKind } from "../../lib/sidebarSections";
+import { cutSizeLabel } from "../../lib/placeLabel";import { SIDEBAR_SECTION_LABELS, availableSidebarSections, initialSidebarState, isRightSidebarSection, reduceSidebar, resolveLeftSidebarSection, resolveRightSidebarSection, resolveSidebarSection, LeftSidebarSectionId, RightSidebarSectionId, ActiveAnalysis, isSiteAnalysisKind } from "../../lib/sidebarSections";
 import { buildDataSources, countLoaded } from "../../lib/dataSources";
 import { useWikidataLandmarks } from "../useWikidataLandmarks";
 import {
@@ -148,7 +148,7 @@ import type { SectionKnifePose } from "../../lib/sectionKnife/plane";
 import { snapPoseToModel } from "../../lib/sectionKnife/snap";
 import { selectedKnife } from "../../lib/sectionKnife/state";
 import { buildSectionExportSvg, sectionExportLayerNames } from "../../lib/sectionKnife/sectionExport";
-import { useWalkRipple } from "../useWalkRipple";import { useWalkPlayback, useWalkViewshed } from "../useWalkViewshed";
+import { useWalkPlayback, useWalkViewshed } from "../useWalkViewshed";
 
 import { loadSiteWind } from "../../lib/windLoad";
 import type { SiteWindSelection } from "../../lib/windRoseData";
@@ -179,7 +179,7 @@ import { readStoredRenderQuality, writeStoredRenderQuality, type RenderQuality }
 
 import { shouldShowIntroBridgePill } from "./shouldShowIntroBridgePill";
 import { loadView } from "./loadModelView";
-import { initialSolarSettings } from "./initialSolarSettings";
+import { initialAnalysisKind, initialSolarSettings } from "./initialSolarSettings";
 import { useSunHoursGround } from "../useSunHoursGround";
 import { SOLAR_SLIDER_END_MIN, SOLAR_SLIDER_START_MIN, clampSolarSliderMinutes } from "../../lib/solarSlider";
 import {
@@ -205,7 +205,7 @@ export function useModelPage({
 }: ModelPageProps) {
   const [tab, setTab] = useState<Tab>("3d");
   const [drawing, setDrawing] = useState<DrawingKind>("site");
-  const [analysisKind, setAnalysisKind] = useState<SiteAnalysisKind>("solar");
+  const [analysisKind, setAnalysisKind] = useState<ActiveAnalysis>(() => initialAnalysisKind(window.location.search));
   const [shortcutCheatsheetOpen, setShortcutCheatsheetOpen] = useState(false);
   const [lineStyles, setLineStyles] = useState<LineStyles>(() => readDrawingStyle());
   useColourRevision();
@@ -305,6 +305,12 @@ export function useModelPage({
     if (sidebarModelRef.current === model) return;
     sidebarModelRef.current = model;
     dispatchSidebar({ type: "new-model" });
+    setAnalysisKind(null);
+    setWindSettings(() => {
+      const nextWind = windSettingsForModelOpen(window.localStorage);
+      writeStoredWindSettings(window.localStorage, nextWind);
+      return nextWind;
+    });
     setHiddenBuildingUses(new Set());
     const nextDisplay = view3dDisplayForModelOpen(window.localStorage);
     setView3dDisplay(nextDisplay);
@@ -472,7 +478,7 @@ export function useModelPage({
     setWindSettings(next);
   }
 
-  const wantWindTable = windSettings.enabled || (sidebar.section === "analysis" && analysisKind === "wind");
+  const wantWindTable = windSettings.enabled || analysisKind === "wind";
   useEffect(() => {
     if (!wantWindTable) return;
     let cancelled = false;
@@ -1063,15 +1069,6 @@ export function useModelPage({
     [model, overrideResult, visibleBuildings, comHeightsMeasuredOn],
   );
   const walk = useWalkViewshed(model, displayModel);
-  const walkRipple = useWalkRipple(model, displayModel);
-  const [walkRippleToast, setWalkRippleToast] = useState<string | null>(null);
-  useEffect(() => {
-    if (walkRipple.status === "ready") {
-      setWalkRippleToast(walkRipple.modeLabel ?? "Analysis complete. Walk ripple generated.");
-    } else if (walkRipple.status === "idle") {
-      setWalkRippleToast(null);
-    }
-  }, [walkRipple.modeLabel, walkRipple.status]);
   const walkAt = useWalkPlayback(walk);
 
   const drawingModel = useMemo(() => {
@@ -1322,16 +1319,12 @@ export function useModelPage({
   });
   const leftOpen: LeftSidebarSectionId = resolveLeftSidebarSection(sidebar.section, sectionIds);
   const rightOpen: RightSidebarSectionId = resolveRightSidebarSection(sidebar.rightSection, sectionIds);
-  const viewAnalysisOpen = leftOpen === "analysis" && analysisKind === "view";
-  const rippleAnalysisOpen = leftOpen === "analysis" && analysisKind === "walkRipple";
+  const viewAnalysisOpen = analysisKind === "view";
   const walkDrawing = viewAnalysisOpen && walk.drawing;
   const { drawing: walkDrawingOn, setDrawing: setWalkDrawing } = walk;
   useEffect(() => {
     if (!viewAnalysisOpen && walkDrawingOn) setWalkDrawing(false);
   }, [viewAnalysisOpen, walkDrawingOn, setWalkDrawing]);
-  useEffect(() => {
-    if (!rippleAnalysisOpen && walkRipple.placing) walkRipple.setPlacing(false);
-  }, [rippleAnalysisOpen, walkRipple]);
 
   const [consolePlaying, setConsolePlaying] = useState(false);
   const consoleDaylight = useMemo(
@@ -1379,8 +1372,8 @@ export function useModelPage({
     designWind,
     designWinds,
     clearDesignWind: () => commitWind({ ...windSettings, designWind: null }),
-    active: tab === "3d" && view.projection === "plan" && leftOpen === "analysis" && analysisKind === "wind" && siteWind != null,
-    scaleWanted: tab === "3d" && windSettings.enabled && leftOpen === "analysis" && analysisKind === "wind",
+    active: tab === "3d" && view.projection === "plan" && analysisKind === "wind" && siteWind != null,
+    scaleWanted: tab === "3d" && windSettings.enabled && analysisKind === "wind",
   });
 
   useEffect(() => {
@@ -1448,7 +1441,10 @@ export function useModelPage({
 
   const applyShortcut = useCallback(
     (action: ModelShortcutAction) => {
-      if (action.analysisKind) setAnalysisKind(action.analysisKind as SiteAnalysisKind);
+      if (action.section === "analysis") {
+        if (isSiteAnalysisKind(action.analysisKind)) setAnalysisKind(action.analysisKind);
+        return;
+      }
       selectSection(action.section);
     },
     [sectionIds, setSidebarCollapsed],
@@ -2309,7 +2305,6 @@ export function useModelPage({
     rightItems,
     rightOpen,
     rightSectionIds,
-    rippleAnalysisOpen,
     save3dm,
     saveBuildingHeight,
     saveExplodedAxoAi,
@@ -2372,7 +2367,6 @@ export function useModelPage({
     setUnmatchedEdits,
     setView,
     setView3dDisplay,
-    setWalkRippleToast,
     setWindNote,
     setWindSettings,
     shortcutCheatsheetOpen,
@@ -2414,8 +2408,6 @@ export function useModelPage({
     walk,
     walkAt,
     walkDrawing,
-    walkRipple,
-    walkRippleToast,
     wantWindTable,
     windMotion,
     windNote,

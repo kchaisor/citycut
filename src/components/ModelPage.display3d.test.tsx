@@ -189,11 +189,9 @@ describe("Display panel controls by view tab", () => {
     expect(leftRail.getAttribute("aria-orientation")).toBe("horizontal");
     expect(rightRail.getAttribute("aria-orientation")).toBe("horizontal");
     expect(within(leftRail).getByRole("button", { name: "Display" }).getAttribute("aria-pressed")).toBe("true");
-    const siteAnalysisBtn = within(leftRail).getByRole("button", { name: "Site Analysis" });
-    expect(siteAnalysisBtn.querySelector("svg.lucide-radar")).toBeTruthy();
-    const analysisTabs = document.querySelector(".site-analysis-tabs") as HTMLElement;
-    expect(within(analysisTabs).getByRole("tab", { name: "Sun", hidden: true }).querySelector("svg.lucide-sun")).toBeTruthy();
-    expect(within(leftRail).getByRole("button", { name: "Site Analysis" })).toBeTruthy();
+    expect(within(leftRail).queryByRole("button", { name: "Site Analysis" })).toBeNull();
+    expect(leftRail.querySelector('[data-section="analysis"]')).toBeNull();
+    expect(document.querySelector(".site-analysis-tabs")).toBeNull();
     expect(within(leftRail).getByRole("button", { name: "Import" })).toBeTruthy();
     expect(within(leftRail).queryByRole("button", { name: "Export" })).toBeNull();
     expect(within(rightRail).getByRole("button", { name: "Model details" }).getAttribute("aria-pressed")).toBe("true");
@@ -599,7 +597,7 @@ describe("Display panel controls by view tab", () => {
     expect(floatingCss).toMatch(/\.model \.left-outliner \.style-seg \.style-btn[\s\S]*white-space:\s*nowrap/);
   });
 
-  it("renders View Style heading in Display and expands the 2-row Environmental Console with zero left drawer on Analysis", async () => {
+  it("keeps the Analysis bar always on with no left-rail Site Analysis item, all analyses off, and toggles Solar Study and Wind Rose", async () => {
     const user = userEvent.setup();
     render(
       <ModelPage
@@ -622,24 +620,34 @@ describe("Display panel controls by view tab", () => {
     expect(leftOutliner.hidden).toBe(false);
 
     const leftRail = screen.getByRole("toolbar", { name: "Model tools" });
-    await user.click(within(leftRail).getByRole("button", { name: "Site Analysis" }));
-
-    expect(leftOutliner.hidden).toBe(true);
-    expect(leftOutliner.getAttribute("data-active-section")).toBe("analysis");
+    expect(within(leftRail).queryByRole("button", { name: "Site Analysis" })).toBeNull();
 
     const envConsole = screen.getByRole("region", { name: "Environmental analysis console" });
-    expect(envConsole).toBeTruthy();
-    expect(within(envConsole).getByRole("tab", { name: "Solar Study" })).toBeTruthy();
-    expect(within(envConsole).getByRole("tab", { name: "Wind Rose" })).toBeTruthy();
-    expect(within(envConsole).getByRole("tab", { name: "Viewshed Walk" })).toBeTruthy();
+    expect(within(envConsole).getByText("Analysis")).toBeTruthy();
+    for (const name of ["Solar Study", "Wind Rose", "Viewshed Walk"]) {
+      expect(within(envConsole).getByRole("button", { name }).getAttribute("aria-pressed")).toBe("false");
+    }
+    expect(within(envConsole).queryByRole("button", { name: "Walk Ripple" })).toBeNull();
     expect(within(envConsole).getByLabelText("Live solar telemetry").textContent).toContain("ALT");
+    expect(within(envConsole).getByRole("group", { name: "Scene overlay toggles" })).toBeTruthy();
+    expect(within(envConsole).getByRole("group", { name: "Solar date presets" })).toBeTruthy();
+    expect(within(envConsole).getByRole("group", { name: "Render quality" })).toBeTruthy();
+    expect(envConsole.querySelector(".env-solar-idle")).toBeTruthy();
+    expect(screen.queryByRole("region", { name: "Solar and camera controls" })).toBeNull();
 
-    await user.click(within(envConsole).getByRole("tab", { name: "Wind Rose" }));
-    expect(within(envConsole).getByLabelText("Live wind telemetry").textContent).toContain("PREVAILING");
-
-    await user.click(within(leftRail).getByRole("button", { name: "Display" }));
+    await user.click(within(envConsole).getByRole("button", { name: "Solar Study" }));
     expect(leftOutliner.hidden).toBe(false);
-    expect(screen.queryByRole("region", { name: "Environmental analysis console" })).toBeNull();
-    expect(screen.getByRole("region", { name: "Solar and camera controls" })).toBeTruthy();
+    expect(within(envConsole).getByLabelText("Live solar telemetry").textContent).toContain("ALT");
+    expect(envConsole.querySelector(".env-solar-idle")).toBeNull();
+
+    await user.click(within(envConsole).getByRole("button", { name: "Wind Rose" }));
+    expect(within(envConsole).getByLabelText("Live wind telemetry").textContent).toContain("PREVAILING");
+    expect(within(envConsole).queryByLabelText("Live solar telemetry")).toBeNull();
+
+    await user.click(within(envConsole).getByRole("button", { name: "Wind Rose" }));
+    expect(within(envConsole).queryByLabelText("Live wind telemetry")).toBeNull();
+    expect(within(envConsole).getByLabelText("Live solar telemetry")).toBeTruthy();
+    expect(envConsole.querySelector(".env-solar-idle")).toBeTruthy();
+    expect(screen.getByRole("region", { name: "Environmental analysis console" })).toBeTruthy();
   });
 });

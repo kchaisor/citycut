@@ -54,12 +54,6 @@ declare global {
       setSectionKnifePose?: (pose: import("./sectionKnife/plane").SectionKnifePose) => void;
       auditSectionExport?: () => { ok: boolean; layers: string[] };
     };
-    __citycutWalkRippleQa?: {
-      setMinutes: (minutes: number) => void;
-      getMinutes: () => number;
-      getUniformMinutes: () => number;
-      countReachedBuildings: (minuteCutoff: number) => number;
-    };
     __citycutQaSelectionAudit?: import("./buildingSelectionAudit").BuildingSelectionAudit;
     __citycutFrameRatio?: number;
     __citycutMinBeat2Ms?: number;

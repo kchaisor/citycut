@@ -11,7 +11,7 @@ import {
 } from "./windState";
 
 describe("windSettingsForModelOpen", () => {
-  it("turns wind on for a new model while keeping stored period and rose preference", () => {
+  it("starts a new model with wind off even when a previous visit stored wind on, keeping the stored period", () => {
     const data: Record<string, string> = { [WIND_ENABLED_KEY]: "1" };
     const storage: Storage = {
       get length() {
@@ -35,7 +35,7 @@ describe("windSettingsForModelOpen", () => {
     };
     expect(readStoredWindSettings(storage).enabled).toBe(true);
     const next = windSettingsForModelOpen(storage);
-    expect(next.enabled).toBe(true);
+    expect(next.enabled).toBe(false);
     expect(next.period).toBe(DEFAULT_WIND_SETTINGS.period);
   });
 });
