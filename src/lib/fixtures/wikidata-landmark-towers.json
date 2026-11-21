@@ -1,0 +1,367 @@
+{
+  "source": "Subset of the wikidata-landmarks-test release built by run 44834965840 (Wikidata, CC0), queried 2026-11-20T23:12:43.074Z",
+  "generatedAt": "2026-11-20T23:12:43.074Z",
+  "expected": {
+    "Eureka Tower": "Q270407",
+    "Australia 108": "Q4823550",
+    "Aurora Melbourne Central": "Q19460317",
+    "120 Collins Street": "Q172402",
+    "101 Collins Street": "Q165506",
+    "Rialto Towers (South Tower)": "Q1138772",
+    "Rialto Towers (North Tower)": "Q1138772",
+    "Premier Tower": "Q20020491",
+    "Swanston Central": "Q141595787",
+    "568 Collins Street": "Q19460063",
+    "Melbourne Central Tower": "Q135961495",
+    "Freshwater Place Residential Tower": "Q5503128",
+    "ANZ Tower, Collins Place (55 Collins St)": "Q131407913",
+    "Nauru House (80 Collins St)": "Q960951",
+    "Crown Towers": "Q28224275",
+    "1 Spring Street (Shell House)": "Q56643949",
+    "Manchester Unity Building": "Q14935205",
+    "RMIT Swanston Academic Building (Building 80)": "Q14935279"
+  },
+  "absent": [
+    "Prima Pearl",
+    "405 Bourke Street",
+    "35 Spring Street",
+    "Ernst & Young Plaza (8 Exhibition St)",
+    "HWT Tower (40 City Rd)"
+  ],
+  "items": [
+    {
+      "qid": "Q165506",
+      "name": "101 Collins Street",
+      "lon": 144.9707778,
+      "lat": -37.815,
+      "heightsM": [
+        260
+      ],
+      "floorsAboveGround": 57,
+      "yearBuilt": 1991,
+      "yearOpened": null,
+      "architects": [
+        {
+          "qid": "Q5259598",
+          "name": "Denton Corker Marshall"
+        }
+      ],
+      "styles": [],
+      "heritage": [],
+      "wikipedia": "https://en.wikipedia.org/wiki/101_Collins_Street"
+    },
+    {
+      "qid": "Q172402",
+      "name": "120 Collins Street",
+      "lon": 144.9695,
+      "lat": -37.8138333,
+      "heightsM": [
+        265
+      ],
+      "floorsAboveGround": 52,
+      "yearBuilt": 1991,
+      "yearOpened": null,
+      "architects": [
+        {
+          "qid": "Q5680011",
+          "name": "Hassell"
+        }
+      ],
+      "styles": [],
+      "heritage": [],
+      "wikipedia": "https://en.wikipedia.org/wiki/120_Collins_Street"
+    },
+    {
+      "qid": "Q270407",
+      "name": "Eureka Tower",
+      "lon": 144.9644444,
+      "lat": -37.8216667,
+      "heightsM": [
+        297.3
+      ],
+      "floorsAboveGround": 91,
+      "yearBuilt": 2006,
+      "yearOpened": 2006,
+      "architects": [
+        {
+          "qid": "Q5443251",
+          "name": "Fender Katsalidis Architects"
+        }
+      ],
+      "styles": [
+        {
+          "qid": "Q245188",
+          "name": "modern architecture"
+        }
+      ],
+      "heritage": [],
+      "wikipedia": "https://en.wikipedia.org/wiki/Eureka_Tower"
+    },
+    {
+      "qid": "Q960951",
+      "name": "Nauru House",
+      "lon": 144.9708333,
+      "lat": -37.8133333,
+      "heightsM": [
+        190
+      ],
+      "floorsAboveGround": 52,
+      "yearBuilt": 1977,
+      "yearOpened": 1977,
+      "architects": [
+        {
+          "qid": "Q2071743",
+          "name": "Perrott Lyon Timlock & Kesa"
+        }
+      ],
+      "styles": [],
+      "heritage": [],
+      "wikipedia": "https://en.wikipedia.org/wiki/Nauru_House"
+    },
+    {
+      "qid": "Q1138772",
+      "name": "Rialto Towers",
+      "lon": 144.9583333,
+      "lat": -37.8188889,
+      "heightsM": [
+        251
+      ],
+      "floorsAboveGround": 55,
+      "yearBuilt": 1986,
+      "yearOpened": null,
+      "architects": [],
+      "styles": [],
+      "heritage": [
+        {
+          "qid": "Q28147634",
+          "name": "listed on the Victorian Heritage Register"
+        }
+      ],
+      "wikipedia": "https://en.wikipedia.org/wiki/Rialto_Towers"
+    },
+    {
+      "qid": "Q4823550",
+      "name": "Australia 108",
+      "lon": 144.9639,
+      "lat": -37.8233,
+      "heightsM": [
+        316.7
+      ],
+      "floorsAboveGround": 100,
+      "yearBuilt": null,
+      "yearOpened": null,
+      "architects": [],
+      "styles": [
+        {
+          "qid": "Q245188",
+          "name": "modern architecture"
+        }
+      ],
+      "heritage": [],
+      "wikipedia": "https://en.wikipedia.org/wiki/Australia_108"
+    },
+    {
+      "qid": "Q5503128",
+      "name": "Freshwater Place",
+      "lon": 144.962,
+      "lat": -37.8215,
+      "heightsM": [],
+      "floorsAboveGround": 60,
+      "yearBuilt": 2005,
+      "yearOpened": null,
+      "architects": [
+        {
+          "qid": "Q4868821",
+          "name": "Bates Smart"
+        }
+      ],
+      "styles": [],
+      "heritage": [],
+      "wikipedia": "https://en.wikipedia.org/wiki/Freshwater_Place"
+    },
+    {
+      "qid": "Q14935205",
+      "name": "Manchester Unity Building",
+      "lon": 144.9664,
+      "lat": -37.8154,
+      "heightsM": [],
+      "floorsAboveGround": 12,
+      "yearBuilt": 1932,
+      "yearOpened": 1932,
+      "architects": [
+        {
+          "qid": "Q13385026",
+          "name": "Marcus Barlow"
+        }
+      ],
+      "styles": [],
+      "heritage": [
+        {
+          "qid": "Q28147634",
+          "name": "listed on the Victorian Heritage Register"
+        }
+      ],
+      "wikipedia": "https://en.wikipedia.org/wiki/Manchester_Unity_Building"
+    },
+    {
+      "qid": "Q14935279",
+      "name": "RMIT Swanston Academic Building",
+      "lon": 144.962955,
+      "lat": -37.808193,
+      "heightsM": [],
+      "floorsAboveGround": 11,
+      "yearBuilt": 2012,
+      "yearOpened": null,
+      "architects": [],
+      "styles": [
+        {
+          "qid": "Q595448",
+          "name": "postmodern architecture"
+        }
+      ],
+      "heritage": [],
+      "wikipedia": "https://en.wikipedia.org/wiki/Swanston_Academic_Building"
+    },
+    {
+      "qid": "Q19460063",
+      "name": "568 Collins Street",
+      "lon": 144.955,
+      "lat": -37.8184,
+      "heightsM": [],
+      "floorsAboveGround": 69,
+      "yearBuilt": null,
+      "yearOpened": null,
+      "architects": [],
+      "styles": [],
+      "heritage": [],
+      "wikipedia": "https://en.wikipedia.org/wiki/568_Collins_Street"
+    },
+    {
+      "qid": "Q19460317",
+      "name": "Aurora Melbourne Central",
+      "lon": 144.962441,
+      "lat": -37.809656,
+      "heightsM": [],
+      "floorsAboveGround": 88,
+      "yearBuilt": null,
+      "yearOpened": null,
+      "architects": [
+        {
+          "qid": "Q17050743",
+          "name": "Elenberg Fraser"
+        }
+      ],
+      "styles": [],
+      "heritage": [],
+      "wikipedia": "https://en.wikipedia.org/wiki/Aurora_Melbourne_Central"
+    },
+    {
+      "qid": "Q20020491",
+      "name": "Premier Tower",
+      "lon": 144.9536917,
+      "lat": -37.8173164,
+      "heightsM": [],
+      "floorsAboveGround": 78,
+      "yearBuilt": null,
+      "yearOpened": null,
+      "architects": [
+        {
+          "qid": "Q17050743",
+          "name": "Elenberg Fraser"
+        }
+      ],
+      "styles": [],
+      "heritage": [],
+      "wikipedia": "https://en.wikipedia.org/wiki/Premier_Tower"
+    },
+    {
+      "qid": "Q28224275",
+      "name": "Crown Towers",
+      "lon": 144.95995,
+      "lat": -37.82362,
+      "heightsM": [
+        152.46
+      ],
+      "floorsAboveGround": 43,
+      "yearBuilt": 1997,
+      "yearOpened": null,
+      "architects": [],
+      "styles": [],
+      "heritage": [],
+      "wikipedia": "https://en.wikipedia.org/wiki/Crown_Towers"
+    },
+    {
+      "qid": "Q56643949",
+      "name": "1 Spring Street",
+      "lon": 144.9741,
+      "lat": -37.8151,
+      "heightsM": [
+        132
+      ],
+      "floorsAboveGround": null,
+      "yearBuilt": null,
+      "yearOpened": null,
+      "architects": [
+        {
+          "qid": "Q85669",
+          "name": "Harry Seidler"
+        }
+      ],
+      "styles": [
+        {
+          "qid": "Q245188",
+          "name": "modern architecture"
+        }
+      ],
+      "heritage": [
+        {
+          "qid": "Q28147634",
+          "name": "listed on the Victorian Heritage Register"
+        }
+      ],
+      "wikipedia": null
+    },
+    {
+      "qid": "Q131407913",
+      "name": "ANZ Tower at Collins Place",
+      "lon": 144.9720573,
+      "lat": -37.8142442,
+      "heightsM": [],
+      "floorsAboveGround": null,
+      "yearBuilt": null,
+      "yearOpened": null,
+      "architects": [],
+      "styles": [],
+      "heritage": [],
+      "wikipedia": null
+    },
+    {
+      "qid": "Q135961495",
+      "name": "Melbourne Central Office Tower",
+      "lon": 144.9619444,
+      "lat": -37.8108333,
+      "heightsM": [],
+      "floorsAboveGround": null,
+      "yearBuilt": null,
+      "yearOpened": null,
+      "architects": [],
+      "styles": [],
+      "heritage": [],
+      "wikipedia": "https://en.wikipedia.org/wiki/Melbourne_Central_Tower"
+    },
+    {
+      "qid": "Q141595787",
+      "name": "Swanston Central",
+      "lon": 144.9618,
+      "lat": -37.8059,
+      "heightsM": [],
+      "floorsAboveGround": null,
+      "yearBuilt": null,
+      "yearOpened": null,
+      "architects": [],
+      "styles": [],
+      "heritage": [],
+      "wikipedia": "https://en.wikipedia.org/wiki/Swanston_Central"
+    }
+  ]
+}

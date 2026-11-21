@@ -17,7 +17,7 @@ import {
   queryCells,
   splitCell,
   yearFromWikidataDate,
-} from "./wikidata-landmarks-lib.mjs";
+} from "../shared/wikidataLandmarks.js";
 
 const sample = JSON.parse(readFileSync(new URL("./fixtures/wikidata-sparql-sample.json", import.meta.url), "utf8"));
 const bake = () => finaliseItems(groupBindings(checkSparqlJson(sample)), GREATER_MELBOURNE_BBOX);
@@ -44,8 +44,9 @@ describe("SPARQL query", () => {
     const q = landmarkQuery(cell);
     expect(q).toContain('wikibase:cornerSouthWest "Point(144.9 -37.9)"^^geo:wktLiteral');
     expect(q).toContain('wikibase:cornerNorthEast "Point(145.1 -37.7)"^^geo:wktLiteral');
-    expect(q).toContain("wdt:P31/wdt:P279* wd:Q811979");
-    for (const p of ["P625", "P2048", "P1101", "P571", "P1619", "P84", "P149", "P1435"]) expect(q).toContain(p);
+    expect(q).toContain("?item wdt:P31/wdt:P279* wd:Q811979 .");
+    expect(landmarkQuery({ west: 144, south: -38, east: 145, north: -37 }, "Q55488")).toContain("?item wdt:P31/wdt:P279* wd:Q55488 .");
+    for (const p of ["P625", "P2048", "P1101", "P571", "P1619", "P84", "P149", "P1435", "P10689"]) expect(q).toContain(p);
     expect(q).toContain("<https://en.wikipedia.org/>");
   });
   it("reads heights normalised to metres from best-rank statements", () => {
@@ -101,6 +102,7 @@ describe("baking the sample answer", () => {
       styles: [{ qid: "Q900201", name: "Fixture modernism" }],
       heritage: [],
       wikipedia: "https://en.wikipedia.org/wiki/Fixture_Tower",
+      osmWayIds: [700001],
     });
   });
   it("leaves missing facts empty instead of guessing", () => {
@@ -109,6 +111,7 @@ describe("baking the sample answer", () => {
     expect(hall.floorsAboveGround).toBeNull();
     expect(hall.yearOpened).toBeNull();
     expect(hall.wikipedia).toBeNull();
+    expect(hall.osmWayIds).toEqual([]);
     expect(hall.heritage).toEqual([{ qid: "Q900301", name: "Fixture heritage register" }]);
   });
   it("drops and counts items without an English label or a point in the box", () => {
@@ -172,6 +175,8 @@ describe("splitting slow cells", () => {
     expect(isSlowQueryFailure(new Error("Wikidata cell failed after 2 attempts: answered HTTP 504."))).toBe(true);
     expect(isSlowQueryFailure(new Error("Wikidata cell failed after 2 attempts: answered HTTP 500."))).toBe(true);
     expect(isSlowQueryFailure(new Error("Wikidata cell timed out after 70000 ms"))).toBe(true);
+    expect(isSlowQueryFailure(new Error("Wikidata structures cell failed after 2 attempts: Bad control character in string literal in JSON at position 4948023 (line 170672 column 104)"))).toBe(true);
+    expect(isSlowQueryFailure(new Error("Unexpected end of JSON input"))).toBe(true);
     expect(isSlowQueryFailure(new Error("Wikidata cell answered HTTP 429; stopping without retry."))).toBe(false);
     expect(isSlowQueryFailure(new Error("Wikidata SPARQL answer had no results.bindings array."))).toBe(false);
   });
@@ -183,8 +188,10 @@ describe("splitting slow cells", () => {
       return [{ cell: c }];
     };
     const other = { west: 0.2, south: 0, east: 0.3, north: 0.1 };
-    const { results, splits } = await queryCells([cell, other], fetchCell, { minCellDeg: 0.05 });
+    const split = [];
+    const { results, splits } = await queryCells([cell, other], fetchCell, { minCellDeg: 0.05, onSplit: ({ cell: c }) => split.push(c) });
     expect(splits).toBe(1);
+    expect(split).toEqual([cell]);
     expect(results.flat().map((r) => r.cell)).toEqual([...splitCell(cell), other]);
     expect(asked).toHaveLength(6);
   });

@@ -4,6 +4,8 @@ export const WIKIDATA_MANIFEST_NAME = "wikidata-landmarks-manifest.json";
 export const WIKIDATA_SPARQL_URL = "https://query.wikidata.org/sparql";
 export const WIKIDATA_ATTRIBUTION = "Wikidata (CC0)";
 export const ARCHITECTURAL_STRUCTURE = "Q811979";
+export const RAILWAY_STATION = "Q55488";
+export const LANDMARK_CLASSES = [ARCHITECTURAL_STRUCTURE, RAILWAY_STATION];
 
 export const GREATER_MELBOURNE_BBOX = { west: 144.333634, south: -38.502988, east: 145.878412, north: -37.175099 };
 
@@ -34,15 +36,15 @@ export function bboxCells(bbox, stepDeg) {
 
 const wktPoint = (lon, lat) => `"Point(${lon} ${lat})"^^geo:wktLiteral`;
 
-export function landmarkQuery(cell) {
+export function landmarkQuery(cell, classQid = ARCHITECTURAL_STRUCTURE) {
   return `SELECT ?item ?label ?coord ?height ?floors ?inception ?opened ?article
-  ?architect ?architectLabel ?style ?styleLabel ?heritage ?heritageLabel WHERE {
+  ?architect ?architectLabel ?style ?styleLabel ?heritage ?heritageLabel ?osmWay WHERE {
   SERVICE wikibase:box {
     ?item wdt:P625 ?coord .
     bd:serviceParam wikibase:cornerSouthWest ${wktPoint(cell.west, cell.south)} .
     bd:serviceParam wikibase:cornerNorthEast ${wktPoint(cell.east, cell.north)} .
   }
-  ?item wdt:P31/wdt:P279* wd:${ARCHITECTURAL_STRUCTURE} .
+  ?item wdt:P31/wdt:P279* wd:${classQid} .
   OPTIONAL { ?item rdfs:label ?label FILTER(LANG(?label) = "en") }
   OPTIONAL { ?item p:P2048 ?heightStatement . ?heightStatement a wikibase:BestRank ; psn:P2048/wikibase:quantityAmount ?height . }
   OPTIONAL { ?item wdt:P1101 ?floors }
@@ -51,13 +53,14 @@ export function landmarkQuery(cell) {
   OPTIONAL { ?item wdt:P84 ?architect . OPTIONAL { ?architect rdfs:label ?architectLabel FILTER(LANG(?architectLabel) = "en") } }
   OPTIONAL { ?item wdt:P149 ?style . OPTIONAL { ?style rdfs:label ?styleLabel FILTER(LANG(?styleLabel) = "en") } }
   OPTIONAL { ?item wdt:P1435 ?heritage . OPTIONAL { ?heritage rdfs:label ?heritageLabel FILTER(LANG(?heritageLabel) = "en") } }
+  OPTIONAL { ?item wdt:P10689 ?osmWay }
   OPTIONAL { ?article schema:about ?item ; schema:isPartOf <https://en.wikipedia.org/> }
 }`;
 }
 
-export function landmarkQueryUrl(cell) {
+export function landmarkQueryUrl(cell, classQid = ARCHITECTURAL_STRUCTURE) {
   const url = new URL(WIKIDATA_SPARQL_URL);
-  url.searchParams.set("query", landmarkQuery(cell));
+  url.searchParams.set("query", landmarkQuery(cell, classQid));
   url.searchParams.set("format", "json");
   return url.toString();
 }
@@ -108,6 +111,7 @@ function emptyItem(qid) {
     inception: new Set(),
     opened: new Set(),
     articles: new Set(),
+    osmWays: new Set(),
     architects: new Map(),
     styles: new Map(),
     heritage: new Map(),
@@ -138,6 +142,8 @@ export function groupBindings(rows, accumulator = new Map()) {
     add(item.inception, yearFromWikidataDate(bindingValue(row, "inception")));
     add(item.opened, yearFromWikidataDate(bindingValue(row, "opened")));
     add(item.articles, bindingValue(row, "article"));
+    const osmWay = numberOrNull(bindingValue(row, "osmWay"));
+    if (osmWay !== null && Number.isInteger(osmWay) && osmWay > 0) item.osmWays.add(osmWay);
     for (const [key, field] of MULTI_FIELDS) {
       const linked = qidFromUri(bindingValue(row, key));
       if (!linked) continue;
@@ -171,6 +177,7 @@ export function finaliseItem(item, bbox) {
       styles: linkedList(item.styles),
       heritage: linkedList(item.heritage),
       wikipedia: [...item.articles].sort()[0] ?? null,
+      osmWayIds: [...item.osmWays].sort((a, b) => a - b),
     },
     reason: null,
   };
@@ -239,10 +246,10 @@ export function splitCell(cell) {
 
 export function isSlowQueryFailure(err) {
   const message = err instanceof Error ? err.message : String(err);
-  return /HTTP 50[0234]\b|timed out/.test(message);
+  return /HTTP 50[0234]\b|timed out|in JSON at position|Unexpected end of JSON/.test(message);
 }
 
-export async function queryCells(cells, fetchCell, { minCellDeg, onCell = () => {} }) {
+export async function queryCells(cells, fetchCell, { minCellDeg, onCell = () => {}, onSplit = () => {} }) {
   const queue = [...cells];
   const results = [];
   let splits = 0;
@@ -256,6 +263,7 @@ export async function queryCells(cells, fetchCell, { minCellDeg, onCell = () => 
       const halfWidth = Math.max(cell.east - cell.west, cell.north - cell.south) / 2;
       if (!isSlowQueryFailure(err) || halfWidth < minCellDeg - 1e-9) throw err;
       splits += 1;
+      onSplit({ cell, error: err });
       queue.unshift(...splitCell(cell));
     }
   }

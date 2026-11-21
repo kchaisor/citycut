@@ -7,6 +7,7 @@ const NSW_DECODED_ROWS = new Set(["nsw-lots", "nsw-easements", "nsw-road-corrido
 import type { ComBuildingHeightsStatus } from "./comBuildingHeightsStatus";
 import { treeTierCounts } from "./trees";
 import { estimatedIslandCount, ROUNDABOUT_ISLAND_ESTIMATE_NOTE } from "./roundabouts";
+import type { WikidataLandmarksState } from "./wikidataLandmarks";
 
 export type DataSourceStatus = "ok" | "loading" | "failed" | "partial" | "idle";
 
@@ -24,6 +25,7 @@ export type DataSourceInput = {
   comHeights: ComBuildingHeightsStatus;
   comMeasuredCount: number;
   comError: string | null;
+  wikidata?: WikidataLandmarksState;
 };
 
 const STATUS_WORD: Record<DataSourceStatus, string> = {
@@ -47,7 +49,7 @@ export function overtureReleaseFromNote(note: string): string | null {
   return match ? match[1]!.trim() : null;
 }
 
-export function buildDataSources({ model, comHeights, comMeasuredCount, comError }: DataSourceInput): DataSourceRow[] {
+export function buildDataSources({ model, comHeights, comMeasuredCount, comError, wikidata }: DataSourceInput): DataSourceRow[] {
   const rows: DataSourceRow[] = [];
   const failures = model.useTierFailures ?? [];
   const warnings = model.heightSourceLoadWarnings ?? [];
@@ -230,6 +232,9 @@ export function buildDataSources({ model, comHeights, comMeasuredCount, comError
     treeRow("vicmap", "Vicmap trees", "vicmap");
   }
 
+  const wikidataRow = wikidata ? wikidataSourceRow(wikidata) : null;
+  if (wikidataRow) rows.push(wikidataRow);
+
   if (model.layers.roads && (model.tramLinesLoadFailed || (model.tramLines?.length ?? 0) > 0)) {
     rows.push(
       model.tramLinesLoadFailed
@@ -363,4 +368,34 @@ export function nswDataSourceRows(model: CityModel): DataSourceRow[] {
 export function countLoaded(rows: readonly DataSourceRow[]): { loaded: number; total: number } {
   const counted = rows.filter((row) => row.status !== "idle");
   return { loaded: counted.filter((row) => row.status === "ok").length, total: counted.length };
+}
+
+export const WIKIDATA_ROW_LABEL = "Wikidata landmarks";
+
+export function wikidataSourceRow(state: WikidataLandmarksState): DataSourceRow | null {
+  if (state.status === "idle") return null;
+  if (state.status === "loading") return { id: "wikidata", label: WIKIDATA_ROW_LABEL, status: "loading", detail: "Loading", notes: [] };
+  if (state.status === "failed") {
+    return { id: "wikidata", label: WIKIDATA_ROW_LABEL, status: "failed", detail: "Not available for this area", notes: [state.reason] };
+  }
+  const notes = [
+    state.source === "baked"
+      ? `Baked Wikidata file${state.generatedAt ? ` queried ${state.generatedAt.slice(0, 10)}` : ""}. Wikidata (CC0).`
+      : "Live Wikidata query for this cut. Wikidata (CC0).",
+  ];
+  const skipped = state.noFootprint + state.manyFootprints;
+  if (skipped > 0) {
+    const parts = [
+      state.noFootprint > 0 ? `${count(state.noFootprint, "item")} on no building footprint` : null,
+      state.manyFootprints > 0 ? `${count(state.manyFootprints, "item")} on more than one footprint` : null,
+    ].filter(Boolean);
+    notes.push(`${count(state.inCut, "Wikidata item")} in this cut; not matched: ${parts.join(", ")}.`);
+  }
+  return {
+    id: "wikidata",
+    label: WIKIDATA_ROW_LABEL,
+    status: "ok",
+    detail: `${count(state.matches.length, "landmark")} matched`,
+    notes,
+  };
 }
