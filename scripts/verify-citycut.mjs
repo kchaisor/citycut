@@ -45,6 +45,13 @@ function findFreePort() {
   });
 }
 
+async function ensureAnalysisOn(page, kind) {
+  const btn = page.locator(`.model .env-mode-btn[data-analysis="${kind}"]`);
+  if ((await btn.getAttribute("aria-pressed", { timeout: 30_000 })) !== "true") {
+    await btn.click({ timeout: 30_000 });
+  }
+}
+
 async function rasterizeSvgPng(browser, svg, width, height) {
   const page = await browser.newPage();
   await page.setViewportSize({
@@ -1701,8 +1708,7 @@ async function main() {
     }
 
     // SITE ANALYSIS DIRECTION A INVARIANT (IN 3D MODEL)
-    const analysisBtn = page.locator('.model button[data-section="analysis"]').first();
-    await analysisBtn.click();
+    await ensureAnalysisOn(page, "solar");
     await page.waitForTimeout(300);
 
     const analysisInfo = await page.evaluate(() => {
@@ -1747,9 +1753,8 @@ async function main() {
 
     assertCheck(
       "site-analysis-direction-a",
-      "Clicking Analysis hides the left drawer completely (0 visible left drawer), opens the non-overflowing 2-row bottom environmental console without N ▲ or Reset view, places Reset view in .top-bar-center, and shows 3D Sun Dome (not 9–3pm Plan Fan) in 3D view",
-      analysisInfo.visibleLeftDrawerCount === 0 &&
-        analysisInfo.hasEnvConsole &&
+      "Turning Solar Study on opens the non-overflowing 2-row bottom Analysis bar without N ▲ or Reset view, places Reset view in .top-bar-center, and shows 3D Sun Dome (not 9–3pm Plan Fan) in 3D view",
+      analysisInfo.hasEnvConsole &&
         analysisInfo.hasTwoRows &&
         !analysisInfo.hasBottomCompass &&
         !analysisInfo.hasBottomReset &&
@@ -1761,7 +1766,7 @@ async function main() {
       `visibleLeftDrawers=${analysisInfo.visibleLeftDrawerCount}, noOverflow=${analysisInfo.noHorizontalOverflow}, topReset=${analysisInfo.hasTopCenterReset}, bottomCompass=${analysisInfo.hasBottomCompass}, 3dDome=${analysisInfo.has3dSunDomeIn3d}, planFanIn3d=${analysisInfo.hasPlanFanIn3d}, rect=${JSON.stringify(analysisInfo.envConsoleRect)}`,
     );
 
-    await page.getByRole("tab", { name: /Wind Rose/i }).click();
+    await ensureAnalysisOn(page, "wind");
     await page.waitForFunction(
       () => {
         const root = document.querySelector(".model");
@@ -1907,91 +1912,7 @@ async function main() {
     }
     await page.setViewportSize(VIEWPORT);
 
-    await page.getByRole("tab", { name: /Walk Ripple/i }).click();
-    await page.waitForTimeout(250);
-    await page.getByRole("button", { name: /Pick origin/i }).first().click();
-    const rippleCanvas = page.locator(".model canvas").first();
-    const rippleCanvasBox = await rippleCanvas.boundingBox();
-    if (!rippleCanvasBox) throw new Error("Walk ripple: missing model canvas");
-    await page.mouse.click(
-      rippleCanvasBox.x + rippleCanvasBox.width * 0.5,
-      rippleCanvasBox.y + rippleCanvasBox.height * 0.52,
-    );
-    const scrubTrack = page.locator(".model .walk-ripple-scrubber-track");
-    await page.waitForFunction(
-      () => {
-        const track = document.querySelector(".model .walk-ripple-scrubber-track");
-        return track && track.getAttribute("aria-disabled") === "false";
-      },
-      { timeout: 120000 },
-    );
-    await page.waitForTimeout(800);
-
-    await scrubTrack.waitFor({ state: "visible", timeout: 10000 });
-    const trackBox = await scrubTrack.boundingBox();
-    if (!trackBox) throw new Error("Walk ripple: scrubber track missing");
-
-    const readScrubState = () =>
-      page.evaluate(() => {
-        const readout = document.querySelector(".model .walk-ripple-time-readout");
-        const label = readout?.getAttribute("data-walk-ripple-minutes") ?? "";
-        const reached = Number(readout?.getAttribute("data-walk-ripple-reached") ?? "0");
-        return { label, reached, minutes: Number.parseFloat(label) };
-      });
-
-    const dragScrubToPct = async (pct) => {
-      const box = await scrubTrack.boundingBox();
-      if (!box) throw new Error("Walk ripple: scrubber track missing");
-      const x = box.x + box.width * pct;
-      const y = box.y + box.height * 0.5;
-      await page.mouse.move(x, y);
-      await page.mouse.down();
-      await page.mouse.move(x + 2, y);
-      await page.mouse.up();
-      await page.waitForTimeout(280);
-    };
-
-    await dragScrubToPct(0.08);
-    const atLow = await readScrubState();
-
-    await dragScrubToPct(0.62);
-    const atHigh = await readScrubState();
-
-    const rippleOverflow = await page.evaluate(() => {
-      const envConsole = document.querySelector(".model .env-console");
-      const bottomRow = envConsole?.querySelector(".env-bottom-row");
-      return Boolean(
-        envConsole &&
-          bottomRow &&
-          envConsole.scrollWidth <= envConsole.clientWidth + 1 &&
-          bottomRow.scrollWidth <= bottomRow.clientWidth + 1,
-      );
-    });
-
-    assertCheck(
-      "walk-ripple-time-scrubber",
-      "Walk Ripple scrubber accepts Playwright mouse drags, updates minute readout and uRippleTime, increases reached-building count, and keeps the env console row without horizontal overflow",
-      rippleOverflow &&
-        atLow.minutes >= 0.5 &&
-        atLow.minutes <= 4.5 &&
-        atHigh.minutes >= 10 &&
-        atHigh.minutes <= 14.5 &&
-        atHigh.reached > atLow.reached &&
-        atHigh.reached - atLow.reached >= 3,
-      `low=[min=${atLow.minutes}, reached=${atLow.reached}, label=${atLow.label}], high=[min=${atHigh.minutes}, reached=${atHigh.reached}, label=${atHigh.label}], noOverflow=${rippleOverflow}`,
-    );
-
-    await page.getByRole("button", { name: /Replay walk ripple/i }).click();
-    await page.waitForTimeout(400);
-    const replayStart = await readScrubState();
-    assertCheck(
-      "walk-ripple-replay",
-      "Walk Ripple replay button restarts the 0–20 min animation from the scrubber row",
-      replayStart.minutes <= 1.5,
-      `minutesAfterReplayClick=${replayStart.minutes}`,
-    );
-
-    await page.getByRole("tab", { name: /Solar Study/i }).click();
+    await ensureAnalysisOn(page, "solar");
     await page.waitForTimeout(200);
 
     // DRAWING -> DISPLAY OUTLINER CLEANUP & RESET COLOURS INVARIANT
@@ -2751,7 +2672,7 @@ async function main() {
         { timeout: 300_000 },
       );
       await importPage.getByRole("tab", { name: "3D" }).click({ timeout: 60_000 });
-      await importPage.locator('button[data-section="analysis"]').click({ timeout: 30_000 });
+      await ensureAnalysisOn(importPage, "solar");
       const importShadowsOn = importPage.locator(".model .env-console .overlay-chips button", { hasText: "Shadows" });
       if ((await importShadowsOn.getAttribute("aria-pressed")) !== "true") {
         await importShadowsOn.click({ timeout: 30_000 });
@@ -2769,7 +2690,7 @@ async function main() {
       await importPage.getByRole("tab", { name: "Drawing" }).click({ timeout: 60_000 });
       await importPage.getByRole("button", { name: "Site plan" }).click({ timeout: 60_000 });
       await importPage.waitForSelector("svg.plan", { timeout: 120_000 });
-      await importPage.locator('button[data-section="analysis"]').click({ timeout: 60_000 });
+      await ensureAnalysisOn(importPage, "solar");
       await importPage.waitForTimeout(300);
       const shadowsChip = importPage.locator(".model .env-console .overlay-chips button", { hasText: "Shadows" });
       await shadowsChip.click({ timeout: 30_000 });
@@ -2848,7 +2769,7 @@ async function main() {
         fanLenBeforeHourScrub === fanLenHour9 && fanLenHour9 === fanLenHour15 && fanLenHour15 > 1000,
         `shadowDLength=${fanLenBeforeHourScrub}/${fanLenHour9}/${fanLenHour15}`,
       );
-      const jun21Btn = importPage.getByRole("button", { name: "21 Jun" });
+      const jun21Btn = importPage.getByRole("button", { name: "21 Jun · Winter solstice" });
       if ((await jun21Btn.count()) > 0) await jun21Btn.click({ timeout: 30_000 });
       await importPage.waitForTimeout(600);
       const fanAllStats = await importPage.evaluate(() => window.__citycutQaPlan?.sunStudyCasterStats?.());
@@ -2911,7 +2832,7 @@ async function main() {
         { timeout: 60_000 },
       );
       await importPage.waitForTimeout(400);
-      await importPage.locator('button[data-section="analysis"]').click({ timeout: 30_000 });
+      await ensureAnalysisOn(importPage, "solar");
       await importPage.waitForTimeout(250);
       const envFanBtn = importPage.locator(".model .env-console .overlay-chips button", {
         hasText: "9–3pm Plan Fan",
@@ -2947,7 +2868,7 @@ async function main() {
         path: path.join(cursorArtifacts, "drawing-podium-tower-outlines.png"),
         clip: { x: 0, y: 0, width: VIEWPORT.width, height: VIEWPORT.height },
       });
-      await importPage.locator('button[data-section="analysis"]').click({ timeout: 30_000 });
+      await ensureAnalysisOn(importPage, "solar");
       await importPage.waitForTimeout(250);
       if ((await envFanBtn.count()) > 0 && (await envFanBtn.getAttribute("aria-pressed")) !== "true") {
         await envFanBtn.click({ timeout: 30_000 });

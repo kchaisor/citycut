@@ -1,5 +1,6 @@
 import { capturePresetFromSearch } from "../../lib/captureQuery";
 import { readStoredHeliodonRadiusFactor, resolveHeliodonRadiusFactor } from "../../lib/heliodonRadius";
+import type { ActiveAnalysis } from "../../lib/sidebarSections";
 import type { SolarViewSettings } from "../SolarHeliodon";
 
 export function initialSolarSettings(
@@ -17,4 +18,8 @@ export function initialSolarSettings(
     minute: 0,
     sunHours: false,
   };
+}
+
+export function initialAnalysisKind(search: string): ActiveAnalysis {
+  return capturePresetFromSearch(search).solarPath ? "solar" : null;
 }

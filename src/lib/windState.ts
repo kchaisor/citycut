@@ -18,7 +18,7 @@ export const DEFAULT_WIND_SETTINGS: WindViewSettings = {
 };
 
 export function windSettingsForModelOpen(storage: Storage): WindViewSettings {
-  return { ...readStoredWindSettings(storage), enabled: true };
+  return { ...readStoredWindSettings(storage), enabled: false };
 }
 
 export function readStoredWindSettings(storage: Storage): WindViewSettings {

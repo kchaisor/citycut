@@ -404,7 +404,7 @@ describe("model top bar group layout", () => {
           expect(audit3d, audit3d.errors.join("; ")).toMatchObject({ ok: true });
 
           if (width === 1280) {
-            await page.locator('.model button[data-section="analysis"]').first().click({ force: true });
+            await page.locator('.model .env-mode-btn[data-analysis="solar"]').click({ force: true });
             await page.waitForTimeout(400);
             const gap = await page.evaluate(() => {
               const bar = document.querySelector(".model .bottom-bar.env-console");
@@ -414,7 +414,7 @@ describe("model top bar group layout", () => {
             });
             expect(gap).toBeGreaterThanOrEqual(16);
             await page.keyboard.press("Escape").catch(() => {});
-            await page.locator('.model button[data-section="analysis"]').first().click({ force: true }).catch(() => {});
+            await page.locator('.model .env-mode-btn[data-analysis="solar"]').click({ force: true }).catch(() => {});
             await page.waitForTimeout(200);
           }
 

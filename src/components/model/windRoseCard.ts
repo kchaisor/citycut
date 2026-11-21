@@ -1,15 +1,14 @@
+import type { ActiveAnalysis } from "../../lib/sidebarSections";
 import type { SiteWindSelection } from "../../lib/windRoseData";
 
 export function windRoseCardOn({
-  leftOpen,
   tab,
   analysisKind,
   siteWind,
 }: {
-  leftOpen: string | null;
   tab: string;
-  analysisKind: string;
+  analysisKind: ActiveAnalysis;
   siteWind: SiteWindSelection | null;
 }): boolean {
-  return leftOpen === "analysis" && tab !== "satellite" && analysisKind === "wind" && siteWind != null;
+  return tab !== "satellite" && analysisKind === "wind" && siteWind != null;
 }

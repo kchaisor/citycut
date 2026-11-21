@@ -226,7 +226,7 @@ export function Sidebar({
             </span>
           ) : null}
           {items.map((item) =>
-            item.id === "analysis" && siteIntel ? (
+            item.id === "drawing" && siteIntel ? (
               <Fragment key={item.id}>
                 {renderRailButton(item, false)}
                 <span className="sidebar-rail-slot">
@@ -282,7 +282,7 @@ export function Sidebar({
           data-panel-side={panelSide}
           data-active-section={active}
           aria-labelledby={titleId}
-          hidden={collapsed || (panelSide !== "right" && active === "analysis")}
+          hidden={collapsed}
         >
           <header className={active === "drawing" || active === "display" ? "sidebar-head sr-only" : "sidebar-head"}>
             <h2 id={titleId}>{title}</h2>

@@ -44,8 +44,7 @@ async function openModel(page, url) {
 }
 
 async function openAnalysisWind(page) {
-  await page.locator('.model button[data-section="analysis"]').first().click({ timeout: 120_000 });
-  await page.getByRole("tab", { name: /Wind Rose/i }).click();
+  await page.locator('.model .env-mode-btn[data-analysis="wind"]').click({ timeout: 120_000 });
   await page.waitForSelector(".wind-rose-analysis-card", { timeout: 120_000 });
   await page.waitForFunction(
     () => {

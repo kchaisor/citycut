@@ -15,10 +15,10 @@ import { qaHideHeightPopoverFromSearch } from "../../lib/qaCameraBridge";
 import { sunStudyMutedOn, toggleSelection } from "../../lib/sunStudyPlan";
 import { SceneBoundary } from "../SceneBoundary";
 import { SunHoursLegendDock } from "./SunHoursLegendDock";
-import { solarStudyViewActive } from "../../lib/solarStudyView";
+import { solarSettingsForActiveAnalysis, solarStudyViewActive, windFlowActive } from "../../lib/solarStudyView";
 import { ViewLegend } from "../ViewPanel";
 
-import { SectionKnifeElevationPanel } from "../SectionKnifeElevationPanel";import { WalkRippleLegend } from "../WalkRipplePanel";
+import { SectionKnifeElevationPanel } from "../SectionKnifeElevationPanel";
 
 
 import { shouldShowIntroBridgePill } from "./shouldShowIntroBridgePill";
@@ -51,7 +51,6 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
     landmarkLabelsOn,
     landmarkScreens,
     landmarkSources,
-    leftOpen,
     lineStyles,
     massing,
     model,
@@ -71,7 +70,6 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
     planViewport,
     renderQuality,
     resetBuildingHeight,
-    rippleAnalysisOpen,
     saveBuildingHeight,
     sceneSelection,
     sectionKnifeTool,
@@ -100,8 +98,6 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
     viewAnalysisOpen,
     walk,
     walkDrawing,
-    walkRipple,
-    walkRippleToast,
     windMotion,
     windSettings,
     designWind,
@@ -162,8 +158,8 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
                 corner={view.corner}
                 freeRotate={view.freeRotate}
                 snapId={snapId}
-                solar={solar}
-                windEnabled={windSettings.enabled}
+                solar={solarSettingsForActiveAnalysis(solar, analysisKind)}
+                windEnabled={windFlowActive(windSettings.enabled, analysisKind)}
                 siteWind={siteWind}
                 windPeriod={windSettings.period}
                 windDesignWind={designWind}
@@ -202,24 +198,14 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
                 display={view3dDisplay}
                 importedMassing={massing.group}
                 walkLayer={walk.layer.root}
-                walkRippleLayer={rippleAnalysisOpen ? walkRipple.layer.root : null}
-                walkRippleTint={rippleAnalysisOpen ? walkRipple.tint : null}
-                walkRippleArrivals={rippleAnalysisOpen ? walkRipple.buildingArrivals : null}
-                walkRipplePlaying={rippleAnalysisOpen && walkRipple.ripplePlaying}
-                onScenePoint={
-                  walkRipple.placing
-                    ? (east, north) => walkRipple.placePoint(east, north)
-                    : walkDrawing
-                      ? walk.addPoint
-                      : massing.onScenePoint
-                }
+                onScenePoint={walkDrawing ? walk.addPoint : massing.onScenePoint}
                 sectionKnife={sectionKnifeTool}
                 onSectionKnifePoseChange={onSectionKnifePoseChange}
                 quality={renderQuality}
                 sunHoursGroundGrid={solar.sunHours ? sunHoursGround.grid : null}
                 sunHoursDirectOverlay={solar.sunHours ? sunHoursGround.overlay : null}
                 sunHoursScaleMax={solar.sunHours ? sunHoursGround.scaleMaxHours : 0}
-                solarAnalysisActive={solarStudyViewActive(leftOpen, analysisKind)}
+                solarAnalysisActive={solarStudyViewActive(analysisKind)}
                 landmarkSources={landmarkSources}
                 landmarkLabelsOn={landmarkLabelsOn}
                 onLandmarkScreens={setLandmarkScreens}
@@ -253,12 +239,6 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
                 <SectionKnifeElevationPanel model={displayModel} tool={sectionKnifeTool} />
               )}
               {viewAnalysisOpen && walk.clickCount > 0 && <ViewLegend />}
-              {rippleAnalysisOpen && walkRipple.buildingArrivals && <WalkRippleLegend />}
-              {walkRippleToast ? (
-                <p className="walk-ripple-toast" role="status">
-                  {walkRippleToast}
-                </p>
-              ) : null}
               {tab === "3d" && solar.sunHours ? (
                 <SunHoursLegendDock stackClassName="sun-hours-direct-dock-stack" sunHoursGround={sunHoursGround} />
               ) : null}

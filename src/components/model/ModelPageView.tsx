@@ -14,7 +14,6 @@ export function ModelPageView({ vm }: { vm: ModelPageViewModel }) {
     cutDimLabel,
     introHoldReleasedRef,
     introWebglReadyRef,
-    leftOpen,
     modelRootRef,
     setShortcutCheatsheetOpen,
     shortcutCheatsheetOpen,
@@ -27,7 +26,7 @@ export function ModelPageView({ vm }: { vm: ModelPageViewModel }) {
     topbarLayout,
   } = vm;
 
-  const windCardOn = windRoseCardOn({ leftOpen, tab, analysisKind, siteWind });
+  const windCardOn = windRoseCardOn({ tab, analysisKind, siteWind });
   useWindPlanCardBounds(windCardOn && windPlan.active);
 
   return (

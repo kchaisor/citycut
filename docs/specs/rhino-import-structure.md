@@ -35,6 +35,12 @@ Kelvin confirmed these on 21 Nov 2026:
 2. **Short names under a scheme heading.** The import list shows the short building name under a scheme heading, for example Tower A under Scheme A, not the full layer path as the row title.
 3. **A colour on the file recolours every building.** The whole-file colour is kept. Setting it overrides use colours on every building in that file. (This overrides a later suggestion to drop the file colour.)
 
+### Pending decision for a later draft (21 Nov 2026)
+
+Kelvin confirmed this on 21 Nov 2026; it is not built yet:
+
+- **Imported buildings are always white in Drawing.** The use colour and the file colour apply in 3D only. This sits beside choice 3 above: a file colour still recolours every building in that file, but only in 3D.
+
 ## How we'll know it works
 
 Tick these on the real desktop view, with a test `.3dm` that has three buildings on three layers, one with `building`, `use` and `levels` user text:

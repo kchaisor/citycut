@@ -1,6 +1,5 @@
-import { Eye, Footprints, Sun, Wind } from "lucide-react";
+import { Eye, Sun, Wind } from "lucide-react";
 
-import { WalkRippleTimeScrubber } from "../WalkRippleTimeScrubber";
 import { WALK_SPEEDS } from "../useWalkViewshed";
 import {
   RESCODE_WINDOW_END_HOUR,
@@ -14,6 +13,8 @@ import {
   solarSliderPercent,
   solarSliderSpan,
 } from "../../lib/solarSlider";
+import { SUN_STUDY_DATES } from "../../lib/solar";
+import { toggleAnalysis, type SiteAnalysisKind } from "../../lib/sidebarSections";
 import { WIND_PERIOD_LABELS, WindPeriodId } from "../../lib/windRose";
 import { withDesignWind, withWindSeason } from "../../lib/windState";
 import { DesignWindPresets } from "../DesignWindPresets";
@@ -31,7 +32,6 @@ export function ModelPageViewportFooter({ vm }: { vm: import("./useModelPage").M
     consoleSun,
     consoleWindStats,
     drawing,
-    leftOpen,
     model,
     renderQuality,
     setAnalysisKind,
@@ -42,13 +42,20 @@ export function ModelPageViewportFooter({ vm }: { vm: import("./useModelPage").M
     tab,
     walk,
     walkAt,
-    walkRipple,
     windSettings,
     windPlan,
     designWinds,
     designWind,
   } = vm;
   const planWind = windPlan.active && analysisKind === "wind";
+  const solarChrome = analysisKind !== "wind" && analysisKind !== "view";
+  const solarLive = analysisKind === "solar";
+  const toggleMode = (kind: SiteAnalysisKind) => {
+    const next = toggleAnalysis(analysisKind, kind);
+    setAnalysisKind(next);
+    if (next === "wind" && !windSettings.enabled) commitWind({ ...windSettings, enabled: true });
+    if (next !== "wind" && windSettings.enabled) commitWind({ ...windSettings, enabled: false });
+  };
   const seasonActive = (periodId: WindPeriodId) => designWind == null && windSettings.period === periodId;
   const windTelemetry = (
     <div className="solar-telemetry mono" aria-label="Live wind telemetry">
@@ -79,64 +86,45 @@ export function ModelPageViewportFooter({ vm }: { vm: import("./useModelPage").M
 
   return (
     <>
-        {leftOpen === "analysis" && tab !== "satellite" ? (
+        {tab !== "satellite" ? (
           <div
             className="bottom-bar env-console hud-card"
             role="region"
             aria-label="Environmental analysis console"
+            data-analysis={analysisKind ?? "none"}
           >
             <div className="env-top-row">
-              <div className="env-mode-seg" role="tablist" aria-label="Environmental analysis sub-mode">
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={analysisKind === "solar"}
-                  className={analysisKind === "solar" ? "env-mode-btn active" : "env-mode-btn"}
-                  onClick={() => setAnalysisKind("solar")}
-                >
-                  <Sun size={12} strokeWidth={2.2} aria-hidden="true" />
-                  <span>Solar Study</span>
-                </button>
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={analysisKind === "wind"}
-                  className={analysisKind === "wind" ? "env-mode-btn active" : "env-mode-btn"}
-                  onClick={() => {
-                    setAnalysisKind("wind");
-                    if (!windSettings.enabled) {
-                      commitWind({ ...windSettings, enabled: true });
-                    }
-                  }}
-                >
-                  <Wind size={12} strokeWidth={2.2} aria-hidden="true" />
-                  <span>Wind Rose</span>
-                </button>
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={analysisKind === "view"}
-                  className={analysisKind === "view" ? "env-mode-btn active" : "env-mode-btn"}
-                  onClick={() => setAnalysisKind("view")}
-                >
-                  <Eye size={12} strokeWidth={2.2} aria-hidden="true" />
-                  <span>Viewshed Walk</span>
-                </button>
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={analysisKind === "walkRipple"}
-                  className={analysisKind === "walkRipple" ? "env-mode-btn active" : "env-mode-btn"}
-                  onClick={() => setAnalysisKind("walkRipple")}
-                >
-                  <Footprints size={12} strokeWidth={2.2} aria-hidden="true" />
-                  <span>Walk Ripple</span>
-                </button>
+              <span className="env-console-title">Analysis</span>
+              <span className="v-sep hud-sep" aria-hidden="true" />
+              <div className="env-mode-seg" role="group" aria-label="Analysis modes">
+                {(
+                  [
+                    ["solar", Sun, "Solar Study"],
+                    ["wind", Wind, "Wind Rose"],
+                    ["view", Eye, "Viewshed Walk"],
+                  ] as const
+                ).map(([kind, Icon, label]) => (
+                  <button
+                    key={kind}
+                    type="button"
+                    data-analysis={kind}
+                    aria-pressed={analysisKind === kind}
+                    className={analysisKind === kind ? "env-mode-btn active" : "env-mode-btn"}
+                    onClick={() => toggleMode(kind)}
+                  >
+                    <Icon size={12} strokeWidth={2.2} aria-hidden="true" />
+                    <span>{label}</span>
+                  </button>
+                ))}
               </div>
 
+              {solarChrome && (
+              <div
+                className={solarLive ? "env-solar-chrome" : "env-solar-chrome env-solar-idle"}
+                {...(!solarLive ? { inert: true } : {})}
+              >
               <span className="v-sep hud-sep" aria-hidden="true" />
-
-              {analysisKind === "solar" && (() => {
+              {(() => {
                 const azDeg = Math.round(((consoleSun.azimuthDeg % 360) + 360) % 360);
                 const dirs = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
                 const cardinal = dirs[Math.round(azDeg / 45) % 8] ?? "N";
@@ -163,67 +151,9 @@ export function ModelPageViewportFooter({ vm }: { vm: import("./useModelPage").M
                 );
               })()}
 
-              {analysisKind === "wind" && !planWind && windTelemetry}
+              <span className="v-sep hud-sep" aria-hidden="true" />
 
-              {analysisKind === "view" && (
-                <div className="solar-telemetry mono" aria-label="Live viewshed telemetry">
-                  <div className="st-item">
-                    <span className="st-k">EYE</span>
-                    <span className="st-v">{walk.eyeM.toFixed(1)}m</span>
-                  </div>
-                  <span className="st-dot" aria-hidden="true">·</span>
-                  <div className="st-item">
-                    <span className="st-k">RADIUS</span>
-                    <span className="st-v">{walk.radiusM}m</span>
-                  </div>
-                  <span className="st-dot" aria-hidden="true">·</span>
-                  <div className="st-item">
-                    <span className="st-k">PATH</span>
-                    <span className="st-v">{walk.clickCount > 0 ? `${Math.round(walk.lengthM)}m (${walk.clickCount} pts)` : "Click ground"}</span>
-                  </div>
-                </div>
-              )}
-
-              {analysisKind === "walkRipple" && (
-                <div className="solar-telemetry mono" aria-label="Walk ripple telemetry">
-                  <div className="st-item">
-                    <span className="st-k">PACE</span>
-                    <span className="st-v">80 m/min</span>
-                  </div>
-                  <span className="st-dot" aria-hidden="true">·</span>
-                  <div className="st-item">
-                    <span className="st-k">BANDS</span>
-                    <span className="st-v">5 · 10 · 15 min</span>
-                  </div>
-                  <span className="st-dot" aria-hidden="true">·</span>
-                  <div className="st-item">
-                    <span className="st-k">MODE</span>
-                    <span className="st-v">
-                      {walkRipple.times?.mode === "straight" ? "Straight-line" : walkRipple.times ? "Network" : "Pick origin"}
-                    </span>
-                  </div>
-                </div>
-              )}
-
-              {!planWind && <span className="v-sep hud-sep" aria-hidden="true" />}
-
-              {planWind ? (
-                <WindPlanSwitch plan={windPlan} />
-              ) : (
-                <div className="overlay-chips" role="group" aria-label="Scene overlay toggles">
-                  {analysisKind === "solar" && (
-                    <>
-                      {tab !== "drawing" && (
-                        <button
-                          type="button"
-                          className={solar.showPath ? "ov-chip on" : "ov-chip"}
-                          aria-pressed={solar.showPath}
-                          onClick={() => commitSolar({ ...solar, showPath: !solar.showPath })}
-                        >
-                          <span className="ov-dot" aria-hidden="true" />
-                          <span>3D Sun Dome</span>
-                        </button>
-                      )}
+              <div className="overlay-chips" role="group" aria-label="Scene overlay toggles">
                       <button
                         type="button"
                         className={solar.castShadows ? "ov-chip on" : "ov-chip"}
@@ -242,6 +172,15 @@ export function ModelPageViewportFooter({ vm }: { vm: import("./useModelPage").M
                       >
                         <span className="ov-dot" aria-hidden="true" />
                         <span>Sun hours</span>
+                      </button>
+                      <button
+                        type="button"
+                        className={solar.showPath ? "ov-chip on" : "ov-chip"}
+                        aria-pressed={solar.showPath}
+                        onClick={() => commitSolar({ ...solar, showPath: !solar.showPath })}
+                      >
+                        <span className="ov-dot" aria-hidden="true" />
+                        <span>3D Sun Dome</span>
                       </button>
                       {tab === "drawing" && drawing === "site" && (
                         <button
@@ -273,9 +212,37 @@ export function ModelPageViewportFooter({ vm }: { vm: import("./useModelPage").M
                           <span>{sunStudySelected.length} selected ×</span>
                         </button>
                       )}
-                    </>
-                  )}
+              </div>
+              </div>
+              )}
 
+              {analysisKind === "wind" && !planWind && windTelemetry}
+
+              {analysisKind === "view" && (
+                <div className="solar-telemetry mono" aria-label="Live viewshed telemetry">
+                  <div className="st-item">
+                    <span className="st-k">EYE</span>
+                    <span className="st-v">{walk.eyeM.toFixed(1)}m</span>
+                  </div>
+                  <span className="st-dot" aria-hidden="true">·</span>
+                  <div className="st-item">
+                    <span className="st-k">RADIUS</span>
+                    <span className="st-v">{walk.radiusM}m</span>
+                  </div>
+                  <span className="st-dot" aria-hidden="true">·</span>
+                  <div className="st-item">
+                    <span className="st-k">PATH</span>
+                    <span className="st-v">{walk.clickCount > 0 ? `${Math.round(walk.lengthM)}m (${walk.clickCount} pts)` : "Click ground"}</span>
+                  </div>
+                </div>
+              )}
+
+              {analysisKind && !planWind && !solarChrome && <span className="v-sep hud-sep" aria-hidden="true" />}
+
+              {planWind ? (
+                <WindPlanSwitch plan={windPlan} />
+              ) : analysisKind === "wind" || analysisKind === "view" ? (
+                <div className="overlay-chips" role="group" aria-label="Scene overlay toggles">
                   {analysisKind === "wind" && (
                     <>
                       <button
@@ -313,38 +280,37 @@ export function ModelPageViewportFooter({ vm }: { vm: import("./useModelPage").M
                     </>
                   )}
 
-                  {analysisKind === "walkRipple" && (
-                    <>
-                      <button
-                        type="button"
-                        className={walkRipple.placing ? "ov-chip on" : "ov-chip"}
-                        aria-pressed={walkRipple.placing}
-                        onClick={() => walkRipple.setPlacing(!walkRipple.placing)}
-                      >
-                        <span className="ov-dot" aria-hidden="true" />
-                        <span>{walkRipple.placing ? "Click ground…" : "Pick origin"}</span>
-                      </button>
-                      <button
-                        type="button"
-                        className={walkRipple.status === "ready" ? "ov-chip on" : "ov-chip"}
-                        disabled={!walkRipple.times}
-                        onClick={walkRipple.clear}
-                      >
-                        <span className="ov-dot" aria-hidden="true" />
-                        <span>Clear ripple</span>
-                      </button>
-                    </>
-                  )}
                 </div>
-              )}
+              ) : null}
 
+              <div className="env-quality" role="group" aria-label="Render quality">
+                {(
+                  [
+                    ["high", "High"],
+                    ["fast", "Fast"],
+                  ] as const
+                ).map(([id, label]) => (
+                  <button
+                    key={id}
+                    type="button"
+                    className={renderQuality === id ? "env-quality-btn active" : "env-quality-btn"}
+                    aria-pressed={renderQuality === id}
+                    aria-label={`${label} render quality`}
+                    onClick={() => commitRenderQuality(id)}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
             </div>
 
             <div className="env-bottom-row">
-              {analysisKind === "solar" && (() => {
-                const isJun = solar.month === 6 && solar.day === 21;
-                const isSep = solar.month === 9 && solar.day === 22;
-                const isDec = solar.month === 12 && solar.day === 22;
+              {solarChrome && (
+              <div
+                className={solarLive ? "env-solar-chrome env-solar-bottom" : "env-solar-chrome env-solar-bottom env-solar-idle"}
+                {...(!solarLive ? { inert: true } : {})}
+              >
+              {(() => {
                 const formatMin = (m: number) =>
                   `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
                 const curMin = solar.hour * 60 + solar.minute;
@@ -354,31 +320,23 @@ export function ModelPageViewportFooter({ vm }: { vm: import("./useModelPage").M
                 return (
                   <>
                     <div className="date-presets" role="group" aria-label="Solar date presets">
-                      <button
-                        type="button"
-                        className={isJun ? "p-pill active" : "p-pill"}
-                        aria-pressed={isJun}
-                        onClick={() => commitSolar({ ...solar, month: 6, day: 21, castShadows: true })}
-                      >
-                        21 Jun
-                      </button>
-                      <button
-                        type="button"
-                        className={isSep ? "p-pill active" : "p-pill"}
-                        aria-pressed={isSep}
-                        onClick={() => commitSolar({ ...solar, month: 9, day: 22, castShadows: true })}
-                      >
-                        22 Sep · Equinox
-                      </button>
-                      <button
-                        type="button"
-                        className={isDec ? "p-pill active" : "p-pill"}
-                        aria-pressed={isDec}
-                        onClick={() => commitSolar({ ...solar, month: 12, day: 22, castShadows: true })}
-                      >
-                        22 Dec
-                      </button>
+                      {SUN_STUDY_DATES.map((date) => {
+                        const active = solar.month === date.month && solar.day === date.day;
+                        return (
+                          <button
+                            key={date.id}
+                            type="button"
+                            className={active ? "p-pill active" : "p-pill"}
+                            aria-pressed={active}
+                            onClick={() => commitSolar({ ...solar, month: date.month, day: date.day, castShadows: true })}
+                          >
+                            {date.label} · {date.name}
+                          </button>
+                        );
+                      })}
                     </div>
+
+                    <span className="v-sep hud-sep" aria-hidden="true" />
 
                     <button
                       type="button"
@@ -468,6 +426,8 @@ export function ModelPageViewportFooter({ vm }: { vm: import("./useModelPage").M
                   </>
                 );
               })()}
+              </div>
+              )}
 
               {analysisKind === "wind" && (
                 <>
@@ -610,20 +570,6 @@ export function ModelPageViewportFooter({ vm }: { vm: import("./useModelPage").M
                 </>
               )}
 
-              {analysisKind === "walkRipple" && (
-                <WalkRippleTimeScrubber
-                  minutes={walkRipple.rippleMinutes}
-                  reachedBuildingCount={
-                    walkRipple.buildingArrivals
-                      ? [...walkRipple.buildingArrivals.values()].filter((a) => a <= walkRipple.rippleMinutes + 0.04).length
-                      : 0
-                  }
-                  disabled={!walkRipple.times}
-                  playing={walkRipple.ripplePlaying}
-                  onMinutesChange={walkRipple.setRippleMinutes}
-                  onPlayToggle={walkRipple.toggleRipplePlay}
-                />
-              )}
             </div>
           </div>
         ) : (
@@ -654,30 +600,6 @@ export function ModelPageViewportFooter({ vm }: { vm: import("./useModelPage").M
             <span className="studio-solar-time mono">
               {String(solar.hour).padStart(2, "0")}:{String(solar.minute).padStart(2, "0")} AEST
             </span>
-            {tab === "3d" ? (
-              <>
-                <span className="v-sep hud-sep" aria-hidden="true" />
-                <div className="solar-hours studio-quality-pills" role="group" aria-label="Render quality">
-                  {(
-                    [
-                      ["high", "High"],
-                      ["fast", "Fast"],
-                    ] as const
-                  ).map(([id, label]) => (
-                    <button
-                      key={id}
-                      type="button"
-                      className={renderQuality === id ? "h-tick studio-quality-tick active is-active" : "h-tick studio-quality-tick"}
-                      aria-pressed={renderQuality === id}
-                      aria-label={`${label} render quality`}
-                      onClick={() => commitRenderQuality(id)}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-              </>
-            ) : null}
           </div>
         )}
         {model.terrainError && (
