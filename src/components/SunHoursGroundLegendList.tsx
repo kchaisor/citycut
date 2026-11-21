@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { getColour } from "../lib/colours";
 import { useColourRevision } from "../lib/useColourRevision";
-import { SUN_HOURS_GROUND_CELL_M } from "../lib/sunHoursGround";
+import type { SunHoursResolution } from "../lib/sunHoursQuality";
 
 export const SUN_HOURS_DIRECT_LEGEND_DOCK_TICKS = 5;
 
@@ -37,14 +37,35 @@ export function dockCompactTickLabels(maxHours: number): string[] {
   });
 }
 
+function formatMetres(value: number): string {
+  return String(Math.round(value * 10) / 10);
+}
+
+export function sunHoursResolutionLabel(resolution: SunHoursResolution): string {
+  return `${formatMetres(resolution.cellM)} m grid · ${resolution.stepMinutes} min steps`;
+}
+
+export function sunHoursEasedLabel(resolution: SunHoursResolution): string | null {
+  if (!resolution.degraded) return null;
+  return `Eased from ${formatMetres(resolution.targetCellM)} m grid for this cut size`;
+}
+
+export function sunHoursCalculatingLabel(target: SunHoursResolution | null): string {
+  return target ? `Calculating ${sunHoursResolutionLabel(target)}…` : "Calculating…";
+}
+
 export function SunHoursGroundLegendList({
   maxHours,
+  resolution,
   compact = false,
   pending = false,
+  pendingResolution = null,
 }: {
   maxHours: number;
+  resolution: SunHoursResolution | null;
   compact?: boolean;
   pending?: boolean;
+  pendingResolution?: SunHoursResolution | null;
 }) {
   useColourRevision();
   const tickCount = compact ? SUN_HOURS_DIRECT_LEGEND_DOCK_TICKS : 11;
@@ -55,8 +76,13 @@ export function SunHoursGroundLegendList({
   const gradient = compact
     ? `linear-gradient(to right, ${gradientStops})`
     : `linear-gradient(to top, ${gradientStops})`;
-  const dockFootnote = `${SUN_HOURS_GROUND_CELL_M} m grid · ground, roofs, walls · full daylight`;
-  const sidebarFootnote = `Full daylight · ${SUN_HOURS_GROUND_CELL_M} m grid on ground, roofs, and walls.`;
+  const eased = resolution ? sunHoursEasedLabel(resolution) : null;
+  const dockFootnotes = resolution
+    ? [sunHoursResolutionLabel(resolution), ...(eased ? [eased] : []), "ground, roofs, walls · full daylight"]
+    : [];
+  const sidebarFootnote = resolution
+    ? `Full daylight · ${sunHoursResolutionLabel(resolution)} on ground, roofs, and walls.${eased ? ` ${eased}.` : ""}`
+    : null;
   return (
     <div
       className={compact ? "sun-hours-direct-legend is-compact" : "sun-hours-direct-legend"}
@@ -65,7 +91,7 @@ export function SunHoursGroundLegendList({
       data-sun-hours-direct-legend
     >
       <p className="sun-hours-direct-legend-title">Direct Sun Hours</p>
-      {compact ? (
+      {resolution && compact ? (
         <div className="sun-hours-direct-legend-scale">
           <div className="sun-hours-direct-legend-bar" style={{ background: gradient }} aria-hidden />
           <ol className="sun-hours-direct-legend-ticks" aria-hidden>
@@ -74,7 +100,8 @@ export function SunHoursGroundLegendList({
             ))}
           </ol>
         </div>
-      ) : (
+      ) : null}
+      {resolution && !compact ? (
         <div className="sun-hours-direct-legend-body">
           <span className="sun-hours-direct-legend-unit">hours</span>
           <div className="sun-hours-direct-legend-bar" style={{ background: gradient }} aria-hidden />
@@ -84,14 +111,23 @@ export function SunHoursGroundLegendList({
             ))}
           </ol>
         </div>
-      )}
-      <p
-        className={compact ? "sun-hours-direct-legend-footnote" : "field-note"}
-        data-sun-hours-ground-note
-      >
-        {compact ? dockFootnote : sidebarFootnote}
-        {pending ? " Computing…" : ""}
-      </p>
+      ) : null}
+      {compact
+        ? dockFootnotes.map((line) => (
+            <p key={line} className="sun-hours-direct-legend-footnote" data-sun-hours-ground-note>
+              {line}
+            </p>
+          ))
+        : sidebarFootnote && (
+            <p className="field-note" data-sun-hours-ground-note>
+              {sidebarFootnote}
+            </p>
+          )}
+      {pending ? (
+        <p className="sun-hours-direct-legend-status" role="status" data-sun-hours-calculating>
+          {sunHoursCalculatingLabel(pendingResolution)}
+        </p>
+      ) : null}
     </div>
   );
 }

@@ -31,6 +31,19 @@ These replace the earlier idea that Solar Study is the default and is implied by
 10. **Date buttons name the solstices:** "21 Jun · Winter solstice", "22 Sep · Equinox" and "22 Dec · Summer solstice".
 11. **Walk Ripple is removed** from the product.
 
+### Kelvin's preferences (22 Nov 2026, Direct Sun Hours resolution)
+
+Approved by Kelvin on 22 Nov 2026 (t81u): "Ok let's try this."
+
+12. **The High / Fast switch also sets Direct Sun Hours resolution.** There is no second control; the same switch in the Analysis bar covers both.
+13. **Fast** is the current study: a 3 m grid and 15-minute time steps on ground, roofs and walls.
+14. **High** is a 1 m grid and 5-minute time steps on ground, roofs and walls, limited to the cut and the buildings already in the sun-hours model.
+15. **Big cuts ease the High grid.** If a cut is too big for a 1 m grid (more than about 250,000 ground cells, the size of a 0.5 km cut at 1 m), the grid eases to 1.5 m and then 2 m. The 5-minute step stays. A 0.5 km cut stays at 1 m; a 1 km cut runs at 2 m. Walls coarsen first if they would blow the wall budget, as they already do in Fast.
+16. **The legend says what was used.** The legend footnote states the actual grid and time step of the result on screen, and says when the grid was eased from 1 m for the cut size.
+17. **The wait is visible.** While the study is calculating, the legend shows a "Calculating …" line naming the grid and step being worked on. The previous result stays on screen until the new one is ready; before the first result, the legend shows only its title and the calculating line. The study runs off the main thread, and a new date, model or quality cancels the old run.
+18. **High / Fast still also sets 3D render quality** (ambient occlusion and SMAA), unchanged.
+19. Results cannot be more accurate than the building heights and the terrain grid they sit on.
+
 ## How we'll know it works
 
 Open 40 Cleeland St, Dandenong (`?lat=-37.983826&lon=145.21555&label=40+Cleeland+St%2C+Dandenong+VIC+3175&km=1`), turn Solar Study on in the Analysis bar, pick 21 Jun · Winter solstice around 15:00, Perspective, Shadows on.
@@ -49,6 +62,7 @@ Open 40 Cleeland St, Dandenong (`?lat=-37.983826&lon=145.21555&label=40+Cleeland
 - [ ] The Sun hours pill is off when the model opens, and turning it on colours the site and shows the Direct Sun Hours legend.
 - [ ] In 3D with Sun hours on, the ground colour and the gaps under buildings line up with the 3D building footprints, at Dandenong and at Pyrmont (`?lat=-33.86627&lon=151.18389&km=1.5`). Before the fix, the ground colour on terrain was flipped north–south.
 - [ ] Every roof is fully coloured, with no bare white patches on large roofs. Before the fix, the roof colour sat just under the roof, so large roofs showed through.
+- [ ] With Sun hours on, the legend footnote reads "3 m grid · 15 min steps" on Fast and "1 m grid · 5 min steps" on High for a 0.5 km cut; on a 1 km cut, High reads "2 m grid · 5 min steps" and says the grid was eased from 1 m for this cut size. Switching High / Fast shows a "Calculating …" line on the legend until the new result is ready, the page stays responsive, and 3D ambient occlusion and SMAA still follow the switch.
 
 ## Out of scope
 

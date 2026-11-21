@@ -161,8 +161,25 @@ export function buildRoofFootprintMeshesForModel(
   const roofPositions: number[] = [];
   const roofColors: number[] = [];
   const buildingTriangles = new Map<number, number>();
+  const roofSamplesByBuilding = new Map<number, number[]>();
+  for (let index = 0; index < samples.length; index++) {
+    const sample = samples[index]!;
+    if (sample.kind !== "roof-cell") continue;
+    const indices = roofSamplesByBuilding.get(sample.buildingId);
+    if (indices) indices.push(index);
+    else roofSamplesByBuilding.set(sample.buildingId, [index]);
+  }
   for (const building of extrudedBuildingsForModel(model.buildings.filter(receivesSunHours))) {
-    const count = appendBuildingRoofFootprint(model, building, samples, hours, maxSunHours, roofPositions, roofColors);
+    const indices = roofSamplesByBuilding.get(building.id) ?? [];
+    const count = appendBuildingRoofFootprint(
+      model,
+      building,
+      indices.map((index) => samples[index]!),
+      Float32Array.from(indices, (index) => hours[index]!),
+      maxSunHours,
+      roofPositions,
+      roofColors,
+    );
     buildingTriangles.set(building.id, count);
   }
   return {
