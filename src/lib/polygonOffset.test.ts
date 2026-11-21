@@ -118,6 +118,63 @@ describe("polygonOffset", () => {
     expect(multiArea(shrunk)).toBeLessThan(1.85);
   });
 
+  it("skips a 10 x 1 m rectangle that collapses under a -2 m inset and keeps the rest", () => {
+    expect(offsetMultiPolygon(rect(10, 1), -2)).toEqual([]);
+    const wide: MultiPolygon = [
+      [
+        [
+          [20, 0],
+          [40, 0],
+          [40, 20],
+          [20, 20],
+          [20, 0],
+        ],
+      ],
+    ];
+    const shrunk = offsetMultiPolygon([...rect(10, 1), ...wide], -2);
+    expect(shrunk).toHaveLength(1);
+    expect(multiArea(shrunk)).toBeCloseTo(256, 0);
+  });
+
+  it("morphological close skips zero-width and self-crossing rings instead of throwing", () => {
+    const zeroWidth: MultiPolygon = [
+      [
+        [
+          [0, 0],
+          [5, 0],
+          [10, 0],
+          [0, 0],
+        ],
+      ],
+    ];
+    const sliver: MultiPolygon = [
+      [
+        [
+          [20, 20],
+          [30, 20],
+          [20, 20.0001],
+          [20, 20],
+        ],
+      ],
+    ];
+    const bowtie: MultiPolygon = [
+      [
+        [
+          [0, 0],
+          [10, 10],
+          [10, 0],
+          [0, 10],
+          [0, 0],
+        ],
+      ],
+    ];
+    expect(offsetCloseMultiPolygon(zeroWidth, 2)).toEqual([]);
+    expect(() => offsetCloseMultiPolygon(bowtie, 2)).not.toThrow();
+    const kept = offsetCloseMultiPolygon([...rect(10, 10), ...sliver], 2);
+    expect(kept).toHaveLength(1);
+    expect(multiArea(kept)).toBeCloseTo(100, 0);
+  });
+
   it("offsets CW and CCW rectangles the same way", () => {
     const ccw = offsetMultiPolygon(rect(10, 1.2, true), 2);
     const cw = offsetMultiPolygon(rect(10, 1.2, false), 2);
