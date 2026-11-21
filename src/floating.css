@@ -480,15 +480,10 @@ textarea {
 
 :root {
   --bg-card: rgb(252 251 249 / 94%);
-  --bg-elev: #FFFFFF;
   --bg-sub: #F2F1EC;
   --track-bg: #F2F1EC;
-  --ink: #141413;
-  --ink-2: #4A4945;
-  --ink-3: #787670;
   --ink-muted: #787670;
   --accent: #FFF500;
-  --border-outer: rgb(20 20 19 / 13%);
   --border-subtle: rgb(20 20 19 / 8%);
   --shadow-hud: 0 8px 28px -6px rgb(20 20 19 / 12%), 0 2px 6px -1px rgb(20 20 19 / 6%), inset 0 1px 0 0 rgb(255 255 255 / 85%);
   --font-sans: "Geist", -apple-system, BlinkMacSystemFont, sans-serif;
@@ -5210,4 +5205,135 @@ body,
   .model .topbar-export-wide {
     display: flex !important;
   }
+}
+
+.building-detail-panel .icon-close {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: 6px;
+  color: var(--ink-2);
+}
+.building-detail-panel .icon-close:hover { background: var(--bg-sub); color: var(--ink); }
+.building-detail-panel .icon-close:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+.building-detail-panel .landmark-block {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-outer);
+}
+.building-detail-panel .landmark-head {
+  margin: 0 0 4px;
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.building-detail-panel .landmark-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 4px 0 0;
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  font-weight: 500;
+}
+.building-detail-panel .landmark-row-label { flex: none; color: var(--ink-2); }
+.building-detail-panel .landmark-row-value { min-width: 0; text-align: right; color: var(--ink); }
+.building-detail-panel .landmark-row-value.is-numeric {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+.building-detail-panel .landmark-source {
+  display: inline-block;
+  margin-top: 6px;
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+  font-weight: 500;
+  color: var(--ink-3);
+  text-decoration: none;
+}
+.building-detail-panel .landmark-source:hover,
+.building-detail-panel .landmark-source:focus-visible { text-decoration: underline; }
+
+.landmark-label-layer {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-landmark-labels);
+  pointer-events: none;
+}
+.landmark-label {
+  position: absolute;
+  box-sizing: border-box;
+  max-width: 160px;
+  height: 20px;
+  padding: 0 6px;
+  border: 1px solid var(--border-outer);
+  border-radius: 4px;
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-raised);
+  font-family: var(--sans);
+  font-size: var(--fs-caption);
+  line-height: 18px;
+  font-weight: 500;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transform: translate(-50%, -50%);
+  opacity: 0;
+  pointer-events: none;
+  cursor: pointer;
+  transition: opacity var(--dur-fast) linear;
+}
+.landmark-label.is-visible { opacity: 1; pointer-events: auto; }
+.landmark-label:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+.plan-landmark-label {
+  font-family: var(--sans);
+  font-weight: 500;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--dur-fast) linear;
+}
+.plan-landmark-label.is-visible { opacity: 1; }
+
+.sidebar .landmark-labels-group { margin-bottom: 12px; }
+.sidebar .landmark-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  height: 32px;
+  margin: 0;
+  cursor: pointer;
+}
+.sidebar .landmark-toggle-label {
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  font-weight: 500;
+  color: var(--ink);
+}
+.sidebar .landmark-toggle input[type="checkbox"]:checked {
+  background: var(--ink);
+  box-shadow: none;
+}
+.sidebar .landmark-toggle input[type="checkbox"]:checked::after { background: var(--accent); }
+.sidebar .landmark-helper {
+  margin: 0;
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+  font-weight: 500;
+  color: var(--ink-3);
+}
+.sidebar .sidebar-gh .buildings-count {
+  font-family: var(--mono);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+  color: var(--ink-3);
 }

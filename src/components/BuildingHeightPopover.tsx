@@ -1,5 +1,9 @@
 import type { HiddenBuilding } from "../lib/hiddenBuildings";
 import { useEffect, useRef, useState } from "react";
+import { X } from "lucide-react";
+import { INSPECT_HUD_MARGIN } from "../lib/inspectHudLayout";
+import { landmarkRows, wikidataItemUrl } from "../lib/landmarkLabels";
+import type { WikidataLandmark } from "../lib/wikidataLandmarks";
 import { buildingHeightSourceLabelForBuilding } from "../lib/heightOverrides";
 import {
   emptyBuildingPopupDetails,
@@ -15,6 +19,7 @@ import type { BuildingFeat, LonLat } from "../types";
 
 type Props = {
   building: BuildingFeat;
+  landmark?: WikidataLandmark | null;
   center: LonLat;
   allBuildings?: BuildingFeat[];
   damRecords?: DamFloorRecord[];
@@ -42,8 +47,35 @@ function Field({ label, value }: { label: string; value: string }) {
   );
 }
 
+export function LandmarkBlock({
+  landmark,
+  buildingName,
+  modelHeightM,
+}: {
+  landmark: WikidataLandmark;
+  buildingName: string;
+  modelHeightM: number;
+}) {
+  const rows = landmarkRows(landmark, buildingName, modelHeightM);
+  return (
+    <section className="landmark-block" aria-label="Landmark">
+      <h4 className="landmark-head">Landmark</h4>
+      {rows.map((row) => (
+        <p key={row.label} className="landmark-row">
+          <span className="landmark-row-label">{row.label}</span>
+          <span className={row.numeric ? "landmark-row-value is-numeric" : "landmark-row-value"}>{row.value}</span>
+        </p>
+      ))}
+      <a className="landmark-source" href={wikidataItemUrl(landmark.qid)} target="_blank" rel="noopener noreferrer">
+        Wikidata ↗
+      </a>
+    </section>
+  );
+}
+
 export function BuildingHeightPopover({
   building,
+  landmark = null,
   center,
   allBuildings,
   damRecords,
@@ -111,6 +143,7 @@ export function BuildingHeightPopover({
   const footprintM2 = footprintArea(building.ring, building.holes);
   const footprintValue = footprintM2 >= 4 ? `${Math.round(footprintM2)} m²` : "";
   const heightReadout = `${building.height.toFixed(1)} m`;
+  const nameLine = details.nameLine !== "—" ? details.nameLine : building.overtureName ?? "";
 
   function commit() {
     const parsed = Number(value.replace(/,/g, "").trim());
@@ -133,7 +166,13 @@ export function BuildingHeightPopover({
       aria-label="Building details"
       style={
         floatingScreen
-          ? { left: floatingScreen.left, top: floatingScreen.top, right: "auto", bottom: "auto" }
+          ? {
+              left: floatingScreen.left,
+              top: floatingScreen.top,
+              right: "auto",
+              bottom: "auto",
+              maxHeight: `min(72vh, 460px, calc(100vh - ${floatingScreen.top + INSPECT_HUD_MARGIN}px))`,
+            }
           : undefined
       }
     >
@@ -153,15 +192,15 @@ export function BuildingHeightPopover({
           >
             {minimised ? "▴" : "▾"}
           </button>
-          <button type="button" className="icon-close" aria-label="Close" onClick={onClose}>
-            ×
+          <button type="button" className="icon-close" aria-label="Close" title="Close" onClick={onClose}>
+            <X size={16} strokeWidth={1.75} aria-hidden="true" />
           </button>
         </div>
       </header>
       {!minimised && (
         <div className="building-detail-panel-body">
           <Field label="Use" value={details.useLine !== "—" ? details.useLine : building.use.replace(/_/g, " ")} />
-          <Field label="Name / address" value={details.nameLine !== "—" ? details.nameLine : building.overtureName ?? ""} />
+          <Field label="Name / address" value={nameLine} />
           <Field label="Height" value={heightReadout} />
           <Field
             label="Levels"
@@ -174,6 +213,7 @@ export function BuildingHeightPopover({
           <Field label="Zone & overlays" value={details.zoneLine !== "—" ? details.zoneLine : building.zoneCode ?? ""} />
           {showCom && details.yearLine !== "—" ? <Field label="Year built" value={details.yearLine} /> : null}
           {showCom && details.developmentLine !== "—" ? <Field label="Development" value={details.developmentLine} /> : null}
+          {landmark && <LandmarkBlock landmark={landmark} buildingName={nameLine} modelHeightM={building.height} />}
           <div className="height-editor-block">
             <p className="meta">
               Height editor · Current: {building.height.toFixed(1)} m · {source}

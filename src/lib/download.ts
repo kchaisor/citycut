@@ -142,9 +142,10 @@ export async function downloadFigureSvg(
   scale: number,
   style?: LineStyles,
   heliodon?: HeliodonDiagramExportOptions | null,
+  landmarkLabels?: readonly import("./landmarkLabels").LandmarkLabelSource[] | null,
 ): Promise<void> {
   const { figureGroundSvg } = await import("./aiPlan");
-  const text = await figureGroundSvg(model, scale, style, heliodon);
+  const text = await figureGroundSvg(model, scale, style, heliodon, landmarkLabels);
   downloadBlob(svgFilename(model, "figure", scale), new Blob([text], { type: "image/svg+xml" }));
 }
 

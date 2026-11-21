@@ -60,7 +60,12 @@ export function buildLayeredSvg(widthMm: number, heightMm: number, chunks: PdfCh
   const textEl = (t: PdfText) => {
     if (!t.text) return "";
     const rotate = t.rotateDeg ? ` transform="rotate(${n(-t.rotateDeg)} ${n(t.x)} ${y(t.y)})"` : "";
-    return `<text x="${n(t.x)}" y="${y(t.y)}" font-family="Helvetica, Arial, sans-serif" font-size="${n(t.sizeMm)}" fill="${colour(t.color)}"${rotate}>${esc(t.text)}</text>`;
+    const anchor = t.anchor ? ` text-anchor="${t.anchor}" dominant-baseline="central"` : "";
+    const weight = t.weight ? ` font-weight="${t.weight}"` : "";
+    const halo = t.halo
+      ? ` stroke="${colour(t.halo.color)}" stroke-width="${n(t.halo.widthMm * 2)}" stroke-linejoin="round" paint-order="stroke"`
+      : "";
+    return `<text x="${n(t.x)}" y="${y(t.y)}" font-family="Helvetica, Arial, sans-serif" font-size="${n(t.sizeMm)}"${weight} fill="${colour(t.color)}"${halo}${anchor}${rotate}>${esc(t.text)}</text>`;
   };
 
   const groups = new Map<string, string[]>();

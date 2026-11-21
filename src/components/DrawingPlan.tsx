@@ -43,10 +43,13 @@ import { heliodonLabelFontMetres } from "../lib/heliodonDiagram";
 import { useSunStudyShadows } from "./useSunStudyShadows";
 import { SunHoursGroundPlanOverlay } from "./SunHoursGroundPlanOverlay";
 import { SunHoursRoofPlanOverlay } from "./SunHoursRoofPlanOverlay";
+import { DrawingLandmarkLabels } from "./DrawingLandmarkLabels";
+import type { LandmarkLabelSource } from "../lib/landmarkLabels";
 import type { SunHoursGroundRaster } from "../lib/sunHoursGroundRaster";
 import type { SunHoursGroundGrid } from "../lib/sunHoursGroundPlan";
 
 const NO_SELECTION: readonly number[] = [];
+const NO_LANDMARKS: readonly LandmarkLabelSource[] = [];
 
 export type DrawingKind = "site" | "figure-ground" | "exploded-axo" | "isometric";
 
@@ -95,6 +98,7 @@ export function DrawingPlan({
   sunHoursGroundGrid = null,
   sunHoursGroundScaleMax = 0,
   sunHoursRoofPlanRaster = null,
+  landmarkLabels = NO_LANDMARKS,
 }: {
   model: CityModel;
   kind?: DrawingKind;
@@ -119,6 +123,7 @@ export function DrawingPlan({
   sunHoursGroundGrid?: SunHoursGroundGrid | null;
   sunHoursGroundScaleMax?: number;
   sunHoursRoofPlanRaster?: SunHoursGroundRaster | null;
+  landmarkLabels?: readonly LandmarkLabelSource[];
 }) {
   const svgRef = useRef<SVGSVGElement>(null);
   const drag = useRef<{ px: number; py: number; view: PlanViewport } | null>(null);
@@ -655,6 +660,7 @@ export function DrawingPlan({
       {figure && heliodon && (
         <HeliodonPlanOverlay input={heliodon} planScale={planScale} sideM={model.sideM} />
       )}
+      {landmarkLabels.length > 0 && <DrawingLandmarkLabels labels={landmarkLabels} view={view} svgRef={svgRef} />}
       {empty && (
         <text x={0} y={0} textAnchor="middle" fontSize={model.sideM * 0.04} fill={planEmpty}>
           {figure ? "No building footprints in this frame" : "Nothing mapped in this frame"}

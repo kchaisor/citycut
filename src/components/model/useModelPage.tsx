@@ -72,6 +72,13 @@ import { useSidebarCollapsed } from "../../lib/sidebarCollapse";
 import { cutSizeLabel } from "../../lib/placeLabel";import { SIDEBAR_SECTION_LABELS, availableSidebarSections, initialSidebarState, isRightSidebarSection, reduceSidebar, resolveLeftSidebarSection, resolveRightSidebarSection, resolveSidebarSection, LeftSidebarSectionId, RightSidebarSectionId, SiteAnalysisKind } from "../../lib/sidebarSections";
 import { buildDataSources, countLoaded } from "../../lib/dataSources";
 import { useWikidataLandmarks } from "../useWikidataLandmarks";
+import {
+  LANDMARK_LABELS_DEFAULT_ON,
+  landmarkLabelSources,
+  landmarksByBuilding,
+} from "../../lib/landmarkLabels";
+import type { WikidataLandmark } from "../../lib/wikidataLandmarks";
+import type { LandmarkScreenState } from "../LandmarkLabelProjector";
 
 import { countTreeCrowns } from "../../lib/treeMassing";
 import { capturePresetFromSearch } from "../../lib/captureQuery";import { qaModeFromSearch } from "../../lib/qaCameraBridge";
@@ -456,6 +463,7 @@ export function useModelPage({
         windSettings.enabled && siteWind
           ? { selection: siteWind, period: windSettings.period }
           : null,
+      landmarkLabels: drawingLandmarkSources,
     };
   }
 
@@ -1716,7 +1724,7 @@ export function useModelPage({
     setExportError(null);
     setBusy("svg-figure");
     try {
-      await downloadFigureSvg(drawingModel, figureScale, lineStyles, heliodonDiagramExport());
+      await downloadFigureSvg(drawingModel, figureScale, lineStyles, heliodonDiagramExport(), drawingLandmarkSources);
     } catch {
       setExportError("The figure-ground SVG could not be written.");
     } finally {
@@ -1893,6 +1901,21 @@ export function useModelPage({
     { tier: "manual", label: heightTierLabel("manual") },
   ];
   const wikidata = useWikidataLandmarks(model);
+  const [landmarkLabelsOn, setLandmarkLabelsOn] = useState(LANDMARK_LABELS_DEFAULT_ON);
+  const [landmarkScreens, setLandmarkScreens] = useState<LandmarkScreenState | null>(null);
+  const landmarkByBuilding = useMemo(
+    (): ReadonlyMap<number, WikidataLandmark> =>
+      wikidata.status === "ok" ? landmarksByBuilding(wikidata.matches, model.buildings) : new Map(),
+    [wikidata, model.buildings],
+  );
+  const landmarkSources = useMemo(
+    () => landmarkLabelSources(landmarkByBuilding, displayModel.buildings),
+    [landmarkByBuilding, displayModel.buildings],
+  );
+  const drawingLandmarkSources = useMemo(
+    () => (landmarkLabelsOn ? landmarkLabelSources(landmarkByBuilding, drawingModel.buildings) : []),
+    [landmarkLabelsOn, landmarkByBuilding, drawingModel.buildings],
+  );
   const dataSources = buildDataSources({
     model,
     wikidata,
@@ -2158,6 +2181,14 @@ export function useModelPage({
   }, [tab, drawing, view.projection, view.freeRotate, cutDimLabel, topbarExportOpen, busy, sourcesLoaded.loaded]);
 
   return {
+    drawingLandmarkSources,
+    landmarkByBuilding,
+    landmarkLabelsOn,
+    landmarkScreens,
+    landmarkSources,
+    setLandmarkLabelsOn,
+    setLandmarkScreens,
+    wikidataStatus: wikidata.status,
     analysisKind,
     annotatedAppliedBuildings,
     applyShortcut,
