@@ -31,6 +31,19 @@ These replace the earlier idea that Solar Study is the default and is implied by
 10. **Date buttons name the solstices:** "21 Jun · Winter solstice", "22 Sep · Equinox" and "22 Dec · Summer solstice".
 11. **Walk Ripple is removed** from the product.
 
+### 3D Sun Dome look (Designbot review, 21 Nov 2026)
+
+12. **Size and place.** The dome sits on the centre of the site cut. Its radius is 0.6 × the cut's half-diagonal, kept between 120 m and 350 m: a 1 km square gets 350 m, a 400 m square about 170 m, a 200 m square 120 m. The radius is worked out from the cut; there is no radius slider for the 3D dome.
+13. **Camera.** When the dome turns on, the camera eases (250 ms) so the dome fits in the part of the view that is not covered by the on-screen panels, with 16 px to spare. Reduced motion jumps straight there. Any drag stops the ease.
+14. **Lines and labels stay the same size on screen** at every zoom. Lines are fixed-pixel and labels are a constant screen size.
+15. **Three line styles only.** The selected date's sun path is solid 2 px `--ink`. The other key dates are 1 px `--ink-3`: 21 Jun dashed 6/4, 22 Dec dotted 2/3, the equinox dashed 2/4. Hour lines are 0.75 px `--ink` at 35%. When the selected date is a key date, it is drawn once, in the selected style.
+16. **Hour labels** are only on the selected date's path, and only 09h, 12h and 15h, in Geist Mono 11/600 with tabular figures, 6 px outside the path, with a 2 px background-coloured halo.
+17. **Date labels** read "21 Jun" and "22 Dec" (and the selected date, day first), in Geist 11/500 `--ink-2` with a halo, at the sunset end of their path. The equinox has no label on the dome; the key covers it.
+18. **Horizon ring** is 1 px `--ink` at 25%, with 4 px ticks every 10°, and labels every 30° plus N / E / S / W in 10/700 caps.
+19. **The sun is the only accent:** a 10 px `--accent` dot with a 1 px `--ink` edge and a thin drop line to the ground. No yellow lines and no rayed sun icon.
+20. **Inline key.** While Solar Study is on and the 3D Sun Dome chip is on (3D view), a quiet key sits right after the Shadows / Sun hours / 3D Sun Dome chips in the Analysis bar: the selected date, the other key dates, hour lines and the sun dot, in micro type.
+21. The dome still belongs to Solar Study (item 9): it is hidden in Wind Rose, in Viewshed Walk and when every analysis is off.
+
 ## How we'll know it works
 
 Open 40 Cleeland St, Dandenong (`?lat=-37.983826&lon=145.21555&label=40+Cleeland+St%2C+Dandenong+VIC+3175&km=1`), turn Solar Study on in the Analysis bar, pick 21 Jun · Winter solstice around 15:00, Perspective, Shadows on.
@@ -45,6 +58,11 @@ Open 40 Cleeland St, Dandenong (`?lat=-37.983826&lon=145.21555&label=40+Cleeland
 - [ ] In Drawing with Solar Study on, the 3D Sun Dome chip sits with Shadows, Sun hours and 9–3pm Plan Fan.
 - [ ] The date buttons read "21 Jun · Winter solstice", "22 Sep · Equinox" and "22 Dec · Summer solstice".
 - [ ] There is no Walk Ripple anywhere.
+- [ ] On a 1 km cut the 3D Sun Dome is 350 m across the radius and centred on the cut; turning it on eases the camera so the dome clears the panels.
+- [ ] Zooming in and out keeps the dome lines and labels the same size on screen.
+- [ ] With 22 Dec picked, its path is the only solid line; 21 Jun is dashed, the equinox is finely dashed, and the hour lines are faint. Only 09h, 12h and 15h are labelled, and only on 22 Dec. The paths are labelled "21 Jun" and "22 Dec" at their sunset ends.
+- [ ] The only yellow on the dome is the sun dot, which has an ink edge and a drop line.
+- [ ] The Analysis bar shows the dome key beside the 3D Sun Dome chip while the dome is on, and the bar still fits on two rows at 1440×900.
 - [ ] The time slider runs 06 to 20, with the sunrise and sunset times still shown; dragging before sunrise or after sunset shows a night scene with no sun.
 - [ ] The Sun hours pill is off when the model opens, and turning it on colours the site and shows the Direct Sun Hours legend.
 - [ ] In 3D with Sun hours on, the ground colour and the gaps under buildings line up with the 3D building footprints, at Dandenong and at Pyrmont (`?lat=-33.86627&lon=151.18389&km=1.5`). Before the fix, the ground colour on terrain was flipped north–south.

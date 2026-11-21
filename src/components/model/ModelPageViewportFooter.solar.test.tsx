@@ -89,6 +89,25 @@ describe("Solar Study console", () => {
     expect(document.querySelectorAll("[data-sun-hours-ground-chip]")).toHaveLength(1);
   });
 
+  it("shows the sun dome key beside the chips only while the dome is on", () => {
+    render(<SolarFooter onSolar={() => undefined} />);
+    const dome = screen.getByRole("button", { name: "3D Sun Dome" });
+    if (dome.getAttribute("aria-pressed") === "true") fireEvent.click(dome);
+    expect(screen.queryByRole("list", { name: "Sun dome key" })).toBeNull();
+    fireEvent.click(dome);
+    const key = screen.getByRole("list", { name: "Sun dome key" });
+    const items = within(key).getAllByRole("listitem").map((item) => item.textContent);
+    expect(items).toHaveLength(5);
+    expect(items.at(0)).toMatch(/selected$/);
+    expect(items.slice(-2)).toEqual(["Hours", "Sun"]);
+    expect(key.querySelectorAll(".sun-dome-key-sun")).toHaveLength(1);
+  });
+
+  it("hides the sun dome key when Solar Study is off", () => {
+    render(<Footer />);
+    expect(screen.queryByRole("list", { name: "Sun dome key" })).toBeNull();
+  });
+
   it("runs the time slider from 06:00 to 20:00 with 06 and 20 ticks and keeps the sunrise and sunset marks", () => {
     render(<SolarFooter onSolar={() => undefined} />);
     const slider = screen.getByRole("slider", { name: "Solar time of day" }) as HTMLInputElement;

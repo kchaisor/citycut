@@ -1,26 +1,43 @@
-import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { LineMaterial } from "three/examples/jsm/lines/LineMaterial.js";
 import { LineSegments2 } from "three/examples/jsm/lines/LineSegments2.js";
 import { LineSegmentsGeometry } from "three/examples/jsm/lines/LineSegmentsGeometry.js";
-import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
-import { useFrame } from "@react-three/fiber";
+import { useFrame, useThree } from "@react-three/fiber";
 import { getColour } from "../lib/colours";
 import {
   DIAL_PLANE_EPSILON_M,
   HELIODON_LIFT_M,
-  altitudeRingRadius,
   dialPoint,
   flatDialGround,
   heliodonPoint,
   horizonArcDirections,
   type GroundHeight,
 } from "../lib/heliodonGeometry";
-import { heliodonRadiusM } from "../lib/heliodonRadius";
-import { HELIODON_LABELLED_HOURS, SUN_PATH_STYLES } from "../lib/heliodonSunPaths";
-import { dialPixelsPerDegree, dialTickLodOpacity } from "../lib/dialLod";
-import { heliodonPalette, type HeliodonPalette } from "../lib/heliodonPalette";
+import { sunDomeRadiusM } from "../lib/heliodonRadius";
+import {
+  SUN_DOME_FIT_MS,
+  SUN_DOME_HALO_PX,
+  SUN_DOME_HORIZON_LINE,
+  SUN_DOME_HOUR_LINE,
+  SUN_DOME_KEY_DATES,
+  SUN_DOME_LABEL_GAP_PX,
+  SUN_DOME_SUN_PX,
+  SUN_DOME_TICK_PX,
+  SUN_DOME_TICK_STEP_DEG,
+  easeInOutCubic,
+  hudSafeArea,
+  sunDomeArcs,
+  sunDomeBearingLabels,
+  sunDomeBounds,
+  sunDomeHourLabel,
+  type ScreenRect,
+  type SunDomeLineStyle,
+} from "../lib/heliodonSunDome";
+import { heliodonPalette } from "../lib/heliodonPalette";
+import { cornersOf, type Aabb } from "../lib/isoCamera";
 import { meanTerrainElevation } from "../lib/terrain";
+import { themeColor } from "../lib/themeColor";
 import type { TerrainField } from "../types";
 import { markScreenOnly } from "../lib/screenOnly";
 import { useColourRevision } from "../lib/useColourRevision";
@@ -48,240 +65,268 @@ export type SolarViewSettings = {
 };
 
 const OVERLAY_ORDER = 1000;
-
-export { SUN_PATH_STYLES } from "../lib/heliodonSunPaths";
 const GHOST_OPACITY = 0.38;
-const LABEL_GHOST_OPACITY = 0.35;
-const CASING_PX = 1.5;
+const LABEL_REACH_PX = SUN_DOME_TICK_PX + SUN_DOME_LABEL_GAP_PX + 14;
 
 const vec = (point: Vec3) => new THREE.Vector3(point[0], point[1], point[2]);
 
-function visibleMaterial(color: string): THREE.MeshBasicMaterial {
-  return new THREE.MeshBasicMaterial({ color, depthWrite: false, toneMapped: false });
+type DomeInk = { ink: string; ink2: string; ink3: string; accent: string; halo: string; sans: string; mono: string; scale: number };
+
+function domeInk(pixelRatio: number): DomeInk {
+  const root = typeof document === "undefined" ? null : getComputedStyle(document.documentElement);
+  return {
+    ink: themeColor("--ink", getColour("--sun-compass-label")),
+    ink2: themeColor("--ink-2", getColour("--sun-compass")),
+    ink3: themeColor("--ink-3", getColour("--sun-compass")),
+    accent: themeColor("--accent", getColour("--sun-marker")),
+    halo: themeColor("--bg-elev", heliodonPalette().halo),
+    sans: root?.getPropertyValue("--sans").trim() || "sans-serif",
+    mono: root?.getPropertyValue("--mono").trim() || "monospace",
+    scale: Math.max(1, pixelRatio),
+  };
 }
 
-function ghostMaterial<T extends THREE.Material>(material: T, opacity = GHOST_OPACITY): T {
-  const ghost = material.clone();
-  ghost.depthFunc = THREE.GreaterDepth;
-  ghost.depthWrite = false;
-  ghost.transparent = true;
-  ghost.opacity = material.opacity * opacity;
-  return ghost;
+type DomeLine = { material: LineMaterial; dashPx: readonly [number, number] | null };
+
+type DomeSprite = THREE.Sprite & { userData: { sizePx: [number, number] } };
+
+const LABEL_PRIORITY = { hour: 0, date: 1, cardinal: 2, bearing: 3 } as const;
+
+type DomeLabel = {
+  sprite: DomeSprite;
+  anchor: THREE.Vector3;
+  outward: THREE.Vector3;
+  gapPx: number;
+  priority: number;
+};
+
+type DomeTicks = { geometry: LineSegmentsGeometry; radius: number; ground: GroundHeight; wpp: number };
+
+type DomeRoot = THREE.Group & {
+  userData: { lines: DomeLine[]; labels: DomeLabel[]; ticks: DomeTicks | null };
+};
+
+function lineMaterial(root: DomeRoot, style: SunDomeLineStyle, ink: DomeInk, opacity = style.opacity): LineMaterial {
+  const material = new LineMaterial({
+    color: style.ink === "--ink" ? ink.ink : ink.ink3,
+    linewidth: style.widthPx,
+    transparent: opacity < 1,
+    opacity,
+    depthWrite: false,
+    dashed: Boolean(style.dashPx),
+    dashSize: style.dashPx?.[0] ?? 1,
+    gapSize: style.dashPx?.[1] ?? 0,
+  });
+  material.toneMapped = false;
+  root.userData.lines.push({ material, dashPx: style.dashPx });
+  return material;
 }
 
-type DialLodTier = "minor" | "medium" | "inner";
-
-function registerDialLod(root: HeliodonRoot, material: LineMaterial, tier: DialLodTier, baseOpacity: number) {
-  root.userData.lodMaterials.push({ tier, material, baseOpacity });
-}
-
-function addTwoPass(
-  root: HeliodonRoot,
-  object: THREE.Mesh | LineSegments2,
-  order: number,
-  ghost = true,
-  lod?: { tier: DialLodTier; baseOpacity: number },
-) {
-  object.renderOrder = order;
-  object.frustumCulled = false;
-  root.add(object);
-  const visible = object.material as LineMaterial;
-  if (lod && visible.isLineMaterial) registerDialLod(root, visible, lod.tier, lod.baseOpacity);
-  if (!ghost) return;
-  const hidden = object.clone();
-  const material = ghostMaterial(object.material as THREE.Material);
-  hidden.material = material;
-  if ((material as LineMaterial).isLineMaterial) {
-    material.depthWrite = true;
-    root.userData.lineMaterials.push(material as LineMaterial);
-    if (lod) registerDialLod(root, material as LineMaterial, lod.tier, lod.baseOpacity * GHOST_OPACITY);
-  }
-  hidden.renderOrder = order + 20;
-  root.add(hidden);
-}
-
-function polylineTube(points: THREE.Vector3[], radius: number): THREE.TubeGeometry | null {
-  if (points.length < 2) return null;
-  const path = new THREE.CurvePath<THREE.Vector3>();
-  for (let i = 1; i < points.length; i++) path.add(new THREE.LineCurve3(points[i - 1], points[i]));
-  return new THREE.TubeGeometry(path, Math.max(2, (points.length - 1) * 2), radius, 5, false);
-}
-
-function strokeGeometry(points: THREE.Vector3[], radius: number, pattern: readonly number[] | null): THREE.BufferGeometry | null {
-  if (!pattern) return polylineTube(points, radius);
-  const pieces: THREE.BufferGeometry[] = [];
-  let step = 0;
-  let left = pattern[0];
-  let current: THREE.Vector3[] = [points[0].clone()];
-  for (let i = 1; i < points.length; i++) {
-    const from = points[i - 1];
-    const to = points[i];
-    let travelled = 0;
-    const length = from.distanceTo(to);
-    while (length - travelled > left) {
-      travelled += left;
-      const at = from.clone().lerp(to, travelled / length);
-      if (step % 2 === 0) {
-        current.push(at);
-        const piece = polylineTube(current, radius);
-        if (piece) pieces.push(piece);
-      }
-      current = [at.clone()];
-      step += 1;
-      left = pattern[step % pattern.length];
-    }
-    left -= length - travelled;
-    if (step % 2 === 0) current.push(to.clone());
-    else current = [to.clone()];
-  }
-  if (step % 2 === 0) {
-    const piece = polylineTube(current, radius);
-    if (piece) pieces.push(piece);
-  }
-  if (pieces.length === 0) return null;
-  const merged = mergeGeometries(pieces, false);
-  for (const piece of pieces) piece.dispose();
-  return merged;
-}
-
-type LineWeight = { color: string; widthPx: number; opacity?: number; dash?: [number, number]; cased?: boolean };
-
-class LineBatch {
-  readonly positions: number[] = [];
-  segment(a: Vec3, b: Vec3) {
-    this.positions.push(a[0], a[1], a[2], b[0], b[1], b[2]);
-  }
-  polyline(points: Vec3[]) {
-    for (let i = 1; i < points.length; i++) this.segment(points[i - 1], points[i]);
-  }
-  addTo(root: HeliodonRoot, weight: LineWeight, casing: string, order: number, lodTier?: DialLodTier) {
-    if (this.positions.length === 0) return;
-    const geometry = new LineSegmentsGeometry();
-    geometry.setPositions(this.positions);
-    const lod = lodTier ? { tier: lodTier, baseOpacity: weight.opacity ?? 1 } : undefined;
-    const make = (color: string, widthPx: number, opacity: number, dash?: [number, number]) => {
-      const material = new LineMaterial({
-        color,
-        linewidth: widthPx,
-        transparent: opacity < 1,
-        opacity,
-        depthWrite: false,
-        dashed: Boolean(dash),
-        dashSize: dash?.[0] ?? 1,
-        gapSize: dash?.[1] ?? 0,
-      });
-      material.toneMapped = false;
-      root.userData.lineMaterials.push(material);
-      const lines = new LineSegments2(geometry, material);
-      if (dash) lines.computeLineDistances();
-      return lines;
-    };
-    if (weight.cased !== false) addTwoPass(root, make(casing, weight.widthPx + CASING_PX, 1), order - 1, false);
-    addTwoPass(root, make(weight.color, weight.widthPx, weight.opacity ?? 1, weight.dash), order, true, lod);
+function addLine(root: DomeRoot, geometry: LineSegmentsGeometry, style: SunDomeLineStyle, ink: DomeInk, order: number) {
+  const visible = new LineSegments2(geometry, lineMaterial(root, style, ink));
+  const hidden = new LineSegments2(geometry, lineMaterial(root, style, ink, Math.min(style.opacity * GHOST_OPACITY, 0.99)));
+  hidden.material.depthFunc = THREE.GreaterDepth;
+  for (const [lines, renderOrder] of [[visible, order], [hidden, order + 20]] as const) {
+    if (style.dashPx) lines.computeLineDistances();
+    lines.renderOrder = renderOrder;
+    lines.frustumCulled = false;
+    root.add(lines);
   }
 }
 
-function canvasSprite(canvas: HTMLCanvasElement, order: number): THREE.Sprite {
+function segmentsGeometry(polylines: Vec3[][]): LineSegmentsGeometry | null {
+  const positions: number[] = [];
+  for (const points of polylines) {
+    for (let i = 1; i < points.length; i++) positions.push(...points[i - 1]!, ...points[i]!);
+  }
+  if (positions.length === 0) return null;
+  const geometry = new LineSegmentsGeometry();
+  geometry.setPositions(positions);
+  return geometry;
+}
+
+function crispTexture(canvas: HTMLCanvasElement): THREE.CanvasTexture {
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
-  const material = new THREE.SpriteMaterial({ map: texture, depthTest: false, depthWrite: false, toneMapped: false });
-  const sprite = new THREE.Sprite(material);
-  sprite.renderOrder = order;
-  sprite.frustumCulled = false;
-  return sprite;
+  texture.generateMipmaps = false;
+  texture.minFilter = THREE.LinearFilter;
+  texture.magFilter = THREE.LinearFilter;
+  return texture;
 }
 
-function textSprite(
+function labelSprite(
   text: string,
-  options: { ink: string; halo: string; heightM: number; weight?: number },
-): THREE.Sprite | null {
-  if (typeof document === "undefined") return null;
+  options: { font: string; sizePx: number; weight: number; colour: string; halo: string; scale: number; letterSpacingEm?: number },
+): DomeSprite {
+  const scale = options.scale;
   const canvas = document.createElement("canvas");
   const context = canvas.getContext("2d");
-  if (!context) return null;
-  const px = 64;
-  const font = `${options.weight ?? 500} ${px}px system-ui, sans-serif`;
-  context.font = font;
-  const pad = 14;
-  canvas.width = Math.ceil(context.measureText(text).width + pad * 2);
-  canvas.height = px + pad * 2;
-  context.font = font;
-  context.textAlign = "center";
-  context.textBaseline = "middle";
-  context.fillStyle = options.ink;
-  context.fillText(text, canvas.width / 2, canvas.height / 2 + 3);
-  const sprite = canvasSprite(canvas, OVERLAY_ORDER + 40);
-  sprite.scale.set((options.heightM * canvas.width) / canvas.height, options.heightM, 1);
+  const fontSpec = `${options.weight} ${options.sizePx * scale}px ${options.font}`;
+  const spacing = `${(options.letterSpacingEm ?? 0) * options.sizePx * scale}px`;
+  const pad = SUN_DOME_HALO_PX * scale;
+  if (context) {
+    context.font = fontSpec;
+    context.letterSpacing = spacing;
+    canvas.width = Math.ceil(context.measureText(text).width + pad * 2);
+    canvas.height = Math.ceil(options.sizePx * 1.25 * scale + pad * 2);
+    context.font = fontSpec;
+    context.letterSpacing = spacing;
+    context.textAlign = "center";
+    context.textBaseline = "middle";
+    context.lineJoin = "round";
+    context.lineWidth = SUN_DOME_HALO_PX * 2 * scale;
+    context.strokeStyle = options.halo;
+    context.strokeText(text, canvas.width / 2, canvas.height / 2);
+    context.fillStyle = options.colour;
+    context.fillText(text, canvas.width / 2, canvas.height / 2);
+  }
+  const sprite = new THREE.Sprite(
+    new THREE.SpriteMaterial({ map: crispTexture(canvas), depthTest: false, depthWrite: false, toneMapped: false }),
+  ) as DomeSprite;
+  sprite.renderOrder = OVERLAY_ORDER + 40;
+  sprite.frustumCulled = false;
+  sprite.userData.sizePx = [canvas.width / scale, canvas.height / scale];
   return sprite;
 }
 
-function groundLabel(sprite: THREE.Sprite): THREE.Sprite {
-  const material = sprite.material as THREE.SpriteMaterial;
-  material.depthTest = true;
-  const ghost = new THREE.Sprite(ghostMaterial(material, LABEL_GHOST_OPACITY));
-  ghost.renderOrder = sprite.renderOrder + 1;
-  ghost.frustumCulled = false;
-  sprite.add(ghost);
-  return sprite;
+function addLabel(root: DomeRoot, label: DomeLabel) {
+  label.sprite.position.copy(label.anchor);
+  root.userData.labels.push(label);
+  root.add(label.sprite);
 }
 
-function setLabelOpacity(sprite: THREE.Sprite, opacity: number) {
-  (sprite.material as THREE.SpriteMaterial).opacity = opacity;
-  const ghost = sprite.children[0] as THREE.Sprite | undefined;
-  if (ghost) (ghost.material as THREE.SpriteMaterial).opacity = opacity * LABEL_GHOST_OPACITY;
-}
-
-function hourDotMaterial(fill: string): THREE.SpriteMaterial | null {
-  if (typeof document === "undefined") return null;
+function sunDotSprite(ink: DomeInk): DomeSprite {
+  const scale = ink.scale;
+  const size = SUN_DOME_SUN_PX + 2;
   const canvas = document.createElement("canvas");
-  canvas.width = 64;
-  canvas.height = 64;
+  canvas.width = size * scale;
+  canvas.height = size * scale;
   const context = canvas.getContext("2d");
-  if (!context) return null;
-  context.beginPath();
-  context.arc(32, 32, 22, 0, Math.PI * 2);
-  context.fillStyle = fill;
-  context.fill();
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  return new THREE.SpriteMaterial({ map: texture, depthTest: false, depthWrite: false, toneMapped: false });
-}
-
-function sunIcon(core: string): THREE.Sprite | null {
-  if (typeof document === "undefined") return null;
-  const canvas = document.createElement("canvas");
-  canvas.width = 256;
-  canvas.height = 256;
-  const context = canvas.getContext("2d");
-  if (!context) return null;
-  context.translate(128, 128);
-  context.lineCap = "round";
-  for (let i = 0; i < 12; i++) {
-    const t = (i / 12) * Math.PI * 2;
+  if (context) {
     context.beginPath();
-    context.moveTo(Math.cos(t) * 64, Math.sin(t) * 64);
-    context.lineTo(Math.cos(t) * 110, Math.sin(t) * 110);
-    context.lineWidth = 14;
-    context.strokeStyle = core;
+    context.arc(canvas.width / 2, canvas.height / 2, ((SUN_DOME_SUN_PX - 1) / 2) * scale, 0, Math.PI * 2);
+    context.fillStyle = ink.accent;
+    context.fill();
+    context.lineWidth = scale;
+    context.strokeStyle = ink.ink;
     context.stroke();
   }
-  context.beginPath();
-  context.arc(0, 0, 50, 0, Math.PI * 2);
-  context.fillStyle = core;
-  context.fill();
-  return canvasSprite(canvas, OVERLAY_ORDER + 60);
+  const sprite = new THREE.Sprite(
+    new THREE.SpriteMaterial({ map: crispTexture(canvas), depthTest: false, depthWrite: false, toneMapped: false }),
+  ) as DomeSprite;
+  sprite.renderOrder = OVERLAY_ORDER + 60;
+  sprite.frustumCulled = false;
+  sprite.userData.sizePx = [size, size];
+  return sprite;
+}
+
+function circle(radius: number, ground: GroundHeight, stepDeg = 1): Vec3[] {
+  const points: Vec3[] = [];
+  for (let deg = 0; deg <= 360; deg += stepDeg) points.push(dialPoint(deg, radius, ground));
+  return points;
+}
+
+function buildDial(root: DomeRoot, ink: DomeInk, radius: number, ground: GroundHeight) {
+  const ring = segmentsGeometry([circle(radius, ground)]);
+  if (ring) addLine(root, ring, SUN_DOME_HORIZON_LINE, ink, OVERLAY_ORDER - 10);
+  const ticks = new LineSegmentsGeometry();
+  ticks.setPositions([0, 0, 0, 0, 0, 0]);
+  addLine(root, ticks, SUN_DOME_HORIZON_LINE, ink, OVERLAY_ORDER - 9);
+  root.userData.ticks = { geometry: ticks, radius, ground, wpp: 0 };
+
+  for (const label of sunDomeBearingLabels()) {
+    const sprite = labelSprite(label.text, {
+      font: ink.sans,
+      sizePx: 10,
+      weight: 700,
+      colour: label.cardinal ? ink.ink : ink.ink3,
+      halo: ink.halo,
+      scale: ink.scale,
+      letterSpacingEm: 0.08,
+    });
+    const anchor = vec(dialPoint(label.deg, radius, ground));
+    addLabel(root, {
+      sprite,
+      anchor,
+      outward: anchor.clone().setY(0).normalize(),
+      gapPx: SUN_DOME_TICK_PX + SUN_DOME_TICK_PX,
+      priority: label.cardinal ? LABEL_PRIORITY.cardinal : LABEL_PRIORITY.bearing,
+    });
+  }
+}
+
+function buildSunPaths(
+  root: DomeRoot,
+  ink: DomeInk,
+  lat: number,
+  lon: number,
+  year: number,
+  selected: { month: number; day: number },
+  radius: number,
+  ground: GroundHeight,
+  centre: THREE.Vector3,
+) {
+  const onDome = (direction: Vec3) => heliodonPoint(direction, radius, ground);
+  const outwardOf = (point: THREE.Vector3) => point.clone().sub(centre).normalize();
+  for (const arc of sunDomeArcs(selected)) {
+    const points = horizonArcDirections(lat, lon, year, arc.month, arc.day, 5).map(onDome);
+    const geometry = segmentsGeometry([points]);
+    if (!geometry) continue;
+    addLine(root, geometry, arc.line, ink, OVERLAY_ORDER + (arc.selected ? 4 : 1));
+
+    if (arc.dateLabel) {
+      const sunset = vec(points[points.length - 1]!);
+      addLabel(root, {
+        sprite: labelSprite(arc.dateLabel, { font: ink.sans, sizePx: 11, weight: 500, colour: ink.ink2, halo: ink.halo, scale: ink.scale }),
+        anchor: sunset,
+        outward: outwardOf(sunset).setY(0).normalize(),
+        gapPx: SUN_DOME_LABEL_GAP_PX,
+        priority: LABEL_PRIORITY.date,
+      });
+    }
+    for (const mark of daylightHourMarks(lat, lon, year, arc.month, arc.day)) {
+      if (!arc.hourLabels.includes(mark.hour)) continue;
+      const at = vec(onDome(mark.sample.direction));
+      addLabel(root, {
+        sprite: labelSprite(sunDomeHourLabel(mark.hour), { font: ink.mono, sizePx: 11, weight: 600, colour: ink.ink, halo: ink.halo, scale: ink.scale }),
+        anchor: at,
+        outward: outwardOf(at),
+        gapPx: SUN_DOME_LABEL_GAP_PX,
+        priority: LABEL_PRIORITY.hour,
+      });
+    }
+  }
+
+  const hourDirections = new Map<number, Vec3[]>();
+  for (const key of SUN_DOME_KEY_DATES) {
+    for (const mark of daylightHourMarks(lat, lon, year, key.date.month, key.date.day)) {
+      const list = hourDirections.get(mark.hour) ?? [];
+      list.push(mark.sample.direction);
+      hourDirections.set(mark.hour, list);
+    }
+  }
+  const hourLines: Vec3[][] = [];
+  for (const directions of hourDirections.values()) {
+    if (directions.length < 2) continue;
+    const curve = new THREE.CatmullRomCurve3(directions.map(vec), false, "centripetal");
+    hourLines.push(curve.getPoints(directions.length * 12).map((point) => onDome(point.normalize().toArray() as Vec3)));
+  }
+  const geometry = segmentsGeometry(hourLines);
+  if (geometry) addLine(root, geometry, SUN_DOME_HOUR_LINE, ink, OVERLAY_ORDER - 5);
 }
 
 function disposeTree(root: THREE.Object3D) {
+  const geometries = new Set<THREE.BufferGeometry>();
   root.traverse((object) => {
     const mesh = object as THREE.Mesh;
-    mesh.geometry?.dispose();
+    if (mesh.geometry) geometries.add(mesh.geometry);
     const material = mesh.material as THREE.Material | THREE.Material[] | undefined;
     for (const item of Array.isArray(material) ? material : material ? [material] : []) {
       (item as THREE.SpriteMaterial).map?.dispose();
       item.dispose();
     }
   });
+  for (const geometry of geometries) geometry.dispose();
 }
 
 function useDisposable<T extends THREE.Object3D>(build: () => T, deps: readonly unknown[]): T {
@@ -289,6 +334,27 @@ function useDisposable<T extends THREE.Object3D>(build: () => T, deps: readonly 
   const object = useMemo(build, deps);
   useEffect(() => () => disposeTree(object), [object]);
   return object;
+}
+
+function useDomeFontsTick(): number {
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    const fonts = typeof document === "undefined" ? null : document.fonts;
+    if (!fonts?.load) return;
+    let live = true;
+    const root = getComputedStyle(document.documentElement);
+    const sans = root.getPropertyValue("--sans").trim() || "sans-serif";
+    const mono = root.getPropertyValue("--mono").trim() || "monospace";
+    Promise.all([fonts.load(`700 10px ${sans}`), fonts.load(`500 11px ${sans}`), fonts.load(`600 11px ${mono}`)])
+      .then(() => {
+        if (live) setTick((value) => value + 1);
+      })
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, []);
+  return tick;
 }
 
 export function useMelbourneSunSample(lat: number, lon: number, settings: SolarViewSettings): SolarSample {
@@ -299,261 +365,237 @@ export function useMelbourneSunSample(lat: number, lon: number, settings: SolarV
   );
 }
 
-type MovableLabel = { sprite: THREE.Sprite; spots: THREE.Vector3[] };
-
-type HeliodonRoot = THREE.Group & {
-  userData: {
-    cardinals: THREE.Sprite[];
-    degreeLabels: THREE.Sprite[];
-    movable: MovableLabel[];
-    lineMaterials: LineMaterial[];
-    lodMaterials: { tier: DialLodTier; material: LineMaterial; baseOpacity: number }[];
-  };
-};
-
-function buildDialAnnulus(root: HeliodonRoot, radius: number, ground: GroundHeight) {
-  const geometry = new THREE.RingGeometry(radius * 0.992, radius * 1.008, 96);
-  geometry.rotateX(-Math.PI / 2);
-  const mesh = new THREE.Mesh(
-    geometry,
-    new THREE.MeshBasicMaterial({
-      color: getColour("--heliodon-dial-disc"),
-      transparent: true,
-      opacity: 0.22,
-      depthWrite: false,
-      toneMapped: false,
-    }),
-  );
-  mesh.position.y = ground(0, 0) + 0.05;
-  mesh.renderOrder = OVERLAY_ORDER - 45;
-  mesh.frustumCulled = false;
-  root.add(mesh);
-}
-
-function circle(radius: number, ground: GroundHeight, stepDeg = 1): Vec3[] {
-  const points: Vec3[] = [];
-  for (let deg = 0; deg <= 360; deg += stepDeg) points.push(dialPoint(deg, radius, ground));
-  return points;
-}
-
-function buildDial(root: HeliodonRoot, palette: HeliodonPalette, ringRadius: number, sideM: number, ground: GroundHeight) {
-  const R = ringRadius;
-  buildDialAnnulus(root, R, ground);
-  const minor = new LineBatch();
-  const medium = new LineBatch();
-  const major = new LineBatch();
-  const strong = new LineBatch();
-  const altitude = new LineBatch();
-
-  for (const alt of [30, 60]) altitude.polyline(circle(altitudeRingRadius(alt, R), ground, 2));
-  strong.polyline(circle(R, ground));
-  for (let deg = 0; deg < 360; deg += 1) {
-    if (deg % 90 === 0) strong.segment(dialPoint(deg, R, ground), dialPoint(deg, R + sideM * 0.05, ground));
-    else if (deg % 10 === 0) major.segment(dialPoint(deg, R, ground), dialPoint(deg, R + sideM * 0.034, ground));
-    else if (deg % 5 === 0) medium.segment(dialPoint(deg, R, ground), dialPoint(deg, R + sideM * 0.022, ground));
-    else minor.segment(dialPoint(deg, R, ground), dialPoint(deg, R + sideM * 0.012, ground));
-  }
-
-  const { ink, grey, casing } = palette;
-  const uncased = { cased: false as const };
-  altitude.addTo(root, { color: grey, widthPx: 1.75, ...uncased }, casing, OVERLAY_ORDER - 20, "inner");
-  minor.addTo(root, { color: grey, widthPx: 1.5, ...uncased }, casing, OVERLAY_ORDER - 14, "minor");
-  medium.addTo(root, { color: ink, widthPx: 2, ...uncased }, casing, OVERLAY_ORDER - 12, "medium");
-  major.addTo(root, { color: ink, widthPx: 2.75, ...uncased }, casing, OVERLAY_ORDER - 10);
-  strong.addTo(root, { color: ink, widthPx: 3.5, ...uncased }, casing, OVERLAY_ORDER - 8);
-
-  const lift = (sprite: THREE.Sprite, point: Vec3) => sprite.position.set(point[0], point[1] + sprite.scale.y * 0.6, point[2]);
-  for (let deg = 10; deg < 360; deg += 10) {
-    if (deg % 90 === 0) continue;
-    const number = textSprite(`${deg}°`, { ink: grey, halo: palette.halo, heightM: sideM * 0.017, weight: 600 });
-    if (!number) continue;
-    lift(groundLabel(number), dialPoint(deg, R + sideM * 0.056, ground));
-    root.userData.degreeLabels.push(number);
-    root.add(number);
-  }
-
-  for (const [text, deg] of [["N", 0], ["E", 90], ["S", 180], ["W", 270]] as const) {
-    const north = text === "N";
-    const label = textSprite(text, {
-      ink,
-      halo: palette.halo,
-      heightM: sideM * (north ? 0.062 : 0.045),
-      weight: north ? 800 : 650,
-    });
-    if (!label) continue;
-    label.renderOrder = OVERLAY_ORDER + 50;
-    lift(groundLabel(label), dialPoint(deg, R + sideM * 0.088, ground));
-    root.userData.cardinals.push(label);
-    root.add(label);
-  }
-}
-
-function buildSunPaths(
-  root: HeliodonRoot,
-  palette: HeliodonPalette,
-  lat: number,
-  lon: number,
-  year: number,
-  sideM: number,
-  ringRadius: number,
-  ground: GroundHeight,
-  centre: THREE.Vector3,
-) {
-  const dome = ringRadius;
-  const dots = hourDotMaterial(palette.casing);
-  const onDome = (direction: Vec3) => vec(heliodonPoint(direction, dome, ground));
-  const outward = (point: THREE.Vector3, by: number) => point.clone().sub(centre).normalize().multiplyScalar(by).add(point);
-  const hourDirections = new Map<number, Vec3[]>();
-
-  for (const style of SUN_PATH_STYLES) {
-    const { month, day } = style.date;
-    const points = horizonArcDirections(lat, lon, year, month, day, 5).map(onDome);
-    if (points.length < 2) continue;
-    const pattern = style.pattern?.map((fraction) => fraction * sideM) ?? null;
-    const stroke = strokeGeometry(points, sideM * 0.0013, pattern);
-    if (stroke) addTwoPass(root, new THREE.Mesh(stroke, visibleMaterial(getColour(style.key))), OVERLAY_ORDER + 1);
-
-    for (const mark of daylightHourMarks(lat, lon, year, month, day)) {
-      const at = onDome(mark.sample.direction);
-      const list = hourDirections.get(mark.hour) ?? [];
-      list.push(mark.sample.direction);
-      hourDirections.set(mark.hour, list);
-      if (dots) {
-        const dot = new THREE.Sprite(dots);
-        dot.renderOrder = OVERLAY_ORDER + 30;
-        dot.frustumCulled = false;
-        dot.position.copy(at);
-        dot.scale.setScalar(sideM * 0.011);
-        root.add(dot);
-      }
-      if (!HELIODON_LABELLED_HOURS.has(mark.hour)) continue;
-      const label = textSprite(`${mark.hour}h`, { ink: palette.ink, halo: palette.halo, heightM: sideM * 0.022 });
-      if (!label) continue;
-      const near = outward(at, style.labelSide * sideM * 0.024);
-      const far = outward(at, -style.labelSide * sideM * 0.024);
-      label.position.copy(near);
-      root.userData.movable.push({ sprite: label, spots: [near, far] });
-      root.add(label);
-    }
-
-    const name = textSprite(style.label, { ink: palette.ink, halo: palette.halo, heightM: sideM * 0.026, weight: 650 });
-    if (name) {
-      const spot = (point: THREE.Vector3) => {
-        const at = outward(point, sideM * 0.035);
-        at.y = point.y + sideM * 0.04;
-        return at;
-      };
-      const spots = [spot(points[points.length - 1]), spot(points[0])];
-      name.position.copy(spots[0]);
-      root.userData.movable.push({ sprite: name, spots });
-      root.add(name);
-    }
-  }
-
-  const hourLines = new LineBatch();
-  for (const directions of hourDirections.values()) {
-    if (directions.length < 2) continue;
-    const curve = new THREE.CatmullRomCurve3(directions.map(vec), false, "centripetal");
-    const samples = curve
-      .getPoints(directions.length * 12)
-      .map((point) => heliodonPoint(point.normalize().toArray() as Vec3, dome, ground));
-    hourLines.polyline(samples);
-  }
-  hourLines.addTo(
-    root,
-    { color: palette.grey, widthPx: 1.2, dash: [sideM * 0.004, sideM * 0.004], cased: false },
-    palette.casing,
-    OVERLAY_ORDER - 5,
-  );
-}
-
-type ScreenBox = { x: number; y: number; w: number; h: number };
-
 const scratch = {
-  centre: new THREE.Vector3(),
-  edge: new THREE.Vector3(),
-  right: new THREE.Vector3(),
-  up: new THREE.Vector3(),
-  toCamera: new THREE.Vector3(),
-  outward: new THREE.Vector3(),
+  view: new THREE.Vector3(),
+  ndc: new THREE.Vector3(),
+  ahead: new THREE.Vector3(),
+  world: new THREE.Vector3(),
 };
 
-function screenBox(position: THREE.Vector3, scale: THREE.Vector3, camera: THREE.Camera, width: number, height: number): ScreenBox {
-  scratch.right.setFromMatrixColumn(camera.matrixWorld, 0);
-  scratch.up.setFromMatrixColumn(camera.matrixWorld, 1);
-  scratch.centre.copy(position).project(camera);
-  const x = ((scratch.centre.x + 1) / 2) * width;
-  const y = ((1 - scratch.centre.y) / 2) * height;
-  scratch.edge.copy(position).addScaledVector(scratch.right, scale.x / 2).addScaledVector(scratch.up, scale.y / 2).project(camera);
-  const ex = ((scratch.edge.x + 1) / 2) * width;
-  const ey = ((1 - scratch.edge.y) / 2) * height;
-  return { x, y, w: Math.abs(ex - x), h: Math.abs(ey - y) };
+function worldPerPixel(camera: THREE.Camera, at: THREE.Vector3, heightPx: number): number {
+  if ((camera as THREE.OrthographicCamera).isOrthographicCamera) {
+    const ortho = camera as THREE.OrthographicCamera;
+    return (ortho.top - ortho.bottom) / (ortho.zoom * heightPx);
+  }
+  const persp = camera as THREE.PerspectiveCamera;
+  const depth = Math.max(1e-3, -scratch.view.copy(at).applyMatrix4(persp.matrixWorldInverse).z);
+  return (2 * depth * Math.tan(THREE.MathUtils.degToRad(persp.fov) / 2)) / (persp.zoom * heightPx);
 }
 
-function overlaps(a: ScreenBox, b: ScreenBox, margin = 6): boolean {
-  return Math.abs(a.x - b.x) < a.w + b.w + margin && Math.abs(a.y - b.y) < a.h + b.h + margin;
+type ScreenBox = { x: number; y: number; hw: number; hh: number };
+
+function snapToPixel(centre: number, size: number, pixelRatio: number): number {
+  return Math.round((centre - size / 2) * pixelRatio) / pixelRatio + size / 2;
 }
 
-function useHeliodonFrame(
-  root: HeliodonRoot | null,
-  sun: THREE.Object3D | null,
-  centre: THREE.Vector3,
-  ringRadius: number,
-  ground: GroundHeight,
-) {
-  useFrame(({ camera, size }) => {
+function placeLabel(label: DomeLabel, camera: THREE.Camera, width: number, height: number, pixelRatio: number): ScreenBox | null {
+  const [wPx, hPx] = label.sprite.userData.sizePx;
+  const wpp = worldPerPixel(camera, label.anchor, height);
+  label.sprite.scale.set(wPx * wpp, hPx * wpp, 1);
+  const ndc = scratch.ndc.copy(label.anchor).project(camera);
+  if (ndc.z > 1 || ndc.z < -1) return null;
+  const anchorX = ((ndc.x + 1) / 2) * width;
+  const anchorY = ((1 - ndc.y) / 2) * height;
+  const ahead = scratch.ahead.copy(label.anchor).addScaledVector(label.outward, wpp * 20).project(camera);
+  let dx = ((ahead.x + 1) / 2) * width - anchorX;
+  let dy = ((1 - ahead.y) / 2) * height - anchorY;
+  const length = Math.hypot(dx, dy);
+  if (length < 1e-3) {
+    dx = 0;
+    dy = -1;
+  } else {
+    dx /= length;
+    dy /= length;
+  }
+  const halo = SUN_DOME_HALO_PX;
+  const reach = label.gapPx - halo + Math.abs(dx) * (wPx / 2) + Math.abs(dy) * (hPx / 2);
+  const x = snapToPixel(anchorX + dx * reach, wPx, pixelRatio);
+  const y = snapToPixel(anchorY + dy * reach, hPx, pixelRatio);
+  label.sprite.position.copy(scratch.world.set((x / width) * 2 - 1, 1 - (y / height) * 2, ndc.z).unproject(camera));
+  return { x, y, hw: wPx / 2 - halo, hh: hPx / 2 - halo };
+}
+
+function overlaps(a: ScreenBox, b: ScreenBox): boolean {
+  return Math.abs(a.x - b.x) < a.hw + b.hw && Math.abs(a.y - b.y) < a.hh + b.hh;
+}
+
+function updateTicks(ticks: DomeTicks, camera: THREE.Camera, centre: THREE.Vector3, height: number) {
+  const wpp = worldPerPixel(camera, centre, height);
+  if (ticks.wpp > 0 && Math.abs(wpp / ticks.wpp - 1) < 0.01) return;
+  ticks.wpp = wpp;
+  const positions: number[] = [];
+  for (let deg = 0; deg < 360; deg += SUN_DOME_TICK_STEP_DEG) {
+    const from = dialPoint(deg, ticks.radius, ticks.ground);
+    const length = SUN_DOME_TICK_PX * worldPerPixel(camera, scratch.world.set(from[0], from[1], from[2]), height);
+    positions.push(...from, ...dialPoint(deg, ticks.radius + length, ticks.ground));
+  }
+  ticks.geometry.setPositions(positions);
+}
+
+function useSunDomeFrame(root: DomeRoot | null, sun: DomeSprite | null, centre: THREE.Vector3) {
+  useFrame(({ camera, gl, size }) => {
     if (!root) return;
-    for (const material of root.userData.lineMaterials) material.resolution.set(size.width, size.height);
-    const ringY = ground(0, 0) + HELIODON_LIFT_M;
-    const pxPerDegree = dialPixelsPerDegree(
-      (x, y, z) => {
-        scratch.centre.set(x, y, z).project(camera);
-        return scratch.centre;
-      },
-      size.width,
-      size.height,
-      ringRadius,
-      ringY,
-    );
-    const lod = dialTickLodOpacity(pxPerDegree);
-    for (const entry of root.userData.lodMaterials) {
-      const scale =
-        entry.tier === "minor" ? lod.minor : entry.tier === "medium" ? lod.medium : lod.inner;
-      const opacity = entry.baseOpacity * scale;
-      entry.material.opacity = opacity;
-      entry.material.transparent = opacity < 0.995;
+    const width = gl.domElement.clientWidth || size.width;
+    const height = size.height;
+    const wppCentre = worldPerPixel(camera, centre, height);
+    for (const line of root.userData.lines) {
+      line.material.resolution.set(width, height);
+      if (line.dashPx) line.material.dashScale = 1 / wppCentre;
     }
+    if (root.userData.ticks) updateTicks(root.userData.ticks, camera, centre, height);
 
-    scratch.toCamera.copy(camera.position).sub(centre);
-    const lookingDown = scratch.toCamera.y / Math.max(scratch.toCamera.length(), 1e-6);
-    scratch.toCamera.y = 0;
-    scratch.toCamera.normalize();
-    for (const label of root.userData.degreeLabels) {
-      scratch.outward.copy(label.position).sub(centre);
-      scratch.outward.y = 0;
-      scratch.outward.normalize();
-      const facing = scratch.outward.dot(scratch.toCamera);
-      const opacity = lookingDown > 0.92 ? 1 : THREE.MathUtils.smoothstep(facing, -0.35, 0.25);
-      setLabelOpacity(label, opacity);
-      label.visible = opacity > 0.03;
+    const placed: ScreenBox[] = [];
+    if (sun) {
+      const wpp = worldPerPixel(camera, sun.position, height);
+      sun.scale.setScalar(sun.userData.sizePx[0] * wpp);
+      const ndc = scratch.ndc.copy(sun.position).project(camera);
+      placed.push({ x: ((ndc.x + 1) / 2) * width, y: ((1 - ndc.y) / 2) * height, hw: SUN_DOME_SUN_PX / 2 + 2, hh: SUN_DOME_SUN_PX / 2 + 2 });
     }
+    for (const label of root.userData.labels) {
+      const box = placeLabel(label, camera, width, height, gl.getPixelRatio());
+      const free = box != null && !placed.some((other) => overlaps(box, other));
+      label.sprite.visible = free;
+      if (box && free) placed.push(box);
+    }
+  });
+}
 
-    const blockers = root.userData.cardinals.map((label) => screenBox(label.position, label.scale, camera, size.width, size.height));
-    if (sun?.visible) {
-      const icon = sun.children[0];
-      if (icon) blockers.push(screenBox(sun.position, icon.scale, camera, size.width, size.height));
+type FitPose = { position: THREE.Vector3; target: THREE.Vector3; zoom: number };
+
+function canvasScreenRect(canvas: HTMLCanvasElement): ScreenRect {
+  const rect = canvas.getBoundingClientRect();
+  const host = canvas.parentElement?.getBoundingClientRect() ?? rect;
+  return { left: Math.max(rect.left, host.left), top: rect.top, right: Math.min(rect.right, host.right), bottom: rect.bottom };
+}
+
+function liveHudRects(viewport: ScreenRect): ScreenRect[] {
+  const rects: ScreenRect[] = [];
+  for (const element of Array.from(document.querySelectorAll<HTMLElement>(".model .hud-card"))) {
+    const style = getComputedStyle(element);
+    if (style.display === "none" || style.visibility === "hidden" || Number(style.opacity) === 0) continue;
+    const rect = element.getBoundingClientRect();
+    if (rect.width < 1 || rect.height < 1) continue;
+    if (rect.right <= viewport.left || rect.left >= viewport.right || rect.bottom <= viewport.top || rect.top >= viewport.bottom) continue;
+    rects.push({ left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom });
+  }
+  return rects;
+}
+
+function sunDomeFitPose(
+  camera: THREE.PerspectiveCamera | THREE.OrthographicCamera,
+  target: THREE.Vector3,
+  bounds: Aabb,
+  canvas: ScreenRect,
+  safe: ScreenRect,
+): FitPose | null {
+  const probe = camera.clone();
+  const direction = camera.position.clone().sub(target).normalize();
+  const span = camera.position.distanceTo(target);
+  const corners = cornersOf(bounds).map(vec);
+  const centre = new THREE.Vector3().addVectors(vec(bounds.min), vec(bounds.max)).multiplyScalar(0.5);
+  const canvasWidth = canvas.right - canvas.left;
+  const canvasHeight = canvas.bottom - canvas.top;
+  const ortho = (probe as THREE.OrthographicCamera).isOrthographicCamera;
+  const place = (scale: number) => {
+    probe.position.copy(centre).addScaledVector(direction, ortho ? span : scale);
+    if (ortho) probe.zoom = 1 / scale;
+    probe.lookAt(centre);
+    probe.updateMatrixWorld();
+    probe.updateProjectionMatrix();
+    let left = Infinity;
+    let right = -Infinity;
+    let top = Infinity;
+    let bottom = -Infinity;
+    for (const corner of corners) {
+      const ndc = scratch.ndc.copy(corner).project(probe);
+      if (!ortho && ndc.z > 1) return null;
+      const x = ((ndc.x + 1) / 2) * canvasWidth;
+      const y = ((1 - ndc.y) / 2) * canvasHeight;
+      left = Math.min(left, x);
+      right = Math.max(right, x);
+      top = Math.min(top, y);
+      bottom = Math.max(bottom, y);
     }
-    for (const label of root.userData.movable) {
-      let placed = false;
-      for (const spot of label.spots) {
-        const box = screenBox(spot, label.sprite.scale, camera, size.width, size.height);
-        if (blockers.some((blocker) => overlaps(box, blocker))) continue;
-        label.sprite.position.copy(spot);
-        placed = true;
-        break;
-      }
-      label.sprite.visible = placed;
-    }
+    return { left, right, top, bottom };
+  };
+  const safeWidth = safe.right - safe.left - LABEL_REACH_PX * 2;
+  const safeHeight = safe.bottom - safe.top - LABEL_REACH_PX * 2;
+  if (safeWidth < 40 || safeHeight < 40) return null;
+  const fits = (scale: number) => {
+    const box = place(scale);
+    return box != null && box.right - box.left <= safeWidth && box.bottom - box.top <= safeHeight;
+  };
+  const start = ortho ? 1 / Math.max(probe.zoom, 1e-6) : Math.max(span, 1);
+  let lo = start / 64;
+  let hi = start;
+  while (!fits(hi) && hi < start * 4096) hi *= 2;
+  if (!fits(hi)) return null;
+  for (let i = 0; i < 40; i++) {
+    const mid = (lo + hi) / 2;
+    if (fits(mid)) hi = mid;
+    else lo = mid;
+  }
+  const box = place(hi);
+  if (!box) return null;
+  const wpp = worldPerPixel(probe, centre, canvasHeight);
+  const dx = (safe.left + safe.right) / 2 - canvas.left - (box.left + box.right) / 2;
+  const dy = (safe.top + safe.bottom) / 2 - canvas.top - (box.top + box.bottom) / 2;
+  const right = new THREE.Vector3().setFromMatrixColumn(probe.matrixWorld, 0);
+  const up = new THREE.Vector3().setFromMatrixColumn(probe.matrixWorld, 1);
+  const shift = right.multiplyScalar(-dx * wpp).addScaledVector(up, dy * wpp);
+  return {
+    position: probe.position.clone().add(shift),
+    target: centre.clone().add(shift),
+    zoom: ortho ? probe.zoom : camera.zoom,
+  };
+}
+
+type OrbitLike = {
+  target: THREE.Vector3;
+  update: () => void;
+  addEventListener: (type: "start", listener: () => void) => void;
+  removeEventListener: (type: "start", listener: () => void) => void;
+};
+type FitAnimation = { from: FitPose; to: FitPose; startedAt: number };
+
+function useSunDomeAutoFit(show: boolean, bounds: Aabb) {
+  const camera = useThree((state) => state.camera) as THREE.PerspectiveCamera | THREE.OrthographicCamera;
+  const controls = useThree((state) => state.controls) as unknown as OrbitLike | null;
+  const gl = useThree((state) => state.gl);
+  const invalidate = useThree((state) => state.invalidate);
+  const shown = useRef<boolean | null>(null);
+  const animation = useRef<FitAnimation | null>(null);
+
+  useEffect(() => {
+    const previous = shown.current;
+    shown.current = show;
+    if (!show || previous !== false || !controls) return;
+    const canvas = canvasScreenRect(gl.domElement);
+    const safe = hudSafeArea(canvas, liveHudRects(canvas));
+    const to = sunDomeFitPose(camera, controls.target, bounds, canvas, safe);
+    if (!to) return;
+    const from = { position: camera.position.clone(), target: controls.target.clone(), zoom: camera.zoom };
+    const reduced = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    animation.current = { from, to, startedAt: reduced ? -Infinity : performance.now() };
+    const cancel = () => {
+      animation.current = null;
+    };
+    controls.addEventListener("start", cancel);
+    invalidate();
+    return () => controls.removeEventListener("start", cancel);
+  }, [show, bounds, camera, controls, gl, invalidate]);
+
+  useFrame(() => {
+    const run = animation.current;
+    if (!run || !controls) return;
+    const t = easeInOutCubic((performance.now() - run.startedAt) / SUN_DOME_FIT_MS);
+    camera.position.lerpVectors(run.from.position, run.to.position, t);
+    controls.target.lerpVectors(run.from.target, run.to.target, t);
+    camera.zoom = THREE.MathUtils.lerp(run.from.zoom, run.to.zoom, t);
+    camera.updateProjectionMatrix();
+    controls.update();
+    if (t >= 1) animation.current = null;
+    else invalidate();
   });
 }
 
@@ -576,42 +618,70 @@ export function SolarHeliodon({
 }) {
   const sample = useMelbourneSunSample(lat, lon, settings);
   const colourTick = useColourRevision();
-  const ringRadius = heliodonRadiusM(sideM, settings.radiusFactor);
+  const fontsTick = useDomeFontsTick();
+  const pixelRatio = useThree((state) => Math.ceil(state.viewport.dpr));
+  const radius = sunDomeRadiusM(sideM);
   const show = settings.showPath && !hideDiagram;
+  const { year, month, day } = settings;
   const dialPlaneY = useMemo(
     () => (terrain ? meanTerrainElevation(terrain) : groundY) + DIAL_PLANE_EPSILON_M,
     [terrain, groundY],
   );
   const ground = useMemo<GroundHeight>(() => flatDialGround(dialPlaneY), [dialPlaneY]);
   const centre = useMemo(() => new THREE.Vector3(0, ground(0, 0) + HELIODON_LIFT_M, 0), [ground]);
+  const bounds = useMemo(
+    () => sunDomeBounds({ lat, lon, year, selected: { month, day }, sideM, radiusM: radius, groundY: dialPlaneY }),
+    [lat, lon, year, month, day, sideM, radius, dialPlaneY],
+  );
 
   const root = useDisposable(() => {
-    const group = new THREE.Group() as HeliodonRoot;
+    const group = new THREE.Group() as DomeRoot;
     group.name = "Heliodon";
-    group.userData = { cardinals: [], degreeLabels: [], movable: [], lineMaterials: [], lodMaterials: [] };
-    if (!show) return group;
-    const palette = heliodonPalette();
-    buildDial(group, palette, ringRadius, sideM, ground);
-    buildSunPaths(group, palette, lat, lon, settings.year, sideM, ringRadius, ground, centre);
+    group.userData = { lines: [], labels: [], ticks: null };
+    if (!show || typeof document === "undefined") return group;
+    const ink = domeInk(pixelRatio);
+    buildDial(group, ink, radius, ground);
+    buildSunPaths(group, ink, lat, lon, year, { month, day }, radius, ground, centre);
+    group.userData.labels.sort((a, b) => a.priority - b.priority);
     markScreenOnly(group);
     return group;
-  }, [show, lat, lon, settings.year, sideM, ringRadius, ground, centre, colourTick]);
+  }, [show, lat, lon, year, month, day, radius, ground, centre, colourTick, fontsTick, pixelRatio]);
 
   const marker = useDisposable(() => {
     const group = new THREE.Group();
-    const palette = heliodonPalette();
-    const icon = sunIcon(palette.sun);
-    if (icon) {
-      icon.scale.setScalar(sideM * 0.075);
-      group.add(icon);
-    }
+    group.name = "Sun";
+    if (typeof document === "undefined") return group;
+    const ink = domeInk(pixelRatio);
+    const dot = sunDotSprite(ink);
+    const drop = new LineSegmentsGeometry();
+    drop.setPositions([0, 0, 0, 0, -1, 0]);
+    const material = new LineMaterial({ color: ink.ink, linewidth: 1, depthWrite: false, transparent: true });
+    material.toneMapped = false;
+    const line = new LineSegments2(drop, material);
+    line.renderOrder = OVERLAY_ORDER + 50;
+    line.frustumCulled = false;
+    group.add(line, dot);
+    group.userData = { dot, drop, material };
     markScreenOnly(group);
     return group;
-  }, [sideM, colourTick]);
-  marker.position.copy(vec(heliodonPoint(sample.direction, ringRadius, ground)));
-  marker.visible = show && sample.aboveHorizon;
+  }, [colourTick, pixelRatio]);
 
-  useHeliodonFrame(show ? root : null, marker, centre, ringRadius, ground);
+  const sunAt = vec(heliodonPoint(sample.direction, radius, ground));
+  const sunVisible = show && sample.aboveHorizon;
+  const dot = (marker.userData.dot as DomeSprite | undefined) ?? null;
+  useLayoutEffect(() => {
+    const drop = marker.userData.drop as LineSegmentsGeometry | undefined;
+    dot?.position.copy(sunAt);
+    drop?.setPositions([sunAt.x, sunAt.y, sunAt.z, sunAt.x, ground(sunAt.x, sunAt.z) + HELIODON_LIFT_M, sunAt.z]);
+  });
+  marker.visible = sunVisible;
+
+  useFrame(({ gl, size }) => {
+    const material = marker.userData.material as LineMaterial | undefined;
+    material?.resolution.set(gl.domElement.clientWidth || size.width, size.height);
+  });
+  useSunDomeFrame(show ? root : null, sunVisible ? dot : null, centre);
+  useSunDomeAutoFit(show, bounds);
 
   if (!show) return null;
   return (
