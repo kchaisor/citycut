@@ -126,11 +126,11 @@ Control heights: `--control-xs` 24 · `--control-sm` 28 · `--control-md` 32 · 
 | Region | Position / size (measured) | Rule |
 |---|---|---|
 | Header islands (left, centre, right) | top 14, height 42; left and right at 14 from the edges; centre centred | ≥ 8 gap between them (1280 measures exactly 8; don't add width at 1280). New cut and Reset are icon-only with tooltips (32×32 icon buttons at every width; Kelvin's go 21 Nov 2026, idea from 19 Nov 2026) |
-| Left tool rail | x 14, y 68, w 52 | 8 to the outliner |
+| Left tool rail | x 14, y 68, w 52 | 8 to the outliner. Display, Import and Export only; no Analysis icon (Kelvin, 21 Nov 2026) |
 | Left outliner | x 74, y 68, w 248, max-h `100vh − 134` | scrolls inside itself; padding 12 |
 | Right inspector (SITE INTELLIGENCE) | right 14, y 68, w 268, max-h `100vh − 134` | border 0, uniform `--bg-card`, no inner borders, no legacy `#DBDBDB`/`#EBEBEB` |
-| Bottom bar (solar) | bottom 14, centred, h 40 | – |
-| Analysis env console | bottom 14, centred, min-w `min(720px, 100vw − 32)`, min-h 76, padding 8 12, r 12 | replaces the bottom bar; must clear the outliner and inspector |
+| Bottom bar (solar) | bottom 14, centred, h 40 | Satellite only |
+| Analysis env console | bottom 14, centred, min-w `min(720px, 100vw − 32)`, min-h 76 with an analysis on (one row with none), padding 8 12, r 12 | always on in 3D and Drawing (Kelvin, 21 Nov 2026), starts with an "Analysis" header, and no longer waits for a Site Analysis rail button; must clear the outliner and inspector |
 | Landing | brand pill and omnibox at top 16; workbench at the bottom | omnibox w 540, max `100vw − 440` |
 
 **No overlap:** no two islands may intersect, with a minimum gap of 8px at 1280×800 and 1440×900 (the verify harness checks this at 1440 only, so check 1280 by eye). New UI joins an existing island or takes a free slot; it never floats over another island.

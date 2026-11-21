@@ -11,6 +11,7 @@ import type { WindRoseAsset } from "../lib/windRoseData";
 import { analyzeSiteWind } from "../lib/windRoseStats";
 import { DEFAULT_WIND_SETTINGS, withDesignWind, type WindViewSettings } from "../lib/windState";
 import { siteWindSelection } from "../lib/windStation";
+import type { ActiveAnalysis } from "../lib/sidebarSections";
 import { windRoseCardOn } from "./model/windRoseCard";
 import { useWindPlan } from "./useWindPlan";
 import { WindRosePanel } from "./WindRosePanel";
@@ -70,7 +71,7 @@ function FlowHarness({ initialDesign = null, flowHeading = true }: { initialDesi
 }
 
 describe("the left wind rose card", () => {
-  const card = (tab: string, analysisKind: string) => windRoseCardOn({ leftOpen: "analysis", tab, analysisKind, siteWind: pyrmont });
+  const card = (tab: string, analysisKind: ActiveAnalysis) => windRoseCardOn({ tab, analysisKind, siteWind: pyrmont });
 
   it("shows in wind analysis on the 3D and Drawing tabs", () => {
     expect(card("3d", "wind")).toBe(true);
@@ -80,7 +81,8 @@ describe("the left wind rose card", () => {
   it("hides the card outside wind analysis and on Satellite", () => {
     expect(card("satellite", "wind")).toBe(false);
     expect(card("3d", "solar")).toBe(false);
-    expect(windRoseCardOn({ leftOpen: null, tab: "3d", analysisKind: "wind", siteWind: pyrmont })).toBe(false);
+    expect(card("3d", null)).toBe(false);
+    expect(windRoseCardOn({ tab: "3d", analysisKind: "wind", siteWind: null })).toBe(false);
   });
 
   it("has no Wind Rose chip and mounts no floating rose overlay", () => {

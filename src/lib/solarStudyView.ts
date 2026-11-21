@@ -1,5 +1,15 @@
-import type { LeftSidebarSectionId, SiteAnalysisKind } from "./sidebarSections";
+import type { ActiveAnalysis } from "./sidebarSections";
+import type { SolarViewSettings } from "../components/SolarHeliodon";
 
-export function solarStudyViewActive(leftOpen: LeftSidebarSectionId, analysisKind: SiteAnalysisKind): boolean {
-  return leftOpen === "analysis" && analysisKind === "solar";
+export function solarStudyViewActive(analysisKind: ActiveAnalysis): boolean {
+  return analysisKind === "solar";
+}
+
+export function solarSettingsForActiveAnalysis(solar: SolarViewSettings, analysisKind: ActiveAnalysis): SolarViewSettings {
+  const showPath = solar.showPath && solarStudyViewActive(analysisKind);
+  return showPath === solar.showPath ? solar : { ...solar, showPath };
+}
+
+export function windFlowActive(windEnabled: boolean, analysisKind: ActiveAnalysis): boolean {
+  return windEnabled && analysisKind === "wind";
 }
