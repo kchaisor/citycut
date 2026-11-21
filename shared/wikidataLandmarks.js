@@ -241,10 +241,10 @@ export function splitCell(cell) {
 
 export function isSlowQueryFailure(err) {
   const message = err instanceof Error ? err.message : String(err);
-  return /HTTP 50[0234]\b|timed out/.test(message);
+  return /HTTP 50[0234]\b|timed out|in JSON at position|Unexpected end of JSON/.test(message);
 }
 
-export async function queryCells(cells, fetchCell, { minCellDeg, onCell = () => {} }) {
+export async function queryCells(cells, fetchCell, { minCellDeg, onCell = () => {}, onSplit = () => {} }) {
   const queue = [...cells];
   const results = [];
   let splits = 0;
@@ -258,6 +258,7 @@ export async function queryCells(cells, fetchCell, { minCellDeg, onCell = () => 
       const halfWidth = Math.max(cell.east - cell.west, cell.north - cell.south) / 2;
       if (!isSlowQueryFailure(err) || halfWidth < minCellDeg - 1e-9) throw err;
       splits += 1;
+      onSplit({ cell, error: err });
       queue.unshift(...splitCell(cell));
     }
   }

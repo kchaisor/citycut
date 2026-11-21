@@ -173,6 +173,8 @@ describe("splitting slow cells", () => {
     expect(isSlowQueryFailure(new Error("Wikidata cell failed after 2 attempts: answered HTTP 504."))).toBe(true);
     expect(isSlowQueryFailure(new Error("Wikidata cell failed after 2 attempts: answered HTTP 500."))).toBe(true);
     expect(isSlowQueryFailure(new Error("Wikidata cell timed out after 70000 ms"))).toBe(true);
+    expect(isSlowQueryFailure(new Error("Wikidata structures cell failed after 2 attempts: Bad control character in string literal in JSON at position 4948023 (line 170672 column 104)"))).toBe(true);
+    expect(isSlowQueryFailure(new Error("Unexpected end of JSON input"))).toBe(true);
     expect(isSlowQueryFailure(new Error("Wikidata cell answered HTTP 429; stopping without retry."))).toBe(false);
     expect(isSlowQueryFailure(new Error("Wikidata SPARQL answer had no results.bindings array."))).toBe(false);
   });
@@ -184,8 +186,10 @@ describe("splitting slow cells", () => {
       return [{ cell: c }];
     };
     const other = { west: 0.2, south: 0, east: 0.3, north: 0.1 };
-    const { results, splits } = await queryCells([cell, other], fetchCell, { minCellDeg: 0.05 });
+    const split = [];
+    const { results, splits } = await queryCells([cell, other], fetchCell, { minCellDeg: 0.05, onSplit: ({ cell: c }) => split.push(c) });
     expect(splits).toBe(1);
+    expect(split).toEqual([cell]);
     expect(results.flat().map((r) => r.cell)).toEqual([...splitCell(cell), other]);
     expect(asked).toHaveLength(6);
   });

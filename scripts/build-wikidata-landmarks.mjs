@@ -25,6 +25,7 @@ const CELL_DEG = Number(process.env.WIKIDATA_CELL_DEG ?? 0.2);
 const MIN_CELL_DEG = Number(process.env.WIKIDATA_MIN_CELL_DEG ?? 0.0125);
 const MIN_ITEMS = Number(process.env.WIKIDATA_MIN_ITEMS ?? 100);
 const PAUSE_MS = Number(process.env.WIKIDATA_PAUSE_MS ?? 1000);
+const SPLIT_PAUSE_MS = Number(process.env.WIKIDATA_SPLIT_PAUSE_MS ?? 60_000);
 const UA = {
   "User-Agent": "citycut-wikidata-prebake (https://github.com/kchaisor/citycut)",
   Accept: "application/sparql-results+json",
@@ -45,7 +46,12 @@ async function main() {
   const grouped = new Map();
   let rows = 0;
   let queried = 0;
-  const pause = () => (PAUSE_MS > 0 ? new Promise((r) => setTimeout(r, PAUSE_MS)) : Promise.resolve());
+  let nextPauseMs = PAUSE_MS;
+  const pause = () => {
+    const ms = nextPauseMs;
+    nextPauseMs = PAUSE_MS;
+    return ms > 0 ? new Promise((r) => setTimeout(r, ms)) : Promise.resolve();
+  };
   const fetchCell = (classQid) => async (cell) => {
     if (queried > 0) await pause();
     queried += 1;
@@ -62,9 +68,13 @@ async function main() {
     groupBindings(bindings, grouped);
     log(`${queried} queries, ${remaining} cells left, ${splitCount} splits: ${bindings.length} rows, ${grouped.size} items so far`);
   };
-  const structures = await queryCells(cells, fetchCell(undefined), { minCellDeg: MIN_CELL_DEG, onCell });
+  const onSplit = ({ cell, error }) => {
+    nextPauseMs = Math.max(PAUSE_MS, SPLIT_PAUSE_MS);
+    log(`split ${cell.west.toFixed(4)},${cell.south.toFixed(4)} after "${error instanceof Error ? error.message : error}"; pausing ${nextPauseMs / 1000} s for Wikidata's query-time limit`);
+  };
+  const structures = await queryCells(cells, fetchCell(undefined), { minCellDeg: MIN_CELL_DEG, onCell, onSplit });
   log("railway stations over the whole area");
-  const stations = await queryCells([bbox], fetchCell(RAILWAY_STATION), { minCellDeg: MIN_CELL_DEG, onCell });
+  const stations = await queryCells([bbox], fetchCell(RAILWAY_STATION), { minCellDeg: MIN_CELL_DEG, onCell, onSplit });
   const splits = structures.splits + stations.splits;
   const { items, dropped } = finaliseItems(grouped, bbox);
   log(`kept ${items.length} items; dropped ${dropped.noEnglishLabel} without an English label, ${dropped.noCoordinateInBbox} without a coordinate in the box`);
