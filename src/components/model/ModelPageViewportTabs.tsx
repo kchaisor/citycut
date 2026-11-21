@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { BuildingHeightPopover } from "../BuildingHeightPopover";
+import { LandmarkLabelLayer } from "../LandmarkLabelLayer";
 
 import { TreeInspectHud, TerrainInspectHud } from "../SceneInspectHud";import { DrawingPlan } from "../DrawingPlan";
 
@@ -31,6 +32,7 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
     windModel,
     windPlanOutlineModel,
     drawing,
+    drawingLandmarkSources,
     drawingModel,
     effectiveSunStudyCasters,
     explodedViewport,
@@ -43,6 +45,10 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
     inspectAnchor,
     inspectHudPosition,
     isoDrawingViewport,
+    landmarkByBuilding,
+    landmarkLabelsOn,
+    landmarkScreens,
+    landmarkSources,
     leftOpen,
     lineStyles,
     massing,
@@ -70,6 +76,7 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
     setExplodedViewport,
     setHideSelection,
     setInspectHudScreen,
+    setLandmarkScreens,
     setIsoDrawingViewport,
     setPlanViewport,
     setSceneSelection,
@@ -197,7 +204,28 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
                 sunHoursDirectOverlay={solar.sunHours ? sunHoursGround.overlay : null}
                 sunHoursScaleMax={solar.sunHours ? sunHoursGround.scaleMaxHours : 0}
                 solarAnalysisActive={solarStudyViewActive(leftOpen, analysisKind)}
+                landmarkSources={landmarkSources}
+                landmarkLabelsOn={landmarkLabelsOn}
+                onLandmarkScreens={setLandmarkScreens}
               />
+              {tab === "3d" && landmarkLabelsOn && (
+                <LandmarkLabelLayer
+                  state={landmarkScreens}
+                  hiddenId={pickedBuilding ? pickedBuilding.id : null}
+                  onSelect={(label) => {
+                    const building = displayModel.buildings.find((item) => item.id === label.buildingId);
+                    setSceneSelection({
+                      kind: "building",
+                      buildingId: label.buildingId,
+                      clientX: label.x,
+                      clientY: label.y,
+                      world: { east: label.east, north: label.north, up: label.roofUp - (building?.height ?? 0) },
+                    });
+                    setInspectHudScreen({ clientX: label.x, clientY: label.y, inView: true });
+                    selectForHide(label.buildingId, false);
+                  }}
+                />
+              )}
               {tab === "3d" && sectionKnifeTool.active && (
                 <SectionKnifeElevationPanel model={displayModel} tool={sectionKnifeTool} />
               )}
@@ -214,6 +242,7 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
               {pickedBuilding && !qaHideHeightPopoverFromSearch(window.location.search) && (
                 <BuildingHeightPopover
                   building={pickedBuilding}
+                  landmark={landmarkByBuilding.get(pickedBuilding.id) ?? null}
                   center={displayModel.center}
                   allBuildings={displayModel.buildings}
                   damRecords={displayModel.developmentDamRecords ?? []}
@@ -316,6 +345,7 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
                 sunHoursGroundGrid={sunHoursOnPlan ? sunHoursGround.grid : null}
                 sunHoursGroundScaleMax={sunHoursOnPlan ? sunHoursGround.scaleMaxHours : 0}
                 sunHoursRoofPlanRaster={sunHoursOnPlan ? (sunHoursGround.overlay?.roofPlanRaster ?? null) : null}
+                landmarkLabels={drawing === "site" || drawing === "figure-ground" ? drawingLandmarkSources : []}
               />
             )}
             {sunHoursOnPlan ? (

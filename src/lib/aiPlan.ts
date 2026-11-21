@@ -50,6 +50,12 @@ import {
 import { defaultExplodedAxoSettings, type ExplodedAxoSettings } from "./explodedAxo";
 import { stableExportModel } from "./exportStableOrder";
 import { sectionMarkerPlanChunk } from "./sectionKnife/sectionMarkerPlanChunk";
+import {
+  LANDMARK_FONT_PX,
+  LANDMARK_HALO_PX,
+  placeSheetLabels,
+  type LandmarkLabelSource,
+} from "./landmarkLabels";
 import type { CityModel, ContourSourceId, Pt, Ring } from "../types";
 
 export const SITE_LAYER_ORDER = [
@@ -271,7 +277,45 @@ export type SitePlanExportOptions = {
   sunStudyDate?: SunStudyDate | null;
   sunStudyMuted?: boolean;
   sunStudySelected?: readonly number[];
+  landmarkLabels?: readonly LandmarkLabelSource[] | null;
 };
+
+export const LANDMARK_LABEL_LAYER = "Landmark labels";
+const MM_PER_CSS_PX = 25.4 / 96;
+
+export function landmarkLabelChunk(
+  model: CityModel,
+  layout: SheetLayout,
+  sources: readonly LandmarkLabelSource[] | null | undefined,
+): PdfChunk | null {
+  if (!sources || sources.length === 0) return null;
+  const sizeMm = LANDMARK_FONT_PX * MM_PER_CSS_PX;
+  const frameW = layout.frameWidthMm ?? layout.frameMm;
+  const frameH = layout.frameHeightMm ?? layout.frameMm;
+  const bottom = layout.pageHeightMm - layout.frameY - frameH;
+  const placed = placeSheetLabels(
+    sources,
+    (at) => sheetPoint(at[0], at[1], model.sideM, layout),
+    sizeMm,
+    { left: layout.frameX, right: layout.frameX + frameW, top: bottom, bottom: bottom + frameH },
+  );
+  if (placed.length === 0) return null;
+  const color = fillOf("--landmark-label");
+  const halo = { color: fillOf("--landmark-label-halo"), widthMm: LANDMARK_HALO_PX * MM_PER_CSS_PX };
+  return {
+    name: LANDMARK_LABEL_LAYER,
+    texts: placed.map((label) => ({
+      x: label.x,
+      y: label.y,
+      sizeMm,
+      text: label.text,
+      color,
+      anchor: "middle" as const,
+      weight: 500,
+      halo,
+    })),
+  };
+}
 
 export function sunStudyLayerName(hour: number): string {
   return `Shadow ${String(hour).padStart(2, "0")}:00`;
@@ -311,6 +355,7 @@ function resolveSitePlanExport(
     "heliodon" in exportOptions ||
     "wind" in exportOptions ||
     "sunStudy" in exportOptions ||
+    "landmarkLabels" in exportOptions ||
     "uniformBuildings" in exportOptions ||
     "sectionKnife" in exportOptions
   ) {
@@ -696,6 +741,8 @@ export async function sitePlanSvg(
   const { buildLayeredSvg } = await import("./svgDocument");
   const layout = layoutForModel(model, scale);
   const chunks = sitePlanChunks(model, scale, style ?? readDrawingStyle(), exportOptions);
+  const labels = landmarkLabelChunk(model, layout, resolveSitePlanExport(exportOptions).landmarkLabels);
+  if (labels) chunks.push(labels);
   return buildLayeredSvg(layout.pageWidthMm, layout.pageHeightMm, chunks, sitePlanLayerOrder(chunks));
 }
 
@@ -726,15 +773,14 @@ export async function figureGroundSvg(
   scale: number,
   style?: LineStyles,
   heliodon?: HeliodonDiagramExportOptions | null,
+  landmarkLabels?: readonly LandmarkLabelSource[] | null,
 ): Promise<string> {
   const { buildLayeredSvg } = await import("./svgDocument");
   const layout = layoutForModel(model, scale);
-  return buildLayeredSvg(
-    layout.pageWidthMm,
-    layout.pageHeightMm,
-    figureGroundChunks(model, scale, style ?? readDrawingStyle(), heliodon),
-    FIGURE_LAYER_ORDER,
-  );
+  const chunks = figureGroundChunks(model, scale, style ?? readDrawingStyle(), heliodon);
+  const labels = landmarkLabelChunk(model, layout, landmarkLabels);
+  if (labels) chunks.push(labels);
+  return buildLayeredSvg(layout.pageWidthMm, layout.pageHeightMm, chunks, FIGURE_LAYER_ORDER);
 }
 
 export function sitePlanAi8(

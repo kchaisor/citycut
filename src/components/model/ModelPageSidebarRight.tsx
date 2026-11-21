@@ -35,6 +35,8 @@ export function ModelPageSidebarRight({ vm }: { vm: import("./useModelPage").Mod
     hiddenMatch,
     hiddenStore,
     importHeightEdits,
+    landmarkByBuilding,
+    landmarkLabelsOn,
     lidarTierNote,
     model,
     overrideResult,
@@ -46,6 +48,7 @@ export function ModelPageSidebarRight({ vm }: { vm: import("./useModelPage").Mod
     retryComHeights,
     rightOpen,
     setColourByUse,
+    setLandmarkLabelsOn,
     setShowManualEdits,
     setShowSource,
     showBuildings,
@@ -57,8 +60,15 @@ export function ModelPageSidebarRight({ vm }: { vm: import("./useModelPage").Mod
     uniform,
     unmatchedEdits,
     useCounts,
+    wikidataStatus,
     writeStoredShowManualHeights,
   } = vm;
+  const wikidataHelper =
+    wikidataStatus === "ok"
+      ? `From Wikidata · ${landmarkByBuilding.size.toLocaleString()} matched`
+      : wikidataStatus === "failed"
+        ? "From Wikidata · not available for this area"
+        : "From Wikidata · loading";
 
   return (
     <>
@@ -250,10 +260,22 @@ export function ModelPageSidebarRight({ vm }: { vm: import("./useModelPage").Mod
                     </button>
                   </div>
                 </section>
+                <section className="sidebar-group landmark-labels-group">
+                  <label className="landmark-toggle">
+                    <span className="landmark-toggle-label">Landmark labels</span>
+                    <input
+                      type="checkbox"
+                      role="switch"
+                      checked={landmarkLabelsOn}
+                      onChange={(event) => setLandmarkLabelsOn(event.target.checked)}
+                    />
+                  </label>
+                  <p className="landmark-helper">{wikidataHelper}</p>
+                </section>
                 <section className="sidebar-group">
                   <div className="sidebar-gh">
                     <h3>Use</h3>
-                    <span>{model.buildings.length.toLocaleString()}</span>
+                    <span className="buildings-count mono">{model.buildings.length.toLocaleString()} massings</span>
                   </div>
                   <ul className="legend-two">
                     {BUILDING_USES.filter((use) => useCounts[use] > 0).map((use) => (

@@ -116,12 +116,16 @@ import { GroundWindFlow } from "./GroundWindFlow";
 import { createWindPlanTransformStore, WindPlanOverlay, WindPlanProjector } from "./WindPlanOverlay";
 import type { WindPlanState } from "./useWindPlan";
 import { InspectHudProjector, type InspectHudScreen } from "./InspectHudProjector";
+import { LandmarkLabelProjector, type LandmarkExportLabels, type LandmarkScreenState } from "./LandmarkLabelProjector";
+import type { LandmarkLabelSource } from "../lib/landmarkLabels";
 import type { WindPeriodId } from "../lib/windRose";
 import type { SiteWindSelection } from "../lib/windRoseData";
 import { analyzeSiteWind } from "../lib/windRoseStats";
 import { headingPeriodStats, type DesignWind } from "../lib/windDesignWinds";
 import type { CityModel } from "../types";
 import { introAlreadyPlayedForCut, markIntroPlayedForCut, modelCutSiteId } from "../lib/introPlayed";
+
+const NO_LANDMARKS: readonly LandmarkLabelSource[] = [];
 
 export type SceneExporter = {
   png: () => Promise<Blob>;
@@ -1828,9 +1832,11 @@ function QaCameraBridgeRegister({
 function ExportBridge({
   onExportReady,
   solarDiagramOn,
+  landmarkLabelsRef,
 }: {
   onExportReady: (exporter: SceneExporter | null) => void;
   solarDiagramOn: boolean;
+  landmarkLabelsRef?: RefObject<LandmarkExportLabels | null>;
 }) {
   const gl = useThree((state) => state.gl);
   const scene = useThree((state) => state.scene);
@@ -1839,7 +1845,8 @@ function ExportBridge({
     onExportReady({
       png: async () => {
         const city = scene.getObjectByName("CityCut");
-        const render = () => captureViewPng(gl, scene, get().camera, exportFrameSize(gl.domElement));
+        const render = () =>
+          captureViewPng(gl, scene, get().camera, exportFrameSize(gl.domElement), landmarkLabelsRef?.current ?? null);
         if (city && solarDiagramOn) return withBuildingExportColours(city, false, render);
         return render();
       },
@@ -1849,7 +1856,7 @@ function ExportBridge({
       },
     });
     return () => onExportReady(null);
-  }, [gl, scene, get, onExportReady, solarDiagramOn]);
+  }, [gl, scene, get, onExportReady, solarDiagramOn, landmarkLabelsRef]);
   return null;
 }
 
@@ -1931,6 +1938,7 @@ export function Cameras({
   gizmoOrbitLock = false,
   frameWidthM,
   frameHeightM,
+  landmarkLabelsRef,
 }: {
   side: number;
   lift: number;
@@ -1952,6 +1960,7 @@ export function Cameras({
   gizmoOrbitLock?: boolean;
   frameWidthM: number;
   frameHeightM: number;
+  landmarkLabelsRef?: RefObject<LandmarkExportLabels | null>;
 }) {
   const perspRef = useRef<THREE.PerspectiveCamera>(null);
   const orthoRef = useRef<THREE.OrthographicCamera>(null);
@@ -2145,7 +2154,7 @@ export function Cameras({
             perspControls={perspControls}
             orthoControls={orthoControls}
           />
-          <ExportBridge onExportReady={onExportReady} solarDiagramOn={solarDiagramOn} />
+          <ExportBridge onExportReady={onExportReady} solarDiagramOn={solarDiagramOn} landmarkLabelsRef={landmarkLabelsRef} />
         </>
       )}
     </>
@@ -2228,6 +2237,9 @@ export function Scene3D({
   solarAnalysisActive = false,
   introPlayed,
   active = true,
+  landmarkSources = NO_LANDMARKS,
+  landmarkLabelsOn = false,
+  onLandmarkScreens,
 }: {
   model: CityModel;
   windModel?: CityModel;
@@ -2273,7 +2285,11 @@ export function Scene3D({
   solarAnalysisActive?: boolean;
   introPlayed?: { current: string | null };
   active?: boolean;
+  landmarkSources?: readonly LandmarkLabelSource[];
+  landmarkLabelsOn?: boolean;
+  onLandmarkScreens?: (state: LandmarkScreenState | null) => void;
 }) {
+  const landmarkExportRef = useRef<LandmarkExportLabels | null>(null);
   const sceneCutKey = modelCutSiteId(model.center, model.sideM);
   const introSkip = useMemo(
     () => introAlreadyPlayedForCut(introPlayed?.current ?? null, sceneCutKey),
@@ -2474,6 +2490,14 @@ export function Scene3D({
         enabled={inspectAnchor != null}
         onScreen={onInspectHudScreen}
       />
+      {onLandmarkScreens ? (
+        <LandmarkLabelProjector
+          sources={landmarkSources}
+          enabled={landmarkLabelsOn && active}
+          onScreens={onLandmarkScreens}
+          exportRef={landmarkExportRef}
+        />
+      ) : null}
       {onCompassHeading ? <StudioCompassTracker onHeading={onCompassHeading} /> : null}
       <WindLayer
         model={windModel ?? model}
@@ -2506,6 +2530,7 @@ export function Scene3D({
         cameraMemory={cameraMemory}
         introEnabled={!introSkip}
         gizmoOrbitLock={sectionKnifeGizmoInteraction.orbitLock}
+        landmarkLabelsRef={landmarkExportRef}
       />
       </Canvas>
       {windPlanOn && windPlan ? <WindPlanOverlay model={windPlanOutlineModel ?? model} plan={windPlan} store={windPlanStore} /> : null}

@@ -64,12 +64,12 @@ These are in addition to the choices above. Use design-system tokens only (no ne
 
 Observable checks (tick these on the real desktop view, not implementation details):
 
-- [ ] Cutting Southbank shows Eureka Tower and Australia 108 with their names, cited heights and Wikipedia links in the popover.
-- [ ] Model details lists Wikidata with a match count, and shows a clear note when the source fails.
-- [ ] A suburban cut with no landmarks shows "0 landmarks", not an error.
-- [ ] Turning the labels toggle on and off changes 3D and Drawing, and exports match what is shown.
-- [ ] The existing `landmark-heights.json` towers that have a Wikidata item (18 of 23) are found, and the 5 without one and Crown Towers' off-tower point are listed, checked by a new test.
-- [ ] typecheck, test, build and verify:ui all pass, with desktop screenshots attached.
+- [ ] Cutting Southbank shows Eureka Tower and Australia 108 with their names, cited heights and Wikipedia links in the popover. PR 3: Eureka Tower checked on the desktop view (cited height 297.3 m, 91 floors, 2006, architect, style, and a Wikidata ↗ link, which replaces the Wikipedia link). Australia 108 shows a label, but its popover was not opened.
+- [x] Model details lists Wikidata with a match count, and shows a clear note when the source fails. The list stays visually hidden (Kelvin's PR 3 choice); Wikidata counts in "Ready · N/M sources" and is read out to screen readers. The Buildings panel also shows "From Wikidata · N matched".
+- [ ] A suburban cut with no landmarks shows "0 landmarks", not an error. Covered by a unit test only; not checked on a real suburban cut.
+- [ ] Turning the labels toggle on and off changes 3D and Drawing, and exports match what is shown. PR 3: on is checked in 3D, plan, Drawing and the 3D 2× PNG; the site-plan and figure-ground SVG are covered by tests for on and off. The Illustrator `.ai` files do not carry the labels yet.
+- [x] The existing `landmark-heights.json` towers that have a Wikidata item (18 of 23) are found, and the 5 without one and Crown Towers' off-tower point are listed, checked by a new test.
+- [ ] typecheck, test, build and verify:ui all pass, with desktop screenshots attached. PR 3: typecheck, lint and build pass; unit tests pass except two exploded-axo `.ai` tests that time out on this box (they also fail on main). verify:ui passed 52 checks and failed 3 Rhino `.3dm` checks: this box's Chrome will not load the rhino3dm wasm (MIME type error); PR 3 does not touch Rhino code.
 
 ## Out of scope
 

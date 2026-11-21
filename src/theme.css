@@ -79,6 +79,23 @@
   --sidebar-rail-w: 56px;
   --sidebar-panel-w: 320px;
 
+  --fs-caption: 11px;
+  --lh-caption: 16px;
+  --fs-sm: 12px;
+  --lh-sm: 16px;
+
+  --bg-elev: #FFFFFF;
+  --ink: #141413;
+  --ink-2: #4A4945;
+  --ink-3: #6B6963;
+  --border-outer: rgb(20 20 19 / 13%);
+  --shadow-raised: 0 1px 2px rgb(20 20 19 / 8%);
+
+  --z-hud: 30;
+  --z-landmark-labels: 29;
+
+  --dur-fast: 120ms;
+
   --z-studio-inspector: 30;
   --z-studio-topbar: 40;
 

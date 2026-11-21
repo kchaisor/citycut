@@ -67,6 +67,9 @@ export type PdfText = {
   text: string;
   color: Rgb;
   rotateDeg?: number;
+  anchor?: "middle";
+  weight?: number;
+  halo?: { color: Rgb; widthMm: number };
 };
 
 export type PdfChunk = {

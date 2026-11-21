@@ -2,12 +2,16 @@ import * as THREE from "three";
 import { getColour } from "./colours";
 import { withScreenOnlyHidden } from "./screenOnly";
 import { cameraForExportFrame, type ExportFrame } from "./exportFrame";
+import { drawLandmarkLabels, type CanvasLandmarkLabel } from "./landmarkLabelText";
+
+export type PngLandmarkLabels = (camera: THREE.Camera, width: number, height: number) => CanvasLandmarkLabel[];
 
 export async function captureViewPng(
   gl: THREE.WebGLRenderer,
   scene: THREE.Scene,
   camera: THREE.Camera,
   frame?: ExportFrame,
+  landmarkLabels: PngLandmarkLabels | null = null,
 ): Promise<Blob> {
   const PNG_BACKGROUND = getColour("--export-backdrop");
   const previousBackground = scene.background;
@@ -56,6 +60,11 @@ export async function captureViewPng(
     image.data.set(pixels.subarray(src, src + row), y * row);
   }
   context.putImageData(image, 0, 0);
+  if (landmarkLabels) {
+    const cssWidth = sourceWidth / pixelRatio;
+    const cssHeight = sourceHeight / pixelRatio;
+    drawLandmarkLabels(context, landmarkLabels(renderCamera, cssWidth, cssHeight), cssWidth, cssHeight, width / cssWidth);
+  }
   const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
   if (!blob) throw new Error("Could not encode the PNG.");
   return blob;

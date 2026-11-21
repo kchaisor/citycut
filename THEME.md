@@ -69,6 +69,17 @@ The name is `--background`. The value is `#EBEBEB`.
 | `--sidebar-panel-w` | Width of the sidebar panel next to the rail. | `320px` |
 | `--z-studio-inspector` | Stacking order of the fixed Site Intelligence panel. | `30` |
 | `--z-studio-topbar` | Stacking order of the floating top-bar HUD (menus paint above the inspector). | `40` |
+| `--fs-caption` / `--lh-caption` | Caption type: landmark label pills, the LANDMARK header, the Wikidata link and Buildings helper captions. | `11px` / `16px` |
+| `--fs-sm` / `--lh-sm` | Small type: Landmark block rows in the building popover and the Landmark labels toggle row. | `12px` / `16px` |
+| `--bg-elev` | Raised white surface: landmark label pills and selected sub-options. | `#FFFFFF` |
+| `--ink` | Primary text: landmark label pills and Landmark block values. | `#141413` |
+| `--ink-2` | Secondary text: Landmark block row labels. | `#4A4945` |
+| `--ink-3` | Muted text: section headers, meta, counts, the LANDMARK header, the Wikidata link, Buildings helper captions. Darkened from `#787670` for contrast (DESIGN-SYSTEM.md). | `#6B6963` |
+| `--border-outer` | 1 px edge of HUD islands and landmark label pills. | `rgb(20 20 19 / 13%)` |
+| `--shadow-raised` | Small lift under landmark label pills. | `0 1px 2px rgb(20 20 19 / 8%)` |
+| `--z-hud` | Stacking band of the HUD islands. | `30` |
+| `--z-landmark-labels` | Landmark label pills in 3D and plan, just below `--z-hud`. | `29` |
+| `--dur-fast` | Landmark label fade in and out. | `120ms` |
 | `--studio-intelligence-meta` | MGA / cut-size line in the Site Intelligence header (`~6.3:1` on `--bg-card`). | `#5F5E5A` |
 | `--studio-submode-select-edge` | 1 px outline on the collapsed Perspective / Site plan submode `<select>` below 1280. | `#D9D8D3` |
 
@@ -135,6 +146,8 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--figure-fill` | `#000000` | Figure-ground buildings, the black frame, north mark, and scale bar on that drawing, on screen and in the Illustrator file, and the Rhino FigureGround layer. |
 | `--plan-empty` | `#6d675e` | The sentence shown when a plan has nothing in the frame. |
 | `--contour-label` | `#6A6A6A` | Elevation numbers on the site plan, on screen and in the Illustrator file. |
+| `--landmark-label` | `#141413` | Landmark label text in Drawing (site plan and figure-ground), the site-plan and figure-ground SVG, and the 3D 2× PNG. |
+| `--landmark-label-halo` | `#FFFFFF` | 2 px halo behind that text (SVG stroke with `paint-order`, and the PNG). |
 | `--building-uniform` | `#FFFFFF` | Buildings when colour-by-use is off, that legend swatch, and the Rhino Buildings layer. |
 | `--uniform-road` | `#555555` | Road fill in Drawing when the plan building style is uniform (3D Card view uses `--primary-surface` on canvas instead). |
 | `--building-manual` | `#D4A017` | 3D viewport tint for buildings with a manual height override when “Show manual edits” is on. |
