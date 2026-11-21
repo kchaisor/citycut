@@ -1,5 +1,6 @@
 import type { LonLat, TerrainField } from "../types";
 import { decodeTerrariumWebp } from "./decodeWebp";
+import { qaTerrainField, qaTerrainFromSearch } from "./qaTerrain";
 import {
   TERRAIN_UNAVAILABLE,
   heightFieldFromTiles,
@@ -40,7 +41,10 @@ export async function fetchTerrainForCut(
   center: LonLat,
   sideM: number,
   signal?: AbortSignal,
+  search: string = typeof window === "undefined" ? "" : window.location.search,
 ): Promise<TerrainField> {
+  const qaTerrain = qaTerrainFromSearch(search);
+  if (qaTerrain) return qaTerrainField(qaTerrain, center, sideM);
   try {
     let zoom = preferredTerrainZoom(center.lat);
     for (; zoom >= 8; zoom--) {

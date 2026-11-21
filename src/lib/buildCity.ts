@@ -18,6 +18,7 @@ import { readDrawingStyle } from "./drawingStyle";
 import { basePlinthBuffers, footprintBase, sampleTerrain, terrainBuffers, terrainTint } from "./terrain";
 import { drapeTriangles, GROUND_REMAINING_LAYER, GROUND_ROADS_LAYER, groundGeometry, groundRoadPartition, groundTriangles } from "./groundRoads";
 import { clipTrianglesToTerrainGrid, terrainMeshHeight } from "./terrainDrape";
+import { attachGroundHillshade, hillshadeGrid, hillshadeTexture } from "./hillshade";
 import type { AreaFeat, BuildingFeat, BuildingUse, CityModel, Pt, Ring, RoadGrade, TerrainField } from "../types";
 
 export type CityBuildOptions = {
@@ -413,6 +414,7 @@ function basePlinthMesh(
 function terrainMesh(
   field: TerrainField,
   sideM: number,
+  shadeMap: THREE.DataTexture,
   frameShape = DEFAULT_SITE_FRAME_SHAPE,
   frameSize?: FrameGroundSize,
 ): THREE.Mesh {
@@ -431,6 +433,7 @@ function terrainMesh(
   );
   const mesh = new THREE.Mesh(geometry, material);
   mesh.name = "Terrain";
+  attachGroundHillshade(mesh, shadeMap, sideM);
   order(mesh, SURFACE.terrain.renderOrder);
   return mesh;
 }
@@ -457,6 +460,7 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
     ? { field: model.terrain, sideM: model.sideM, frameSize }
     : null;
   const groundSplit = model.terrain && frameShape === "square" ? groundRoadPartition(model) : null;
+  const shadeMap = model.terrain ? hillshadeTexture(hillshadeGrid(model.terrain)) : null;
   if (model.terrain && groundSplit) {
     const field = model.terrain;
     const remaining = groundGeometry(
@@ -468,11 +472,12 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
       const mesh = new THREE.Mesh(remaining, material);
       mesh.name = "Terrain";
       mesh.userData.exportLayer = GROUND_REMAINING_LAYER;
+      if (shadeMap) attachGroundHillshade(mesh, shadeMap, model.sideM);
       order(mesh, SURFACE.terrain.renderOrder);
       group.add(mesh);
     }
-  } else if (model.terrain) {
-    group.add(terrainMesh(model.terrain, model.sideM, frameShape, frameSize));
+  } else if (model.terrain && shadeMap) {
+    group.add(terrainMesh(model.terrain, model.sideM, shadeMap, frameShape, frameSize));
   } else {
     const widthM = model.widthM ?? model.sideM;
     const heightM = model.heightM ?? model.sideM;
@@ -530,6 +535,7 @@ export function buildCityGroup(model: CityModel, options: CityBuildOptions = {})
   }
   const blockMesh = mergeMeshes(blockGeos, blockMat, "Blocks");
   if (blockMesh) {
+    if (shadeMap) attachGroundHillshade(blockMesh, shadeMap, model.sideM);
     order(blockMesh, SURFACE.block.renderOrder);
     group.add(blockMesh);
   }

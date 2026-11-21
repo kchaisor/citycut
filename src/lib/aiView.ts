@@ -15,6 +15,7 @@ import { hexRgb } from "./lineweights";
 import { ROAD_COLOR, SURFACE } from "./surfaceLayers";
 import { uniformRoadColor } from "./uniformViewport";
 import { footprintBase, sampleTerrain, terrainTint } from "./terrain";
+import { hillshadeGrid, sampleHillshade, shadeRgb } from "./hillshade";
 import { drapeTriangles, GROUND_REMAINING_LAYER, GROUND_ROADS_LAYER, groundRoadPartition, groundTriangles, ROAD_GRADES_BY_PRIORITY } from "./groundRoads";
 import type { TerrainField } from "../types";
 import { comBuildingHeightCreditLine } from "./comBuildingHeightCredit";
@@ -73,6 +74,7 @@ export type ViewStyle = {
   showOutlines?: boolean;
   showContours?: boolean;
   hideTrees?: boolean;
+  hillshade?: boolean;
 };
 
 type Fill = {
@@ -455,11 +457,6 @@ function terrainIndices(count: number, stride: number): number[] {
   return out;
 }
 
-function shadeHeight(t: number): Rgb {
-  const u = Math.min(1, Math.max(0, t));
-  return [0.718 + (0.953 - 0.718) * u, 0.655 + (0.925 - 0.655) * u, 0.576 + (0.898 - 0.576) * u];
-}
-
 function collect(
   model: CityModel,
   shot: CameraShot,
@@ -482,6 +479,13 @@ function collect(
   const occ: Occ[] = [];
   let nextId = 1;
 
+  const shade = field && style.hillshade !== false && !style.whiteCard ? hillshadeGrid(field) : null;
+  const groundRgb = (east: number, north: number, z: number): Rgb =>
+    style.whiteCard || !field
+      ? cardGround()
+      : shade
+        ? shadeRgb(terrainTint(field, z), sampleHillshade(shade, east, north, model.sideM))
+        : terrainTint(field, z);
   const groundSplit = field && (model.frameShape ?? "square") === "square" ? groundRoadPartition(model) : null;
   if (field && groundSplit) {
     const cells = (field.cols - 1) * (field.rows - 1);
@@ -490,7 +494,9 @@ function collect(
     const toWorld = (tri: [number, number, number][]) => faceUp(tri.map(([e, n, z]) => worldOf(e, n, z)));
     for (const tri of drapeTriangles(groundTriangles(groundSplit.remaining, coarse, model.sideM), coarse, model.sideM)) {
       const z = (tri[0][2] + tri[1][2] + tri[2][2]) / 3;
-      const color: Rgb = style.whiteCard ? cardGround() : terrainTint(field, z);
+      const east = (tri[0][0] + tri[1][0] + tri[2][0]) / 3;
+      const north = (tri[0][1] + tri[1][1] + tri[2][1]) / 3;
+      const color = groundRgb(east, north, z);
       pushTri(fills, edges, occ, nextId++, toWorld(tri), color, GROUND_REMAINING_LAYER, 0, false, shot, pageW, pageH, forward);
     }
     for (const grade of ROAD_GRADES_BY_PRIORITY) {
@@ -504,7 +510,6 @@ function collect(
     const stride = Math.max(1, Math.ceil(Math.sqrt(cells / 1600)));
     const cols = terrainIndices(field.cols, stride);
     const rows = terrainIndices(field.rows, stride);
-    const relief = Math.max(field.max - field.min, 0.001);
     const at = (col: number, row: number): Vec3 => {
       const east = -half + col * field.spacingM;
       const north = -half + row * field.spacingM;
@@ -512,7 +517,7 @@ function collect(
       return [east, y, -north];
     };
     const tint = (col: number, row: number): Rgb =>
-      style.whiteCard ? cardGround() : shadeHeight((field.heights[row * field.cols + col] - field.min) / relief);
+      groundRgb(-half + col * field.spacingM, -half + row * field.spacingM, field.heights[row * field.cols + col]);
     for (let r = 0; r < rows.length - 1; r++) {
       for (let c = 0; c < cols.length - 1; c++) {
         const sw = at(cols[c], rows[r]);

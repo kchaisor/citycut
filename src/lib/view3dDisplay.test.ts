@@ -10,6 +10,7 @@ import {
   snapWhenTogglingView3dDisplay,
   view3dDisplayForModelOpen,
   writeStoredView3dDisplay,
+  VIEW3D_HILLSHADE_KEY,
   type View3dDisplaySettings,
 } from "./view3dDisplay";
 
@@ -69,6 +70,7 @@ describe("view3d display defaults and persistence", () => {
     writeStoredView3dDisplay(storage, {
       primaryView: true,
       showOutlines: false,
+      showHillshade: false,
       showContours3d: false,
       hideTrees: true,
       layersVisible: {
@@ -83,9 +85,28 @@ describe("view3d display defaults and persistence", () => {
     const opened = view3dDisplayForModelOpen(storage);
     expect(opened.primaryView).toBe(true);
     expect(opened.showOutlines).toBe(false);
+    expect(opened.showHillshade).toBe(true);
     for (const id of LAYER_3D_IDS) {
       expect(isLayer3dVisible(opened, id)).toBe(true);
     }
+  });
+});
+
+describe("view3d hillshade toggle", () => {
+  it("defaults on, persists under its own key, and is not a scene layer", () => {
+    expect(DEFAULT_VIEW3D_DISPLAY.showHillshade).toBe(true);
+    expect(LAYER_3D_IDS as readonly string[]).not.toContain("hillshade");
+    const store = new Map<string, string>();
+    const storage = {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, v: string) => {
+        store.set(k, v);
+      },
+    };
+    expect(readStoredView3dDisplay(storage).showHillshade).toBe(true);
+    writeStoredView3dDisplay(storage, { ...DEFAULT_VIEW3D_DISPLAY, showHillshade: false });
+    expect(store.get(VIEW3D_HILLSHADE_KEY)).toBe("0");
+    expect(readStoredView3dDisplay(storage).showHillshade).toBe(false);
   });
 });
 

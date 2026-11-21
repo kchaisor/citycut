@@ -1,7 +1,7 @@
 import { terrainMeshHeight } from "./terrainDrape";
 import type { MultiPolygon } from "./safePolygonClip";
 import { clipIntersection as clipIntersectionSafe } from "./safePolygonClip";
-import { COLOUR_FALLBACK, getColour } from "./colours";
+import { getColour } from "./colours";
 import { fromLocal, squareBBox } from "./geo";
 import { clipPolygonRect } from "./clip";
 import { frameHalfExtents, siteFramePolygon, type FrameGroundSize, type SiteFrameShape } from "./siteFrame";
@@ -503,20 +503,16 @@ export function terrainTint(field: Pick<TerrainField, "min" | "max">, z: number)
   return shadeHeight((z - field.min) / Math.max(field.max - field.min, 0.001), 1);
 }
 
+const TERRAIN_ELEVATION_WHISPER = 0.04;
+
 function shadeHeight(t: number, darken: number): [number, number, number] {
   const u = Math.min(1, Math.max(0, t));
   const groundHex = getColour("--ground-fill");
-  if (groundHex.toUpperCase() !== COLOUR_FALLBACK["--ground-fill"].toUpperCase()) {
-    const r = parseInt(groundHex.slice(1, 3), 16) / 255;
-    const g = parseInt(groundHex.slice(3, 5), 16) / 255;
-    const b = parseInt(groundHex.slice(5, 7), 16) / 255;
-    const factor = (0.78 + 0.22 * u) * darken;
-    return [r * factor, g * factor, b * factor];
-  }
-  const red = (0.718 + (0.953 - 0.718) * u) * darken;
-  const green = (0.655 + (0.925 - 0.655) * u) * darken;
-  const blue = (0.576 + (0.898 - 0.576) * u) * darken;
-  return [red, green, blue];
+  const r = parseInt(groundHex.slice(1, 3), 16) / 255;
+  const g = parseInt(groundHex.slice(3, 5), 16) / 255;
+  const b = parseInt(groundHex.slice(5, 7), 16) / 255;
+  const factor = (1 - TERRAIN_ELEVATION_WHISPER * (1 - u)) * darken;
+  return [r * factor, g * factor, b * factor];
 }
 
 type TerrainTri = [Pt, Pt, Pt];

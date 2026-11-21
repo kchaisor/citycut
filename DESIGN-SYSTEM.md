@@ -63,6 +63,13 @@ Fills, map/plan/3D colours and line weights are defined **only** in `src/colours
 
 Colour is never the only signal: a state change also changes the weight, the edge, or the label (accent always comes with its ink edge and 700 weight).
 
+### Terrain hillshade (3D ground)
+
+- The 3D model is always **true scale**. Slope is shown with a soft hillshade on the ground, never by exaggerating the mesh.
+- Light from the north-west (315°, sun altitude 50°). A low-contrast grey multiply on the paper ground (`--ground-fill`, `--block-fill`) only, clamped to a soft range so it reads as ink on paper, not a relief map or heatmap.
+- Never shade buildings, roads, water, landscape, contours, shadows or wind streaks. Ground-draping analysis (sun hours) wins: hillshade is off under it.
+- **Hillshade** toggle in Display → View Style, next to Outlines, on by default. Spec: `docs/specs/terrain-hillshade.md`.
+
 ## 5. Spacing
 
 **4pt grid.** Layout spacing (between rows, sections, islands, and panel padding) uses only 4/8/12/16/24/32. Inside a control, 2px and 6px are allowed: icon-to-label gaps, track padding, and the gap between segments. Off-grid values (3, 5, 7, 9, 10, 11, 13) round to the nearest token.

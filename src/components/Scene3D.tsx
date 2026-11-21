@@ -101,6 +101,7 @@ import { heliodonRadiusM } from "../lib/heliodonRadius";
 import { studioSceneLighting } from "../lib/sunStudyViewport";
 import { applySolarGreyscale } from "../lib/solarGreyscale";
 import { SunHoursLayer } from "./SunHoursLayer";
+import { groundHillshadeOn, setGroundHillshade } from "../lib/hillshade";
 import type { SunHoursDirectOverlay } from "../lib/sunHoursDirectAssess";
 import type { SunHoursGroundGrid } from "../lib/sunHoursGroundPlan";
 import { SectionKnifeScene } from "./SectionKnifeScene";
@@ -544,6 +545,7 @@ function City({
   highlightManual,
   solarDiagramOn,
   directSunHoursOn,
+  sunHoursGroundOn = false,
   solarNeutralFill,
   solarGreyscale,
   solarShadowsActive,
@@ -572,6 +574,7 @@ function City({
   highlightManual: boolean;
   solarDiagramOn: boolean;
   directSunHoursOn: boolean;
+  sunHoursGroundOn?: boolean;
   solarNeutralFill: string;
   solarGreyscale: boolean;
   solarShadowsActive: boolean;
@@ -975,6 +978,10 @@ function City({
     display.primaryView,
     invalidate,
   ]);
+  useLayoutEffect(() => {
+    setGroundHillshade(group, groundHillshadeOn(display.showHillshade, sunHoursGroundOn));
+    invalidate();
+  }, [group, display.showHillshade, sunHoursGroundOn, invalidate]);
   const buildingsVisible = isLayer3dVisible(display, "buildings");
   const roadsVisible = isLayer3dVisible(display, "roads");
   const footpathsVisible = isLayer3dVisible(display, "footpaths");
@@ -2452,6 +2459,7 @@ export function Scene3D({
         highlightManual={showManualEdits && model.manualHeightEditCount !== undefined && model.manualHeightEditCount > 0}
         solarDiagramOn={solar.showPath}
         directSunHoursOn={Boolean(solar.sunHours && sunHoursDirectOverlay)}
+        sunHoursGroundOn={Boolean(solar.sunHours && sunHoursGroundGrid)}
         solarNeutralFill={solarNeutralFill}
         solarGreyscale={solarAnalysisActive}
         solarShadowsActive={solarShadowsActive}

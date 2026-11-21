@@ -146,6 +146,16 @@ export function ModelPageSidebarLeftA({ vm }: { vm: import("./useModelPage").Mod
                         <span>Outlines</span>
                         <span className={`mini-chk ${view3dDisplay.showOutlines ? "on" : ""}`} aria-hidden="true">{view3dDisplay.showOutlines ? <svg width="9" height="9" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="2.5 6.5 5 9 9.5 3.5" /></svg> : null}</span>
                       </label>
+                      <label className={view3dDisplay.showHillshade ? "mini-flag is-on check-field" : "mini-flag check-field"}>
+                        <input
+                          className="sr-only"
+                          type="checkbox"
+                          checked={view3dDisplay.showHillshade}
+                          onChange={(event) => commitView3dDisplay({ ...view3dDisplay, showHillshade: event.target.checked })}
+                        />
+                        <span>Hillshade</span>
+                        <span className={`mini-chk ${view3dDisplay.showHillshade ? "on" : ""}`} aria-hidden="true">{view3dDisplay.showHillshade ? <svg width="9" height="9" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="2.5 6.5 5 9 9.5 3.5" /></svg> : null}</span>
+                      </label>
                       <label className={showManualEdits ? "mini-flag is-on check-field" : "mini-flag check-field"}>
                         <input
                           className="sr-only"
