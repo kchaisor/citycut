@@ -1,5 +1,6 @@
 import { planShadowOffset, planShadowRings } from "./buildingShadows";
 import { daylightWindowMinutes, sunAtMelbourneLocal } from "./solar";
+import { castsSunHoursShadow } from "./sunHoursBuildings";
 import { pointInPolygon } from "./useCascade";
 import {
   buildExtrudedFootprintMask,
@@ -108,6 +109,7 @@ function canvasLitStepCount(
     ctx.clearRect(0, 0, cols, rows);
     ctx.fillStyle = "black";
     for (const building of model.buildings) {
+      if (!castsSunHoursShadow(building)) continue;
       const offset = planShadowOffset(sample, building.height);
       if (!offset) continue;
       const ring = building.ring;

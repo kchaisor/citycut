@@ -167,6 +167,28 @@ describe("imported building colours", () => {
   });
 });
 
+describe("display footprint from the shadow-caster roofs", () => {
+  it("a stepped building draws one filled footprint with a part per roof level", () => {
+    const base = scheme();
+    const [towerA, podium, towerB] = base.buildings;
+    const stepped: ImportedMassing = {
+      ...base,
+      partTriangleStarts: [0, 28, 42],
+      buildings: [
+        { ...podium!, triStart: towerA!.triStart, triEnd: podium!.triEnd, vertexStart: 0, vertexEnd: podium!.vertexEnd, topZ: 86, height: 86 },
+        towerB!,
+      ],
+    };
+    const plan = footprints(massingDrawingBuildings([stepped], origin, zone));
+    expect(names(plan)).toEqual(["Podium", "Tower B"]);
+    const merged = plan[0]!;
+    expect(merged.height).toBeCloseTo(86, 0);
+    expect(merged.extrusionParts?.map((part) => Math.round(part.height)).sort((a, b) => a - b)).toEqual([18, 86]);
+    expect(merged.importedColour).toBe(getColour("--use-unclassified"));
+    expect(plan[1]!.extrusionParts).toBeUndefined();
+  });
+});
+
 describe("placement moves the file together", () => {
   it("moving and rotating moves all three footprints by the same rigid transform", () => {
     const before = scheme();

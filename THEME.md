@@ -163,7 +163,7 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--uniform-road` | `#555555` | Road fill in Drawing when the plan building style is uniform (3D Card view uses `--primary-surface` on canvas instead). |
 | `--building-manual` | `#D4A017` | 3D viewport tint for buildings with a manual height override when “Show manual edits” is on. |
 | `--site-building` | `#F2C230` | Buildings on the searched property: site plan, 3D, Rhino `Buildings::Site`, and Illustrator Site buildings layer. Manual-height amber and uniform colour apply to non-site buildings only; site buildings stay yellow unless manual-height tint is on for that building (manual wins in 3D). |
-| `--imported-massing` | `#FFFFFF` | Default colour of imported .3dm massing in 3D, Drawing (site plan, figure-ground, exploded axo), .ai and .3dm. Each imported model can override it with the Colour picker in Import (stored with the model). |
+| `--imported-massing` | `#FFFFFF` | Fallback fill for imported .3dm massing in 3D, Drawing (site plan, figure-ground, exploded axo, isometric), .ai and .3dm, used only when a building has no colour set. Imported buildings normally take their use colour (`--use-unclassified` with no use), or the file colour from the Colour picker in Import (stored with the model). |
 | `--imported-massing-upper-stroke` | `#6E6E6E` | Solid linework for upper roof/setback outlines inside imported footprints. |
 | `--imported-massing-upper-tone` | `#E6E6E6` | Light plan fill behind upper-level outlines on screen. |
 | `--switch-knob` | `#000000` | Knob of every sidebar switch, on and off, so an off switch reads on its pale `--control-off` track. On = `--accent` track, knob right. |

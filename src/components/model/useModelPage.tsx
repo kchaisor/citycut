@@ -181,6 +181,7 @@ import { shouldShowIntroBridgePill } from "./shouldShowIntroBridgePill";
 import { loadView } from "./loadModelView";
 import { initialAnalysisKind, initialSolarSettings } from "./initialSolarSettings";
 import { useSunHoursGround } from "../useSunHoursGround";
+import { sunHoursModel } from "../../lib/sunHoursBuildings";
 import { SOLAR_SLIDER_END_MIN, SOLAR_SLIDER_START_MIN, clampSolarSliderMinutes } from "../../lib/solarSlider";
 import {
   SECTION_ICONS,
@@ -1105,8 +1106,12 @@ export function useModelPage({
       contours: contoursVisible ? displayModel.contours : false,
     };
   }, [displayModel, massing.drawingBuildings, massing.drawingUpperLevels, view3dDisplay]);
+  const sunHoursAssessModel = useMemo(
+    () => sunHoursModel(tab === "drawing", displayModel, drawingModel, massing.drawingBuildings),
+    [tab, displayModel, drawingModel, massing.drawingBuildings],
+  );
   const sunHoursGround = useSunHoursGround(
-    tab === "drawing" ? drawingModel : displayModel,
+    sunHoursAssessModel,
     solar.year,
     solar.month,
     solar.day,

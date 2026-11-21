@@ -377,7 +377,7 @@ function buildBuildingSolids(
   const items: IsoSolidItem[] = [];
 
   for (const building of model.buildings) {
-    if (building.meshDrawnBy != null) continue;
+    if (building.meshDrawnBy != null || building.importedMassingShadowCaster) continue;
     const terrainBase = model.terrain
       ? footprintBase(model.terrain, building.ring, model.sideM) - baseElevation
       : 0;
