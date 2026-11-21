@@ -44,6 +44,22 @@ Sketch or screenshot:
 - When two or more Wikidata items sit on one building, the popover and the label use the item whose name is the building's own name (for example Eureka Tower, not Eureka Skydeck).
 - The sources list stays visually hidden. The Wikidata row remains in the "Ready · N/M sources" count and for screen readers.
 
+### PR 3 design (Designbot, 21 Nov 2026; Kelvin's go 5:08 PM AEDT)
+
+These are in addition to the choices above. Use design-system tokens only (no new hex in the app). Do not change the top bar.
+
+- **Label collision.** Hide any label whose box hits a HUD island or the open popover, with an 8 px gap. Hide the selected building's own label while its popover is open.
+- **Placement.** Place labels greedily, tallest building first (or by sitelink count if that is available). Drop a label that overlaps one already placed, with a 4 px gap. Recalculate when the camera or zoom stops, after a 100 ms pause. Fades use `--dur-fast`. Zooming in reveals labels that were dropped.
+- **3D and plan pill.** Fill `--bg-elev`, 1 px `--border-outer`, `--shadow-raised`, radius 4, height 20, padding 0 6, type `--fs-caption` 11 / 500 `--ink`. Max width 160 with an ellipsis, and the full name in the standard tooltip. Sit just below `--z-hud`. Clicking a label selects its building.
+- **3D anchor.** The pill is fixed at 11 px, never rotated, anchored at the roof top centre and projected to the screen. It is depth-tested, so it hides when another building is in front.
+- **Plan anchor.** The pill sits on the footprint centroid, always upright and horizontal.
+- **Drawing and exports.** No pill. Text only, 11 / 500 `--ink`, with a 2 px white halo using `paint-order` stroke. The 2× PNG and SVG include the labels only when the toggle is on.
+- **Popover Landmark block.** Drop the Landmark Name row when it is the same as the building name. Values are `--fs-sm` 500 `--ink`; numbers use Geist Mono with tabular figures. Row labels are 500 `--ink-2`. The LANDMARK micro header is `--ink-3`, with a divider above it.
+- **Wikidata link.** A "Wikidata ↗" caption in `--ink-3` links to the item's Q-page, and is underlined on hover.
+- **Close control.** A real 28×28 close button with a 16 px ×, `aria-label` Close, and a tooltip. The popover sits 8 px beside the building and stays at least 16 px inside the viewport.
+- **Toggle.** A plain 32 px list row (no card). The label is `--fs-sm` 500 `--ink`. The switch is on the right, with an ink track and an accent knob.
+- **Helper copy.** "From Wikidata · N matched" in caption `--ink-3`. "290 massings" stays a mono caption in `--ink-3`.
+
 ## How we'll know it works
 
 Observable checks (tick these on the real desktop view, not implementation details):
