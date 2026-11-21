@@ -10,29 +10,28 @@ import {
   type WikidataLandmark,
   type WikidataLandmarksDocument,
 } from "../../shared/wikidataLandmarks.js";
-import { M_PER_DEG_LAT, mPerDegLon, toLocal } from "./geo";
-import { pointInPolygon } from "./useCascade";
-import type { BuildingFeat, CityModel } from "../types";
+import {
+  bboxContains,
+  cutBbox,
+  matchLandmarks,
+  type WikidataLandmarksResult,
+} from "./wikidataMatch";
+import type { CityModel } from "../types";
 
 export type { WikidataLandmark } from "../../shared/wikidataLandmarks.js";
+export {
+  bboxContains,
+  cutBbox,
+  matchLandmarks,
+  wikidataHeightGaps,
+  type WikidataHeightGap,
+  type WikidataLandmarksResult,
+  type WikidataMatch,
+} from "./wikidataMatch";
 
 const PREBAKED_BASE = import.meta.env.VITE_PREBAKED_TILES_BASE ?? import.meta.env.BASE_URL;
 export const WIKIDATA_LANDMARKS_URL = `${PREBAKED_BASE}${WIKIDATA_LANDMARKS_NAME}`;
 export const WIKIDATA_TIMEOUT_MS = 8000;
-
-export type WikidataMatch = { buildingId: number; item: WikidataLandmark };
-
-export type WikidataLandmarksResult =
-  | {
-      status: "ok";
-      source: "baked" | "live";
-      generatedAt: string | null;
-      matches: WikidataMatch[];
-      inCut: number;
-      noFootprint: number;
-      manyFootprints: number;
-    }
-  | { status: "failed"; reason: string };
 
 export type WikidataLandmarksState = { status: "idle" } | { status: "loading" } | WikidataLandmarksResult;
 
@@ -86,50 +85,6 @@ export async function fetchLiveLandmarks(bbox: WikidataBbox, fetchImpl: Fetch = 
     groupBindings(checkSparqlJson(body), grouped);
   }
   return finaliseItems(grouped, bbox).items;
-}
-
-export function cutBbox(model: Pick<CityModel, "center" | "sideM" | "widthM" | "heightM">): WikidataBbox {
-  const dLon = (model.widthM ?? model.sideM) / 2 / mPerDegLon(model.center.lat);
-  const dLat = (model.heightM ?? model.sideM) / 2 / M_PER_DEG_LAT;
-  return { west: model.center.lon - dLon, south: model.center.lat - dLat, east: model.center.lon + dLon, north: model.center.lat + dLat };
-}
-
-export function bboxContains(outer: WikidataBbox, inner: WikidataBbox): boolean {
-  return inner.west >= outer.west && inner.east <= outer.east && inner.south >= outer.south && inner.north <= outer.north;
-}
-
-function inBbox(item: Pick<WikidataLandmark, "lon" | "lat">, bbox: WikidataBbox): boolean {
-  return item.lon >= bbox.west && item.lon <= bbox.east && item.lat >= bbox.south && item.lat <= bbox.north;
-}
-
-function buildingsForItem(model: Pick<CityModel, "center" | "buildings">, item: WikidataLandmark): BuildingFeat[] {
-  const ways = new Set(item.osmWayIds ?? []);
-  const byWay = ways.size > 0 ? model.buildings.filter((b) => b.osmWayIds?.some((id) => ways.has(id))) : [];
-  if (byWay.length === 1) return byWay;
-  const at = toLocal(item.lat, item.lon, model.center);
-  return (byWay.length > 1 ? byWay : model.buildings).filter((b) => pointInPolygon(at, b.ring, b.holes));
-}
-
-export function matchLandmarks(
-  model: Pick<CityModel, "center" | "sideM" | "widthM" | "heightM" | "buildings">,
-  items: readonly WikidataLandmark[],
-  source: "baked" | "live",
-  generatedAt: string | null,
-): WikidataLandmarksResult {
-  const bbox = cutBbox(model);
-  const matches: WikidataMatch[] = [];
-  let inCut = 0;
-  let noFootprint = 0;
-  let manyFootprints = 0;
-  for (const item of items) {
-    if (!inBbox(item, bbox)) continue;
-    inCut += 1;
-    const containing = buildingsForItem(model, item);
-    if (containing.length === 0) noFootprint += 1;
-    else if (containing.length > 1) manyFootprints += 1;
-    else matches.push({ buildingId: containing[0]!.id, item });
-  }
-  return { status: "ok", source, generatedAt, matches, inCut, noFootprint, manyFootprints };
 }
 
 export type WikidataItemsLoad =

@@ -7,6 +7,8 @@ import {
   paddedComFetchBounds,
 } from "../src/lib/comBuildingHeights.ts";
 import { applyDevelopmentFloorsToBuildings, fetchDevelopmentFloorRecords } from "../src/lib/comDevelopmentFloors.ts";
+import { existsSync, readFileSync } from "node:fs";
+import { matchLandmarks, wikidataHeightGaps } from "../src/lib/wikidataMatch.ts";
 
 const lat = -37.8136;
 const lon = 144.9831;
@@ -35,4 +37,14 @@ for (let i = 0; i < base.length; i++) {
     });
   }
 }
-console.log(JSON.stringify({ flaggedCount: flagged.length, flagged: flagged.slice(0, 25) }, null, 2));
+const wikidataFile = process.env.WIKIDATA_FILE ?? "public/wikidata-landmarks.json";
+let wikidata;
+if (existsSync(wikidataFile)) {
+  const items = JSON.parse(readFileSync(wikidataFile, "utf8")).items ?? [];
+  const matched = matchLandmarks({ center, sideM, buildings: after }, items, "baked", null);
+  const gaps = wikidataHeightGaps(after, matched.matches);
+  wikidata = { matched: matched.matches.length, heightGapsOver10pc: gaps.length, gaps };
+} else {
+  wikidata = { skipped: `${wikidataFile} not found; run node scripts/fetch-wikidata-landmarks.mjs or set WIKIDATA_FILE` };
+}
+console.log(JSON.stringify({ flaggedCount: flagged.length, flagged: flagged.slice(0, 25), wikidata }, null, 2));
