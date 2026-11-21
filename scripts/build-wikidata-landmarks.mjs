@@ -16,7 +16,7 @@ import {
   queryCells,
   WIKIDATA_LANDMARKS_NAME,
   WIKIDATA_MANIFEST_NAME,
-} from "./wikidata-landmarks-lib.mjs";
+} from "../shared/wikidataLandmarks.js";
 
 const ROOT = resolve(import.meta.dirname, "..");
 const OUT_DIR = resolve(ROOT, process.env.WIKIDATA_OUT_DIR ?? "public");

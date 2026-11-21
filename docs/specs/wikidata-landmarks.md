@@ -29,6 +29,14 @@ Sketch or screenshot:
 5. **Heights.** Wikidata height is shown as "cited" only. It does not override LiDAR or OSM heights. Where both exist and differ by more than 10%, flag it in the existing height-outlier review script.
 6. **Attribution.** Wikidata is CC0. Credit "Wikidata" in the sources list anyway, matching house style.
 
+### PR 2 notes (21 Nov 2026)
+
+- The query also takes railway stations (Q55488), not only buildings and structures (Q811979), so stations like Flinders Street come through. Kelvin's go, 20 Nov 2026.
+- Matching is by point in footprint only for now. Overture does not carry the OpenStreetMap `wikidata` tag through to CityCut's buildings, so the tag match in step 2 is not used yet.
+- Several Wikidata items can sit on one building (Eureka Tower and Eureka Skydeck, for example). PR 2 keeps them all; PR 3 decides which one the popover shows.
+- Of the 23 towers in `landmark-heights.json`, 18 have a Wikidata item and 5 do not (Prima Pearl, 405 Bourke Street, 35 Spring Street, Ernst & Young Plaza, HWT Tower). Crown Towers' Wikidata point is about 135 m from the tower, so it will not match its footprint. A test pins all of this.
+- The sources list is visually hidden in the current Model details; the Wikidata row shows in its count ("Ready · N/M sources") and to screen readers until the list is shown again.
+
 ## How we'll know it works
 
 Observable checks (tick these on the real desktop view, not implementation details):
@@ -37,7 +45,7 @@ Observable checks (tick these on the real desktop view, not implementation detai
 - [ ] Model details lists Wikidata with a match count, and shows a clear note when the source fails.
 - [ ] A suburban cut with no landmarks shows "0 landmarks", not an error.
 - [ ] Turning the labels toggle on and off changes 3D and Drawing, and exports match what is shown.
-- [ ] The existing `landmark-heights.json` towers all match their Wikidata items, checked by a new test.
+- [ ] The existing `landmark-heights.json` towers that have a Wikidata item (18 of 23) are found, and the 5 without one and Crown Towers' off-tower point are listed, checked by a new test.
 - [ ] typecheck, test, build and verify:ui all pass, with desktop screenshots attached.
 
 ## Out of scope

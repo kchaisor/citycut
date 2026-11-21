@@ -17,7 +17,7 @@ import {
   queryCells,
   splitCell,
   yearFromWikidataDate,
-} from "./wikidata-landmarks-lib.mjs";
+} from "../shared/wikidataLandmarks.js";
 
 const sample = JSON.parse(readFileSync(new URL("./fixtures/wikidata-sparql-sample.json", import.meta.url), "utf8"));
 const bake = () => finaliseItems(groupBindings(checkSparqlJson(sample)), GREATER_MELBOURNE_BBOX);
@@ -44,7 +44,7 @@ describe("SPARQL query", () => {
     const q = landmarkQuery(cell);
     expect(q).toContain('wikibase:cornerSouthWest "Point(144.9 -37.9)"^^geo:wktLiteral');
     expect(q).toContain('wikibase:cornerNorthEast "Point(145.1 -37.7)"^^geo:wktLiteral');
-    expect(q).toContain("wdt:P31/wdt:P279* wd:Q811979");
+    expect(q).toContain("{ ?item wdt:P31/wdt:P279* wd:Q811979 . } UNION { ?item wdt:P31/wdt:P279* wd:Q55488 . }");
     for (const p of ["P625", "P2048", "P1101", "P571", "P1619", "P84", "P149", "P1435"]) expect(q).toContain(p);
     expect(q).toContain("<https://en.wikipedia.org/>");
   });

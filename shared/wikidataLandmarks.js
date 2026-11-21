@@ -4,6 +4,8 @@ export const WIKIDATA_MANIFEST_NAME = "wikidata-landmarks-manifest.json";
 export const WIKIDATA_SPARQL_URL = "https://query.wikidata.org/sparql";
 export const WIKIDATA_ATTRIBUTION = "Wikidata (CC0)";
 export const ARCHITECTURAL_STRUCTURE = "Q811979";
+export const RAILWAY_STATION = "Q55488";
+export const LANDMARK_CLASSES = [ARCHITECTURAL_STRUCTURE, RAILWAY_STATION];
 
 export const GREATER_MELBOURNE_BBOX = { west: 144.333634, south: -38.502988, east: 145.878412, north: -37.175099 };
 
@@ -42,7 +44,7 @@ export function landmarkQuery(cell) {
     bd:serviceParam wikibase:cornerSouthWest ${wktPoint(cell.west, cell.south)} .
     bd:serviceParam wikibase:cornerNorthEast ${wktPoint(cell.east, cell.north)} .
   }
-  ?item wdt:P31/wdt:P279* wd:${ARCHITECTURAL_STRUCTURE} .
+  ${LANDMARK_CLASSES.map((qid) => `{ ?item wdt:P31/wdt:P279* wd:${qid} . }`).join(" UNION ")}
   OPTIONAL { ?item rdfs:label ?label FILTER(LANG(?label) = "en") }
   OPTIONAL { ?item p:P2048 ?heightStatement . ?heightStatement a wikibase:BestRank ; psn:P2048/wikibase:quantityAmount ?height . }
   OPTIONAL { ?item wdt:P1101 ?floors }
