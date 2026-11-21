@@ -3,7 +3,6 @@ import { squareBBox } from "./geo";
 import { sitePlanAi8, sitePlanChunks } from "./aiPlan";
 import { parseNativeAiLayers } from "./aiNative";
 import { planPaths } from "./svgPlan";
-import { contourInterval } from "./terrain";
 import {
   VICMAP_CONTOUR_PAGE,
   VICMAP_METRO_CONTOUR_URL,
@@ -197,7 +196,7 @@ describe("contour fallback", () => {
     expect(layer?.source).toBe("dem");
     expect(layer?.label).toBe("derived from terrain DEM");
     expect(layer?.lines.length).toBeGreaterThan(0);
-    expect(layer?.interval).toBe(contourInterval(20));
+    expect(layer?.interval).toBe(1);
   });
 
   it("keeps Vicmap lines when the metro service answers, including a second page", async () => {
@@ -391,51 +390,68 @@ describe("contour fallback", () => {
       expect(plan.contourIndex).toEqual([false, true, false, true, true]);
     }
     expect(contourDrawerLabel(metroModel(elevations).contourLayer!, 1000)).toBe("Vicmap Elevation 1 m");
-    expect(drawnContourInterval("vicmap-metro", 1, 1000)).toBe(1);
+    expect(drawnContourInterval("vicmap-metro", 1000)).toBe(1);
     expect(altitudeOnInterval(6, 5)).toBe(false);
     expect(altitudeOnInterval(10, 5)).toBe(true);
   });
 
-  it("thins metro contours to 5 m at 1:2500 and smaller, and indexes every 25 m", () => {
+  it("keeps every 1 m metro contour at 1:2500 and 1:5000 too, with heavier lines every 5 m", () => {
     const elevations = [1, 5, 6, 10, 25];
     const layer = metroModel(elevations).contourLayer!;
     for (const scale of [2500, 5000]) {
       const plan = planPaths(metroModel(elevations), 1.2, 5, scale);
-      expect(plan.contourInterval).toBe(5);
-      expect(plan.contours).toHaveLength(3);
-      expect(plan.contourIndex).toEqual([false, false, true]);
+      expect(plan.contourInterval).toBe(1);
+      expect(plan.contours).toHaveLength(elevations.length);
+      expect(plan.contourIndex).toEqual([false, true, false, true, true]);
       expect(plan.contourLabels).toEqual([]);
-      expect(contourDrawerLabel(layer, scale)).toBe("Vicmap Elevation 5 m (1 m at 1:1000)");
+      expect(contourDrawerLabel(layer, scale)).toBe("Vicmap Elevation 1 m");
     }
   });
 
-  it("leaves statewide and DEM contours unthinned at a small scale", () => {
+  it("still thins metro contours when the coarse interval token is raised above 1 m", () => {
+    const elevations = [1, 5, 6, 10, 25];
+    const plan = planPaths(metroModel(elevations), 1.2, 5, 2500, 5, 2500);
+    expect(plan.contourInterval).toBe(5);
+    expect(plan.contours).toHaveLength(3);
+    expect(plan.contourIndex).toEqual([false, false, true]);
+    expect(contourDrawerLabel(metroModel(elevations).contourLayer!, 2500, 5, 2500)).toBe("Vicmap Elevation 5 m (1 m at 1:1000)");
+    expect(planPaths(metroModel(elevations), 1.2, 5, 1000, 5, 2500).contourInterval).toBe(1);
+  });
+
+  it("draws statewide and DEM contours on the 1 m interval and says which lines are interpolated", () => {
     const state = planPaths(metroModel([10, 20, 50], "vicmap-state", 10), 1.2, 5, 5000);
-    expect(state.contourInterval).toBe(10);
+    expect(state.contourInterval).toBe(1);
     expect(state.contours).toHaveLength(3);
-    expect(state.contourIndex).toEqual([false, false, true]);
-    expect(contourDrawerLabel(metroModel([10], "vicmap-state", 10).contourLayer!, 5000)).toBe("Vicmap Elevation 10 m");
+    expect(state.contourIndex).toEqual([true, true, true]);
+    expect(contourDrawerLabel(metroModel([10], "vicmap-state", 10).contourLayer!, 5000)).toBe(
+      "Vicmap Elevation 10 m; 1 m lines in between are interpolated",
+    );
 
     const dem = planPaths(metroModel([1, 6, 10], "dem", 1), 1.2, 5, 5000);
     expect(dem.contourInterval).toBe(1);
     expect(dem.contours).toHaveLength(3);
     expect(dem.contourIndex).toEqual([false, false, true]);
-    expect(contourDrawerLabel(metroModel([1], "dem", 1).contourLayer!, 5000)).toBe("derived from terrain DEM");
+    expect(contourDrawerLabel(metroModel([1], "dem", 1).contourLayer!, 5000)).toBe("derived from terrain DEM, every 1 m");
+  });
+
+  it("draws 1 m for every contour source at 1:500, 1:1000 and 1:2500", () => {
+    for (const source of ["vicmap-metro", "vicmap-state", "cos-1m", "cos-nsw", "nsw-2m", "dem"] as const) {
+      for (const scale of [500, 1000, 2500, 5000]) {
+        expect(drawnContourInterval(source, scale)).toBe(1);
+      }
+    }
   });
 
   it("follows the export scale in the site-plan Illustrator contours", () => {
     const model = metroModel([1, 5, 6, 25]);
-    const coarse = sitePlanChunks(model, 5000);
-    const coarseLines = coarse.find((chunk) => chunk.name === "Contours");
-    expect(coarseLines?.paths).toHaveLength(2);
-    expect(coarseLines?.paths?.[0].strokeMm).toBe(0.02);
-    expect(coarseLines?.paths?.[1].strokeMm).toBe(0.18);
-    expect(coarse.find((chunk) => chunk.name === "Contour labels")).toBeUndefined();
-    expect(coarse.find((chunk) => chunk.name === "Annotation")?.texts?.some((text) => text.text.includes("Contours every 5 m"))).toBe(true);
-
-    const fine = sitePlanChunks(model, 1000);
-    expect(fine.find((chunk) => chunk.name === "Contours")?.paths).toHaveLength(4);
-    expect(fine.find((chunk) => chunk.name === "Annotation")?.texts?.some((text) => text.text.includes("Contours every 1 m"))).toBe(true);
+    for (const scale of [1000, 5000]) {
+      const chunks = sitePlanChunks(model, scale);
+      const lines = chunks.find((chunk) => chunk.name === "Contours");
+      expect(lines?.paths).toHaveLength(4);
+      expect(lines?.paths?.map((path) => path.strokeMm)).toEqual([0.02, 0.18, 0.02, 0.18]);
+      expect(chunks.find((chunk) => chunk.name === "Contour labels")).toBeUndefined();
+      expect(chunks.find((chunk) => chunk.name === "Annotation")?.texts?.some((text) => text.text.includes("Contours every 1 m"))).toBe(true);
+    }
   });
 
   it("writes each site-plan layer once without contour label text", () => {

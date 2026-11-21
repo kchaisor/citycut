@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AXO_HATCH_PAINTS,
+  axoIndexContourWeight,
   axoLayerBasePaint,
   axoLayerLabelAnchor,
   axoPlateShowsAerial,
@@ -26,6 +27,7 @@ import { getColour } from "../lib/colours";
 import { dashScreen, readDrawingStyle } from "../lib/drawingStyle";
 import { themeColor } from "../lib/themeColor";
 import { useColourRevision } from "../lib/useColourRevision";
+import { TransportLegendDock } from "./TransportLegendDock";
 import type { CityModel } from "../types";
 
 function hatchPatternId(paint: AxoPaintKey): string {
@@ -162,8 +164,10 @@ export function DrawingExplodedAxo({
   const guideDash = dashScreen(lineStyle.axoGuideDash ?? "none");
   const tramColour = getColour("--tram-line-stroke");
   const massingEdge = getColour("--axo-building-edge");
+  const indexContourWeight = useMemo(() => axoIndexContourWeight(), [colourTick]);
+  const dockLegend = paintLayers.find((layer) => layer.dockLegend)?.dockLegend;
 
-  return (
+  const drawing = (
     <svg
       ref={svgRef}
       className="plan exploded-axo"
@@ -362,14 +366,16 @@ export function DrawingExplodedAxo({
               <g className="axo-ground-contours" data-axo-ground-contours="true">
                 {layer.topoContourStrokes.map((d, ci) => {
                   const contourDash = dashScreen(lineStyle.contour.dash);
+                  const index = layer.topoContourIndex?.[ci] ?? false;
                   return (
                     <path
                       key={`gc${ci}`}
                       d={d}
+                      data-contour-index={index ? "true" : undefined}
                       fill="none"
                       stroke={axoPaintColour("contour")}
                       strokeOpacity={0.85}
-                      strokeWidth={roadPx * 0.48}
+                      strokeWidth={roadPx * 0.48 * (index ? indexContourWeight : 1)}
                       vectorEffect="non-scaling-stroke"
                       strokeLinecap={contourDash?.cap ?? "round"}
                       strokeLinejoin="round"
@@ -523,6 +529,12 @@ export function DrawingExplodedAxo({
           );
         })}
     </svg>
+  );
+  return (
+    <>
+      {drawing}
+      {dockLegend ? <TransportLegendDock legend={dockLegend} /> : null}
+    </>
   );
 }
 
