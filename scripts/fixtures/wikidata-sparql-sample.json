@@ -21,6 +21,7 @@
         "label": { "xml:lang": "en", "type": "literal", "value": "Fixture Tower" },
         "coord": { "datatype": "http://www.opengis.net/ont/geosparql#wktLiteral", "type": "literal", "value": "Point(144.9645305 -37.8215766)" },
         "height": { "datatype": "http://www.w3.org/2001/XMLSchema#decimal", "type": "literal", "value": "297.3" },
+        "osmWay": { "datatype": "http://www.w3.org/2001/XMLSchema#string", "type": "literal", "value": "700001" },
         "architect": { "type": "uri", "value": "http://www.wikidata.org/entity/Q900102" },
         "architectLabel": { "xml:lang": "en", "type": "literal", "value": "Second Fixture Studio" },
         "style": { "type": "uri", "value": "http://www.wikidata.org/entity/Q900201" },

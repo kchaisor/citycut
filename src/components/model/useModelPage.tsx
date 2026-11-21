@@ -71,6 +71,7 @@ import { resolveBuildingHeightsAfterCom } from "../../lib/buildingHeightPipeline
 import { useSidebarCollapsed } from "../../lib/sidebarCollapse";
 import { cutSizeLabel } from "../../lib/placeLabel";import { SIDEBAR_SECTION_LABELS, availableSidebarSections, initialSidebarState, isRightSidebarSection, reduceSidebar, resolveLeftSidebarSection, resolveRightSidebarSection, resolveSidebarSection, LeftSidebarSectionId, RightSidebarSectionId, SiteAnalysisKind } from "../../lib/sidebarSections";
 import { buildDataSources, countLoaded } from "../../lib/dataSources";
+import { useWikidataLandmarks } from "./useWikidataLandmarks";
 
 import { countTreeCrowns } from "../../lib/treeMassing";
 import { capturePresetFromSearch } from "../../lib/captureQuery";import { qaModeFromSearch } from "../../lib/qaCameraBridge";
@@ -1891,8 +1892,10 @@ export function useModelPage({
     { tier: "real_source_unmatched", label: heightTierLabel("real_source_unmatched") },
     { tier: "manual", label: heightTierLabel("manual") },
   ];
+  const wikidata = useWikidataLandmarks(model);
   const dataSources = buildDataSources({
     model,
+    wikidata: wikidata.status,
     comHeights: comHeightsStatus,
     comMeasuredCount: comMeasuredHeightCount,
     comError: comFootprintFetchError ?? (comHeightsApplyFailed ? "The height matcher failed." : null),
@@ -2190,6 +2193,7 @@ export function useModelPage({
     crs,
     cutDimLabel,
     dataSources,
+    wikidataMatches: wikidata.result,
     dispatchSidebar,
     defaultExplodedAxoGapM,
     defaultExplodedAxoSettings,

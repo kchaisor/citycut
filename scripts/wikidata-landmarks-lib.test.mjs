@@ -44,8 +44,9 @@ describe("SPARQL query", () => {
     const q = landmarkQuery(cell);
     expect(q).toContain('wikibase:cornerSouthWest "Point(144.9 -37.9)"^^geo:wktLiteral');
     expect(q).toContain('wikibase:cornerNorthEast "Point(145.1 -37.7)"^^geo:wktLiteral');
-    expect(q).toContain("wdt:P31/wdt:P279* wd:Q811979");
-    for (const p of ["P625", "P2048", "P1101", "P571", "P1619", "P84", "P149", "P1435"]) expect(q).toContain(p);
+    expect(q).toContain("VALUES ?class { wd:Q811979 wd:Q55488 }");
+    expect(q).toContain("wdt:P31/wdt:P279* ?class");
+    for (const p of ["P625", "P2048", "P1101", "P571", "P1619", "P84", "P149", "P1435", "P10689"]) expect(q).toContain(p);
     expect(q).toContain("<https://en.wikipedia.org/>");
   });
   it("reads heights normalised to metres from best-rank statements", () => {
@@ -101,6 +102,7 @@ describe("baking the sample answer", () => {
       styles: [{ qid: "Q900201", name: "Fixture modernism" }],
       heritage: [],
       wikipedia: "https://en.wikipedia.org/wiki/Fixture_Tower",
+      osmWayIds: [700001],
     });
   });
   it("leaves missing facts empty instead of guessing", () => {
@@ -109,6 +111,7 @@ describe("baking the sample answer", () => {
     expect(hall.floorsAboveGround).toBeNull();
     expect(hall.yearOpened).toBeNull();
     expect(hall.wikipedia).toBeNull();
+    expect(hall.osmWayIds).toEqual([]);
     expect(hall.heritage).toEqual([{ qid: "Q900301", name: "Fixture heritage register" }]);
   });
   it("drops and counts items without an English label or a point in the box", () => {
@@ -128,7 +131,7 @@ describe("output", () => {
     const { items, dropped } = bake();
     const generatedAt = "2026-11-20T00:00:00.000Z";
     const doc = landmarksDocument(items, { bbox: GREATER_MELBOURNE_BBOX, generatedAt });
-    expect(doc).toMatchObject({ schemaVersion: 1, generatedAt, attribution: "Wikidata (CC0)" });
+    expect(doc).toMatchObject({ schemaVersion: 2, generatedAt, attribution: "Wikidata (CC0)" });
     const manifest = landmarksManifest({
       bbox: GREATER_MELBOURNE_BBOX,
       generatedAt,

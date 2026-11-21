@@ -194,6 +194,9 @@ jobs:
     if: needs.gate.outputs.run == 'true' && (github.event_name != 'workflow_dispatch' || inputs.jobs == 'all' || inputs.jobs == 'wikidata')
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    permissions:
+      contents: write
+      actions: write
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -220,6 +223,7 @@ jobs:
             && gh release upload wikidata-landmarks-latest public/wikidata-landmarks.json public/wikidata-landmarks-manifest.json --clobber \
             || gh release create wikidata-landmarks-latest public/wikidata-landmarks.json public/wikidata-landmarks-manifest.json \
               --title "Wikidata landmarks (latest)" --notes "Rolling latest Wikidata landmarks file."
+          gh workflow run pages.yml --ref main
       - name: Publish test pre-release (non-main branches)
         if: github.ref != 'refs/heads/main'
         env:

@@ -7,6 +7,7 @@ const NSW_DECODED_ROWS = new Set(["nsw-lots", "nsw-easements", "nsw-road-corrido
 import type { ComBuildingHeightsStatus } from "./comBuildingHeightsStatus";
 import { treeTierCounts } from "./trees";
 import { estimatedIslandCount, ROUNDABOUT_ISLAND_ESTIMATE_NOTE } from "./roundabouts";
+import { WIKIDATA_UNAVAILABLE, type WikidataStatus } from "./wikidataLandmarks";
 
 export type DataSourceStatus = "ok" | "loading" | "failed" | "partial" | "idle";
 
@@ -24,6 +25,7 @@ export type DataSourceInput = {
   comHeights: ComBuildingHeightsStatus;
   comMeasuredCount: number;
   comError: string | null;
+  wikidata?: WikidataStatus;
 };
 
 const STATUS_WORD: Record<DataSourceStatus, string> = {
@@ -47,7 +49,30 @@ export function overtureReleaseFromNote(note: string): string | null {
   return match ? match[1]!.trim() : null;
 }
 
-export function buildDataSources({ model, comHeights, comMeasuredCount, comError }: DataSourceInput): DataSourceRow[] {
+function wikidataRow(status: WikidataStatus): DataSourceRow | null {
+  if (status.state === "idle") return null;
+  if (status.state === "loading") return { id: "wikidata", label: "Wikidata", status: "loading", detail: "Landmarks · loading", notes: [] };
+  if (status.state === "failed") {
+    return { id: "wikidata", label: "Wikidata", status: "failed", detail: WIKIDATA_UNAVAILABLE, notes: [status.reason] };
+  }
+  const notes: string[] = [];
+  if (status.noFootprint > 0) {
+    notes.push(`${count(status.noFootprint, "item")} in this cut ${status.noFootprint === 1 ? "sits" : "sit"} in no building footprint; not matched.`);
+  }
+  if (status.ambiguous > 0) {
+    notes.push(`${count(status.ambiguous, "item")} could match more than one building; not matched.`);
+  }
+  const when = status.source === "baked" && status.queryDate ? `Queried ${status.queryDate.slice(0, 10)}` : "Live query";
+  return {
+    id: "wikidata",
+    label: "Wikidata",
+    status: "ok",
+    detail: `${count(status.matched, "landmark")} matched · ${when} · CC0`,
+    notes,
+  };
+}
+
+export function buildDataSources({ model, comHeights, comMeasuredCount, comError, wikidata }: DataSourceInput): DataSourceRow[] {
   const rows: DataSourceRow[] = [];
   const failures = model.useTierFailures ?? [];
   const warnings = model.heightSourceLoadWarnings ?? [];
@@ -174,6 +199,9 @@ export function buildDataSources({ model, comHeights, comMeasuredCount, comError
       notes,
     });
   }
+
+  const landmarks = model.layers.buildings && wikidata ? wikidataRow(wikidata) : null;
+  if (landmarks) rows.push(landmarks);
 
   if (model.region === "nsw") rows.push(...nswDataSourceRows(model));
 
