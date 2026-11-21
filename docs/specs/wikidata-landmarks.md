@@ -32,10 +32,33 @@ Sketch or screenshot:
 ### PR 2 notes (21 Nov 2026)
 
 - Railway stations (Q55488) are fetched too, so stations like Flinders Street come through (Kelvin's go, 20 Nov 2026). They come from a second, separate query over the whole area. On 21 Nov a single query covering both classes made the busiest CBD cell hit Wikidata's rate limit (HTTP 429), so the building query stays exactly as in PR 1. The live fallback runs the same two queries for the cut. A second run on 21 Nov showed the CBD cell sits at Wikidata's 60-second limit even with the PR 1 query: Wikidata cut the answer off mid-stream (unreadable JSON). The bake now treats a cut-off answer like a timeout and splits the cell into quarters, and waits 60 s after any split so the next query stays inside Wikidata's query-time allowance instead of getting HTTP 429.
-- Matching is by point in footprint only for now. Overture does not carry the OpenStreetMap `wikidata` tag through to CityCut's buildings, so the tag match in step 2 is not used yet.
+- Matching tries Wikidata's OpenStreetMap way id (P10689) first, then falls back to whether the point sits inside a footprint. Overture does not carry the OpenStreetMap `wikidata` tag through to CityCut's buildings, so the tag match in step 2 is not used yet.
 - Several Wikidata items can sit on one building (Eureka Tower and Eureka Skydeck, for example). PR 2 keeps them all; PR 3 decides which one the popover shows.
-- Of the 23 towers in `landmark-heights.json`, 18 have a Wikidata item and 5 do not (Prima Pearl, 405 Bourke Street, 35 Spring Street, Ernst & Young Plaza, HWT Tower). Crown Towers' Wikidata point is about 135 m from the tower, so it will not match its footprint. A test pins all of this.
+- Of the 23 towers in `landmark-heights.json`, 18 have a Wikidata item and 5 do not (Prima Pearl, 405 Bourke Street, 35 Spring Street, Ernst & Young Plaza, HWT Tower). Crown Towers' Wikidata point is about 135 m from the cited tower point, so a test using an 80 m square around that point does not match it. On a real Southbank cut the point can still fall inside the larger Crown complex footprint, so Crown Towers may match.
 - The sources list is visually hidden in the current Model details; the Wikidata row shows in its count ("Ready · N/M sources") and to screen readers until the list is shown again.
+
+### PR 3 choices (Kelvin, 21 Nov 2026, 4:51 PM AEDT)
+
+- Labels are shown for every matched building, including stations, hotels and similar.
+- The "Landmark labels" toggle starts off.
+- When two or more Wikidata items sit on one building, the popover and the label use the item whose name is the building's own name (for example Eureka Tower, not Eureka Skydeck).
+- The sources list stays visually hidden. The Wikidata row remains in the "Ready · N/M sources" count and for screen readers.
+
+### PR 3 design (Designbot, 21 Nov 2026; Kelvin's go 5:08 PM AEDT)
+
+These are in addition to the choices above. Use design-system tokens only (no new hex in the app). Do not change the top bar.
+
+- **Label collision.** Hide any label whose box hits a HUD island or the open popover, with an 8 px gap. Hide the selected building's own label while its popover is open.
+- **Placement.** Place labels greedily, tallest building first (or by sitelink count if that is available). Drop a label that overlaps one already placed, with a 4 px gap. Recalculate when the camera or zoom stops, after a 100 ms pause. Fades use `--dur-fast`. Zooming in reveals labels that were dropped.
+- **3D and plan pill.** Fill `--bg-elev`, 1 px `--border-outer`, `--shadow-raised`, radius 4, height 20, padding 0 6, type `--fs-caption` 11 / 500 `--ink`. Max width 160 with an ellipsis, and the full name in the standard tooltip. Sit just below `--z-hud`. Clicking a label selects its building.
+- **3D anchor.** The pill is fixed at 11 px, never rotated, anchored at the roof top centre and projected to the screen. It is depth-tested, so it hides when another building is in front.
+- **Plan anchor.** The pill sits on the footprint centroid, always upright and horizontal.
+- **Drawing and exports.** No pill. Text only, 11 / 500 `--ink`, with a 2 px white halo using `paint-order` stroke. The 2× PNG and SVG include the labels only when the toggle is on.
+- **Popover Landmark block.** Drop the Landmark Name row when it is the same as the building name. Values are `--fs-sm` 500 `--ink`; numbers use Geist Mono with tabular figures. Row labels are 500 `--ink-2`. The LANDMARK micro header is `--ink-3`, with a divider above it.
+- **Wikidata link.** A "Wikidata ↗" caption in `--ink-3` links to the item's Q-page, and is underlined on hover.
+- **Close control.** A real 28×28 close button with a 16 px ×, `aria-label` Close, and a tooltip. The popover sits 8 px beside the building and stays at least 16 px inside the viewport.
+- **Toggle.** A plain 32 px list row (no card). The label is `--fs-sm` 500 `--ink`. The switch is on the right, with an ink track and an accent knob.
+- **Helper copy.** "From Wikidata · N matched" in caption `--ink-3`. "290 massings" stays a mono caption in `--ink-3`.
 
 ## How we'll know it works
 
