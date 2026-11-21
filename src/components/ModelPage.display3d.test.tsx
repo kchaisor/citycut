@@ -628,18 +628,26 @@ describe("Display panel controls by view tab", () => {
       expect(within(envConsole).getByRole("button", { name }).getAttribute("aria-pressed")).toBe("false");
     }
     expect(within(envConsole).queryByRole("button", { name: "Walk Ripple" })).toBeNull();
-    expect(within(envConsole).queryByLabelText("Live solar telemetry")).toBeNull();
+    expect(within(envConsole).getByLabelText("Live solar telemetry").textContent).toContain("ALT");
+    expect(within(envConsole).getByRole("group", { name: "Scene overlay toggles" })).toBeTruthy();
+    expect(within(envConsole).getByRole("group", { name: "Solar date presets" })).toBeTruthy();
+    expect(within(envConsole).getByRole("group", { name: "Render quality" })).toBeTruthy();
+    expect(envConsole.querySelector(".env-solar-idle")).toBeTruthy();
     expect(screen.queryByRole("region", { name: "Solar and camera controls" })).toBeNull();
 
     await user.click(within(envConsole).getByRole("button", { name: "Solar Study" }));
     expect(leftOutliner.hidden).toBe(false);
     expect(within(envConsole).getByLabelText("Live solar telemetry").textContent).toContain("ALT");
+    expect(envConsole.querySelector(".env-solar-idle")).toBeNull();
 
     await user.click(within(envConsole).getByRole("button", { name: "Wind Rose" }));
     expect(within(envConsole).getByLabelText("Live wind telemetry").textContent).toContain("PREVAILING");
+    expect(within(envConsole).queryByLabelText("Live solar telemetry")).toBeNull();
 
     await user.click(within(envConsole).getByRole("button", { name: "Wind Rose" }));
     expect(within(envConsole).queryByLabelText("Live wind telemetry")).toBeNull();
+    expect(within(envConsole).getByLabelText("Live solar telemetry")).toBeTruthy();
+    expect(envConsole.querySelector(".env-solar-idle")).toBeTruthy();
     expect(screen.getByRole("region", { name: "Environmental analysis console" })).toBeTruthy();
   });
 });

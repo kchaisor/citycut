@@ -24,6 +24,7 @@ import { WindPlanSwitch } from "./WindPlanSwitch";
 export function ModelPageViewportFooter({ vm }: { vm: import("./useModelPage").ModelPageViewModel }) {
   const {
     analysisKind,
+    commitRenderQuality,
     commitSolar,
     commitWind,
     consoleDaylight,
@@ -32,6 +33,7 @@ export function ModelPageViewportFooter({ vm }: { vm: import("./useModelPage").M
     consoleWindStats,
     drawing,
     model,
+    renderQuality,
     setAnalysisKind,
     setConsolePlaying,
     setSunStudySelected,
@@ -46,6 +48,8 @@ export function ModelPageViewportFooter({ vm }: { vm: import("./useModelPage").M
     designWind,
   } = vm;
   const planWind = windPlan.active && analysisKind === "wind";
+  const solarChrome = analysisKind !== "wind" && analysisKind !== "view";
+  const solarLive = analysisKind === "solar";
   const toggleMode = (kind: SiteAnalysisKind) => {
     const next = toggleAnalysis(analysisKind, kind);
     setAnalysisKind(next);
@@ -114,9 +118,13 @@ export function ModelPageViewportFooter({ vm }: { vm: import("./useModelPage").M
                 ))}
               </div>
 
-              {analysisKind && <span className="v-sep hud-sep" aria-hidden="true" />}
-
-              {analysisKind === "solar" && (() => {
+              {solarChrome && (
+              <div
+                className={solarLive ? "env-solar-chrome" : "env-solar-chrome env-solar-idle"}
+                {...(!solarLive ? { inert: true } : {})}
+              >
+              <span className="v-sep hud-sep" aria-hidden="true" />
+              {(() => {
                 const azDeg = Math.round(((consoleSun.azimuthDeg % 360) + 360) % 360);
                 const dirs = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
                 const cardinal = dirs[Math.round(azDeg / 45) % 8] ?? "N";
@@ -143,35 +151,9 @@ export function ModelPageViewportFooter({ vm }: { vm: import("./useModelPage").M
                 );
               })()}
 
-              {analysisKind === "wind" && !planWind && windTelemetry}
+              <span className="v-sep hud-sep" aria-hidden="true" />
 
-              {analysisKind === "view" && (
-                <div className="solar-telemetry mono" aria-label="Live viewshed telemetry">
-                  <div className="st-item">
-                    <span className="st-k">EYE</span>
-                    <span className="st-v">{walk.eyeM.toFixed(1)}m</span>
-                  </div>
-                  <span className="st-dot" aria-hidden="true">·</span>
-                  <div className="st-item">
-                    <span className="st-k">RADIUS</span>
-                    <span className="st-v">{walk.radiusM}m</span>
-                  </div>
-                  <span className="st-dot" aria-hidden="true">·</span>
-                  <div className="st-item">
-                    <span className="st-k">PATH</span>
-                    <span className="st-v">{walk.clickCount > 0 ? `${Math.round(walk.lengthM)}m (${walk.clickCount} pts)` : "Click ground"}</span>
-                  </div>
-                </div>
-              )}
-
-              {analysisKind && !planWind && <span className="v-sep hud-sep" aria-hidden="true" />}
-
-              {planWind ? (
-                <WindPlanSwitch plan={windPlan} />
-              ) : analysisKind ? (
-                <div className="overlay-chips" role="group" aria-label="Scene overlay toggles">
-                  {analysisKind === "solar" && (
-                    <>
+              <div className="overlay-chips" role="group" aria-label="Scene overlay toggles">
                       <button
                         type="button"
                         className={solar.castShadows ? "ov-chip on" : "ov-chip"}
@@ -230,9 +212,37 @@ export function ModelPageViewportFooter({ vm }: { vm: import("./useModelPage").M
                           <span>{sunStudySelected.length} selected ×</span>
                         </button>
                       )}
-                    </>
-                  )}
+              </div>
+              </div>
+              )}
 
+              {analysisKind === "wind" && !planWind && windTelemetry}
+
+              {analysisKind === "view" && (
+                <div className="solar-telemetry mono" aria-label="Live viewshed telemetry">
+                  <div className="st-item">
+                    <span className="st-k">EYE</span>
+                    <span className="st-v">{walk.eyeM.toFixed(1)}m</span>
+                  </div>
+                  <span className="st-dot" aria-hidden="true">·</span>
+                  <div className="st-item">
+                    <span className="st-k">RADIUS</span>
+                    <span className="st-v">{walk.radiusM}m</span>
+                  </div>
+                  <span className="st-dot" aria-hidden="true">·</span>
+                  <div className="st-item">
+                    <span className="st-k">PATH</span>
+                    <span className="st-v">{walk.clickCount > 0 ? `${Math.round(walk.lengthM)}m (${walk.clickCount} pts)` : "Click ground"}</span>
+                  </div>
+                </div>
+              )}
+
+              {analysisKind && !planWind && !solarChrome && <span className="v-sep hud-sep" aria-hidden="true" />}
+
+              {planWind ? (
+                <WindPlanSwitch plan={windPlan} />
+              ) : analysisKind === "wind" || analysisKind === "view" ? (
+                <div className="overlay-chips" role="group" aria-label="Scene overlay toggles">
                   {analysisKind === "wind" && (
                     <>
                       <button
@@ -272,11 +282,35 @@ export function ModelPageViewportFooter({ vm }: { vm: import("./useModelPage").M
 
                 </div>
               ) : null}
+
+              <div className="env-quality" role="group" aria-label="Render quality">
+                {(
+                  [
+                    ["high", "High"],
+                    ["fast", "Fast"],
+                  ] as const
+                ).map(([id, label]) => (
+                  <button
+                    key={id}
+                    type="button"
+                    className={renderQuality === id ? "env-quality-btn active" : "env-quality-btn"}
+                    aria-pressed={renderQuality === id}
+                    aria-label={`${label} render quality`}
+                    onClick={() => commitRenderQuality(id)}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
             </div>
 
-            {analysisKind && (
             <div className="env-bottom-row">
-              {analysisKind === "solar" && (() => {
+              {solarChrome && (
+              <div
+                className={solarLive ? "env-solar-chrome env-solar-bottom" : "env-solar-chrome env-solar-bottom env-solar-idle"}
+                {...(!solarLive ? { inert: true } : {})}
+              >
+              {(() => {
                 const formatMin = (m: number) =>
                   `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
                 const curMin = solar.hour * 60 + solar.minute;
@@ -392,6 +426,8 @@ export function ModelPageViewportFooter({ vm }: { vm: import("./useModelPage").M
                   </>
                 );
               })()}
+              </div>
+              )}
 
               {analysisKind === "wind" && (
                 <>
@@ -535,7 +571,6 @@ export function ModelPageViewportFooter({ vm }: { vm: import("./useModelPage").M
               )}
 
             </div>
-            )}
           </div>
         ) : (
           <div className="bottom-bar studio-solar-bar hud-card" role="region" aria-label="Solar and camera controls">

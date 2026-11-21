@@ -24,8 +24,11 @@ function Footer({ onSolar = () => undefined, onWind = () => undefined, initialKi
   const [solar, setSolar] = useState(() => initialSolarSettings("", emptyStorage));
   const [analysisKind, setAnalysisKind] = useState<ActiveAnalysis>(initialKind);
   const [windSettings, setWindSettings] = useState<WindViewSettings>(DEFAULT_WIND_SETTINGS);
+  const [renderQuality, setRenderQuality] = useState<"high" | "fast">("high");
   const vm = {
     analysisKind,
+    commitRenderQuality: setRenderQuality,
+    renderQuality,
     commitSolar: (next: SolarViewSettings) => {
       onSolar(next);
       setSolar(next);
@@ -102,15 +105,43 @@ describe("Solar Study console", () => {
 describe("Analysis bar", () => {
   afterEach(cleanup);
 
-  it("shows on a new cut with an Analysis header and all three analyses off", () => {
+  it("shows the full Solar Study layout on a new cut with all analyses off", () => {
     render(<Footer />);
     const bar = screen.getByRole("region", { name: "Environmental analysis console" });
+    expect(bar.getAttribute("data-analysis")).toBe("none");
     expect(within(bar).getByText("Analysis")).toBeTruthy();
     for (const name of ["Solar Study", "Wind Rose", "Viewshed Walk"]) {
       expect(modeButton(name).getAttribute("aria-pressed")).toBe("false");
     }
-    expect(screen.queryByRole("group", { name: "Scene overlay toggles" })).toBeNull();
-    expect(screen.queryByRole("group", { name: "Solar date presets" })).toBeNull();
+    expect(within(bar).getByLabelText("Live solar telemetry").textContent).toContain("ALT");
+    const chips = screen.getByRole("group", { name: "Scene overlay toggles" });
+    expect(Array.from(chips.querySelectorAll("button.ov-chip")).map((b) => b.textContent)).toEqual([
+      "Shadows",
+      "Sun hours",
+      "3D Sun Dome",
+    ]);
+    expect(screen.getByRole("group", { name: "Solar date presets" })).toBeTruthy();
+    expect(screen.getByRole("slider", { name: "Solar time of day" })).toBeTruthy();
+    expect(screen.getByRole("group", { name: "Render quality" })).toBeTruthy();
+    const idle = bar.querySelectorAll(".env-solar-idle");
+    expect(idle.length).toBeGreaterThanOrEqual(2);
+    for (const node of idle) {
+      expect(node.hasAttribute("inert")).toBe(true);
+    }
+  });
+
+  it("shows a High/Fast quality switch that changes the render quality", () => {
+    render(<Footer />);
+    const group = screen.getByRole("group", { name: "Render quality" });
+    const high = within(group).getByRole("button", { name: "High render quality" });
+    const fast = within(group).getByRole("button", { name: "Fast render quality" });
+    expect(high.getAttribute("aria-pressed")).toBe("true");
+    expect(fast.getAttribute("aria-pressed")).toBe("false");
+    fireEvent.click(fast);
+    expect(high.getAttribute("aria-pressed")).toBe("false");
+    expect(fast.getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(high);
+    expect(high.getAttribute("aria-pressed")).toBe("true");
   });
 
   it("has no Walk Ripple mode", () => {

@@ -25,8 +25,8 @@ Kelvin's reference shots from 19 Nov 2026: 40 Cleeland St, Dandenong, Perspectiv
 These replace the earlier idea that Solar Study is the default and is implied by "Site Analysis is open".
 
 6. **Nothing is on at a new cut.** Solar Study, Wind Rose, Viewshed Walk, the 3D Sun Dome, Shadows, Sun hours and the 9–3pm Plan Fan all start off. Wind does not come back on just because it was on in an earlier visit.
-7. **The Analysis bar is always there** at the bottom of the 3D and Drawing views (not Satellite), with an "Analysis" header. There is no Analysis icon in the left tool rail any more; Display, Import and Export stay.
-8. **The three analyses are toggles.** Clicking Solar Study, Wind Rose or Viewshed Walk turns it on; clicking the one that is on turns it off, leaving nothing selected; clicking another switches to it. Wind streaks only run while Wind Rose is on.
+7. **The Analysis bar is always there** at the bottom of the 3D and Drawing views (not Satellite), with an "Analysis" header. There is no Analysis icon in the left tool rail any more; Display, Import and Export stay. The bar always uses the full two-row Solar Study layout — header, Solar Study / Wind Rose / Viewshed Walk chips, the ALT / AZ / DAYLIGHT readout, Shadows / Sun hours / 3D Sun Dome (and 9–3pm Plan Fan in Drawing), the date presets and the time slider — even when nothing is switched on. When Solar Study is off, those solar controls stay visible but inactive (a muted, non-interactive look). Wind Rose and Viewshed Walk still swap their own rows in when they are on. A compact High / Fast quality switch sits at the right end of the top row and is always available. (Updated 22 Nov 2026.)
+8. **The three analyses are toggles.** Clicking Solar Study, Wind Rose or Viewshed Walk turns it on; clicking the one that is on turns it off, leaving nothing selected; clicking another switches to it. Turning Solar Study off does not collapse the bar. Wind streaks only run while Wind Rose is on.
 9. **The 3D Sun Dome belongs to Solar Study.** The dome, and its chip, only take effect while Solar Study is on. Switching to Wind Rose or Viewshed Walk, or turning Solar Study off, hides the dome even if its chip was left on. The chip also shows in Drawing, beside Shadows, Sun hours and the 9–3pm Plan Fan.
 10. **Date buttons name the solstices:** "21 Jun · Winter solstice", "22 Sep · Equinox" and "22 Dec · Summer solstice".
 11. **Walk Ripple is removed** from the product.
@@ -37,10 +37,10 @@ Open 40 Cleeland St, Dandenong (`?lat=-37.983826&lon=145.21555&label=40+Cleeland
 
 - [ ] In the greyscale Perspective view with Shadows on, shadows on the ground and on buildings are a strong, readable dark grey, with detail still visible in the shade and sunlit roofs and walls staying light, without the scene going muddy or black.
 - [ ] Trees, roads, terrain and buildings are grey; switching to Wind Rose, or turning Solar Study off, brings the colours back.
-- [ ] When the model first opens, the 3D scene is in colour, not grey, and the Analysis bar shows with an "Analysis" header and Solar Study, Wind Rose and Viewshed Walk all off.
+- [ ] When the model first opens, the 3D scene is in colour, not grey, and the Analysis bar shows the full two-row Solar Study layout with an "Analysis" header, Solar Study / Wind Rose / Viewshed Walk all off, the solar readout, overlays, date presets and time slider visible but inactive, and the High / Fast quality switch at the right.
 - [ ] A new cut has no wind streaks, no sun dome, no shadows, no Sun hours and no Plan Fan, even after a visit that left wind on.
 - [ ] The left tool rail has no Analysis icon.
-- [ ] Clicking Solar Study twice turns it on and then off again; the bar stays visible with nothing selected.
+- [ ] Clicking Solar Study twice turns it on and then off again; the bar stays visible in the full two-row layout, with the solar controls muted again and nothing selected.
 - [ ] With 3D Sun Dome on, switching to Wind Rose hides the dome and starts the wind streaks; turning Wind Rose off stops them.
 - [ ] In Drawing with Solar Study on, the 3D Sun Dome chip sits with Shadows, Sun hours and 9–3pm Plan Fan.
 - [ ] The date buttons read "21 Jun · Winter solstice", "22 Sep · Equinox" and "22 Dec · Summer solstice".

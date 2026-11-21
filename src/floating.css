@@ -3890,7 +3890,7 @@ body,
 
 .model .bottom-bar.env-console {
   position: fixed !important;
-  bottom: 12px !important;
+  bottom: 14px !important;
   left: 50% !important;
   transform: translateX(-50%) !important;
   z-index: 32 !important;
@@ -3913,14 +3913,6 @@ body,
   box-sizing: border-box !important;
 }
 
-.model .bottom-bar.env-console[data-analysis="none"] {
-  min-height: 0 !important;
-}
-
-.model .bottom-bar.env-console[data-analysis="none"] .env-top-row {
-  justify-content: flex-start !important;
-}
-
 .model .bottom-bar.env-console .env-console-title {
   font-family: var(--sans) !important;
   font-size: var(--fs-micro) !important;
@@ -3935,12 +3927,83 @@ body,
 
 .model .bottom-bar.env-console .env-top-row {
   display: flex !important;
-  flex-wrap: wrap !important;
+  flex-wrap: nowrap !important;
   align-items: center !important;
   justify-content: flex-start !important;
   gap: var(--space-2) !important;
   min-height: var(--control-sm) !important;
 }
+
+.model .bottom-bar.env-console .env-solar-chrome {
+  display: inline-flex !important;
+  align-items: center !important;
+  flex-wrap: wrap !important;
+  gap: var(--space-2) !important;
+  min-width: 0 !important;
+  flex: 1 1 auto !important;
+}
+
+.model .bottom-bar.env-console .env-solar-bottom {
+  display: flex !important;
+  flex-wrap: nowrap !important;
+  align-items: center !important;
+  gap: var(--space-2) !important;
+  min-width: 0 !important;
+  flex: 1 1 auto !important;
+  width: 100% !important;
+}
+
+.model .bottom-bar.env-console .env-solar-idle {
+  opacity: 0.48 !important;
+  user-select: none !important;
+}
+
+.model .bottom-bar.env-console .env-quality {
+  display: inline-flex !important;
+  align-items: center !important;
+  margin-left: auto !important;
+  flex-shrink: 0 !important;
+  height: var(--control-xs) !important;
+  box-sizing: border-box !important;
+  background: var(--bg-sub) !important;
+  padding: var(--space-0-5) !important;
+  border-radius: var(--radius-md) !important;
+  gap: var(--space-0-5) !important;
+}
+
+.model .bottom-bar.env-console .env-quality-btn {
+  height: 100% !important;
+  padding: 0 var(--space-2) !important;
+  border-radius: var(--radius-sm) !important;
+  border: 0 !important;
+  background: transparent !important;
+  font-family: var(--sans) !important;
+  font-size: var(--fs-caption) !important;
+  font-weight: 600 !important;
+  color: var(--ink-2) !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  cursor: pointer !important;
+  white-space: nowrap !important;
+  box-shadow: none !important;
+}
+
+.model .bottom-bar.env-console .env-quality-btn.active {
+  background: var(--accent) !important;
+  color: var(--ink) !important;
+  font-weight: 700 !important;
+  box-shadow: inset 0 0 0 1px var(--ink) !important;
+}
+
+.model .bottom-bar.env-console .env-quality-btn:not(.active):hover {
+  background: var(--bg-elev) !important;
+  color: var(--ink) !important;
+}
+
+.model .bottom-bar.env-console .env-quality-btn.active:hover {
+  background: var(--accent-hover) !important;
+}
+
 
 .model .bottom-bar.env-console .env-mode-seg {
   display: inline-flex !important;
@@ -4080,7 +4143,8 @@ body,
 .model .bottom-bar.env-console .env-mode-btn:focus-visible,
 .model .bottom-bar.env-console .ov-chip:focus-visible,
 .model .bottom-bar.env-console .p-pill:focus-visible,
-.model .bottom-bar.env-console .play-pill:focus-visible {
+.model .bottom-bar.env-console .play-pill:focus-visible,
+.model .bottom-bar.env-console .env-quality-btn:focus-visible {
   outline: 2px solid var(--ink) !important;
   outline-offset: 2px !important;
 }
