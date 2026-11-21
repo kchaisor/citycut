@@ -190,7 +190,6 @@ export function Sidebar({
               onClick={onNewCut}
             >
               <Plus size={16} strokeWidth={2.25} className="topbar-compact-icon" aria-hidden="true" />
-              <span className="topbar-compact-label">+ New cut</span>
             </button>
           ) : null}
         </div>

@@ -4838,12 +4838,32 @@ body,
   flex-shrink: 0;
 }
 
-.model .topbar-compact-icon-btn .topbar-compact-icon {
-  display: none;
+.model .topbar-compact-icon-btn {
+  box-sizing: border-box;
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  min-height: 32px;
+  padding: 0;
+  gap: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 7px;
+  overflow: hidden;
+  flex-shrink: 0;
 }
 
-.model .topbar-compact-icon-btn .topbar-compact-label {
-  display: inline;
+.model .top-bar-center .cam-reset.topbar-compact-icon-btn,
+.model .top-bar-left .sidebar-new-cut.new-cut-pill.topbar-compact-icon-btn {
+  width: 32px;
+  min-width: 32px;
+  padding: 0;
+  gap: 0;
+}
+
+.model .topbar-compact-icon-btn .topbar-compact-icon {
+  display: block;
 }
 
 .model .topbar-export-compact {
@@ -5064,44 +5084,6 @@ body,
     padding: 0 7px !important;
     font-size: 10.5px !important;
   }
-
-  .model .topbar-compact-icon-btn {
-    box-sizing: border-box;
-    width: 32px;
-    height: 32px;
-    min-width: 32px;
-    min-height: 32px;
-    padding: 0;
-    gap: 0;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 7px;
-    overflow: hidden;
-  }
-
-  .model .top-bar-center .cam-reset.topbar-compact-icon-btn {
-    width: 32px;
-    min-width: 32px;
-    padding: 0;
-    gap: 0;
-  }
-
-  .model .top-bar-left .sidebar-new-cut.new-cut-pill.topbar-compact-icon-btn {
-    width: 32px;
-    min-width: 32px;
-    padding: 0;
-    gap: 0;
-  }
-
-  .model .topbar-compact-icon-btn .topbar-compact-icon {
-    display: block;
-  }
-
-  .model .topbar-compact-icon-btn .topbar-compact-label {
-    display: none;
-  }
-
 }
 
 @media (max-width: 1279px) {

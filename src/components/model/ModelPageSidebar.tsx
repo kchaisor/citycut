@@ -267,7 +267,6 @@ export function ModelPageSidebar({ vm }: { vm: import("./useModelPage").ModelPag
                   }}
                 >
                   <RotateCcw size={15} strokeWidth={2.1} className="topbar-compact-icon" aria-hidden="true" />
-                  <span className="topbar-compact-label">Reset view</span>
                 </button>
               </div>
             }
