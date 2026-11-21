@@ -92,6 +92,8 @@ describe("right HUD stack", () => {
     expect(index).not.toMatch(/272px/);
     expect(index).not.toMatch(/--wind-plan-card-/);
     expect(block(index, ".wind-streaks")).toMatch(/flex: none;/);
+    expect(block(index, ".wind-rose-analysis-card.is-collapsed")).toMatch(/flex: none;/);
+    expect(block(index, ".wind-rose-analysis-card.is-collapsed")).toMatch(/min-height: var\(--hud-card-head\);/);
   });
 
   it("centres the Analysis console in the lane left clear by the rail and the right stack", () => {
