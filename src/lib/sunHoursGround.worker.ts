@@ -8,6 +8,7 @@ export type SunHoursGroundWorkerRequest = {
   month: number;
   day: number;
   cellM: number;
+  stepMinutes: number;
 };
 
 export type SunHoursGroundWorkerMessage =
@@ -20,9 +21,9 @@ const scope = self as unknown as {
 };
 
 scope.onmessage = (event: MessageEvent<SunHoursGroundWorkerRequest>) => {
-  const { id, model, year, month, day, cellM } = event.data;
+  const { id, model, year, month, day, cellM, stepMinutes } = event.data;
   try {
-    const grid = computeSunHoursGroundGrid(model as CityModel, year, month, day, cellM);
+    const grid = computeSunHoursGroundGrid(model as CityModel, year, month, day, cellM, stepMinutes);
     if (!grid) scope.postMessage({ type: "empty", id });
     else scope.postMessage({ type: "done", id, grid });
   } catch {

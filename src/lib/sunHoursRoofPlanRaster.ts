@@ -66,7 +66,7 @@ export function rasterizeSunHoursRoofPlan(
   scaleMaxHours: number,
 ): SunHoursGroundRaster | null {
   if (scaleMaxHours <= 0 || typeof document === "undefined") return null;
-  const cellM = SUN_HOURS_GROUND_CELL_M;
+  const cellM = samples.find((sample) => sample.kind === "roof-cell")?.spanM ?? SUN_HOURS_GROUND_CELL_M;
   const half = model.sideM / 2;
   const cols = Math.max(1, Math.ceil(model.sideM / cellM));
   const rows = cols;

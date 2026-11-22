@@ -2,8 +2,9 @@ import * as THREE from "three";
 import { daylightWindowMinutes, sunAtMelbourneLocal } from "./solar";
 import { buildFacadeOcclusionMesh } from "./facadeOcclusionMesh";
 import { planToWorld, worldOutward3 } from "./sunHoursWorld";
-import { SUN_HOURS_GROUND_STEP_MINUTES, sunHoursDirectRgb, sunHoursGroundFromLitSteps } from "./sunHoursGround";
-import { directSunHoursSamplesForModel, type DirectSunHoursSample } from "./sunHoursDirectSample";
+import { sunHoursDirectRgb, sunHoursGroundFromLitSteps } from "./sunHoursGround";
+import { directSunHoursSampleSet, type DirectSunHoursSample } from "./sunHoursDirectSample";
+import { FAST_SUN_HOURS_PARAMS, type SunHoursSampleParams } from "./sunHoursQuality";
 import { buildRoofFootprintMeshesForModel } from "./sunHoursRoofFootprint";
 import type { SunHoursGroundRaster } from "./sunHoursGroundRaster";
 import { packSunHoursRoofRasterSource, type SunHoursRoofRasterSource } from "./sunHoursRoofPlanRaster";
@@ -23,6 +24,10 @@ export type SunHoursDirectOverlay = {
   wallColors: Float32Array;
   cellCount: number;
   maxSunHours: number;
+  cellM: number;
+  wallCellM: number;
+  roofCellM: number;
+  stepMinutes: number;
   roofPlanRaster: SunHoursGroundRaster | null;
   roofRasterSource: SunHoursRoofRasterSource | null;
 };
@@ -32,6 +37,7 @@ function isLitAtStep(
   sample: DirectSunHoursSample,
   sunDir: THREE.Vector3,
   aboveHorizon: boolean,
+  ray: THREE.Ray,
 ): boolean {
   if (!aboveHorizon) return false;
   if (sample.kind === "facade-bay") {
@@ -40,17 +46,25 @@ function isLitAtStep(
     if (dot < FACING_DOT_MIN) return false;
   } else if (sunDir.y < FACING_DOT_MIN) return false;
   const origin = planToWorld(sample.east, sample.north, sample.yM);
-  const ray = new THREE.Ray(new THREE.Vector3(origin[0], origin[1], origin[2]), sunDir);
+  ray.origin.set(origin[0], origin[1], origin[2]);
+  ray.direction.copy(sunDir);
   ray.origin.addScaledVector(ray.direction, SELF_SKIP_M);
   const hit = mesh.geometry.boundsTree?.raycastFirst(ray);
   return !hit || hit.distance > RAY_MAX_M;
 }
 
-function daylightSteps(lat: number, lon: number, year: number, month: number, day: number): { dir: THREE.Vector3; above: boolean }[] {
+export function daylightSteps(
+  lat: number,
+  lon: number,
+  year: number,
+  month: number,
+  day: number,
+  stepMinutes: number,
+): { dir: THREE.Vector3; above: boolean }[] {
   const window = daylightWindowMinutes(lat, lon, year, month, day);
   if (!window) return [];
   const steps: { dir: THREE.Vector3; above: boolean }[] = [];
-  for (let minuteOfDay = window.sunrise; minuteOfDay <= window.sunset; minuteOfDay += SUN_HOURS_GROUND_STEP_MINUTES) {
+  for (let minuteOfDay = window.sunrise; minuteOfDay <= window.sunset; minuteOfDay += stepMinutes) {
     const hour = Math.floor(minuteOfDay / 60);
     const minute = minuteOfDay % 60;
     const sample = sunAtMelbourneLocal(lat, lon, year, month, day, hour, minute);
@@ -96,6 +110,7 @@ function buildOverlayMesh(
   samples: DirectSunHoursSample[],
   hours: Float32Array,
   maxSunHours: number,
+  resolution: { cellM: number; wallCellM: number; roofCellM: number; stepMinutes: number },
 ): SunHoursDirectOverlay {
   const positions: number[] = [];
   const colors: number[] = [];
@@ -133,9 +148,36 @@ function buildOverlayMesh(
     wallColors: new Float32Array(wallColors),
     cellCount: samples.length,
     maxSunHours,
+    ...resolution,
     roofPlanRaster: null,
     roofRasterSource: null,
   };
+}
+
+export function directSunHoursAtSamples(
+  model: CityModel,
+  samples: DirectSunHoursSample[],
+  year: number,
+  month: number,
+  day: number,
+  stepMinutes: number,
+): Float32Array | null {
+  if (samples.length === 0) return null;
+  const occlusionMesh = buildFacadeOcclusionMesh(model);
+  if (!occlusionMesh) return null;
+  const sunDirs = daylightSteps(model.center.lat, model.center.lon, year, month, day, stepMinutes);
+  const litCounts = new Uint16Array(samples.length);
+  const ray = new THREE.Ray();
+  for (const { dir, above } of sunDirs) {
+    if (!above) continue;
+    for (let index = 0; index < samples.length; index++) {
+      if (isLitAtStep(occlusionMesh, samples[index]!, dir, above, ray)) litCounts[index]! += 1;
+    }
+  }
+  occlusionMesh.geometry.disposeBoundsTree?.();
+  occlusionMesh.geometry.dispose();
+  if (sunDirs.length === 0) return null;
+  return Float32Array.from(litCounts, (count) => sunHoursGroundFromLitSteps(count, stepMinutes));
 }
 
 export function assessDirectSunHoursOverlay(
@@ -144,35 +186,21 @@ export function assessDirectSunHoursOverlay(
   month: number,
   day: number,
   scaleMaxHours?: number,
+  params: SunHoursSampleParams = FAST_SUN_HOURS_PARAMS,
 ): SunHoursDirectOverlay | null {
-  const samples = directSunHoursSamplesForModel(model);
-  if (samples.length === 0) return null;
-  const occlusionMesh = buildFacadeOcclusionMesh(model);
-  if (!occlusionMesh) return null;
-  const sunDirs = daylightSteps(model.center.lat, model.center.lon, year, month, day);
-  if (sunDirs.length === 0) {
-    occlusionMesh.geometry.disposeBoundsTree?.();
-    occlusionMesh.geometry.dispose();
-    return null;
-  }
-  const litCounts = new Uint16Array(samples.length);
-  for (const { dir, above } of sunDirs) {
-    if (!above) continue;
-    for (let index = 0; index < samples.length; index++) {
-      if (isLitAtStep(occlusionMesh, samples[index]!, dir, above)) litCounts[index]! += 1;
-    }
-  }
-  occlusionMesh.geometry.disposeBoundsTree?.();
-  occlusionMesh.geometry.dispose();
-  const hours = new Float32Array(samples.length);
+  const { samples, wallCellM, roofCellM } = directSunHoursSampleSet(model, params);
+  const { stepMinutes } = params;
+  const hours = directSunHoursAtSamples(model, samples, year, month, day, stepMinutes);
+  if (!hours) return null;
   let maxSunHours = 0;
-  for (let index = 0; index < hours.length; index++) {
-    const value = sunHoursGroundFromLitSteps(litCounts[index]!);
-    hours[index] = value;
-    maxSunHours = Math.max(maxSunHours, value);
-  }
+  for (const value of hours) maxSunHours = Math.max(maxSunHours, value);
   const scale = Math.max(scaleMaxHours ?? 0, maxSunHours, 0.01);
-  const overlay = buildOverlayMesh(model, samples, hours, scale);
+  const overlay = buildOverlayMesh(model, samples, hours, scale, {
+    cellM: params.cellM,
+    wallCellM,
+    roofCellM,
+    stepMinutes,
+  });
   overlay.roofRasterSource = packSunHoursRoofRasterSource(samples, hours);
   return overlay;
 }
