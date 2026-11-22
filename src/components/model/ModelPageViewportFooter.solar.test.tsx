@@ -229,9 +229,10 @@ describe("Sun hours layers follow the toggle", () => {
     const tabs = readFileSync(resolve(__dirname, "ModelPageViewportTabs.tsx"), "utf8");
     expect(tabs).toContain("sunHoursGroundGrid={solar.sunHours ? sunHoursGround.grid : null}");
     expect(tabs).toContain("sunHoursDirectOverlay={solar.sunHours ? sunHoursGround.overlay : null}");
-    expect(tabs).toMatch(
-      /tab === "3d" && solar\.sunHours \? \(\s*<SunHoursLegendDock stackClassName="sun-hours-direct-dock-stack"/,
-    );
+    expect(tabs).not.toContain("SunHoursLegendDock");
+    const sidebar = readFileSync(resolve(__dirname, "ModelPageSidebar.tsx"), "utf8");
+    expect(sidebar).toContain("sunHours: Boolean(vm.solar.sunHours)");
+    expect(sidebar).toContain("{sunHoursLegendOn ? <SunHoursLegendDock sunHoursGround={vm.sunHoursGround} /> : null}");
     expect(tabs).toContain("solarAnalysisActive={solarStudyViewActive(analysisKind)}");
     expect(tabs).not.toContain('solarAnalysisActive={analysisKind === "solar"}');
   });

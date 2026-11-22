@@ -14,7 +14,6 @@ import { sceneSelectionBuildingId } from "../../lib/sceneInspectPick";
 import { qaHideHeightPopoverFromSearch } from "../../lib/qaCameraBridge";
 import { sunStudyMutedOn, toggleSelection } from "../../lib/sunStudyPlan";
 import { SceneBoundary } from "../SceneBoundary";
-import { SunHoursLegendDock } from "./SunHoursLegendDock";
 import { solarSettingsForActiveAnalysis, solarStudyViewActive, windFlowActive } from "../../lib/solarStudyView";
 import { ViewLegend } from "../ViewPanel";
 
@@ -239,9 +238,6 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
                 <SectionKnifeElevationPanel model={displayModel} tool={sectionKnifeTool} />
               )}
               {viewAnalysisOpen && walk.clickCount > 0 && <ViewLegend />}
-              {tab === "3d" && solar.sunHours ? (
-                <SunHoursLegendDock stackClassName="sun-hours-direct-dock-stack" sunHoursGround={sunHoursGround} />
-              ) : null}
               {pickedBuilding && !qaHideHeightPopoverFromSearch(window.location.search) && (
                 <BuildingHeightPopover
                   building={pickedBuilding}
@@ -356,9 +352,6 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
               />
             )}
             {importedPopover}
-            {sunHoursOnPlan ? (
-              <SunHoursLegendDock stackClassName="plan-solar-dock-stack" sunHoursGround={sunHoursGround} />
-            ) : null}
           </div>
         )}
         {tab === "satellite" && (
