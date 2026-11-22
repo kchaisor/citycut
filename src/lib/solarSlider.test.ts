@@ -112,4 +112,20 @@ describe("solar time slider", () => {
     );
     expect(source("src/components/model/ModelPageViewportFooter.tsx")).toContain("data-tick-tier={solarSliderTickTier(h)}");
   });
+
+  it("keeps the daylight scrubber wide enough to wrap instead of collapsing the track", () => {
+    const floating = source("src/floating.css");
+    const scrubberStart = floating.indexOf(".model .bottom-bar.env-console .daylight-scrubber {");
+    const scrubber = floating.slice(scrubberStart, floating.indexOf("}", scrubberStart));
+    expect(scrubber).toMatch(/min-width: calc\(var\(--control-md\) \* 6\)/);
+    expect(scrubber).not.toMatch(/min-width: 0;/);
+    const trackStart = floating.indexOf(".model .bottom-bar.env-console .scrubber-track {");
+    const track = floating.slice(trackStart, floating.indexOf("}", trackStart));
+    expect(track).toMatch(new RegExp(`min-width: ${SOLAR_SLIDER_LATE_TICK_MIN_TRACK_PX}px`));
+    const bottomStart = floating.indexOf(".model .bottom-bar.env-console .env-solar-bottom {");
+    const bottom = floating.slice(bottomStart, floating.indexOf("}", bottomStart));
+    expect(bottom).toMatch(/flex-wrap: wrap/);
+    expect(bottom).not.toMatch(/flex-wrap: nowrap/);
+  });
+
 });
