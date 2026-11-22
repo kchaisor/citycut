@@ -170,25 +170,12 @@ function wallSamplesForBuilding(model: CityModel, building: BuildingFeat, cellM:
   return footprints.flatMap((part, partIndex) => wallSamplesForPart(building, part, partIndex, baseYM, cellM));
 }
 
-function appendSamples(target: DirectSunHoursSample[], extra: DirectSunHoursSample[]): void {
-  // push(...extra) overflows the call stack on a 1 m High first pass (large/tall buildings).
-  for (const sample of extra) target.push(sample);
-}
-
 function wallSamplesAll(model: CityModel, wallCellM: number): DirectSunHoursSample[] {
-  const units: DirectSunHoursSample[] = [];
-  for (const building of model.buildings.filter(receivesSunHours)) {
-    appendSamples(units, wallSamplesForBuilding(model, building, wallCellM));
-  }
-  return units;
+  return model.buildings.filter(receivesSunHours).flatMap((building) => wallSamplesForBuilding(model, building, wallCellM));
 }
 
 function roofSamplesAll(model: CityModel, cellM: number): DirectSunHoursSample[] {
-  const units: DirectSunHoursSample[] = [];
-  for (const building of model.buildings.filter(receivesSunHours)) {
-    appendSamples(units, roofSamplesForBuilding(model, building, cellM));
-  }
-  return units;
+  return model.buildings.filter(receivesSunHours).flatMap((building) => roofSamplesForBuilding(model, building, cellM));
 }
 
 export type DirectSunHoursSampleSet = {
