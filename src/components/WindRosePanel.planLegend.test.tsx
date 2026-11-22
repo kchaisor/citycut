@@ -130,6 +130,29 @@ describe("WindRosePanel plan legend", () => {
     expect(css).not.toMatch(/\.wind-rose-meta-skipped \{[^}]*line-clamp/);
   });
 
+  it("draws Nearby stations as a 28px disclosure row with a chevron", () => {
+    const { container } = renderCard(stubPlan("speed", 8));
+    const summary = container.querySelector("details.wind-rose-nearby summary")!;
+    expect(summary.querySelector("svg.wind-rose-nearby-chevron")).toBeTruthy();
+    const css = source("src/index.css");
+    expect(css).toMatch(/\.wind-rose-nearby summary \{[^}]*min-height: var\(--control-sm\);/);
+  });
+
+  it("puts Calm in the rose centre and one station footnote with the TMYx link", () => {
+    const { container } = renderCard(stubPlan("speed", 8));
+    const card = container.querySelector(".wind-rose-panel.is-plan")!;
+    expect(card.querySelector(".wind-rose-calm-caption")).toBeNull();
+    expect(card.querySelector(".wind-rose-chart .wind-rose-calm")?.textContent).toMatch(/^Calm \d+\.\d%$/);
+    const notes = card.querySelectorAll(".wind-rose-footnote");
+    expect(notes).toHaveLength(1);
+    expect(notes[0]!.textContent).toContain("Regional station, not site wind · TMYx ↗");
+    expect(notes[0]!.textContent).toMatch(/km · /);
+    const link = notes[0]!.querySelector("a")!;
+    expect(link.getAttribute("href")).toBe("https://climate.onebuilding.org/");
+    expect(link.getAttribute("target")).toBe("_blank");
+    expect(link.getAttribute("rel")).toBe("noopener noreferrer");
+  });
+
   it("keeps the velocity scale out of a separate model-page card", () => {
     const view = readFileSync(path.join(process.cwd(), "src/components/model/ModelPageView.tsx"), "utf8");
     expect(view).not.toContain("WindPlanVelocityLegend");

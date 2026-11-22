@@ -74,6 +74,8 @@ The name is `--background`. The value is `#EBEBEB`.
 | `--control-sm` | 28 px control: the Set use select in the imported building popover. | `28px` |
 | `--control-md` | 32 px control: eye toggles in Buildings › Import, the imported-building checkbox row. | `32px` |
 | `--row-imported-building` | Height of one imported building row in Buildings › Import. | `48px` |
+| `--hud-card-head` | Height of the wind-rose card's WIND ROSE header row, which is also its collapse row (Kelvin's yes to Designbot, 22 Nov 2026). | `48px` |
+| `--fs-title` / `--lh-title` | Title step of the type scale: Site Intelligence Overview KPI values (mono 600; Designbot asked for 15, the scale has 16). | `16px` / `20px` |
 | `--radius-xs` / `--radius-sm` / `--radius-md` | Swatches and checkboxes / rows and segments / segment tracks and selects, in Buildings › Import and the imported building popover. | `4px` / `6px` / `8px` |
 | `--space-0-5` … `--space-3` | 4 pt spacing steps (2, 4, 6, 8, 12 px) used by Buildings › Import and the imported building popover. | `2px` … `12px` |
 | `--fs-caption` / `--lh-caption` | Caption type: landmark label pills, the LANDMARK header, the Wikidata link and Buildings helper captions. | `11px` / `16px` |
@@ -83,7 +85,8 @@ The name is `--background`. The value is `#EBEBEB`.
 | `--ink-2` | Secondary text: Landmark block row labels. | `#4A4945` |
 | `--ink-3` | Muted text: section headers, meta, counts, the LANDMARK header, the Wikidata link, Buildings helper captions. Darkened from `#787670` for contrast (DESIGN-SYSTEM.md). | `#6B6963` |
 | `--border-outer` | 1 px edge of HUD islands and landmark label pills. | `rgb(20 20 19 / 13%)` |
-| `--shadow-raised` | Small lift under landmark label pills. | `0 1px 2px rgb(20 20 19 / 8%)` |
+| `--shadow-raised` | Small lift under landmark label pills and the Wind streaks slider thumb. | `0 1px 2px rgb(20 20 19 / 8%)` |
+| `--slider-track` | Unfilled part of the 4 px Wind streaks slider track (ink at 15%); the filled part is `--ink`. | `rgb(20 20 19 / 15%)` |
 | `--space-0-5` / `--space-1` / `--space-1-5` | 2 / 4 / 6 px gaps inside controls: the Analysis bar date track and the gaps between its chips and icons. | `2px` / `4px` / `6px` |
 | `--space-2` / `--space-3` / `--space-4` | 8 / 12 / 16 px layout spacing: Analysis bar padding, row and group gaps, divider height. | `8px` / `12px` / `16px` |
 | `--radius-sm` / `--radius-md` / `--radius-lg` | Corner radius of chips (6), the date track (8) and the Analysis bar island (12). | `6px` / `8px` / `12px` |
@@ -291,9 +294,9 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--axo-hydro-course` | `#3d8fbf` | Exploded axo Vicmap hydro watercourse stroke. |
 | `--axo-rail-line` | `#2d2d2d` | Exploded axo Vicmap rail centre line. |
 | `--axo-rail-station` | `#1a1a1a` | Exploded axo Vicmap rail station marker. |
-| `--axo-pt-train` | `#003366` | Exploded axo PTV train route. |
-| `--axo-pt-tram` | `#00854a` | Exploded axo PTV tram route. |
-| `--axo-pt-bus` | `#c45c00` | Exploded axo PTV bus route. |
+| `--axo-pt-train` | `#003366` | Exploded axo PTV train route, and the Train line sample in the Transport legend card and the export sheet legend. |
+| `--axo-pt-tram` | `#000000` | Exploded axo PTV tram route, and the Tram line sample in the Transport legend card and the export sheet legend. |
+| `--axo-pt-bus` | `#c45c00` | Exploded axo PTV bus route, and the Bus line sample in the Transport legend card and the export sheet legend. |
 | `--axo-contour` | `#8a8578` | Exploded axo Vicmap contour stroke. |
 | `--axo-cadastre` | `#e8a33c` | Exploded axo cadastre (Vicmap parcel) boundary, orange. |
 | `--axo-terrain-mesh` | `#4a4a4a` | Exploded axo terrain (DTM) mesh grid. |
@@ -431,10 +434,10 @@ A dash is two lengths in millimetres: how long the mark is, then how long the ga
 | `--contour-stroke-mm` | Weight of a contour | `0.1` | mm |
 | `--contour-stroke` | Colour of a contour | `#B0B0B0` | colour |
 | `--contour-dash` | Dash of a contour | `1.5 0.75` | mm, on then off |
-| `--contour-index-mm` | Weight of every Nth contour. Same colour and dash as the other contours | `0.18` | mm |
-| `--contour-index-every` | How many drawn contours between index lines. `5` is every 5th line: 5 m on 1 m data, 25 m once that data is drawn at 5 m, and 50 m on 10 m data | `5` | count |
-| `--contour-coarse-interval-m` | Interval used for metro contours at small plan scales. Only altitudes on this step are drawn | `5` | m |
-| `--contour-coarse-from-scale` | Plan-scale denominator where that coarser interval starts. `2500` is 1:2500, 1:5000, and smaller. 1:500 and 1:1000 keep every metre | `2500` | scale denominator |
+| `--contour-index-mm` | Weight of every Nth contour on the site plan and in exports. Same colour and dash as the other contours. The exploded axo scales its contour strokes by the same ratio, and 3D draws index contours solid | `0.18` | mm |
+| `--contour-index-every` | How many drawn contours between index lines. Contours are drawn every 1 m on every site (official lines plus interpolated ones), so `5` is an index line every 5 m | `5` | count |
+| `--contour-coarse-interval-m` | Interval used for metro and City of Sydney contours at small plan scales. `1` keeps 1 m at every scale (Kelvin, 22 Nov 2026). Set `5` to thin those sources to 5 m from `--contour-coarse-from-scale`; NSW 2 m and DEM sites stay at 1 m | `1` | m |
+| `--contour-coarse-from-scale` | Plan-scale denominator where a coarser interval would start if `--contour-coarse-interval-m` is above 1. `2500` is 1:2500, 1:5000, and smaller. 1:500 and 1:1000 always keep every metre | `2500` | scale denominator |
 | `--frame-stroke-mm` | Weight of the square frame | `0.35` | mm |
 | `--frame-stroke` | Colour of the frame | `#1C1B17` | colour |
 | `--frame-dash` | Dash of the frame | `none` | mm, on then off |

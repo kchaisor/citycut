@@ -10,8 +10,10 @@ import {
   contourLevels,
   contourLines,
   decodeTerrarium,
+  DRAWN_CONTOUR_INTERVAL_M,
   footprintBase,
   heightFieldFromTiles,
+  MAX_GRID_NODES,
   metresPerPixel,
   preferredTerrainZoom,
   sampleTerrain,
@@ -19,16 +21,20 @@ import {
   TERRAIN_ELEVATION_MIN_M,
   TERRAIN_SPIKE_M,
   terrariumHeight,
+  terrainNote,
   basePlinthBottomY,
   basePlinthBuffers,
   basePlinthThicknessM,
   terrainBuffers,
+  terrainFetchBBox,
+  terrainGridSize,
   TERRAIN_TILE_SIZE,
   tilesForBBox,
   webMercatorPixel,
   type DecodedTile,
 } from "./terrain";
 import { squareBBox } from "./geo";
+import { SITE_FRAME_CIRCLE_SEGMENTS } from "./siteFrame";
 import type { CityModel, TerrainField } from "../types";
 
 const melbourne = { lon: 144.9631, lat: -37.8136 };
@@ -241,6 +247,65 @@ describe("height sampling", () => {
   });
 });
 
+describe("terrain grid keeps the native posting", () => {
+  const sites = [
+    { name: "Rozelle", lon: 151.1704, lat: -33.867518 },
+    { name: "Southbank", lon: 144.9646, lat: -37.8216 },
+  ];
+  const sides = [500, 1000, 2000];
+
+  for (const site of sites) {
+    for (const sideM of sides) {
+      it(`keeps ${site.name} ${sideM / 1000} km at the z14 source posting`, () => {
+        const zoom = preferredTerrainZoom(site.lat);
+        expect(zoom).toBe(14);
+        const source = metresPerPixel(site.lat, zoom);
+        const nativeCols = Math.ceil(sideM / source) + 1;
+        const grid = terrainGridSize(site.lat, sideM, zoom);
+        expect(source).toBeGreaterThan(3.7);
+        expect(source).toBeLessThan(4.0);
+        expect(Math.abs(grid.cols - nativeCols)).toBeLessThanOrEqual(1);
+        expect(grid.rows).toBe(grid.cols);
+        expect(grid.spacingM).toBeCloseTo(sideM / (grid.cols - 1), 10);
+        expect(grid.spacingM).toBeLessThanOrEqual(source + 0.15);
+        expect(grid.spacingM).toBeGreaterThan(3.7);
+      });
+    }
+  }
+
+  it("never caps below the native node count of a 2 km cut", () => {
+    for (const site of sites) {
+      const source = metresPerPixel(site.lat, preferredTerrainZoom(site.lat));
+      expect(MAX_GRID_NODES).toBeGreaterThanOrEqual(Math.ceil(2000 / source) + 1);
+    }
+  });
+
+  it("coarsens cuts bigger than 2 km at the cap", () => {
+    expect(MAX_GRID_NODES).toBeLessThanOrEqual(600);
+    const grid = terrainGridSize(sites[1].lat, 5000, 14);
+    expect(grid.cols).toBe(MAX_GRID_NODES);
+    expect(grid.spacingM).toBeCloseTo(5000 / (MAX_GRID_NODES - 1), 10);
+  });
+
+  it("builds a 2 km heightfield from tiles at the native posting", () => {
+    const site = sites[1];
+    const sideM = 2000;
+    const zoom = preferredTerrainZoom(site.lat);
+    const decoded: DecodedTile[] = tilesForBBox(terrainFetchBBox(site, sideM, zoom), zoom).map(({ x, y }) => ({
+      x,
+      y,
+      width: TERRAIN_TILE_SIZE,
+      height: TERRAIN_TILE_SIZE,
+      heights: new Float32Array(TERRAIN_TILE_SIZE * TERRAIN_TILE_SIZE).fill(12),
+    }));
+    const field = heightFieldFromTiles(decoded, site, sideM, zoom);
+    expect(field.cols).toBeGreaterThan(500);
+    expect(field.spacingM).toBeLessThanOrEqual(field.metresPerPixel + 0.15);
+    expect(field.heights.length).toBe(field.cols * field.rows);
+    expect(sampleTerrain(field, 900, -900, sideM)).toBeCloseTo(12, 4);
+  });
+});
+
 describe("contours", () => {
   it("chooses 1, 2, 5, or 10 m from the relief", () => {
     expect(contourInterval(3)).toBe(1);
@@ -250,6 +315,24 @@ describe("contours", () => {
     expect(contourInterval(79)).toBe(5);
     expect(contourInterval(80)).toBe(10);
     expect(contourLevels(10.2, 14.8, 2)).toEqual([12, 14]);
+  });
+
+  it("draws DEM contours every 1 m even where relief once picked 2, 5 or 10 m", () => {
+    expect(DRAWN_CONTOUR_INTERVAL_M).toBe(1);
+    const field: TerrainField = {
+      cols: 2,
+      rows: 2,
+      heights: Float32Array.of(0, 28, 0, 28),
+      min: 0,
+      max: 28,
+      spacingM: 100,
+      zoom: 14,
+      metresPerPixel: 4,
+      source: "Mapterhorn",
+    };
+    expect(contourInterval(28)).toBe(5);
+    expect(contourLines(field, 100, DRAWN_CONTOUR_INTERVAL_M)).toHaveLength(27);
+    expect(terrainNote(field, true)).toContain("Contours are every 1 m on the site plan.");
   });
 
   it("draws a level line across a north-south ramp", () => {
@@ -520,6 +603,36 @@ describe("terrain in the model", () => {
     }
     expect(outside).toBe(0);
     expect(rim).toBeGreaterThan(6);
+  });
+
+  it("covers the whole frame circle on a fine grid without gaps or overlap", () => {
+    const cols = 161;
+    const sideM = 2000;
+    const field: TerrainField = {
+      cols,
+      rows: cols,
+      heights: new Float32Array(cols * cols).fill(5),
+      min: 5,
+      max: 5,
+      spacingM: sideM / (cols - 1),
+      zoom: 14,
+      metresPerPixel: 3.8,
+      source: "Mapterhorn",
+    };
+    const circle = terrainBuffers(field, sideM, "circle");
+    let area = 0;
+    for (let i = 0; i < circle.indices.length; i += 3) {
+      const [a, b, c] = [0, 1, 2].map((k) => circle.indices[i + k]! * 3);
+      const ax = circle.positions[a]!;
+      const az = circle.positions[a + 2]!;
+      area += Math.abs(
+        (circle.positions[b]! - ax) * (circle.positions[c + 2]! - az) -
+          (circle.positions[c]! - ax) * (circle.positions[b + 2]! - az),
+      ) / 2;
+    }
+    const half = sideM / 2;
+    const polygonArea = (SITE_FRAME_CIRCLE_SEGMENTS / 2) * half * half * Math.sin((2 * Math.PI) / SITE_FRAME_CIRCLE_SEGMENTS);
+    expect(Math.abs(area - polygonArea) / polygonArea).toBeLessThan(0.001);
   });
 
   it("builds a watertight 3D BasePlinth matching terrainMeshHeight along the perimeter down to basePlinthBottomY", () => {

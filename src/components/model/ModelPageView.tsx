@@ -1,11 +1,9 @@
-import { useLayoutEffect } from "react";
 import { ShortcutCheatsheet } from "../ShortcutCheatsheet";
-import { WindRosePanel } from "../WindRosePanel";
-import { windRoseCardOn } from "./windRoseCard";
 import { shouldShowIntroBridgePill } from "./shouldShowIntroBridgePill";
 import { ModelPageSidebar } from "./ModelPageSidebar";
 import { ModelPageViewportFooter } from "./ModelPageViewportFooter";
 import { ModelPageViewportTabs } from "./ModelPageViewportTabs";
+import { useRightHudLayout } from "./useRightHudLayout";
 import type { ModelPageViewModel } from "./useModelPage";
 
 export function ModelPageView({ vm }: { vm: ModelPageViewModel }) {
@@ -18,16 +16,25 @@ export function ModelPageView({ vm }: { vm: ModelPageViewModel }) {
     setShortcutCheatsheetOpen,
     shortcutCheatsheetOpen,
     sidebarCollapsed,
+    siteIntelOpen,
+    leftOpen,
     siteWind,
     tab,
-    windMotion,
     windSettings,
     windPlan,
     topbarLayout,
   } = vm;
 
-  const windCardOn = windRoseCardOn({ tab, analysisKind, siteWind });
-  useWindPlanCardBounds(windCardOn && windPlan.active);
+  useRightHudLayout(modelRootRef, [
+    tab,
+    analysisKind,
+    siteWind,
+    siteIntelOpen,
+    leftOpen,
+    sidebarCollapsed,
+    windPlan.active,
+    windSettings.enabled,
+  ]);
 
   return (
     <div
@@ -48,61 +55,9 @@ export function ModelPageView({ vm }: { vm: ModelPageViewModel }) {
       >
         <ModelPageViewportTabs vm={vm} />
         <ModelPageSidebar vm={vm} />
-        {windCardOn && siteWind ? (
-          <div
-            className={windPlan.active ? "wind-rose-analysis-card is-plan hud-card" : "wind-rose-analysis-card hud-card"}
-            aria-label="Wind rose panel"
-          >
-            <WindRosePanel
-              selection={siteWind}
-              period={windSettings.period}
-              plan={windPlan}
-              flowHeading={windSettings.enabled && tab === "3d"}
-              reducedMotion={
-                windSettings.enabled && tab === "3d" && windMotion.streaksPaused
-                  ? { animateAnyway: windMotion.animateAnyway, onAnimateAnyway: windMotion.setAnimateAnyway }
-                  : null
-              }
-            />
-          </div>
-        ) : null}
         <ModelPageViewportFooter vm={vm} />
       </div>
       <ShortcutCheatsheet open={shortcutCheatsheetOpen} onClose={() => setShortcutCheatsheetOpen(false)} />
     </div>
   );
-}
-const WIND_PLAN_CARD_GAP_PX = 8;
-const WIND_PLAN_CARD_INSET_PX = 14;
-
-function useWindPlanCardBounds(active: boolean) {
-  useLayoutEffect(() => {
-    if (!active || typeof document === "undefined") return;
-    const root = document.documentElement;
-    const rail = document.querySelector<HTMLElement>(".model .left-tool-rail");
-    const card = document.querySelector<HTMLElement>(".model .wind-rose-analysis-card.is-plan");
-    const consoleBar = document.querySelector<HTMLElement>(".model .bottom-bar.env-console");
-    const sync = () => {
-      if (rail) root.style.setProperty("--wind-plan-card-top", `${Math.round(rail.getBoundingClientRect().bottom + WIND_PLAN_CARD_GAP_PX)}px`);
-      let bottom = WIND_PLAN_CARD_INSET_PX;
-      if (card && consoleBar) {
-        const c = card.getBoundingClientRect();
-        const b = consoleBar.getBoundingClientRect();
-        if (b.width > 0 && b.left < c.right + WIND_PLAN_CARD_GAP_PX && b.right > c.left - WIND_PLAN_CARD_GAP_PX) {
-          bottom = Math.max(bottom, Math.round(window.innerHeight - b.top + WIND_PLAN_CARD_GAP_PX));
-        }
-      }
-      root.style.setProperty("--wind-plan-card-bottom", `${bottom}px`);
-    };
-    sync();
-    const observer = typeof ResizeObserver !== "undefined" ? new ResizeObserver(sync) : null;
-    for (const el of [rail, consoleBar]) if (el) observer?.observe(el);
-    window.addEventListener("resize", sync);
-    return () => {
-      observer?.disconnect();
-      window.removeEventListener("resize", sync);
-      root.style.removeProperty("--wind-plan-card-top");
-      root.style.removeProperty("--wind-plan-card-bottom");
-    };
-  }, [active]);
 }
