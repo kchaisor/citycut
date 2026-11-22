@@ -7,12 +7,12 @@ const resourceUrl = (id, file) =>
 
 export const PT_FALLBACK = {
   lines: {
-    id: "d8e5a974-98ba-4823-af5f-b0d2185263ac",
-    url: resourceUrl("d8e5a974-98ba-4823-af5f-b0d2185263ac", "public_transport_lines.geojson"),
+    id: "0c139eab-f668-4bf6-bffa-473be59ff4bd",
+    url: resourceUrl("0c139eab-f668-4bf6-bffa-473be59ff4bd", "public_transport_lines.geojson"),
   },
   stops: {
-    id: "0b8332b8-ee9a-43a0-b83a-367693c0e74e",
-    url: resourceUrl("0b8332b8-ee9a-43a0-b83a-367693c0e74e", "public_transport_stops.geojson"),
+    id: "57022dfa-9807-43a5-b070-673d069e2d6a",
+    url: resourceUrl("57022dfa-9807-43a5-b070-673d069e2d6a", "public_transport_stops.geojson"),
   },
 };
 
