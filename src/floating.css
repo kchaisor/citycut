@@ -5713,7 +5713,7 @@ body,
 .model .transport-legend-dock {
   position: fixed;
   left: 74px;
-  bottom: 104px;
+  bottom: var(--transport-legend-bottom, var(--space-2));
   z-index: var(--z-hud);
   box-sizing: border-box;
   width: 156px;
@@ -5727,9 +5727,6 @@ body,
 }
 .model:has(.left-outliner:not([hidden])) .transport-legend-dock {
   left: 330px;
-}
-.model:has(.viewport > .stage-error) .transport-legend-dock {
-  bottom: 142px;
 }
 .model .transport-legend-title {
   font-family: var(--sans);

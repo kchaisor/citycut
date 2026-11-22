@@ -1,5 +1,5 @@
 import { useLayoutEffect, type RefObject } from "react";
-import { envConsoleLanes, rightHudMaxHeight, type HudBox } from "../../lib/rightHudLayout";
+import { envConsoleLanes, rightHudMaxHeight, transportLegendBottom, type HudBox } from "../../lib/rightHudLayout";
 
 const RESYNC_MS = 500;
 
@@ -34,7 +34,8 @@ export function useRightHudLayout(rootRef: RefObject<HTMLElement | null>, deps: 
       const railEl = root.querySelector(".left-tool-rail");
       const outlinerEl = root.querySelector(".left-outliner");
       const compassEl = root.querySelector(".studio-compass");
-      for (const el of [stackEl, consoleEl, railEl, outlinerEl]) watch(el);
+      const toastEl = root.querySelector(".viewport > .stage-error");
+      for (const el of [stackEl, consoleEl, railEl, outlinerEl, toastEl]) watch(el);
       const stack = box(stackEl);
       const consoleBar = box(consoleEl);
       if (consoleBar) {
@@ -45,6 +46,8 @@ export function useRightHudLayout(rootRef: RefObject<HTMLElement | null>, deps: 
         setVar(root, "--env-console-lane-left", null);
         setVar(root, "--env-console-lane-right", null);
       }
+      const legendBottom = transportLegendBottom(window.innerHeight, [consoleBar, box(toastEl)]);
+      setVar(root, "--transport-legend-bottom", `${legendBottom}px`);
       if (stack) {
         const maxHeight = rightHudMaxHeight(window.innerHeight, stack, [box(consoleEl), box(compassEl)]);
         setVar(root, "--right-hud-max-height", `${maxHeight}px`);
