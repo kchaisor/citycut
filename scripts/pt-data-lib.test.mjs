@@ -15,8 +15,8 @@ const res = (o) => ({ success: true, result: { resources: o } });
 describe("matchPtResources", () => {
   it("picks lines and stops from the recorded package_show", () => {
     const m = matchPtResources(recorded);
-    expect(m.lines?.id).toBe("d8e5a974-98ba-4823-af5f-b0d2185263ac");
-    expect(m.stops?.id).toBe("0b8332b8-ee9a-43a0-b83a-367693c0e74e");
+    expect(m.lines?.id).toBe("0c139eab-f668-4bf6-bffa-473be59ff4bd");
+    expect(m.stops?.id).toBe("57022dfa-9807-43a5-b070-673d069e2d6a");
     expect(m.lines?.url).toMatch(/public_transport_lines\.geojson$/);
     expect(m.stops?.url).toMatch(/public_transport_stops\.geojson$/);
   });
