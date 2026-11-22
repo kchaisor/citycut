@@ -4289,6 +4289,11 @@ body,
   min-width: calc(var(--control-md) * 6) !important;
 }
 
+.model .bottom-bar.env-console .env-solar-bottom .daylight-scrubber {
+  flex: 1 1 auto !important;
+  min-width: max-content !important;
+}
+
 .model .bottom-bar.env-console .sun-bound {
   font-family: var(--mono) !important;
   font-size: var(--fs-micro) !important;
