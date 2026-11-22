@@ -8,6 +8,8 @@ import {
   type ExtrudedFootprintMaskPart,
 } from "./extrudedBuildingFootprint";
 import { sunHoursGroundFromLitSteps, SUN_HOURS_GROUND_CELL_M, SUN_HOURS_GROUND_STEP_MINUTES } from "./sunHoursGround";
+import { modelFrameBounds, siteFrameFromModel } from "./modelFrame";
+import { containsPoint } from "./siteFrame";
 import type { CityModel, Pt, Ring } from "../types";
 
 export type SunHoursGroundGrid = {
@@ -23,11 +25,6 @@ export type SunHoursGroundGrid = {
   stepMinutes: number;
 };
 
-function siteBounds(model: CityModel) {
-  const half = model.sideM / 2;
-  return { minE: -half, maxE: half, minN: -half, maxN: half };
-}
-
 export function planPointInsideAnyBuilding(
   model: CityModel,
   east: number,
@@ -38,12 +35,27 @@ export function planPointInsideAnyBuilding(
   return planPointUnderExtrudedFootprintMask(mask, east, north);
 }
 
-function cellCenterInsideExtrudedFootprint(
-  mask: readonly ExtrudedFootprintMaskPart[],
-  east: number,
-  north: number,
-): boolean {
-  return planPointUnderExtrudedFootprintMask(mask, east, north);
+function groundCellMask(
+  model: CityModel,
+  footprintMask: readonly ExtrudedFootprintMaskPart[],
+  cols: number,
+  rows: number,
+  originEast: number,
+  originNorth: number,
+  cellM: number,
+): Uint8Array {
+  const frame = siteFrameFromModel(model);
+  const masked = new Uint8Array(cols * rows);
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < cols; col++) {
+      const east = originEast + (col + 0.5) * cellM;
+      const north = originNorth + (row + 0.5) * cellM;
+      if (!containsPoint(frame, [east, north]) || planPointUnderExtrudedFootprintMask(footprintMask, east, north)) {
+        masked[row * cols + col] = 1;
+      }
+    }
+  }
+  return masked;
 }
 
 export function sampleSunHoursGroundCell(
@@ -101,14 +113,7 @@ function canvasLitStepCount(
     ctx.closePath();
     ctx.fill();
   };
-  const masked = new Uint8Array(cols * rows);
-  for (let row = 0; row < rows; row++) {
-    for (let col = 0; col < cols; col++) {
-      const east = originEast + (col + 0.5) * cellM;
-      const north = originNorth + (row + 0.5) * cellM;
-      if (cellCenterInsideExtrudedFootprint(footprintMask, east, north)) masked[row * cols + col] = 1;
-    }
-  }
+  const masked = groundCellMask(model, footprintMask, cols, rows, originEast, originNorth, cellM);
   const litSteps = new Uint16Array(cols * rows);
   let steps = 0;
   for (let minuteOfDay = window.sunrise; minuteOfDay <= window.sunset; minuteOfDay += stepMinutes) {
@@ -188,14 +193,7 @@ function computeSunHoursGroundGridMulti(
   const stepShadows = daylightGroundStepShadows(model, year, month, day, stepMinutes);
   if (stepShadows.length === 0) return null;
   const litSteps = new Uint16Array(cols * rows);
-  const masked = new Uint8Array(cols * rows);
-  for (let row = 0; row < rows; row++) {
-    for (let col = 0; col < cols; col++) {
-      const east = originEast + (col + 0.5) * cellM;
-      const north = originNorth + (row + 0.5) * cellM;
-      if (cellCenterInsideExtrudedFootprint(footprintMask, east, north)) masked[row * cols + col] = 1;
-    }
-  }
+  const masked = groundCellMask(model, footprintMask, cols, rows, originEast, originNorth, cellM);
   for (const stepShadow of stepShadows) {
     for (let row = 0; row < rows; row++) {
       for (let col = 0; col < cols; col++) {
@@ -240,7 +238,7 @@ export function computeSunHoursGroundGrid(
   cellM = SUN_HOURS_GROUND_CELL_M,
   stepMinutes = SUN_HOURS_GROUND_STEP_MINUTES,
 ): SunHoursGroundGrid | null {
-  const bounds = siteBounds(model);
+  const bounds = modelFrameBounds(model);
   const cols = Math.max(1, Math.ceil((bounds.maxE - bounds.minE) / cellM));
   const rows = Math.max(1, Math.ceil((bounds.maxN - bounds.minN) / cellM));
   const originEast = bounds.minE;

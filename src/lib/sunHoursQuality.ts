@@ -1,4 +1,5 @@
 import type { RenderQuality } from "./renderQuality";
+import { frameGroundSize, type FrameGroundSize } from "./siteFrame";
 import { SUN_HOURS_GROUND_CELL_M, SUN_HOURS_GROUND_STEP_MINUTES } from "./sunHoursGround";
 
 export const SUN_HOURS_HIGH_CELL_M = 0.25;
@@ -34,19 +35,23 @@ export const FAST_SUN_HOURS_RESOLUTION: SunHoursResolution = {
   degraded: false,
 };
 
-export function sunHoursGroundCellCount(sideM: number, cellM: number): number {
-  const perSide = Math.max(1, Math.ceil(sideM / cellM - 1e-6));
-  return perSide * perSide;
+export function sunHoursGroundCellCount(widthM: number, cellM: number, heightM = widthM): number {
+  const perSide = (lengthM: number) => Math.max(1, Math.ceil(lengthM / cellM - 1e-6));
+  return perSide(widthM) * perSide(heightM);
 }
 
-function highCellM(sideM: number): number {
+function highCellM(ground: FrameGroundSize): number {
   for (const cellM of [SUN_HOURS_HIGH_CELL_M, ...SUN_HOURS_HIGH_EASED_CELLS_M]) {
-    if (sunHoursGroundCellCount(sideM, cellM) <= SUN_HOURS_HIGH_MAX_GROUND_CELLS) return cellM;
+    if (sunHoursGroundCellCount(ground.widthM, cellM, ground.heightM) <= SUN_HOURS_HIGH_MAX_GROUND_CELLS) return cellM;
   }
   return SUN_HOURS_HIGH_EASED_CELLS_M[SUN_HOURS_HIGH_EASED_CELLS_M.length - 1];
 }
 
-export function sunHoursQualityParams(quality: RenderQuality, sideM: number): SunHoursQualityParams {
+export function sunHoursQualityParams(
+  quality: RenderQuality,
+  sideM: number,
+  ground: FrameGroundSize = frameGroundSize(sideM),
+): SunHoursQualityParams {
   if (quality === "fast") {
     return {
       quality,
@@ -58,7 +63,7 @@ export function sunHoursQualityParams(quality: RenderQuality, sideM: number): Su
       denseCutWallCellM: SUN_HOURS_GROUND_CELL_M * 2,
     };
   }
-  const cellM = highCellM(sideM);
+  const cellM = highCellM(ground);
   const surfaceCellM = Math.max(cellM, SUN_HOURS_HIGH_SURFACE_CELL_M);
   return {
     quality,

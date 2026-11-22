@@ -7,7 +7,7 @@ import {
 } from "./extrudedBuildingFootprint";
 import { openRing } from "./geo";
 import { sunHoursDirectRgb } from "./sunHoursGround";
-import { receivesSunHours } from "./sunHoursBuildings";
+import { receivesSunHours, sunHoursReceivers } from "./sunHoursBuildings";
 import { SURFACE } from "./surfaceLayers";
 import { footprintBase } from "./terrain";
 import type { DirectSunHoursSample } from "./sunHoursDirectSample";
@@ -169,7 +169,7 @@ export function buildRoofFootprintMeshesForModel(
     if (indices) indices.push(index);
     else roofSamplesByBuilding.set(sample.buildingId, [index]);
   }
-  for (const building of extrudedBuildingsForModel(model.buildings.filter(receivesSunHours))) {
+  for (const building of extrudedBuildingsForModel(sunHoursReceivers(model))) {
     const indices = roofSamplesByBuilding.get(building.id) ?? [];
     const count = appendBuildingRoofFootprint(
       model,

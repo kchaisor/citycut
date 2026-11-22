@@ -1,5 +1,7 @@
 import * as THREE from "three";
 import { terrainMeshHeight } from "./terrainDrape";
+import { siteFrameFromModel } from "./modelFrame";
+import { containsPoint } from "./siteFrame";
 import type { SunHoursGroundGrid } from "./sunHoursGroundPlan";
 import type { CityModel } from "../types";
 
@@ -51,26 +53,22 @@ export function buildSunHoursGroundDrapeGeometry(
       uvs[index * 2 + 1] = SUN_HOURS_GROUND_TEXTURE_FLIP_Y ? row / rows : 1 - row / rows;
     }
   }
-  const indices = new Uint32Array(cols * rows * 6);
-  let write = 0;
+  const frame = siteFrameFromModel(model);
+  const indices: number[] = [];
   for (let row = 0; row < rows; row++) {
     for (let col = 0; col < cols; col++) {
+      if (!containsPoint(frame, [originEast + (col + 0.5) * cellM, originNorth + (row + 0.5) * cellM])) continue;
       const sw = row * vertCols + col;
       const se = sw + 1;
       const nw = sw + vertCols;
       const ne = nw + 1;
-      indices[write++] = sw;
-      indices[write++] = se;
-      indices[write++] = ne;
-      indices[write++] = sw;
-      indices[write++] = ne;
-      indices[write++] = nw;
+      indices.push(sw, se, ne, sw, ne, nw);
     }
   }
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
   geometry.setAttribute("uv", new THREE.BufferAttribute(uvs, 2));
-  geometry.setIndex(new THREE.BufferAttribute(indices, 1));
+  geometry.setIndex(new THREE.BufferAttribute(Uint32Array.from(indices), 1));
   geometry.computeVertexNormals();
   return geometry;
 }

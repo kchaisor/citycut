@@ -33,6 +33,8 @@ export function sunStudyModelKey(model: CityModel): string {
   const t = model.terrain;
   return [
     model.sideM,
+    model.widthM ?? model.sideM,
+    model.heightM ?? model.sideM,
     model.frameShape ?? "square",
     t ? `${t.cols}x${t.rows}:${t.min}:${t.max}` : "flat",
     model.buildings.length,
