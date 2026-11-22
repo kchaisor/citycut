@@ -2,6 +2,7 @@ import { useLayoutEffect, type RefObject } from "react";
 import { envConsoleLanes, rightHudMaxHeight, transportLegendBottom, type HudBox } from "../../lib/rightHudLayout";
 
 const RESYNC_MS = 500;
+const RIGHT_ANALYSIS_CARD = ".wind-rose-analysis-card, .sun-hours-hud-card";
 
 function box(el: Element | null): HudBox | null {
   if (!el) return null;
@@ -35,11 +36,18 @@ export function useRightHudLayout(rootRef: RefObject<HTMLElement | null>, deps: 
       const outlinerEl = root.querySelector(".left-outliner");
       const compassEl = root.querySelector(".studio-compass");
       const toastEl = root.querySelector(".viewport > .stage-error");
-      for (const el of [stackEl, consoleEl, railEl, outlinerEl, toastEl]) watch(el);
+      const analysisCardEl = stackEl?.querySelector(RIGHT_ANALYSIS_CARD) ?? null;
+      for (const el of [stackEl, consoleEl, railEl, outlinerEl, toastEl, analysisCardEl]) watch(el);
       const stack = box(stackEl);
       const consoleBar = box(consoleEl);
       if (consoleBar) {
-        const lanes = envConsoleLanes(window.innerWidth, consoleBar, [box(railEl), box(outlinerEl)], stack);
+        const lanes = envConsoleLanes(
+          window.innerWidth,
+          consoleBar,
+          [box(railEl), box(outlinerEl)],
+          stack,
+          box(analysisCardEl) != null,
+        );
         setVar(root, "--env-console-lane-left", `${lanes.left}px`);
         setVar(root, "--env-console-lane-right", `${lanes.right}px`);
       } else {
