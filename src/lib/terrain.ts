@@ -4,7 +4,13 @@ import { clipIntersection as clipIntersectionSafe } from "./safePolygonClip";
 import { COLOUR_FALLBACK, getColour } from "./colours";
 import { fromLocal, squareBBox } from "./geo";
 import { clipPolygonRect } from "./clip";
-import { frameHalfExtents, siteFramePolygon, type FrameGroundSize, type SiteFrameShape } from "./siteFrame";
+import {
+  frameHalfExtents,
+  SITE_FRAME_CIRCLE_SEGMENTS,
+  siteFramePolygon,
+  type FrameGroundSize,
+  type SiteFrameShape,
+} from "./siteFrame";
 import type { LonLat, Pt, Ring, TerrainField } from "../types";
 
 /**
@@ -32,7 +38,7 @@ export const TERRAIN_TILE_SIZE = 512;
 export const TERRAIN_ATTRIBUTION_URL = "https://mapterhorn.com/attribution";
 export const TERRAIN_UNAVAILABLE = "Terrain tiles could not be loaded, so the ground is flat.";
 
-const MAX_GRID_NODES = 193;
+export const MAX_GRID_NODES = 600;
 
 const EARTH_M = 2 * Math.PI * 6378137;
 
@@ -603,6 +609,11 @@ function appendGridTriangleClippedToCircle(
   field: TerrainField,
   relief: number,
 ): void {
+  const inner = (sideM / 2) * Math.cos(Math.PI / SITE_FRAME_CIRCLE_SEGMENTS);
+  if (tri.every(([east, north]) => east * east + north * north <= inner * inner)) {
+    pushClippedTriangle(positions, colors, indexList, tri, heights, tri, field, relief);
+    return;
+  }
   for (const ring of clipTriangleToCircle(tri, sideM)) {
     for (const part of fanTriangulate(ring)) {
       pushClippedTriangle(positions, colors, indexList, tri, heights, part, field, relief);
