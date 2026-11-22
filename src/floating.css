@@ -317,39 +317,31 @@ input[type="range"]::-moz-range-thumb { width: 18px; height: 3px; border-radius:
   overflow: hidden;
   color: var(--sun-hours-direct-dock-footnote);
 }
-.plan-solar-dock-stack {
-  position: absolute;
-  left: 12px;
-  bottom: 12px;
-  z-index: 4;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  max-width: min(320px, calc(100% - 24px));
-  pointer-events: none;
-}
-.model:has(.bottom-bar.env-console) .plan-solar-dock-stack,
-.sun-hours-direct-dock-stack {
-  bottom: 212px;
-}
-.sun-hours-direct-dock-stack {
-  position: absolute;
-  left: 12px;
-  z-index: 4;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  max-width: min(320px, calc(100% - 24px));
-  pointer-events: none;
-}
-.plan-solar-legend-dock:has([data-sun-hours-direct-legend]) {
-  padding: 12px;
+.sun-hours-direct-legend-status { margin: 0; font-size: 10px; font-weight: 600; line-height: 1.2; }
+.sun-hours-hud-card {
+  position: relative;
+  flex: none;
   box-sizing: border-box;
-  width: fit-content;
-  max-width: min(240px, calc(100vw - 24px));
-  min-width: 0;
+  width: 100%;
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--bg-card);
+  border: 1px solid var(--border-outer);
+  box-shadow: var(--shadow-hud);
+  pointer-events: auto;
 }
-.plan-solar-legend-dock { padding: 10px 12px; pointer-events: none; }
+.sun-hours-hud-card .sun-hours-direct-legend.is-compact {
+  width: 100%;
+}
+.sun-hours-hud-card .sun-hours-direct-legend-title {
+  font-family: var(--sans);
+  font-size: var(--fs-micro);
+  line-height: var(--lh-micro);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
 
 .sun-study-kicker { margin: 14px 0 6px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; line-height: normal; color: var(--sidebar-text); }
 .sun-study > .sun-study-kicker + * { margin-top: -10px; }
@@ -3975,7 +3967,7 @@ body,
 
 .model .bottom-bar.env-console .env-solar-bottom {
   display: flex !important;
-  flex-wrap: nowrap !important;
+  flex-wrap: wrap !important;
   align-items: center !important;
   gap: var(--space-2) !important;
   min-width: 0 !important;
@@ -4283,7 +4275,7 @@ body,
   gap: var(--space-2) !important;
   position: relative !important;
   overflow: hidden !important;
-  min-width: 0 !important;
+  min-width: calc(var(--control-md) * 6) !important;
 }
 
 .model .bottom-bar.env-console .sun-bound {
@@ -4301,6 +4293,7 @@ body,
 
 .model .bottom-bar.env-console .scrubber-track {
   flex: 1 !important;
+  min-width: 158px !important;
   height: 18px !important;
   border-radius: 5px !important;
   background: color-mix(in srgb, var(--ink) 7%, transparent) !important;
@@ -4309,6 +4302,7 @@ body,
   align-items: center !important;
   justify-content: space-between !important;
   padding: 0 6px !important;
+  container: solar-track / inline-size !important;
 }
 
 .model .bottom-bar.env-console .daylight-band {
@@ -4374,6 +4368,18 @@ body,
   color: var(--ink) !important;
   font-weight: 700 !important;
   box-shadow: inset 0 0 0 1px var(--ink) !important;
+}
+
+@container solar-track (width < 298px) {
+  .model .bottom-bar.env-console .scrubber-tick-btn[data-tick-tier="minor"] {
+    display: none !important;
+  }
+}
+
+@container solar-track (width < 158px) {
+  .model .bottom-bar.env-console .scrubber-tick-btn[data-tick-tier="late"] {
+    display: none !important;
+  }
 }
 
 .model .bottom-bar.env-console .scrubber-range-input {

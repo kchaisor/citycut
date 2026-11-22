@@ -36,15 +36,17 @@ export function envConsoleLanes(
   consoleBox: HudBox,
   leftObstacles: readonly (HudBox | null)[],
   rightStack: HudBox | null,
+  reserveRight = false,
 ): EnvConsoleLanes {
   let left = ENV_CONSOLE_EDGE_PX;
   for (const box of leftObstacles) {
     if (!sized(box) || !overlapsY(box, consoleBox, HUD_GUTTER_PX)) continue;
     left = Math.max(left, Math.ceil(box.right + HUD_GUTTER_PX));
   }
-  const right = sized(rightStack)
-    ? Math.max(ENV_CONSOLE_EDGE_PX, Math.ceil(viewportWidth - rightStack.left + HUD_GUTTER_PX))
-    : ENV_CONSOLE_EDGE_PX;
+  const right =
+    sized(rightStack) && (reserveRight || overlapsY(rightStack, consoleBox, HUD_GUTTER_PX))
+      ? Math.max(ENV_CONSOLE_EDGE_PX, Math.ceil(viewportWidth - rightStack.left + HUD_GUTTER_PX))
+      : ENV_CONSOLE_EDGE_PX;
   return { left, right };
 }
 

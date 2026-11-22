@@ -1048,6 +1048,7 @@ export function useModelPage({
     solar.month,
     solar.day,
     Boolean(solar.sunHours),
+    renderQuality,
   );
 
   useEffect(() => {

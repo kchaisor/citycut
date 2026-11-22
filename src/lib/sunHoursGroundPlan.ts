@@ -20,6 +20,7 @@ export type SunHoursGroundGrid = {
   maxSunHours: number;
   masked: Uint8Array;
   steps: number;
+  stepMinutes: number;
 };
 
 function siteBounds(model: CityModel) {
@@ -57,6 +58,21 @@ export function sampleSunHoursGroundCell(
   return { hours: grid.sunHours[index]!, masked: Boolean(grid.masked[index]) };
 }
 
+type RasterContext = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
+
+function rasterContext(cols: number, rows: number): RasterContext | null {
+  if (typeof document !== "undefined") {
+    const canvas = document.createElement("canvas");
+    canvas.width = cols;
+    canvas.height = rows;
+    return canvas.getContext("2d", { willReadFrequently: true });
+  }
+  if (typeof OffscreenCanvas !== "undefined") {
+    return new OffscreenCanvas(cols, rows).getContext("2d", { willReadFrequently: true });
+  }
+  return null;
+}
+
 function canvasLitStepCount(
   model: CityModel,
   year: number,
@@ -69,15 +85,10 @@ function canvasLitStepCount(
   cellM: number,
   stepMinutes: number,
   footprintMask: readonly ExtrudedFootprintMaskPart[],
+  ctx: RasterContext,
 ): { litSteps: Uint16Array; masked: Uint8Array; steps: number } | null {
-  if (typeof document === "undefined") return null;
   const window = daylightWindowMinutes(model.center.lat, model.center.lon, year, month, day);
   if (!window) return null;
-  const canvas = document.createElement("canvas");
-  canvas.width = cols;
-  canvas.height = rows;
-  const ctx = canvas.getContext("2d", { willReadFrequently: true });
-  if (!ctx) return null;
   const fillRing = (points: Pt[]) => {
     if (points.length < 3) return;
     ctx.beginPath();
@@ -217,6 +228,7 @@ function computeSunHoursGroundGridMulti(
     maxSunHours,
     masked,
     steps: stepShadows.length,
+    stepMinutes,
   };
 }
 
@@ -234,7 +246,8 @@ export function computeSunHoursGroundGrid(
   const originEast = bounds.minE;
   const originNorth = bounds.minN;
   const footprintMask = buildExtrudedFootprintMask(model.buildings);
-  if (typeof document === "undefined") {
+  const ctx = rasterContext(cols, rows);
+  if (!ctx) {
     return computeSunHoursGroundGridMulti(
       model,
       year,
@@ -261,6 +274,7 @@ export function computeSunHoursGroundGrid(
     cellM,
     stepMinutes,
     footprintMask,
+    ctx,
   );
   if (!raster || raster.steps === 0) return null;
   const { litSteps, masked, steps } = raster;
@@ -285,6 +299,7 @@ export function computeSunHoursGroundGrid(
     maxSunHours,
     masked,
     steps,
+    stepMinutes,
   };
 }
 

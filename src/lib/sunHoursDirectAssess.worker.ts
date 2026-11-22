@@ -1,5 +1,6 @@
 import { assessDirectSunHoursOverlay } from "./sunHoursDirectAssess";
 import type { SunHoursDirectOverlay } from "./sunHoursDirectAssess";
+import type { SunHoursSampleParams } from "./sunHoursQuality";
 import type { CityModel } from "../types";
 
 export type SunHoursDirectWorkerRequest = {
@@ -9,6 +10,7 @@ export type SunHoursDirectWorkerRequest = {
   month: number;
   day: number;
   scaleMaxHours?: number;
+  params: SunHoursSampleParams;
 };
 
 export type SunHoursDirectWorkerMessage =
@@ -23,9 +25,9 @@ type WorkerScope = {
 const scope = self as unknown as WorkerScope;
 
 scope.onmessage = (event: MessageEvent<SunHoursDirectWorkerRequest>) => {
-  const { id, model, year, month, day, scaleMaxHours } = event.data;
+  const { id, model, year, month, day, scaleMaxHours, params } = event.data;
   try {
-    const overlay = assessDirectSunHoursOverlay(model as CityModel, year, month, day, scaleMaxHours);
+    const overlay = assessDirectSunHoursOverlay(model as CityModel, year, month, day, scaleMaxHours, params);
     if (!overlay) scope.postMessage({ type: "empty", id });
     else scope.postMessage({ type: "done", id, overlay });
   } catch {

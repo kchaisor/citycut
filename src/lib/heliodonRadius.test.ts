@@ -8,7 +8,24 @@ import {
   heliodonRadiusM,
   parseHeliodonRadiusFactor,
   resolveHeliodonRadiusFactor,
+  sunDomeRadiusM,
 } from "./heliodonRadius";
+
+describe("3D sun dome radius", () => {
+  it("clamps a 1 km cut to 350 m", () => {
+    expect(sunDomeRadiusM(1000)).toBe(350);
+  });
+
+  it("clamps a 200 m cut up to 120 m", () => {
+    expect(sunDomeRadiusM(200)).toBe(120);
+  });
+
+  it("uses 0.6 × the half-diagonal for a mid cut", () => {
+    expect(sunDomeRadiusM(400)).toBeCloseTo(0.6 * Math.hypot(200, 200), 6);
+    expect(sunDomeRadiusM(400)).toBeGreaterThan(120);
+    expect(sunDomeRadiusM(400)).toBeLessThan(350);
+  });
+});
 
 describe("heliodon radius mapping", () => {
   it("maps factor to metres from the site half-width", () => {

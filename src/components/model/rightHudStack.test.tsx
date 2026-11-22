@@ -3,7 +3,12 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import type { ReactNode } from "react";
 import { Sidebar } from "../Sidebar";
+import { SunHoursLegendDock } from "./SunHoursLegendDock";
+import { sunHoursLegendCardOn } from "./sunHoursLegendCard";
+import { sunHoursQualityParams, sunHoursResolution } from "../../lib/sunHoursQuality";
+import type { useSunHoursGround } from "../useSunHoursGround";
 import { WindStreaksSlider } from "../WindStreaksSlider";
 import { windRoseCardAutoCollapsed, windRoseCardMeta, windStreaksSliderOn } from "./windRoseCard";
 import { getWindStreakDensity, resetWindStreakDensityCache } from "../../lib/windStreakDensity";
@@ -22,7 +27,22 @@ const block = (source: string, selector: string) => {
   return source.slice(start, source.indexOf("}", start));
 };
 
-function renderSidebar(siteIntelOpen: boolean) {
+const windCard = <div className="wind-rose-analysis-card hud-card" aria-label="Wind rose panel" />;
+
+function sunHoursState(sideM: number, pending = false): ReturnType<typeof useSunHoursGround> {
+  const resolution = sunHoursResolution(sunHoursQualityParams("high", sideM));
+  return {
+    grid: { maxSunHours: 12.1 },
+    overlay: null,
+    scaleMaxHours: 12.1,
+    resolution,
+    targetResolution: resolution,
+    pending,
+    pendingSurfaces: false,
+  } as unknown as ReturnType<typeof useSunHoursGround>;
+}
+
+function renderSidebar(siteIntelOpen: boolean, rightBelow: ReactNode = windCard) {
   return render(
     <Sidebar
       id="panel"
@@ -38,7 +58,7 @@ function renderSidebar(siteIntelOpen: boolean) {
       onHome={() => undefined}
       siteIntel={{ open: siteIntelOpen, onToggle: () => undefined, icon: <span>s</span> }}
       rightChildren={<p>overview</p>}
-      rightBelow={<div className="wind-rose-analysis-card hud-card" aria-label="Wind rose panel" />}
+      rightBelow={rightBelow}
     >
       <p>body</p>
     </Sidebar>,
@@ -94,6 +114,69 @@ describe("right HUD stack", () => {
     expect(block(index, ".wind-streaks")).toMatch(/flex: none;/);
     expect(block(index, ".wind-rose-analysis-card.is-collapsed")).toMatch(/flex: none;/);
     expect(block(index, ".wind-rose-analysis-card.is-collapsed")).toMatch(/min-height: var\(--hud-card-head\);/);
+  });
+
+  it("stacks the Direct Sun Hours legend in the same column, under the wind rose card", () => {
+    const { container } = renderSidebar(
+      true,
+      <>
+        {windCard}
+        <SunHoursLegendDock sunHoursGround={sunHoursState(1000, true)} />
+      </>,
+    );
+    const stack = container.querySelector(".right-hud-stack")!;
+    expect([...stack.children].map((el) => el.className)).toEqual([
+      "right-inspector hud-card",
+      "wind-rose-analysis-card hud-card",
+      "sun-hours-hud-card hud-card",
+    ]);
+    const card = stack.querySelector(".sun-hours-hud-card")!;
+    expect(card.getAttribute("aria-label")).toBe("Direct Sun Hours panel");
+    expect(card.querySelector(".sun-hours-direct-legend-title")?.textContent).toBe("Direct Sun Hours");
+    expect(card.querySelector(".sun-hours-direct-legend-scale")).toBeTruthy();
+    expect(card.textContent).toContain("2 m grid · 5 min steps");
+    expect(card.textContent).toContain("Eased from 0.25 m grid for this cut size");
+    expect(card.querySelector("[data-sun-hours-calculating]")).toBeTruthy();
+    expect(card.querySelector("button")).toBeNull();
+    expect(container.querySelectorAll("[data-sun-hours-ground-legend-dock]")).toHaveLength(1);
+  });
+
+  it("keeps the Direct Sun Hours legend on the right when it is the only card", () => {
+    const { container } = renderSidebar(false, <SunHoursLegendDock sunHoursGround={sunHoursState(120)} />);
+    const stack = container.querySelector(".right-hud-stack")!;
+    expect([...stack.children].map((el) => el.className)).toEqual(["sun-hours-hud-card hud-card"]);
+    expect(stack.textContent).toContain("0.25 m grid · 5 min steps");
+    expect(stack.querySelector("[data-sun-hours-calculating]")).toBeNull();
+  });
+
+  it("shows the Direct Sun Hours legend in 3D and the Drawing site plan only, once there is something to show", () => {
+    const on = { tab: "3d", drawing: "site", sunHours: true, hasResult: true, pending: false };
+    expect(sunHoursLegendCardOn(on)).toBe(true);
+    expect(sunHoursLegendCardOn({ ...on, tab: "drawing" })).toBe(true);
+    expect(sunHoursLegendCardOn({ ...on, hasResult: false, pending: true })).toBe(true);
+    expect(sunHoursLegendCardOn({ ...on, tab: "drawing", drawing: "figure-ground" })).toBe(false);
+    expect(sunHoursLegendCardOn({ ...on, tab: "satellite" })).toBe(false);
+    expect(sunHoursLegendCardOn({ ...on, sunHours: false })).toBe(false);
+    expect(sunHoursLegendCardOn({ ...on, hasResult: false })).toBe(false);
+  });
+
+  it("makes the Direct Sun Hours legend a full-width stack card with no bottom-left dock", () => {
+    const floating = css("src/floating.css");
+    const card = block(floating, ".sun-hours-hud-card");
+    expect(card).toMatch(/width: 100%;/);
+    expect(card).toMatch(/padding: var\(--space-4\);/);
+    expect(card).toMatch(/border-radius: var\(--radius-lg\);/);
+    expect(card).toMatch(/background: var\(--bg-card\);/);
+    expect(card).toMatch(/border: 1px solid var\(--border-outer\);/);
+    expect(card).toMatch(/box-shadow: var\(--shadow-hud\);/);
+    expect(card).not.toMatch(/position: (absolute|fixed)|left:|bottom:/);
+    expect(block(floating, ".sun-hours-hud-card .sun-hours-direct-legend.is-compact")).toMatch(/width: 100%;/);
+    expect(floating).not.toMatch(/sun-hours-direct-dock-stack|plan-solar-dock-stack|plan-solar-legend-dock/);
+    const tabs = css("src/components/model/ModelPageViewportTabs.tsx");
+    expect(tabs).not.toContain("SunHoursLegendDock");
+    const sidebar = css("src/components/model/ModelPageSidebar.tsx");
+    expect(sidebar).toContain("{sunHoursLegendOn ? <SunHoursLegendDock sunHoursGround={vm.sunHoursGround} /> : null}");
+    expect(sidebar).toContain("{windRoseOn ? <WindRoseHudCard vm={vm} /> : null}");
   });
 
   it("centres the Analysis console in the lane left clear by the rail and the right stack", () => {
