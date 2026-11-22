@@ -1,31 +1,35 @@
 import { windFlowActive } from "../../lib/solarStudyView";
-import type { ActiveAnalysis } from "../../lib/sidebarSections";
+import type { ActiveAnalyses } from "../../lib/sidebarSections";
 import type { SiteWindSelection } from "../../lib/windRoseData";
 
 export function windRoseCardOn({
   tab,
-  analysisKind,
+  analyses,
   siteWind,
 }: {
   tab: string;
-  analysisKind: ActiveAnalysis;
+  analyses: ActiveAnalyses;
   siteWind: SiteWindSelection | null;
 }): boolean {
-  return tab !== "satellite" && analysisKind === "wind" && siteWind != null;
+  return tab !== "satellite" && analyses.wind && siteWind != null;
 }
 
 export function windStreaksSliderOn({
   tab,
-  analysisKind,
+  analyses,
   windEnabled,
   planActive,
 }: {
   tab: string;
-  analysisKind: ActiveAnalysis;
+  analyses: ActiveAnalyses;
   windEnabled: boolean;
   planActive: boolean;
 }): boolean {
-  return tab === "3d" && windFlowActive(windEnabled, analysisKind) && !planActive;
+  return tab === "3d" && windFlowActive(windEnabled, analyses) && !planActive;
+}
+
+export function siteIntelAutoFolded(windRoseOn: boolean): boolean {
+  return windRoseOn;
 }
 
 export const WIND_ROSE_CARD_ROOMY_WIDTH_PX = 1440;

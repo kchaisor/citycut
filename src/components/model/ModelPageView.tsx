@@ -8,7 +8,7 @@ import type { ModelPageViewModel } from "./useModelPage";
 
 export function ModelPageView({ vm }: { vm: ModelPageViewModel }) {
   const {
-    analysisKind,
+    analyses,
     cutDimLabel,
     introHoldReleasedRef,
     introWebglReadyRef,
@@ -17,6 +17,7 @@ export function ModelPageView({ vm }: { vm: ModelPageViewModel }) {
     shortcutCheatsheetOpen,
     sidebarCollapsed,
     siteIntelOpen,
+    siteIntelFolded,
     leftOpen,
     siteWind,
     tab,
@@ -27,13 +28,14 @@ export function ModelPageView({ vm }: { vm: ModelPageViewModel }) {
 
   useRightHudLayout(modelRootRef, [
     tab,
-    analysisKind,
+    analyses,
     siteWind,
     siteIntelOpen,
     leftOpen,
     sidebarCollapsed,
     windPlan.active,
     windSettings.enabled,
+    siteIntelFolded,
   ]);
 
   return (

@@ -11,7 +11,7 @@ import type { WindRoseAsset } from "../lib/windRoseData";
 import { analyzeSiteWind } from "../lib/windRoseStats";
 import { DEFAULT_WIND_SETTINGS, withDesignWind, type WindViewSettings } from "../lib/windState";
 import { siteWindSelection } from "../lib/windStation";
-import type { ActiveAnalysis } from "../lib/sidebarSections";
+import { NO_ANALYSES, analysesOf, type ActiveAnalyses } from "../lib/sidebarSections";
 import { windRoseCardOn } from "./model/windRoseCard";
 import { useWindPlan } from "./useWindPlan";
 import { WindRosePanel } from "./WindRosePanel";
@@ -71,23 +71,28 @@ function FlowHarness({ initialDesign = null, flowHeading = true }: { initialDesi
 }
 
 describe("the wind rose card", () => {
-  const card = (tab: string, analysisKind: ActiveAnalysis) => windRoseCardOn({ tab, analysisKind, siteWind: pyrmont });
+  const card = (tab: string, analyses: ActiveAnalyses) => windRoseCardOn({ tab, analyses, siteWind: pyrmont });
 
   it("shows in wind analysis on the 3D and Drawing tabs", () => {
-    expect(card("3d", "wind")).toBe(true);
-    expect(card("drawing", "wind")).toBe(true);
+    expect(card("3d", analysesOf("wind"))).toBe(true);
+    expect(card("drawing", analysesOf("wind"))).toBe(true);
+  });
+
+  it("stays up when Solar Study is on together with Wind Rose", () => {
+    expect(card("3d", analysesOf("wind", "solar"))).toBe(true);
+    expect(card("3d", analysesOf("wind", "solar", "view"))).toBe(true);
   });
 
   it("hides the card outside wind analysis and on Satellite", () => {
-    expect(card("satellite", "wind")).toBe(false);
-    expect(card("3d", "solar")).toBe(false);
-    expect(card("3d", null)).toBe(false);
-    expect(windRoseCardOn({ tab: "3d", analysisKind: "wind", siteWind: null })).toBe(false);
+    expect(card("satellite", analysesOf("wind"))).toBe(false);
+    expect(card("3d", analysesOf("solar"))).toBe(false);
+    expect(card("3d", NO_ANALYSES)).toBe(false);
+    expect(windRoseCardOn({ tab: "3d", analyses: analysesOf("wind"), siteWind: null })).toBe(false);
   });
 
   it("has no Wind Rose chip and mounts no floating rose overlay", () => {
     expect(source("src/components/model/ModelPageViewportFooter.tsx")).not.toMatch(/windRoseChipOn|toggleWindRoseChip|showRose/);
-    expect(source("src/components/model/ModelPageSidebar.tsx")).toContain("windRoseCardOn(");
+    expect(source("src/components/model/useModelPage.tsx")).toContain("windRoseCardOn(");
     expect(source("src/components/model/ModelPageViewportTabs.tsx")).not.toContain("WindRoseOverlay");
     expect(source("src/index.css")).not.toContain(".wind-rose-overlay");
   });

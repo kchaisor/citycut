@@ -1,5 +1,5 @@
 import { useLayoutEffect, type RefObject } from "react";
-import { envConsoleLanes, rightHudMaxHeight, transportLegendBottom, type HudBox } from "../../lib/rightHudLayout";
+import { envConsoleLanes, leftOutlinerMaxHeight, rightHudMaxHeight, transportLegendBottom, type HudBox } from "../../lib/rightHudLayout";
 
 const RESYNC_MS = 500;
 const RIGHT_ANALYSIS_CARD = ".wind-rose-analysis-card, .sun-hours-hud-card";
@@ -40,11 +40,18 @@ export function useRightHudLayout(rootRef: RefObject<HTMLElement | null>, deps: 
       for (const el of [stackEl, consoleEl, railEl, outlinerEl, toastEl, analysisCardEl]) watch(el);
       const stack = box(stackEl);
       const consoleBar = box(consoleEl);
+      const outliner = box(outlinerEl);
+      const outlinerYields = consoleBar != null && outliner != null && consoleEl!.classList.contains("is-combined");
+      setVar(
+        root,
+        "--left-outliner-max-height",
+        outlinerYields ? `${leftOutlinerMaxHeight(consoleBar, outliner)}px` : null,
+      );
       if (consoleBar) {
         const lanes = envConsoleLanes(
           window.innerWidth,
           consoleBar,
-          [box(railEl), box(outlinerEl)],
+          [box(railEl), outlinerYields ? null : outliner],
           stack,
           box(analysisCardEl) != null,
         );

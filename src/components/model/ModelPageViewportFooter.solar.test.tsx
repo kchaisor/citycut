@@ -4,8 +4,9 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { useState } from "react";
 import { afterEach, describe, expect, it } from "vitest";
-import type { ActiveAnalysis } from "../../lib/sidebarSections";
+import { NO_ANALYSES, analysesOf, type ActiveAnalyses, type SiteAnalysisKind } from "../../lib/sidebarSections";
 import { DEFAULT_WIND_SETTINGS, type WindViewSettings } from "../../lib/windState";
+import { windMotionPaused } from "../../lib/windStreakMotion";
 import type { SolarViewSettings } from "../SolarHeliodon";
 import { initialSolarSettings } from "./initialSolarSettings";
 import { ModelPageViewportFooter } from "./ModelPageViewportFooter";
@@ -16,17 +17,21 @@ const emptyStorage = { getItem: () => null, setItem: () => undefined };
 type FooterProps = {
   onSolar?: (next: SolarViewSettings) => void;
   onWind?: (next: WindViewSettings) => void;
-  initialKind?: ActiveAnalysis;
+  initialKind?: SiteAnalysisKind | null;
+  reducedMotion?: boolean;
   tab?: "3d" | "drawing" | "satellite";
 };
 
-function Footer({ onSolar = () => undefined, onWind = () => undefined, initialKind = null, tab = "3d" }: FooterProps) {
+function Footer({ onSolar = () => undefined, onWind = () => undefined, initialKind = null, tab = "3d", reducedMotion = false }: FooterProps) {
   const [solar, setSolar] = useState(() => initialSolarSettings("", emptyStorage));
-  const [analysisKind, setAnalysisKind] = useState<ActiveAnalysis>(initialKind);
+  const [analyses, setAnalyses] = useState<ActiveAnalyses>(initialKind ? analysesOf(initialKind) : NO_ANALYSES);
+  const [windStreaksOn, setWindStreaksOn] = useState(false);
+  const [userPaused, setUserPaused] = useState<boolean | null>(null);
+  const paused = windMotionPaused({ systemReduced: reducedMotion, animateAnyway: false, userPaused });
   const [windSettings, setWindSettings] = useState<WindViewSettings>(DEFAULT_WIND_SETTINGS);
   const [renderQuality, setRenderQuality] = useState<"high" | "fast">("high");
   const vm = {
-    analysisKind,
+    analyses,
     commitRenderQuality: setRenderQuality,
     renderQuality,
     commitSolar: (next: SolarViewSettings) => {
@@ -45,7 +50,10 @@ function Footer({ onSolar = () => undefined, onWind = () => undefined, initialKi
     designWind: null,
     drawing: "site",
     model: { buildings: [] },
-    setAnalysisKind,
+    setAnalyses,
+    setWindStreaksOn,
+    windStreaksOn,
+    windMotion: { paused, setPaused: setUserPaused, animateStreaks: !paused },
     setConsolePlaying: () => undefined,
     setSunStudySelected: () => undefined,
     solar,
@@ -174,21 +182,132 @@ describe("Analysis bar", () => {
     expect(screen.queryByText(/Walk Ripple/)).toBeNull();
   });
 
-  it("turns the active analysis off when clicked again and switches when another is clicked", () => {
+  it("toggles each analysis on its own: clicking one never turns another off", () => {
     render(<Footer />);
+    const bar = screen.getByRole("region", { name: "Environmental analysis console" });
     fireEvent.click(modeButton("Solar Study"));
     expect(modeButton("Solar Study").getAttribute("aria-pressed")).toBe("true");
     fireEvent.click(modeButton("Solar Study"));
     expect(modeButton("Solar Study").getAttribute("aria-pressed")).toBe("false");
     fireEvent.click(modeButton("Solar Study"));
+    fireEvent.click(modeButton("Wind Rose"));
+    expect(modeButton("Solar Study").getAttribute("aria-pressed")).toBe("true");
+    expect(modeButton("Wind Rose").getAttribute("aria-pressed")).toBe("true");
+    expect(bar.getAttribute("data-analysis")).toBe("solar wind");
+    expect(bar.className).toContain("is-combined");
     fireEvent.click(modeButton("Viewshed Walk"));
-    expect(modeButton("Solar Study").getAttribute("aria-pressed")).toBe("false");
-    expect(modeButton("Viewshed Walk").getAttribute("aria-pressed")).toBe("true");
-    fireEvent.click(modeButton("Viewshed Walk"));
-    expect(screen.getByRole("region", { name: "Environmental analysis console" }).getAttribute("data-analysis")).toBe("none");
+    expect(bar.getAttribute("data-analysis")).toBe("solar wind view");
+    for (const name of ["Solar Study", "Wind Rose", "Viewshed Walk"]) fireEvent.click(modeButton(name));
+    expect(bar.getAttribute("data-analysis")).toBe("none");
+    expect(bar.className).not.toContain("is-combined");
   });
 
-  it("turns wind on with Wind Rose and off again when Wind Rose is turned off or left", () => {
+  it("keeps the bar up with muted solar chrome when Solar Study and Wind Rose are both turned off again", () => {
+    render(<Footer />);
+    const bar = screen.getByRole("region", { name: "Environmental analysis console" });
+    fireEvent.click(modeButton("Solar Study"));
+    fireEvent.click(modeButton("Wind Rose"));
+    expect(bar.querySelectorAll(".env-solar-idle")).toHaveLength(0);
+    fireEvent.click(modeButton("Solar Study"));
+    expect(bar.querySelector(".env-solar-chrome")).toBeNull();
+    fireEvent.click(modeButton("Wind Rose"));
+    expect(screen.getByRole("region", { name: "Environmental analysis console" })).toBe(bar);
+    const idle = bar.querySelectorAll(".env-solar-idle");
+    expect(idle.length).toBeGreaterThanOrEqual(2);
+    for (const node of idle) expect(node.hasAttribute("inert")).toBe(true);
+    expect(screen.queryByRole("group", { name: "Wind season presets" })).toBeNull();
+  });
+
+  it("keeps the solar rows and adds the wind row when Solar Study and Wind Rose are both on", () => {
+    render(<Footer />);
+    const bar = screen.getByRole("region", { name: "Environmental analysis console" });
+    fireEvent.click(modeButton("Solar Study"));
+    fireEvent.click(modeButton("Wind Rose"));
+    expect(Array.from(bar.children).map((row) => row.className)).toEqual([
+      "env-top-row",
+      "env-bottom-row env-solar-row",
+      "env-bottom-row env-wind-row",
+    ]);
+    const top = bar.querySelector(".env-top-row")!;
+    expect(top.lastElementChild?.getAttribute("aria-label")).toBe("Render quality");
+    expect(top.querySelector(".env-top-main .env-quality")).toBeNull();
+    expect(within(bar).queryByLabelText("Live wind telemetry")).toBeNull();
+    expect(screen.getByRole("slider", { name: "Solar time of day" })).toBeTruthy();
+    expect(bar.querySelector(".env-solar-row .time-readout-pill")?.textContent).toContain("15:00 AEST");
+    const windRow = bar.querySelector(".env-wind-row")!;
+    expect(windRow.querySelector(".time-readout-pill")).toBeNull();
+    const end = windRow.lastElementChild!;
+    expect(end.className).toBe("env-wind-end");
+    expect(Array.from(end.querySelectorAll("button")).map((b) => b.textContent)).toEqual([
+      "3D Wind Flow",
+      "Wind streaks",
+      "❚❚ Pause",
+    ]);
+  });
+
+  it("keeps solar-only and wind-only on two rows", () => {
+    render(<Footer />);
+    const bar = screen.getByRole("region", { name: "Environmental analysis console" });
+    const rows = () => Array.from(bar.children).map((row) => row.className);
+    expect(rows()).toEqual(["env-top-row", "env-bottom-row env-solar-row"]);
+    fireEvent.click(modeButton("Solar Study"));
+    expect(rows()).toEqual(["env-top-row", "env-bottom-row env-solar-row"]);
+    fireEvent.click(modeButton("Solar Study"));
+    fireEvent.click(modeButton("Wind Rose"));
+    expect(rows()).toEqual(["env-top-row", "env-bottom-row env-wind-row"]);
+    expect(within(bar).getByLabelText("Live wind telemetry").textContent).toContain("PREVAILING");
+    expect(bar.className).not.toContain("is-combined");
+  });
+
+  it("gives Wind Rose two separate chips, both on by default, that switch independently", () => {
+    const winds: WindViewSettings[] = [];
+    render(<Footer onWind={(next) => winds.push(next)} />);
+    fireEvent.click(modeButton("Wind Rose"));
+    const flow = () => screen.getByRole("button", { name: "3D Wind Flow" });
+    const streaks = () => screen.getByRole("button", { name: "Wind streaks" });
+    expect(flow().getAttribute("aria-pressed")).toBe("true");
+    expect(streaks().getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(flow());
+    expect(winds.at(-1)?.enabled).toBe(false);
+    expect(flow().getAttribute("aria-pressed")).toBe("false");
+    expect(streaks().getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(flow());
+    fireEvent.click(streaks());
+    expect(flow().getAttribute("aria-pressed")).toBe("true");
+    expect(streaks().getAttribute("aria-pressed")).toBe("false");
+    expect(winds.at(-1)?.enabled).toBe(true);
+  });
+
+  it("pauses and plays the wind animation from the end of the wind row, starting paused under reduced motion", () => {
+    render(<Footer />);
+    fireEvent.click(modeButton("Wind Rose"));
+    const pause = screen.getByRole("button", { name: "Pause wind animation" });
+    expect(pause.getAttribute("data-wind-paused")).toBe("false");
+    fireEvent.click(pause);
+    const play = screen.getByRole("button", { name: "Play wind animation" });
+    expect(play.getAttribute("data-wind-paused")).toBe("true");
+    expect(play.textContent).toBe("▶ Play");
+    fireEvent.click(play);
+    expect(screen.getByRole("button", { name: "Pause wind animation" })).toBeTruthy();
+    cleanup();
+    render(<Footer reducedMotion />);
+    fireEvent.click(modeButton("Wind Rose"));
+    const held = screen.getByRole("button", { name: "Play wind animation" });
+    expect(held.getAttribute("data-wind-paused")).toBe("true");
+    fireEvent.click(held);
+    expect(screen.getByRole("button", { name: "Pause wind animation" })).toBeTruthy();
+  });
+
+  it("fills the selected date and season with ink, not yellow", () => {
+    const css = readFileSync(resolve(__dirname, "../../floating.css"), "utf8");
+    const active = css.match(/^\.model \.bottom-bar\.env-console \.p-pill\.active \{([^}]*)\}/m)?.[1] ?? "";
+    expect(active).toContain("background: var(--ink)");
+    expect(active).toContain("color: var(--on-ink)");
+    expect(active).not.toContain("--accent");
+    expect(readFileSync(resolve(__dirname, "../../theme.css"), "utf8")).toMatch(/--on-ink: #FFFFFF;/);
+  });
+
+  it("turns wind on with Wind Rose, off when Wind Rose is turned off, and leaves it on when Solar Study is clicked", () => {
     const winds: WindViewSettings[] = [];
     render(<Footer onWind={(next) => winds.push(next)} />);
     fireEvent.click(modeButton("Wind Rose"));
@@ -196,8 +315,13 @@ describe("Analysis bar", () => {
     fireEvent.click(modeButton("Wind Rose"));
     expect(winds.at(-1)?.enabled).toBe(false);
     fireEvent.click(modeButton("Wind Rose"));
+    const before = winds.length;
     fireEvent.click(modeButton("Solar Study"));
-    expect(winds.at(-1)?.enabled).toBe(false);
+    expect(winds.length).toBe(before);
+    expect(winds.at(-1)?.enabled).toBe(true);
+    fireEvent.click(modeButton("Solar Study"));
+    expect(winds.at(-1)?.enabled).toBe(true);
+    expect(modeButton("Wind Rose").getAttribute("aria-pressed")).toBe("true");
   });
 
   it("turns Shadows and the 3D Sun Dome on when Solar Study is clicked, leaving Sun hours off", () => {
@@ -212,7 +336,7 @@ describe("Analysis bar", () => {
     expect(screen.getByRole("button", { name: "Sun hours" }).getAttribute("aria-pressed")).toBe("false");
   });
 
-  it("turns Shadows and the 3D Sun Dome on when switching from Wind Rose or Viewshed Walk to Solar Study", () => {
+  it("turns Shadows and the 3D Sun Dome on when Solar Study is added to Wind Rose or Viewshed Walk", () => {
     for (const from of ["Wind Rose", "Viewshed Walk"]) {
       const calls: SolarViewSettings[] = [];
       render(<Footer onSolar={(next) => calls.push(next)} />);
@@ -290,7 +414,7 @@ describe("Sun hours layers follow the toggle", () => {
     const sidebar = readFileSync(resolve(__dirname, "ModelPageSidebar.tsx"), "utf8");
     expect(sidebar).toContain("sunHours: Boolean(vm.solar.sunHours)");
     expect(sidebar).toContain("{sunHoursLegendOn ? <SunHoursLegendDock sunHoursGround={vm.sunHoursGround} /> : null}");
-    expect(tabs).toContain("solarAnalysisActive={solarStudyViewActive(analysisKind)}");
-    expect(tabs).not.toContain('solarAnalysisActive={analysisKind === "solar"}');
+    expect(tabs).toContain("solarAnalysisActive={solarStudyViewActive(analyses)}");
+    expect(tabs).not.toContain("analysisKind");
   });
 });

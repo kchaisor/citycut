@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { initialAnalysisKind, initialSolarSettings } from "./initialSolarSettings";
+import { initialAnalyses, initialSolarSettings } from "./initialSolarSettings";
 import { DEFAULT_WIND_SETTINGS, WIND_ENABLED_KEY, windSettingsForModelOpen } from "../../lib/windState";
 
 const emptyStorage = { getItem: () => null, setItem: () => undefined };
@@ -31,11 +31,11 @@ describe("initialSolarSettings", () => {
 
 describe("analysis defaults for a new cut", () => {
   it("selects no analysis, so Solar Study, Wind Rose and Viewshed Walk all start off", () => {
-    expect(initialAnalysisKind("")).toBeNull();
+    expect(initialAnalyses("")).toEqual({ solar: false, wind: false, view: false });
   });
 
   it("opens Solar Study only for the solar=path capture preset", () => {
-    expect(initialAnalysisKind("?solar=path")).toBe("solar");
+    expect(initialAnalyses("?solar=path")).toEqual({ solar: true, wind: false, view: false });
   });
 
   it("keeps wind off for a new cut even after a visit that left wind on", () => {

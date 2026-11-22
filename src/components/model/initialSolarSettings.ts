@@ -1,6 +1,6 @@
 import { capturePresetFromSearch } from "../../lib/captureQuery";
 import { readStoredHeliodonRadiusFactor, resolveHeliodonRadiusFactor } from "../../lib/heliodonRadius";
-import type { ActiveAnalysis } from "../../lib/sidebarSections";
+import { NO_ANALYSES, analysesOf, type ActiveAnalyses } from "../../lib/sidebarSections";
 import type { SolarViewSettings } from "../SolarHeliodon";
 
 export function initialSolarSettings(
@@ -20,6 +20,6 @@ export function initialSolarSettings(
   };
 }
 
-export function initialAnalysisKind(search: string): ActiveAnalysis {
-  return capturePresetFromSearch(search).solarPath ? "solar" : null;
+export function initialAnalyses(search: string): ActiveAnalyses {
+  return capturePresetFromSearch(search).solarPath ? analysesOf("solar") : NO_ANALYSES;
 }

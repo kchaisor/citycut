@@ -839,6 +839,12 @@ describe("Display panel controls by view tab", () => {
     expect(envConsole.querySelector(".env-solar-idle")).toBeNull();
 
     await user.click(within(envConsole).getByRole("button", { name: "Wind Rose" }));
+    expect(within(envConsole).getByRole("button", { name: "Solar Study" }).getAttribute("aria-pressed")).toBe("true");
+    expect(within(envConsole).getByRole("group", { name: "Wind season presets" })).toBeTruthy();
+    expect(within(envConsole).getByLabelText("Live solar telemetry")).toBeTruthy();
+    expect(envConsole.querySelector(".env-solar-idle")).toBeNull();
+
+    await user.click(within(envConsole).getByRole("button", { name: "Solar Study" }));
     expect(within(envConsole).getByLabelText("Live wind telemetry").textContent).toContain("PREVAILING");
     expect(within(envConsole).queryByLabelText("Live solar telemetry")).toBeNull();
 

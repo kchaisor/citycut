@@ -44,11 +44,12 @@ The name is `--background`. The value is `#EBEBEB`.
 | `--font-size-card` | The size of an export card title, such as Site plan. | `16px` |
 | `--font-size-stat` | The size of the big numbers in the model summary. | `22px` |
 | `--font-size-title` | The size of the large title in the model summary. | `28px` |
-| `--wind-rose-size` | Diameter of the on-screen wind rose diagram in the 3D view; caption text scales from this. | `168px` |
+| `--wind-rose-size` | Smallest width of the wind rose in the Wind Rose card; the rose never shrinks below it (Kelvin, 23 Nov 2026; was 168px). | `176px` |
 | `--shape-toggle-on-bg` | Fill of the selected Square / Circle pill on the landing map. | `#1A1916` |
 | `--shape-toggle-on-text` | Label on the selected Square / Circle pill. | `#FFFCF8` |
 | `--accent` | The one accent colour in the model sidebar. Only ever a fill, with `--accent-ink` on top and a 1 px `--accent-edge` outline: the selected rail icon, a switch that is on, the selected segment (such as Colour by), and the Ready dot. Never used for text or thin lines. It is its own setting, separate from `--site-building`, so changing one does not change the other. | `#FFF500` |
 | `--accent-ink` | Text and icons on an `--accent` fill, and the knob of a switch that is on. | `#1A1916` |
+| `--on-ink` | Text on an `--ink` fill, such as the selected date and season pills in the Analysis bar (Kelvin, 23 Nov 2026). | `#FFFFFF` |
 | `--accent-edge` | The 1 px outline around every `--accent` fill, so the yellow still reads on the near-white sidebar. | `#1A1916` |
 | `--accent-hover` | An `--accent` control under the pointer. | `#FFF9A6` |
 | `--sidebar-bg` | The model sidebar and its icon rail. | `#FFFCF8` |
@@ -336,6 +337,9 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--axo-tree-canopy-shade` | `#5e8f45` | Exploded axo tree canopy (shaded side). |
 | `--axo-tree-trunk` | `#7a6a55` | Exploded axo tree trunk. |
 | `--wind-streak` | `#2B6CB0` | Animated wind streaks in the 3D viewport (~70% opacity). |
+| `--wind-stream-1` | `#6D9BC7` | Wind streaks diagram arrows and legend swatch: the most frequent wind direction. Soft dusty blue, deeper than `--water-3d`. Stays in colour in the B&W View Style (Kelvin, 23 Nov 2026). |
+| `--wind-stream-2` | `#8FBEA3` | Wind streaks diagram arrows and legend swatch: the second direction. Soft sage. |
+| `--wind-stream-3` | `#C3A6CF` | Wind streaks diagram arrows and legend swatch: the third direction. Soft lilac. |
 | `--wind-rose` | `#3d5a73` | On-screen wind rose overlay and Wind export layer. |
 | `--wind-rose-card-surface` | `#fffcf8` | Wind analysis card background and rose hub disc. |
 | `--wind-rose-ring` | `#c9d2da` | Wind rose outer ring stroke. |

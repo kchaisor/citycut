@@ -113,6 +113,8 @@ import {
 import type { WalkRippleBuildingTint } from "../lib/walkRippleBuildingTint";
 import { SolarHeliodon, SolarLight, useMelbourneSunSample, type SolarViewSettings } from "./SolarHeliodon";
 import { GroundWindFlow } from "./GroundWindFlow";
+import { WindDiagramStreams } from "./WindDiagramStreams";
+import type { PrevailingStream } from "../lib/windPrevailingStreams";
 import { createWindPlanTransformStore, WindPlanOverlay, WindPlanProjector } from "./WindPlanOverlay";
 import type { WindPlanState } from "./useWindPlan";
 import { InspectHudProjector, type InspectHudScreen } from "./InspectHudProjector";
@@ -2218,6 +2220,7 @@ export function Scene3D({
   windDesignWind = null,
   windSector = null,
   windAnimateStreaks,
+  windDiagramStreams = null,
   windPlan = null,
   onExportReady,
   onSceneInspectPick,
@@ -2267,6 +2270,7 @@ export function Scene3D({
   windDesignWind?: DesignWind | null;
   windSector?: number | null;
   windAnimateStreaks: boolean;
+  windDiagramStreams?: readonly PrevailingStream[] | null;
   windPlan?: WindPlanState | null;
   onExportReady: (exporter: SceneExporter | null) => void;
   onSceneInspectPick: (selection: SceneSelection) => void;
@@ -2308,6 +2312,7 @@ export function Scene3D({
   const boundsRef = useRef<Aabb | null>(null);
   const windPlanStore = useMemo(() => createWindPlanTransformStore(), []);
   const windPlanOn = windPlan?.active === true;
+  const windDiagramOn = windDiagramStreams != null && windDiagramStreams.length > 0;
   const onBounds = useCallback((bounds: Aabb) => {
     boundsRef.current = bounds;
     if (typeof document === "undefined") return;
@@ -2402,7 +2407,7 @@ export function Scene3D({
         <ScenePause active={active} />
         <AdaptiveViewportDpr />
         <SceneContinuousBridge
-          windAnimate={windEnabled && windAnimateStreaks && !windPlanOn}
+          windAnimate={(windEnabled || windDiagramOn) && windAnimateStreaks && !windPlanOn}
           walkRippleActive={walkRipplePlaying}
         />
         {qaModeFromSearch(typeof window === "undefined" ? "" : window.location.search) ? <QaPerfSampler /> : null}
@@ -2522,6 +2527,9 @@ export function Scene3D({
         enabled={windEnabled && !windPlanOn}
         animateStreaks={windAnimateStreaks}
       />
+      {windDiagramOn && !windPlanOn ? (
+        <WindDiagramStreams model={windModel ?? model} streams={windDiagramStreams ?? []} animate={active && windAnimateStreaks} />
+      ) : null}
       {windPlanOn ? <WindPlanProjector store={windPlanStore} /> : null}
       <Cameras
         side={model.sideM}

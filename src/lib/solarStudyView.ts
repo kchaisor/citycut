@@ -1,12 +1,12 @@
-import type { ActiveAnalysis } from "./sidebarSections";
+import type { ActiveAnalyses } from "./sidebarSections";
 import type { SolarViewSettings } from "../components/SolarHeliodon";
 
-export function solarStudyViewActive(analysisKind: ActiveAnalysis): boolean {
-  return analysisKind === "solar";
+export function solarStudyViewActive(analyses: ActiveAnalyses): boolean {
+  return analyses.solar;
 }
 
-export function solarSettingsForActiveAnalysis(solar: SolarViewSettings, analysisKind: ActiveAnalysis): SolarViewSettings {
-  const showPath = solar.showPath && solarStudyViewActive(analysisKind);
+export function solarSettingsForActiveAnalysis(solar: SolarViewSettings, analyses: ActiveAnalyses): SolarViewSettings {
+  const showPath = solar.showPath && solarStudyViewActive(analyses);
   return showPath === solar.showPath ? solar : { ...solar, showPath };
 }
 
@@ -14,6 +14,10 @@ export function solarSettingsOnStudyStart(solar: SolarViewSettings): SolarViewSe
   return solar.castShadows && solar.showPath ? solar : { ...solar, castShadows: true, showPath: true };
 }
 
-export function windFlowActive(windEnabled: boolean, analysisKind: ActiveAnalysis): boolean {
-  return windEnabled && analysisKind === "wind";
+export function windFlowActive(windEnabled: boolean, analyses: ActiveAnalyses): boolean {
+  return windEnabled && analyses.wind;
+}
+
+export function windDiagramActive(streaksOn: boolean, analyses: ActiveAnalyses): boolean {
+  return streaksOn && analyses.wind;
 }
