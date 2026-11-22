@@ -1112,9 +1112,6 @@ async function main() {
       `polar=${beat4Info.polar}, bldg=[${beat4Info.bldgInner},${beat4Info.bldgOuter}], tree=${beat4Info.treeScale}, hudOpacities=[${beat4Info.topOpacity},${beat4Info.leftOpacity},${beat4Info.rightOpacity},${beat4Info.bottomOpacity}], underlay=${beat4Info.hasUnderlay}`,
     );
 
-    // -------------------------------------------------------------------------
-    // SECTION KNIFE: out of the live UI until it is reworked
-    // -------------------------------------------------------------------------
     {
       const isoBtn = page.locator(".model .proj-btn.studio-submode-pill", { hasText: "Isometric" }).first();
       if ((await isoBtn.count()) > 0) {
