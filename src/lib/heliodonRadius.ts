@@ -13,6 +13,15 @@ export function heliodonRadiusM(sideM: number, factor: number): number {
   return (sideM / 2) * factor;
 }
 
+export const SUN_DOME_RADIUS_MIN_M = 120;
+export const SUN_DOME_RADIUS_MAX_M = 350;
+export const SUN_DOME_HALF_DIAGONAL_FACTOR = 0.6;
+
+export function sunDomeRadiusM(sideM: number): number {
+  const raw = SUN_DOME_HALF_DIAGONAL_FACTOR * Math.hypot(sideM / 2, sideM / 2);
+  return Math.min(SUN_DOME_RADIUS_MAX_M, Math.max(SUN_DOME_RADIUS_MIN_M, raw));
+}
+
 export function clampHeliodonRadiusFactor(value: number): number {
   if (!Number.isFinite(value)) return HELIODON_RADIUS_FACTOR_DEFAULT;
   return Math.min(HELIODON_RADIUS_FACTOR_MAX, Math.max(HELIODON_RADIUS_FACTOR_MIN, value));

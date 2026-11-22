@@ -7,6 +7,7 @@ import {
 } from "./extrudedBuildingFootprint";
 import { openRing } from "./geo";
 import { sunHoursDirectRgb } from "./sunHoursGround";
+import { receivesSunHours } from "./sunHoursBuildings";
 import { SURFACE } from "./surfaceLayers";
 import { footprintBase } from "./terrain";
 import type { DirectSunHoursSample } from "./sunHoursDirectSample";
@@ -160,8 +161,25 @@ export function buildRoofFootprintMeshesForModel(
   const roofPositions: number[] = [];
   const roofColors: number[] = [];
   const buildingTriangles = new Map<number, number>();
-  for (const building of extrudedBuildingsForModel(model.buildings)) {
-    const count = appendBuildingRoofFootprint(model, building, samples, hours, maxSunHours, roofPositions, roofColors);
+  const roofSamplesByBuilding = new Map<number, number[]>();
+  for (let index = 0; index < samples.length; index++) {
+    const sample = samples[index]!;
+    if (sample.kind !== "roof-cell") continue;
+    const indices = roofSamplesByBuilding.get(sample.buildingId);
+    if (indices) indices.push(index);
+    else roofSamplesByBuilding.set(sample.buildingId, [index]);
+  }
+  for (const building of extrudedBuildingsForModel(model.buildings.filter(receivesSunHours))) {
+    const indices = roofSamplesByBuilding.get(building.id) ?? [];
+    const count = appendBuildingRoofFootprint(
+      model,
+      building,
+      indices.map((index) => samples[index]!),
+      Float32Array.from(indices, (index) => hours[index]!),
+      maxSunHours,
+      roofPositions,
+      roofColors,
+    );
     buildingTriangles.set(building.id, count);
   }
   return {
@@ -172,7 +190,7 @@ export function buildRoofFootprintMeshesForModel(
 }
 
 export function everyBuildingHasRoofFootprint(buildingTriangles: Map<number, number>, buildings: BuildingFeat[]): boolean {
-  for (const building of extrudedBuildingsForModel(buildings)) {
+  for (const building of extrudedBuildingsForModel(buildings.filter(receivesSunHours))) {
     if ((buildingTriangles.get(building.id) ?? 0) <= 0) return false;
   }
   return true;

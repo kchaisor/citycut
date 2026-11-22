@@ -70,7 +70,7 @@ function FlowHarness({ initialDesign = null, flowHeading = true }: { initialDesi
   );
 }
 
-describe("the left wind rose card", () => {
+describe("the wind rose card", () => {
   const card = (tab: string, analysisKind: ActiveAnalysis) => windRoseCardOn({ tab, analysisKind, siteWind: pyrmont });
 
   it("shows in wind analysis on the 3D and Drawing tabs", () => {
@@ -87,7 +87,7 @@ describe("the left wind rose card", () => {
 
   it("has no Wind Rose chip and mounts no floating rose overlay", () => {
     expect(source("src/components/model/ModelPageViewportFooter.tsx")).not.toMatch(/windRoseChipOn|toggleWindRoseChip|showRose/);
-    expect(source("src/components/model/ModelPageView.tsx")).toContain("windRoseCardOn(");
+    expect(source("src/components/model/ModelPageSidebar.tsx")).toContain("windRoseCardOn(");
     expect(source("src/components/model/ModelPageViewportTabs.tsx")).not.toContain("WindRoseOverlay");
     expect(source("src/index.css")).not.toContain(".wind-rose-overlay");
   });
@@ -139,7 +139,9 @@ describe("3D Wind Flow rose", () => {
     expect(panel.textContent).not.toContain("sheltered");
     expect(panel.textContent).not.toContain("Pedestrian comfort");
     expect(panel.querySelector("details.wind-rose-nearby")).toBeTruthy();
-    expect(panel.textContent).toContain("Regional station wind, not site wind.");
+    expect(panel.querySelector(".wind-rose-footnote")?.textContent).toContain("Regional station, not site wind · TMYx ↗");
+    expect(panel.querySelector(".wind-rose-calm-caption")).toBeNull();
+    expect(panel.querySelector(".wind-rose-chart .wind-rose-calm")?.textContent).toMatch(/^Calm \d+\.\d%$/);
   });
 });
 

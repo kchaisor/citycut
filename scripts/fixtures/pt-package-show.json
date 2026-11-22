@@ -5,19 +5,19 @@
     "name": "public-transport-lines-and-stops",
     "resources": [
       {
-        "id": "d8e5a974-98ba-4823-af5f-b0d2185263ac",
+        "id": "0c139eab-f668-4bf6-bffa-473be59ff4bd",
         "name": "Public Transport Lines",
         "format": "GeoJSON",
         "mimetype": "application/geo+json",
-        "url": "https://opendata.transport.vic.gov.au/dataset/6d36dfd9-8693-4552-8a03-05eb29a391fd/resource/d8e5a974-98ba-4823-af5f-b0d2185263ac/download/public_transport_lines.geojson",
+        "url": "https://opendata.transport.vic.gov.au/dataset/6d36dfd9-8693-4552-8a03-05eb29a391fd/resource/0c139eab-f668-4bf6-bffa-473be59ff4bd/download/public_transport_lines.geojson",
         "last_modified": "2026-10-12T00:53:08.719672"
       },
       {
-        "id": "0b8332b8-ee9a-43a0-b83a-367693c0e74e",
+        "id": "57022dfa-9807-43a5-b070-673d069e2d6a",
         "name": "Public Transport Stops",
         "format": "GeoJSON",
         "mimetype": "application/geo+json",
-        "url": "https://opendata.transport.vic.gov.au/dataset/6d36dfd9-8693-4552-8a03-05eb29a391fd/resource/0b8332b8-ee9a-43a0-b83a-367693c0e74e/download/public_transport_stops.geojson",
+        "url": "https://opendata.transport.vic.gov.au/dataset/6d36dfd9-8693-4552-8a03-05eb29a391fd/resource/57022dfa-9807-43a5-b070-673d069e2d6a/download/public_transport_stops.geojson",
         "last_modified": "2026-10-12T00:53:23.717587"
       }
     ]

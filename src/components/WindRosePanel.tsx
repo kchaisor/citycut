@@ -1,21 +1,14 @@
 import { useMemo } from "react";
 import type { WindPeriodId } from "../lib/windRose";
 import type { SiteWindSelection } from "../lib/windRoseData";
-import { formatCalmPercent, windRoseCalmCaption } from "../lib/windBins";
 import { analyzeSiteWind } from "../lib/windRoseStats";
 import { windRoseStationLines } from "../lib/windRoseCaptions";
 import { windRoseSectorSharePct, windRoseSectorTip } from "../lib/windRoseChart";
 import { getColour } from "../lib/colours";
 import { WindNearbyStations } from "./WindSkippedCloser";
 import { WindRoseSvgChart, type WindRosePicker } from "./WindRoseSvgChart";
-import { WindReducedMotionNote } from "./WindReducedMotionNote";
 import { WindPlanLegend, WindPlanRows, WindPlanVelocityLegend, windPlanSeasonLabel } from "./WindPlanCard";
 import type { WindPlanState } from "./useWindPlan";
-
-export type WindRoseReducedMotion = {
-  animateAnyway: boolean;
-  onAnimateAnyway: (value: boolean) => void;
-};
 
 export function windRosePickerOn(
   plan: Pick<WindPlanState, "active" | "mode"> | null,
@@ -30,20 +23,14 @@ export function WindRosePanel({
   period,
   plan = null,
   flowHeading = false,
-  reducedMotion = null,
 }: {
   selection: SiteWindSelection;
   period: WindPeriodId;
   plan?: WindPlanState | null;
   flowHeading?: boolean;
-  reducedMotion?: WindRoseReducedMotion | null;
 }) {
   const stats = useMemo(() => analyzeSiteWind(selection, period), [selection, period]);
   const lines = useMemo(() => windRoseStationLines(selection), [selection]);
-  const calmCaption = useMemo(
-    () => (stats ? windRoseCalmCaption(stats.calmPercent) : ""),
-    [stats],
-  );
   const pickerOn = windRosePickerOn(plan, flowHeading);
   const picker = useMemo<WindRosePicker | undefined>(() => {
     if (!plan || !pickerOn || !stats) return undefined;
@@ -87,12 +74,8 @@ export function WindRosePanel({
           className="wind-rose-panel-svg"
           picker={picker}
         />
-        <p className="wind-rose-calm-caption">{calmCaption}</p>
-        <p className="wind-rose-meta wind-rose-meta-source wind-rose-meta-station" title={lines.line1}>
-          {lines.line1}
-        </p>
+        <WindRoseFootnote stationLine={lines.line1} />
         <WindNearbyStations selection={selection} className="wind-rose-meta" />
-        <p className="wind-rose-meta wind-rose-meta-note">Regional station wind</p>
         <WindPlanLegend plan={plan} />
       </div>
     );
@@ -106,21 +89,27 @@ export function WindRosePanel({
         className="wind-rose-panel-svg"
         picker={picker}
       />
-      <p className="wind-rose-calm-caption">{calmCaption}</p>
-      <p className="wind-rose-meta wind-rose-meta-source wind-rose-meta-station" title={lines.line1}>
-        {lines.line1}
-      </p>
+      <WindRoseFootnote stationLine={lines.line1} />
       <WindNearbyStations selection={selection} className="wind-rose-meta" />
-      <p className="wind-rose-meta">{lines.line2}</p>
-      <p className="wind-rose-meta wind-rose-meta-note">Regional station wind, not site wind.</p>
-      {reducedMotion ? (
-        <WindReducedMotionNote animateAnyway={reducedMotion.animateAnyway} onAnimateAnyway={reducedMotion.onAnimateAnyway} />
-      ) : null}
       <WindPlanVelocityLegend scaleMaxMs={plan?.scaleMaxMs ?? null} />
     </div>
   );
 }
 
-export function windRosePanelCalmText(calmPct: number): string {
-  return `Calm ${formatCalmPercent(calmPct)}`;
+export const WIND_ROSE_TMYX_URL = "https://climate.onebuilding.org/";
+
+function WindRoseFootnote({ stationLine }: { stationLine: string }) {
+  return (
+    <p className="wind-rose-footnote">
+      <span className="wind-rose-footnote-station" title={stationLine}>
+        {stationLine}
+      </span>
+      <span>
+        Regional station, not site wind ·{" "}
+        <a href={WIND_ROSE_TMYX_URL} target="_blank" rel="noopener noreferrer">
+          TMYx ↗
+        </a>
+      </span>
+    </p>
+  );
 }

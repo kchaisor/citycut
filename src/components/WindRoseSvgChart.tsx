@@ -1,6 +1,7 @@
-import { useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from "react";
 import { createPortal } from "react-dom";
 import { getColour } from "../lib/colours";
+import { formatCalmPercent } from "../lib/windBins";
 import { useColourRevision } from "../lib/useColourRevision";
 import { sectorCenterDeg, sectorLabel, WIND_SECTOR_COUNT, type WindPeriodStats } from "../lib/windRose";
 import {
@@ -26,6 +27,11 @@ export type WindRosePicker = {
 };
 
 const VIEW_SIZE = 240;
+const CARDINAL_LABEL_PX = 11;
+const VIEW_TOP = DEFAULT_WIND_ROSE_LAYOUT.cy - DEFAULT_WIND_ROSE_LAYOUT.labelR - CARDINAL_LABEL_PX / 2;
+const VIEW_HEIGHT = VIEW_SIZE - VIEW_TOP;
+const VIEW_BOX = `0 ${VIEW_TOP} ${VIEW_SIZE} ${VIEW_HEIGHT}`;
+const CHART_STYLE = { "--wind-rose-view-w": `${VIEW_SIZE}px` } as CSSProperties;
 const SELECTED_ARC_PX = 4;
 const SELECTED_ARC_EDGE_PX = 1;
 const HIT_R_PAD_PX = SELECTED_ARC_PX / 2 + SELECTED_ARC_EDGE_PX;
@@ -105,7 +111,7 @@ export function WindRoseSvgChart({
           y={cardinals[c.key].y}
           textAnchor="middle"
           dominantBaseline="middle"
-          fontSize={11}
+          fontSize={CARDINAL_LABEL_PX}
           fontWeight={600}
           fill={getColour(c.colour)}
           className="wind-rose-label"
@@ -116,15 +122,20 @@ export function WindRoseSvgChart({
     </>
   );
 
+  const calm = <WindRoseCalm layout={layout} calmPercent={stats.calmPercent} />;
+
   if (!picker) {
     return (
-      <svg viewBox={`0 0 ${VIEW_SIZE} ${VIEW_SIZE}`} role="img" aria-hidden="true" className={className}>
-        {rings}
-        {wedges.map((w, index) => (
-          <path key={index} d={w.d} fill={w.fill} fillOpacity={0.95} />
-        ))}
-        {labels}
-      </svg>
+      <div className="wind-rose-chart" style={CHART_STYLE}>
+        <svg viewBox={VIEW_BOX} role="img" aria-hidden="true" className={className}>
+          {rings}
+          {wedges.map((w, index) => (
+            <path key={index} d={w.d} fill={w.fill} fillOpacity={0.95} />
+          ))}
+          {labels}
+        </svg>
+        {calm}
+      </div>
     );
   }
 
@@ -143,13 +154,14 @@ export function WindRoseSvgChart({
 
   return (
     <div
-      className="wind-rose-picker"
+      className="wind-rose-chart wind-rose-picker"
+      style={CHART_STYLE}
       data-hovering={active != null ? "true" : undefined}
       onPointerLeave={() => setHovered(null)}
     >
       <svg
         ref={svgRef}
-        viewBox={`0 0 ${VIEW_SIZE} ${VIEW_SIZE}`}
+        viewBox={VIEW_BOX}
         tabIndex={0}
         role="slider"
         aria-label="Wind direction. Click a sector or use the left and right arrow keys."
@@ -194,8 +206,23 @@ export function WindRoseSvgChart({
         {labels}
         {selected != null ? <SelectedSector layout={layout} sector={selected} /> : null}
       </svg>
+      {calm}
       {active != null ? <WindRoseTip svg={svgRef.current} layout={layout} sector={active} text={picker.tip(active)} /> : null}
     </div>
+  );
+}
+
+function WindRoseCalm({ layout, calmPercent }: { layout: WindRoseChartLayout; calmPercent: number }) {
+  return (
+    <span
+      className="wind-rose-calm"
+      style={{
+        left: `${(layout.cx / VIEW_SIZE) * 100}%`,
+        top: `${((layout.cy - VIEW_TOP) / VIEW_HEIGHT) * 100}%`,
+      }}
+    >
+      <span>Calm</span> <span>{formatCalmPercent(calmPercent)}</span>
+    </span>
   );
 }
 
@@ -255,7 +282,7 @@ function WindRoseTip({
       return left >= TIP_VIEWPORT_MARGIN_PX && left + w * scale <= window.innerWidth - TIP_VIEWPORT_MARGIN_PX;
     };
     const box = windRoseTipBox(layout, sector, w, h, fits);
-    setPos({ left: rect.left + box.x * scale, top: rect.top + box.y * scale, flipped: box.flipped });
+    setPos({ left: rect.left + box.x * scale, top: rect.top + (box.y - VIEW_TOP) * scale, flipped: box.flipped });
   }, [svg, layout, sector, text]);
   return createPortal(
     <span

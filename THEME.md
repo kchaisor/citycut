@@ -74,6 +74,8 @@ The name is `--background`. The value is `#EBEBEB`.
 | `--control-sm` | 28 px control: the Set use select in the imported building popover. | `28px` |
 | `--control-md` | 32 px control: eye toggles in Buildings › Import, the imported-building checkbox row. | `32px` |
 | `--row-imported-building` | Height of one imported building row in Buildings › Import. | `48px` |
+| `--hud-card-head` | Height of the wind-rose card's WIND ROSE header row, which is also its collapse row (Kelvin's yes to Designbot, 22 Nov 2026). | `48px` |
+| `--fs-title` / `--lh-title` | Title step of the type scale: Site Intelligence Overview KPI values (mono 600; Designbot asked for 15, the scale has 16). | `16px` / `20px` |
 | `--radius-xs` / `--radius-sm` / `--radius-md` | Swatches and checkboxes / rows and segments / segment tracks and selects, in Buildings › Import and the imported building popover. | `4px` / `6px` / `8px` |
 | `--space-0-5` … `--space-3` | 4 pt spacing steps (2, 4, 6, 8, 12 px) used by Buildings › Import and the imported building popover. | `2px` … `12px` |
 | `--fs-caption` / `--lh-caption` | Caption type: landmark label pills, the LANDMARK header, the Wikidata link and Buildings helper captions. | `11px` / `16px` |
@@ -83,7 +85,8 @@ The name is `--background`. The value is `#EBEBEB`.
 | `--ink-2` | Secondary text: Landmark block row labels. | `#4A4945` |
 | `--ink-3` | Muted text: section headers, meta, counts, the LANDMARK header, the Wikidata link, Buildings helper captions. Darkened from `#787670` for contrast (DESIGN-SYSTEM.md). | `#6B6963` |
 | `--border-outer` | 1 px edge of HUD islands and landmark label pills. | `rgb(20 20 19 / 13%)` |
-| `--shadow-raised` | Small lift under landmark label pills. | `0 1px 2px rgb(20 20 19 / 8%)` |
+| `--shadow-raised` | Small lift under landmark label pills and the Wind streaks slider thumb. | `0 1px 2px rgb(20 20 19 / 8%)` |
+| `--slider-track` | Unfilled part of the 4 px Wind streaks slider track (ink at 15%); the filled part is `--ink`. | `rgb(20 20 19 / 15%)` |
 | `--space-0-5` / `--space-1` / `--space-1-5` | 2 / 4 / 6 px gaps inside controls: the Analysis bar date track and the gaps between its chips and icons. | `2px` / `4px` / `6px` |
 | `--space-2` / `--space-3` / `--space-4` | 8 / 12 / 16 px layout spacing: Analysis bar padding, row and group gaps, divider height. | `8px` / `12px` / `16px` |
 | `--radius-sm` / `--radius-md` / `--radius-lg` | Corner radius of chips (6), the date track (8) and the Analysis bar island (12). | `6px` / `8px` / `12px` |
@@ -163,7 +166,7 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--uniform-road` | `#555555` | Road fill in Drawing when the plan building style is uniform (3D Card view uses `--primary-surface` on canvas instead). |
 | `--building-manual` | `#D4A017` | 3D viewport tint for buildings with a manual height override when “Show manual edits” is on. |
 | `--site-building` | `#F2C230` | Buildings on the searched property: site plan, 3D, Rhino `Buildings::Site`, and Illustrator Site buildings layer. Manual-height amber and uniform colour apply to non-site buildings only; site buildings stay yellow unless manual-height tint is on for that building (manual wins in 3D). |
-| `--imported-massing` | `#FFFFFF` | Default colour of imported .3dm massing in 3D, Drawing (site plan, figure-ground, exploded axo), .ai and .3dm. Each imported model can override it with the Colour picker in Import (stored with the model). |
+| `--imported-massing` | `#FFFFFF` | Fallback fill for imported .3dm massing in 3D, Drawing (site plan, figure-ground, exploded axo, isometric), .ai and .3dm, used only when a building has no colour set. Imported buildings normally take their use colour (`--use-unclassified` with no use), or the file colour from the Colour picker in Import (stored with the model). |
 | `--imported-massing-upper-stroke` | `#6E6E6E` | Solid linework for upper roof/setback outlines inside imported footprints. |
 | `--imported-massing-upper-tone` | `#E6E6E6` | Light plan fill behind upper-level outlines on screen. |
 | `--switch-knob` | `#000000` | Knob of every sidebar switch, on and off, so an off switch reads on its pale `--control-off` track. On = `--accent` track, knob right. |
@@ -238,9 +241,9 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--sun-arc-summer` | `#1a1916` | Dec 21 sun path in the 3D heliodon, solid line (screen only). Black or grey only. |
 | `--sun-arc-equinox` | `#1a1916` | Sep/Mar sun path in the 3D heliodon, dashed line (screen only). Black or grey only. |
 | `--sun-arc-winter` | `#1a1916` | Jun 21 sun path in the 3D heliodon, dash-dot line (screen only). Black or grey only. |
-| `--sun-marker` | `#ffcc1a` | Sun icon at the current time in the 3D heliodon (screen only). The only yellow in the heliodon. |
+| `--sun-marker` | `#ffcc1a` | 14 px sun at the current time in the 3D heliodon (screen only; was 10 px, Kelvin 22 Nov 2026). The only yellow in the heliodon. A 1 px `--ink` dashed line runs from the sun to the dome centre. |
 | `--sun-compass` | `#45423c` | Dark grey of the 3D heliodon dial: 10° altitude rings, azimuth radials, 1° ticks, degree numbers and hour lines (screen only). |
-| `--sun-compass-label` | `#1a1916` | Ink of the 3D heliodon dial: horizon ring, 5° and 10° ticks, cardinal ticks, dashed axes, N/E/S/W, hour labels, arc labels and hour-dot outlines (screen only). |
+| `--sun-compass-label` | `#1a1916` | Ink of the 3D heliodon dial: horizon ring, 5° and 10° ticks, cardinal ticks, dashed axes, N/E/S/W (20/700, twice the 10/700 bearing numbers; Kelvin 22 Nov 2026), hour labels, arc labels and hour-dot outlines (screen only). |
 | `--studio-compass-chip` | `#111111` | 3D view compass (Designbot C): dark disc behind the north/south needle. |
 | `--studio-compass-chip-ring` | `#000000` | 3D view compass: 1px outer ring on the chip. |
 | `--studio-compass-needle-north` | `#ffe500` | 3D view compass: north half of the needle. |

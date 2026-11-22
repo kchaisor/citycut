@@ -11,6 +11,7 @@ import {
   clampSolarSliderMinutes,
   isRescodeHour,
   solarSliderPercent,
+  solarSliderTickTier,
   solarSliderSpan,
 } from "../../lib/solarSlider";
 import { SUN_STUDY_DATES } from "../../lib/solar";
@@ -19,7 +20,6 @@ import { WIND_PERIOD_LABELS, WindPeriodId } from "../../lib/windRose";
 import { withDesignWind, withWindSeason } from "../../lib/windState";
 import { DesignWindPresets } from "../DesignWindPresets";
 import { WindPlanSwitch } from "./WindPlanSwitch";
-
 
 export function ModelPageViewportFooter({ vm }: { vm: import("./useModelPage").ModelPageViewModel }) {
   const {
@@ -379,6 +379,7 @@ export function ModelPageViewportFooter({ vm }: { vm: import("./useModelPage").M
                                       ? "scrubber-tick-btn hi"
                                       : "scrubber-tick-btn"
                                 }
+                                data-tick-tier={solarSliderTickTier(h)}
                                 aria-label={`Solar time ${String(h).padStart(2, "0")}:00`}
                                 aria-pressed={solar.hour === h}
                                 onClick={() => {

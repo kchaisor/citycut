@@ -31,6 +31,34 @@ These replace the earlier idea that Solar Study is the default and is implied by
 10. **Date buttons name the solstices:** "21 Jun · Winter solstice", "22 Sep · Equinox" and "22 Dec · Summer solstice".
 11. **Walk Ripple is removed** from the product.
 
+### Kelvin's preferences (22 Nov 2026, Direct Sun Hours resolution)
+
+Approved by Kelvin on 22 Nov 2026 (t81u): "Ok let's try this."
+
+12. **The High / Fast switch also sets Direct Sun Hours resolution.** There is no second control; the same switch in the Analysis bar covers both.
+13. **Fast** is the current study: a 3 m grid and 15-minute time steps on ground, roofs and walls.
+14. **High** is a 1 m grid and 5-minute time steps on ground, roofs and walls, limited to the cut and the buildings already in the sun-hours model.
+15. **Big cuts ease the High grid.** If a cut is too big for a 1 m grid (more than about 250,000 ground cells, the size of a 0.5 km cut at 1 m), the grid eases to 1.5 m and then 2 m. The 5-minute step stays. A 0.5 km cut stays at 1 m; a 1 km cut runs at 2 m. Walls coarsen first if they would blow the wall budget, as they already do in Fast.
+16. **The legend says what was used.** The legend footnote states the actual grid and time step of the result on screen, and says when the grid was eased from 1 m for the cut size.
+17. **The wait is visible.** While the study is calculating, the legend shows a "Calculating …" line naming the grid and step being worked on. The previous result stays on screen until the new one is ready; before the first result, the legend shows only its title and the calculating line. The study runs off the main thread, and a new date, model or quality cancels the old run.
+18. **High / Fast still also sets 3D render quality** (ambient occlusion and SMAA), unchanged.
+19. Results cannot be more accurate than the building heights and the terrain grid they sit on.
+20. **High roofs and walls coarsen under a cap so building surfaces finish in a reasonable time.** In High, if roofs would need more than about 24,000 samples, the roof cell doubles from the High grid (up to 12 m) until they fit; walls do the same above about 52,000 samples. Every building keeps at least one roof sample. On dense or large cuts this makes High roof and wall cells coarser than the ground grid, and they can be coarser than Fast's. Fast is unchanged, and so are the High ground grid and the 5-minute step. (Added 22 Nov 2026, afternoon.)
+21. **High ground now targets a 0.25 m grid.** Kelvin's yes, 22 Nov 2026 ("Yes, do both"). This replaces the High ground grid sizes in 14–16. High starts the ground at 0.25 m and eases up a ladder (0.25, 0.5, 1, 1.5, then 2 m) until the ground is at or under about 250,000 cells; the budget itself is unchanged. That keeps 0.25 m for cuts up to about 125 m a side and 0.5 m up to about 250 m; a 0.5 km cut still runs at 1 m and a 1 km cut at 2 m, because 0.25 m there would be 4 million and 16 million cells. The legend footnote shows the actual spacing used and says "Eased from 0.25 m grid" whenever the cut did not get 0.25 m. Roofs and walls still start no finer than 1 m, under the same caps as 20. Fast and the 5-minute step are unchanged.
+
+### 3D Sun Dome look (Designbot review, 21 Nov 2026)
+
+22. **Size and place.** The dome sits on the centre of the site cut. Its radius is 0.6 × the cut's half-diagonal, kept between 120 m and 350 m: a 1 km square gets 350 m, a 400 m square about 170 m, a 200 m square 120 m. The radius is worked out from the cut; there is no radius slider for the 3D dome.
+23. **Camera.** When the dome turns on, the camera eases (250 ms) so the dome itself (its radius and height, not the whole cut) fits in the part of the view that is not covered by the on-screen panels, with 16 px to spare. Reduced motion jumps straight there. Any drag stops the ease.
+24. **Lines and labels stay the same size on screen** at every zoom. Lines are fixed-pixel and labels are a constant screen size.
+25. **Three line styles only.** The selected date's sun path is solid 2 px `--ink`. The other key dates are 1 px `--ink-3`: 21 Jun dashed 6/4, 22 Dec dotted 2/3, the equinox dashed 2/4. Hour lines are 0.75 px `--ink` at 35%. When the selected date is a key date, it is drawn once, in the selected style.
+26. **Hour labels** are only on the selected date's path, and only 09h, 12h and 15h, in Geist Mono 11/600 with tabular figures, 6 px outside the path, with a 2 px background-coloured halo.
+27. **Date labels** read "21 Jun" and "22 Dec" (and the selected date, day first), in Geist 11/500 `--ink-2` with a halo, at the sunset end of their path. The equinox has no label on the dome.
+28. **Horizon ring** is 1 px `--ink` at 25%, with 4 px ticks every 10°, and labels every 30° in 10/700 plus N / E / S / W in 20/700 caps (twice the bearing numbers; Kelvin, 22 Nov 2026).
+29. **The sun is the only accent:** a 14 px `--accent` dot (was 10 px, about 1.4×) with a 1 px `--ink` edge and a 1 px `--ink` dashed 4/3 line from the sun to the dome centre, not a vertical drop to the ground. No yellow lines and no rayed sun icon. (Kelvin, 22 Nov 2026.)
+30. **No inline key in the Analysis bar.** The 21 Jun / 22 Dec / Equinox / Hours / Sun legend beside the 3D Sun Dome chip is removed and is not moved elsewhere. The High / Fast quality switch stays at the right of the top row. (Kelvin, 22 Nov 2026.)
+31. The dome still belongs to Solar Study (item 9): it is hidden in Wind Rose, in Viewshed Walk and when every analysis is off.
+
 ## How we'll know it works
 
 Open 40 Cleeland St, Dandenong (`?lat=-37.983826&lon=145.21555&label=40+Cleeland+St%2C+Dandenong+VIC+3175&km=1`), turn Solar Study on in the Analysis bar, pick 21 Jun · Winter solstice around 15:00, Perspective, Shadows on.
@@ -45,10 +73,16 @@ Open 40 Cleeland St, Dandenong (`?lat=-37.983826&lon=145.21555&label=40+Cleeland
 - [ ] In Drawing with Solar Study on, the 3D Sun Dome chip sits with Shadows, Sun hours and 9–3pm Plan Fan.
 - [ ] The date buttons read "21 Jun · Winter solstice", "22 Sep · Equinox" and "22 Dec · Summer solstice".
 - [ ] There is no Walk Ripple anywhere.
+- [ ] On a 1 km cut the 3D Sun Dome is 350 m across the radius and centred on the cut; turning it on eases the camera so the dome clears the panels.
+- [ ] Zooming in and out keeps the dome lines and labels the same size on screen.
+- [ ] With 22 Dec picked, its path is the only solid line; 21 Jun is dashed, the equinox is finely dashed, and the hour lines are faint. Only 09h, 12h and 15h are labelled, and only on 22 Dec. The paths are labelled "21 Jun" and "22 Dec" at their sunset ends.
+- [ ] The only yellow on the dome is the sun dot, which is 14 px with an ink edge, and a dashed ink line runs from the sun to the dome centre. N / E / S / W are twice the size of the other bearing labels.
+- [ ] The Analysis bar has no dome key beside the 3D Sun Dome chip (or anywhere else). High / Fast stays at the right of the top row, and the bar still fits on two rows at 1440×900.
 - [ ] The time slider runs 06 to 20, with the sunrise and sunset times still shown; dragging before sunrise or after sunset shows a night scene with no sun.
 - [ ] The Sun hours pill is off when the model opens, and turning it on colours the site and shows the Direct Sun Hours legend.
 - [ ] In 3D with Sun hours on, the ground colour and the gaps under buildings line up with the 3D building footprints, at Dandenong and at Pyrmont (`?lat=-33.86627&lon=151.18389&km=1.5`). Before the fix, the ground colour on terrain was flipped north–south.
 - [ ] Every roof is fully coloured, with no bare white patches on large roofs. Before the fix, the roof colour sat just under the roof, so large roofs showed through.
+- [ ] With Sun hours on, the legend footnote reads "3 m grid · 15 min steps" on Fast and "1 m grid · 5 min steps" on High for a 0.5 km cut; on a 1 km cut, High reads "2 m grid · 5 min steps". Both say the grid was eased from 0.25 m for this cut size (updated 22 Nov 2026, see 21). Switching High / Fast shows a "Calculating …" line on the legend until the new result is ready, the page stays responsive, and 3D ambient occlusion and SMAA still follow the switch.
 
 ## Out of scope
 

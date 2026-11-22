@@ -1,14 +1,19 @@
 import { openRing } from "./geo";
-import { extrudedFootprintsForBuilding } from "./extrudedBuildingFootprint";
+import { extrudedFootprintsForBuilding, type ExtrudedFootprint } from "./extrudedBuildingFootprint";
 import { ringCentroid } from "./sunHoursRoofFootprint";
-import { SUN_HOURS_GROUND_CELL_M } from "./sunHoursGround";
+import { receivesSunHours } from "./sunHoursBuildings";
+import {
+  FAST_SUN_HOURS_PARAMS,
+  SUN_HOURS_MAX_WALL_CELL_M,
+  sunHoursStartWallCellM,
+  type SunHoursSampleParams,
+} from "./sunHoursQuality";
 import { footprintBase } from "./terrain";
 import { pointInPolygon } from "./useCascade";
 import type { BuildingFeat, CityModel, Pt, Ring } from "../types";
 
 const BUILDING_SURFACE_LIFT_M = 0.05;
 const WALL_OFFSET_M = 0.08;
-const DIRECT_SUN_HOURS_MAX_WALL_SAMPLES = 48000;
 
 export function gridPointsInRing(ring: Ring, stepM: number): [number, number][] {
   if (ring.length < 3 || !(stepM > 0)) return [];
@@ -64,17 +69,23 @@ function footprintBaseY(model: CityModel, ring: Ring): number {
   return (model.terrain ? footprintBase(model.terrain, ring, model.sideM) : 0) + BUILDING_SURFACE_LIFT_M;
 }
 
-function roofSamplesForBuilding(model: CityModel, building: BuildingFeat): DirectSunHoursSample[] {
+function underTallerPart(point: Pt, part: ExtrudedFootprint, footprints: ExtrudedFootprint[]): boolean {
+  const top = (part.base ?? 0) + part.height;
+  return footprints.some(
+    (other) => other !== part && (other.base ?? 0) + other.height > top && pointInPolygon(point, other.ring, other.holes),
+  );
+}
+
+function roofSamplesForBuilding(model: CityModel, building: BuildingFeat, cellM: number): DirectSunHoursSample[] {
   const footprints = extrudedFootprintsForBuilding(building);
   if (footprints.length === 0) return [];
   const baseYM = footprintBaseY(model, building.ring);
-  const roofY = baseYM + Math.max(...footprints.map((part) => part.height)) - 0.04;
-  const cellM = SUN_HOURS_GROUND_CELL_M;
   const units: DirectSunHoursSample[] = [];
   let roofIndex = 0;
   for (const part of footprints) {
-    const roofPoints = gridPointsInRing(part.ring, cellM);
-    for (const [east, north] of roofPoints) {
+    const roofY = baseYM + (part.base ?? 0) + part.height - 0.04;
+    for (const [east, north] of gridPointsInRing(part.ring, cellM)) {
+      if (footprints.length > 1 && underTallerPart([east, north], part, footprints)) continue;
       units.push({
         id: `direct-roof-${building.id}-${roofIndex++}`,
         kind: "roof-cell",
@@ -89,14 +100,15 @@ function roofSamplesForBuilding(model: CityModel, building: BuildingFeat): Direc
     }
   }
   if (units.length === 0) {
-    const [east, north] = ringCentroid(footprints[0]!.ring);
+    const tallest = footprints.reduce((a, b) => ((b.base ?? 0) + b.height > (a.base ?? 0) + a.height ? b : a));
+    const [east, north] = ringCentroid(tallest.ring);
     units.push({
       id: `direct-roof-${building.id}-centroid`,
       kind: "roof-cell",
       buildingId: building.id,
       east,
       north,
-      yM: roofY,
+      yM: baseYM + (tallest.base ?? 0) + tallest.height - 0.04,
       outwardEast: 0,
       outwardNorth: 0,
       spanM: cellM,
@@ -105,15 +117,19 @@ function roofSamplesForBuilding(model: CityModel, building: BuildingFeat): Direc
   return units;
 }
 
-function wallSamplesForBuilding(model: CityModel, building: BuildingFeat, cellM: number): DirectSunHoursSample[] {
-  const footprints = extrudedFootprintsForBuilding(building);
-  if (footprints.length === 0) return [];
-  const open = openRing(building.ring);
+function wallSamplesForPart(
+  building: BuildingFeat,
+  part: ExtrudedFootprint,
+  partIndex: number,
+  baseYM: number,
+  cellM: number,
+): DirectSunHoursSample[] {
+  const open = openRing(part.ring);
   if (open.length < 3) return [];
   const closed = [...open, open[0]!];
-  const outwardSign = ringSignedArea(building.ring) >= 0 ? 1 : -1;
-  const baseYM = footprintBaseY(model, building.ring);
-  const heightM = Math.max(0.5, building.height);
+  const outwardSign = ringSignedArea(part.ring) >= 0 ? 1 : -1;
+  const partBaseYM = baseYM + (part.base ?? 0);
+  const heightM = Math.max(0.5, part.height);
   const units: DirectSunHoursSample[] = [];
   for (let edge = 0; edge < closed.length - 1; edge++) {
     const a = closed[edge]!;
@@ -129,9 +145,9 @@ function wallSamplesForBuilding(model: CityModel, building: BuildingFeat, cellM:
       const along = Math.min(length, (bay + 0.5) * cellM);
       const t = along / length;
       for (let band = 0; band < bandCount; band++) {
-        const yM = Math.min(baseYM + (band + 0.5) * cellM, baseYM + heightM - 0.02);
+        const yM = Math.min(partBaseYM + (band + 0.5) * cellM, partBaseYM + heightM - 0.02);
         units.push({
-          id: `direct-wall-${building.id}-e${edge}-b${bay}-u${band}`,
+          id: `direct-wall-${building.id}-p${partIndex}-e${edge}-b${bay}-u${band}`,
           kind: "facade-bay",
           buildingId: building.id,
           east: a[0] + dx * t + outward[0] * WALL_OFFSET_M,
@@ -147,29 +163,62 @@ function wallSamplesForBuilding(model: CityModel, building: BuildingFeat, cellM:
   return units;
 }
 
+function wallSamplesForBuilding(model: CityModel, building: BuildingFeat, cellM: number): DirectSunHoursSample[] {
+  const footprints = extrudedFootprintsForBuilding(building);
+  if (footprints.length === 0) return [];
+  const baseYM = footprintBaseY(model, building.ring);
+  return footprints.flatMap((part, partIndex) => wallSamplesForPart(building, part, partIndex, baseYM, cellM));
+}
+
+function appendSamples(target: DirectSunHoursSample[], extra: DirectSunHoursSample[]): void {
+  // push(...extra) overflows the call stack on a 1 m High first pass (large/tall buildings).
+  for (const sample of extra) target.push(sample);
+}
+
 function wallSamplesAll(model: CityModel, wallCellM: number): DirectSunHoursSample[] {
   const units: DirectSunHoursSample[] = [];
-  for (const building of model.buildings) {
-    units.push(...wallSamplesForBuilding(model, building, wallCellM));
+  for (const building of model.buildings.filter(receivesSunHours)) {
+    appendSamples(units, wallSamplesForBuilding(model, building, wallCellM));
   }
   return units;
 }
 
-function roofSamplesAll(model: CityModel): DirectSunHoursSample[] {
+function roofSamplesAll(model: CityModel, cellM: number): DirectSunHoursSample[] {
   const units: DirectSunHoursSample[] = [];
-  for (const building of model.buildings) {
-    units.push(...roofSamplesForBuilding(model, building));
+  for (const building of model.buildings.filter(receivesSunHours)) {
+    appendSamples(units, roofSamplesForBuilding(model, building, cellM));
   }
   return units;
 }
 
-export function directSunHoursSamplesForModel(model: CityModel): DirectSunHoursSample[] {
-  const roofs = roofSamplesAll(model);
-  let wallCellM = model.buildings.length > 120 ? 6 : SUN_HOURS_GROUND_CELL_M;
+export type DirectSunHoursSampleSet = {
+  samples: DirectSunHoursSample[];
+  wallCellM: number;
+  roofCellM: number;
+};
+
+export function directSunHoursSampleSet(
+  model: CityModel,
+  params: SunHoursSampleParams = FAST_SUN_HOURS_PARAMS,
+): DirectSunHoursSampleSet {
+  let roofCellM = params.roofCellM;
+  let roofs = roofSamplesAll(model, roofCellM);
+  while (roofs.length > params.roofSampleCap && roofCellM < SUN_HOURS_MAX_WALL_CELL_M) {
+    roofCellM = Math.min(SUN_HOURS_MAX_WALL_CELL_M, roofCellM * 2);
+    roofs = roofSamplesAll(model, roofCellM);
+  }
+  let wallCellM = sunHoursStartWallCellM(params, model.buildings.length);
   let walls = wallSamplesAll(model, wallCellM);
-  while (walls.length > DIRECT_SUN_HOURS_MAX_WALL_SAMPLES && wallCellM < SUN_HOURS_GROUND_CELL_M * 4) {
-    wallCellM *= 2;
+  while (walls.length > params.wallSampleCap && wallCellM < SUN_HOURS_MAX_WALL_CELL_M) {
+    wallCellM = Math.min(SUN_HOURS_MAX_WALL_CELL_M, wallCellM * 2);
     walls = wallSamplesAll(model, wallCellM);
   }
-  return [...roofs, ...walls];
+  return { samples: roofs.concat(walls), wallCellM, roofCellM };
+}
+
+export function directSunHoursSamplesForModel(
+  model: CityModel,
+  params: SunHoursSampleParams = FAST_SUN_HOURS_PARAMS,
+): DirectSunHoursSample[] {
+  return directSunHoursSampleSet(model, params).samples;
 }

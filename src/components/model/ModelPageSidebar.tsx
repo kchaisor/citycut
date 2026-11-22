@@ -16,6 +16,10 @@ import { SIDEBAR_SECTION_LABELS } from "../../lib/sidebarSections";
 import { ModelPageSidebarLeftA } from "./ModelPageSidebarLeftA";
 import { ModelPageSidebarLeftB } from "./ModelPageSidebarLeftB";
 import { ModelPageSidebarRight } from "./ModelPageSidebarRight";
+import { WindRoseHudCard } from "./WindRoseHudCard";
+import { windRoseCardOn } from "./windRoseCard";
+import { SunHoursLegendDock } from "./SunHoursLegendDock";
+import { sunHoursLegendCardOn } from "./sunHoursLegendCard";
 
 export function ModelPageSidebar({ vm }: { vm: import("./useModelPage").ModelPageViewModel }) {
   const {
@@ -65,6 +69,14 @@ export function ModelPageSidebar({ vm }: { vm: import("./useModelPage").ModelPag
     topbarExportTriggerRef,
     view,
   } = vm;
+  const windRoseOn = windRoseCardOn({ tab, analysisKind: vm.analysisKind, siteWind: vm.siteWind });
+  const sunHoursLegendOn = sunHoursLegendCardOn({
+    tab,
+    drawing,
+    sunHours: Boolean(vm.solar.sunHours),
+    hasResult: vm.sunHoursGround.grid != null,
+    pending: vm.sunHoursGround.pending || vm.sunHoursGround.pendingSurfaces,
+  });
 
   return (
         <div className="sidebar-host">
@@ -89,6 +101,14 @@ export function ModelPageSidebar({ vm }: { vm: import("./useModelPage").ModelPag
               icon: <PanelRight size={16} strokeWidth={1.75} aria-hidden="true" />,
             }}
             rightMeta={`MGA${mgaCrs(model.center.lon).zone}`}
+            rightBelow={
+              windRoseOn || sunHoursLegendOn ? (
+                <>
+                  {windRoseOn ? <WindRoseHudCard vm={vm} /> : null}
+                  {sunHoursLegendOn ? <SunHoursLegendDock sunHoursGround={vm.sunHoursGround} /> : null}
+                </>
+              ) : undefined
+            }
             brandMeta={
               <>
                 <span className="v-sep hud-sep" aria-hidden="true" />

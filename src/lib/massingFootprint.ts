@@ -7,6 +7,7 @@ import {
   type ParsedMassingBuilding,
 } from "./massingImport";
 import { visibleMassingBuildings, type VisibleMassingBuilding } from "./massingBuildings";
+import { interiorPoint } from "./useCascade";
 import type { BuildingFeat, LonLat, Pt } from "../types";
 
 const unionFn = unionFnLoaded;
@@ -386,6 +387,17 @@ export function drawingMassingCount(buildings: BuildingFeat[]): number {
   return buildings.filter((building) => !building.importedMassingShadowCaster).length;
 }
 
+function castersInside(outer: Pt[], casters: BuildingFeat[]): BuildingFeat[] {
+  return casters.filter((caster) => {
+    const [east, north] = interiorPoint(caster.ring, caster.holes);
+    return pointInRing(east, north, outer);
+  });
+}
+
+function roofPlanPolygons(casters: BuildingFeat[]): MultiPolygon {
+  return unionBucket(casters.map((caster) => [caster.ring, ...caster.holes] as Polygon));
+}
+
 export function massingDrawingBuildings(
   imported: ImportedMassing[],
   origin: LonLat,
@@ -397,18 +409,23 @@ export function massingDrawingBuildings(
   let nextShadow = IMPORTED_SHADOW_ID_BASE;
   for (const visible of visibleMassingBuildings(imported)) {
     const { massing, building, part, colour } = visible;
-    const { podiumZ, polygons } = massingPodiumRoofFootprints(part, origin, zone);
-    const { polygons: fallbackPolys, polygonTops } =
-      polygons.length > 0 ? { polygons, polygonTops: polygons.map(() => podiumZ) } : massingFootprint(part, origin, zone);
-    for (const [index, polygon] of fallbackPolys.entries()) {
-      const topZ = polygonTops[index]!;
+    const casters = massingShadowCasters(visible, origin, zone, groundAt, () => nextShadow--);
+    for (const polygon of roofPlanPolygons(casters)) {
       const [outer, ...holes] = polygon;
       if (!outer || outer.length < 4) continue;
+      const ring = closeRing(outer as Pt[]);
+      const inside = castersInside(ring, casters);
+      const ground = footprintGround(ring, part.placement.base, groundAt);
+      if (inside.length === 0) continue;
+      const topZ = Math.max(...inside.map((caster) => caster.importedTopZ!));
+      const extrusionParts =
+        inside.length > 1 ? inside.map((caster) => ({ ring: caster.ring, holes: caster.holes, height: caster.height })) : [];
       out.push({
         id: nextFill--,
-        ring: closeRing(outer as Pt[]),
+        ring,
         holes: holes.map((hole) => closeRing(hole as Pt[])),
-        height: Math.max(1, topZ - footprintGround(outer as Pt[], part.placement.base, groundAt)),
+        height: Math.max(1, topZ - ground),
+        ...(extrusionParts.length > 0 ? { extrusionParts } : {}),
         use: building.use ?? "unclassified",
         source: "none",
         importedMassing: true,
@@ -419,7 +436,7 @@ export function massingDrawingBuildings(
         overtureName: building.name,
       });
     }
-    out.push(...massingShadowCasters(visible, origin, zone, groundAt, () => nextShadow--));
+    out.push(...casters);
   }
   return out;
 }
