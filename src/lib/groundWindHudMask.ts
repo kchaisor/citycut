@@ -1,4 +1,4 @@
-export const GROUND_WIND_HUD_MASK_SELECTORS = [".right-inspector.hud-card", ".bottom-bar.hud-card"] as const;
+export const GROUND_WIND_HUD_MASK_SELECTORS = [".right-hud-stack", ".bottom-bar.hud-card"] as const;
 
 export type GroundWindMaskRect = { x0: number; y0: number; x1: number; y1: number };
 

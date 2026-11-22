@@ -1,6 +1,11 @@
 import * as THREE from "three";
 import { describe, expect, it } from "vitest";
-import { buildContourLineObject, drapeContourSegments, drapeContourSegmentsWithDistances } from "./contourLines3d";
+import {
+  buildContourLineObject,
+  CONTOUR_3D_INDEX_NAME,
+  drapeContourSegments,
+  drapeContourSegmentsWithDistances,
+} from "./contourLines3d";
 import type { CityModel } from "../types";
 
 describe("contour drape", () => {
@@ -42,5 +47,32 @@ describe("contour drape", () => {
     expect(obj).not.toBeNull();
     expect(obj!.material).toBeInstanceOf(THREE.LineDashedMaterial);
     expect(obj!.geometry.getAttribute("lineDistance")?.count).toBe(obj!.geometry.getAttribute("position")?.count);
+  });
+
+  it("draws the 5 m index contours as a solid, heavier line over the dashed 1 m set", () => {
+    const model = {
+      center: { lat: -37.8, lon: 145 },
+      sideM: 100,
+      buildings: [],
+      roads: [],
+      areas: [],
+      trees: [],
+      contours: true,
+      layers: { buildings: true, roads: true, water: true, green: true, trees: true, terrain: true },
+      contourLayer: {
+        source: "vicmap-metro",
+        label: "Vicmap",
+        attribution: "",
+        interval: 1,
+        lines: [9, 10, 11].map((z, i) => ({ z, points: [[-20, -20 + i * 10], [20, -20 + i * 10]] })),
+      },
+    } as unknown as CityModel;
+    const obj = buildContourLineObject(model)!;
+    expect(obj.geometry.getAttribute("position").count).toBe(6);
+    const index = obj.getObjectByName(CONTOUR_3D_INDEX_NAME) as THREE.LineSegments;
+    expect(index).toBeInstanceOf(THREE.LineSegments);
+    expect(index.material).toBe(obj.material);
+    expect(index.geometry.getAttribute("position").count).toBe(2);
+    expect([...(index.geometry.getAttribute("lineDistance").array as Float32Array)]).toEqual([0, 0]);
   });
 });

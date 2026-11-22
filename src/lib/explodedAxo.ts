@@ -12,8 +12,10 @@ import { getColour, type ColourKey } from "./colours";
 import { bufferOpenLine } from "./bufferLine";
 import { openRing, signedArea } from "./geo";
 import { isVehicularRoad } from "./roadFill";
-import { sampleTerrain } from "./terrain";
-import { demContourLayer } from "./vicmapContours";
+import { DRAWN_CONTOUR_INTERVAL_M, sampleTerrain } from "./terrain";
+import { contourIsIndex, demContourLayer, inferContourInterval } from "./vicmapContours";
+import { drawnContourLayer, interpolatedContourLines } from "./drawnContours";
+import { readDrawingStyle } from "./drawingStyle";
 import {
   circleRing,
   clipLine,
@@ -32,7 +34,7 @@ import type {
   TransportRailLine,
   TransportRailStation,
 } from "./explodedAxoOverlayFetch";
-import type { AreaFeat, CityModel, Pt, TerrainField } from "../types";
+import type { AreaFeat, CityModel, Pt, StoredContour, TerrainField } from "../types";
 
 export type ExplodedAxoOverlayBundle = {
   planning?: PlanningOverlayPolygon[] | "unavailable";
@@ -122,6 +124,30 @@ export type AxoPaintKey =
   | "tree-trunk";
 
 export type AxoLegendSwatch = { label: string; paint: AxoPaintKey };
+
+export const TRANSPORT_LEGEND: readonly AxoLegendSwatch[] = [
+  { label: "Train", paint: "pt-train" },
+  { label: "Tram", paint: "pt-tram" },
+  { label: "Bus", paint: "pt-bus" },
+];
+
+export type AxoDockLegend = {
+  title: string;
+  swatches: readonly AxoLegendSwatch[];
+  unavailable: boolean;
+};
+
+export const AXO_CONTOUR_STROKE_MM = 0.12;
+export const AXO_TOPOGRAPHY_STROKE_SCALE = 0.55;
+const AXO_LINE_STROKE_MM = 0.25;
+
+export function axoIndexContourWeight(): number {
+  return Math.max(1, readDrawingStyle().contourIndexMm / AXO_CONTOUR_STROKE_MM);
+}
+
+function axoIndexEvery(): number {
+  return readDrawingStyle().contourIndexEvery;
+}
 
 export type AxoPointMarker = { x: number; y: number; paint: AxoPaintKey; radiusM: number };
 
@@ -529,33 +555,32 @@ export function buildAxoGroundPlinth(
   };
 }
 
-export function buildAxoGroundTopoContours(
+export type AxoContourPath = { d: string; index: boolean };
+
+export function buildAxoGroundTopoContourPaths(
   model: CityModel,
   field?: TerrainField | null,
   exaggeration = DEFAULT_AXO_TERRAIN_EXAGGERATION,
   topoOverlay?: TopographyOverlay | "unavailable",
-): string[] {
+): AxoContourPath[] {
   const hasFieldRelief = Boolean(field && field.max - field.min > 1e-3 && exaggeration > 0);
-  const rawPolylines: Pt[][] = [];
+  const rawLines: StoredContour[] = [];
   if (hasFieldRelief && field) {
-    const contourLayer = demContourLayer(field, model.sideM);
-    for (const line of contourLayer.lines) {
-      rawPolylines.push(line.points);
-    }
+    rawLines.push(...demContourLayer(field, model.sideM).lines);
   } else if (topoOverlay && topoOverlay !== "unavailable" && topoOverlay.contours.length > 0) {
-    for (const c of topoOverlay.contours) {
-      rawPolylines.push(c.line);
-    }
+    for (const c of topoOverlay.contours) rawLines.push({ points: c.line, z: c.z });
   }
-  if (rawPolylines.length === 0) return [];
+  if (rawLines.length === 0) return [];
+  const every = axoIndexEvery();
   const stepM = Math.max(1.5, model.sideM / 80);
   const elevationAt = (e: number, n: number): number =>
     hasFieldRelief && field
       ? Math.max(0, (sampleTerrain(field, e, n, model.sideM) - field.min) * exaggeration)
       : 0;
-  const out: string[] = [];
-  for (const poly of rawPolylines) {
-    for (const part of clipLine(siteFrameFromModel(model), dedupe(poly))) {
+  const out: AxoContourPath[] = [];
+  for (const line of rawLines) {
+    const index = contourIsIndex(line.z, DRAWN_CONTOUR_INTERVAL_M, every);
+    for (const part of clipLine(siteFrameFromModel(model), dedupe(line.points))) {
       if (part.length < 2) continue;
       const dense: Pt[] = [part[0]!];
       for (let i = 0; i < part.length - 1; i += 1) {
@@ -570,10 +595,45 @@ export function buildAxoGroundTopoContours(
       }
       const pts = dense.map(([e, n]) => planPointToIso(e, n, elevationAt(e, n)));
       const d = isoSvgPolyline(pts, false);
-      if (d) out.push(d);
+      if (d) out.push({ d, index });
     }
   }
   return out;
+}
+
+export function buildAxoGroundTopoContours(
+  model: CityModel,
+  field?: TerrainField | null,
+  exaggeration = DEFAULT_AXO_TERRAIN_EXAGGERATION,
+  topoOverlay?: TopographyOverlay | "unavailable",
+): string[] {
+  return buildAxoGroundTopoContourPaths(model, field, exaggeration, topoOverlay).map((path) => path.d);
+}
+
+const topographyLines = new WeakMap<TopographyOverlay, WeakMap<object, StoredContour[]>>();
+const NO_TERRAIN = {};
+
+export function axoTopographyContours(model: CityModel, overlay: TopographyOverlay): StoredContour[] {
+  if (model.region === "nsw") {
+    const drawn = drawnContourLayer(model);
+    if (drawn && drawn.lines.length > 0) return drawn.lines;
+  }
+  const field = model.terrain ?? null;
+  const byField = topographyLines.get(overlay) ?? new WeakMap<object, StoredContour[]>();
+  topographyLines.set(overlay, byField);
+  const cached = byField.get(field ?? NO_TERRAIN);
+  if (cached) return cached;
+  const official = overlay.contours.map((item) => ({ points: item.line, z: item.z }));
+  const interval = inferContourInterval(
+    official.map((line) => line.z),
+    DRAWN_CONTOUR_INTERVAL_M,
+  );
+  const lines =
+    field && interval > DRAWN_CONTOUR_INTERVAL_M
+      ? [...official, ...interpolatedContourLines(field, model.sideM, interval)]
+      : official;
+  byField.set(field ?? NO_TERRAIN, lines);
+  return lines;
 }
 
 export type AxoLayerGeometry = {
@@ -590,14 +650,17 @@ export type AxoLayerGeometry = {
   clipD: string;
   unavailableNote?: string;
   legend?: AxoLegendSwatch[];
+  dockLegend?: AxoDockLegend;
   unclippedStrokes?: string[];
   solids?: AxoSolidFace[];
   sourceNote?: string;
+  creditNote?: string;
   plinthWalls?: AxoPlinthWall[];
   plinthThicknessM?: number;
   plinthMaxReliefM?: number;
   plinthExaggeration?: number;
   topoContourStrokes?: string[];
+  topoContourIndex?: boolean[];
 };
 
 function dedupe(line: Pt[]): Pt[] {
@@ -765,6 +828,8 @@ export function buildExplodedAxoLayers(
     const markers: AxoPointMarker[] = [];
     let unavailableNote: string | undefined;
     let legend: AxoLegendSwatch[] | undefined;
+    let dockLegend: AxoDockLegend | undefined;
+    let creditNote: string | undefined;
     let unclippedStrokes: string[] | undefined;
     let solids: AxoSolidFace[] | undefined;
     let sourceNote: string | undefined;
@@ -773,6 +838,7 @@ export function buildExplodedAxoLayers(
     let plinthMaxReliefM: number | undefined;
     let plinthExaggeration: number | undefined;
     let topoContourStrokes: string[] | undefined;
+    let topoContourIndex: boolean[] | undefined;
 
     const areaToPath = (rings: Pt[][]) =>
       rings
@@ -833,7 +899,7 @@ export function buildExplodedAxoLayers(
       }
     } else if (id === "transport") {
       if (overlays.transport === "unavailable") {
-        unavailableNote = "unavailable";
+        dockLegend = { title: "Transport", swatches: TRANSPORT_LEGEND, unavailable: true };
       } else if (overlays.transport) {
         for (const station of overlays.transport.rail.stations) {
           const [x, y] = planToIsoBase(station[0], station[1]);
@@ -848,27 +914,28 @@ export function buildExplodedAxoLayers(
           const [x, y] = planToIsoBase(stop.point[0], stop.point[1]);
           markers.push({ x, y, paint: ptPaint(stop.mode, "stop"), radiusM: model.sideM * 0.0038 });
         }
-        if (overlays.transport.note) sourceNote = overlays.transport.note;
-        legend = [
-          { label: "Train", paint: "pt-train" },
-          { label: "Tram", paint: "pt-tram" },
-          { label: "Bus", paint: "pt-bus" },
-        ];
+        if (overlays.transport.note) creditNote = overlays.transport.note;
+        dockLegend = { title: "Transport", swatches: TRANSPORT_LEGEND, unavailable: false };
       }
     } else if (id === "topography") {
       if (overlays.topography === "unavailable") {
         unavailableNote = "unavailable";
       } else if (overlays.topography?.contours.length) {
-        pushLinePaths(
-          overlays.topography.contours.map((item) => item.line),
-          strokes,
-          strokePaints,
-          strokeWidthScales,
-          strokeDashed,
-          "contour",
-          0.55,
-          true,
-        );
+        const every = axoIndexEvery();
+        const indexScale = readDrawingStyle().contourIndexMm / AXO_LINE_STROKE_MM;
+        for (const line of axoTopographyContours(model, overlays.topography)) {
+          const index = contourIsIndex(line.z, DRAWN_CONTOUR_INTERVAL_M, every);
+          pushLinePaths(
+            [line.points],
+            strokes,
+            strokePaints,
+            strokeWidthScales,
+            strokeDashed,
+            "contour",
+            index ? Math.max(AXO_TOPOGRAPHY_STROKE_SCALE, indexScale) : AXO_TOPOGRAPHY_STROKE_SCALE,
+            true,
+          );
+        }
       }
     } else if (id === "cadastre") {
       if (overlays.cadastre === "unavailable") {
@@ -955,9 +1022,10 @@ export function buildExplodedAxoLayers(
       } else if (overlays.terrain === "unavailable") {
         unavailableNote = AXO_TERRAIN_UNAVAILABLE_NOTE;
       }
-      const contours = buildAxoGroundTopoContours(model, terrainField, terrainEx, overlays.topography);
+      const contours = buildAxoGroundTopoContourPaths(model, terrainField, terrainEx, overlays.topography);
       if (contours.length > 0) {
-        topoContourStrokes = contours;
+        topoContourStrokes = contours.map((path) => path.d);
+        topoContourIndex = contours.map((path) => path.index);
       }
     }
 
@@ -973,11 +1041,13 @@ export function buildExplodedAxoLayers(
       clipD,
       ...(unavailableNote ? { unavailableNote } : {}),
       ...(legend ? { legend } : {}),
+      ...(dockLegend ? { dockLegend } : {}),
+      ...(creditNote ? { creditNote } : {}),
       ...(unclippedStrokes?.length ? { unclippedStrokes } : {}),
       ...(solids?.length ? { solids } : {}),
       ...(sourceNote ? { sourceNote } : {}),
       ...(plinthWalls?.length ? { plinthWalls, plinthThicknessM, plinthMaxReliefM, plinthExaggeration } : {}),
-      ...(topoContourStrokes?.length ? { topoContourStrokes } : {}),
+      ...(topoContourStrokes?.length ? { topoContourStrokes, topoContourIndex } : {}),
     });
   }
 
@@ -1015,6 +1085,10 @@ const AXO_PAINT_CSS: Record<AxoPaintKey, ColourKey> = {
 
 export function axoPaintColour(paint: AxoPaintKey): string {
   return getColour(AXO_PAINT_CSS[paint]);
+}
+
+export function axoPaintVar(paint: AxoPaintKey): string {
+  return `var(${AXO_PAINT_CSS[paint]})`;
 }
 
 export function axoLayerBasePaint(id: AxoLayerId): AxoPaintKey {

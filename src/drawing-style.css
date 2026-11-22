@@ -45,7 +45,7 @@
   --contour-dash: 1.5 0.75;
   --contour-index-mm: 0.18;
   --contour-index-every: 5;
-  --contour-coarse-interval-m: 5;
+  --contour-coarse-interval-m: 1;
   --contour-coarse-from-scale: 2500;
 
   --frame-stroke-mm: 0.35;

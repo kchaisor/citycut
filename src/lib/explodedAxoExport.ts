@@ -7,6 +7,8 @@ import { plainDataCredit } from "./dataCredits";
 import { comTreesCreditLine } from "./comTreesCredit";
 import { dashSegments, readDrawingStyle } from "./drawingStyle";
 import {
+  AXO_CONTOUR_STROKE_MM,
+  axoIndexContourWeight,
   axoPlateColours,
   axoPlateLabelText,
   axoLayerBasePaint,
@@ -15,6 +17,7 @@ import {
   axoPaintColour,
   buildExplodedAxoLayers,
   explodedAxoBounds,
+  type AxoDockLegend,
   type AxoLayerId,
   type AxoPaintKey,
   type ExplodedAxoOverlayBundle,
@@ -103,6 +106,46 @@ export function explodedAxoPageSize(
   };
 }
 
+export const AXO_SHEET_LEGEND_INSET_MM = 8;
+const LEGEND_TITLE_MM = 2.4;
+const LEGEND_TEXT_MM = 2.4;
+const LEGEND_ROW_MM = 4;
+const LEGEND_SWATCH_MM = 6;
+const LEGEND_SWATCH_STROKE_MM = 0.6;
+
+export function explodedAxoSheetLegend(
+  legend: AxoDockLegend,
+  pageHeightMm: number,
+): { texts: PdfText[]; paths: PdfPath[] } {
+  const ink = hexRgb(getColour("--axo-label"));
+  const x = AXO_SHEET_LEGEND_INSET_MM;
+  const top = pageHeightMm - AXO_SHEET_LEGEND_INSET_MM;
+  const texts: PdfText[] = [{ x, y: top, sizeMm: LEGEND_TITLE_MM, text: legend.title.toUpperCase(), color: ink, weight: 700 }];
+  const paths: PdfPath[] = [];
+  if (legend.unavailable) {
+    texts.push({ x, y: top - LEGEND_ROW_MM, sizeMm: LEGEND_TEXT_MM, text: "Unavailable", color: ink });
+    return { texts, paths };
+  }
+  legend.swatches.forEach((swatch, index) => {
+    const y = top - LEGEND_ROW_MM * (index + 1);
+    const lineY = y + LEGEND_TEXT_MM * 0.35;
+    paths.push({
+      rings: [
+        [
+          [x, lineY],
+          [x + LEGEND_SWATCH_MM, lineY],
+        ],
+      ],
+      stroke: hexRgb(axoPaintColour(swatch.paint)),
+      strokeMm: LEGEND_SWATCH_STROKE_MM,
+      close: false,
+      cap: "round",
+    });
+    texts.push({ x: x + LEGEND_SWATCH_MM + 2, y, sizeMm: LEGEND_TEXT_MM, text: swatch.label, color: ink });
+  });
+  return { texts, paths };
+}
+
 export const EXPLODED_AXO_LAYER_ORDER = [
   "Guides",
   "Planning",
@@ -160,6 +203,7 @@ export function explodedAxoChunks(
   const pageHeightMm = page.heightMm;
   const chunks: PdfChunk[] = [];
   const sourceNotes: string[] = [];
+  let sheetLegend: AxoDockLegend | undefined;
 
   const axoGuideDash = dashSegments(readDrawingStyle().axoGuideDash);
   const guidePaths: PdfPath[] = guides.map((guide) => ({
@@ -201,19 +245,21 @@ export function explodedAxoChunks(
     if (layer.topoContourStrokes?.length) {
       const style = readDrawingStyle();
       const contourDash = dashSegments(style.contour.dash);
-      for (const stroke of layer.topoContourStrokes) {
+      const indexWeight = axoIndexContourWeight();
+      layer.topoContourStrokes.forEach((stroke, strokeIndex) => {
+        const weight = layer.topoContourIndex?.[strokeIndex] ? indexWeight : 1;
         for (const ring of ringsFromIsoD(stroke, origin, scale, pageHeightMm, liftM)) {
           if (ring.length >= 2) {
             paths.push({
               rings: [ring],
               stroke: hexRgb(axoPaintColour("contour")),
-              strokeMm: 0.12,
+              strokeMm: AXO_CONTOUR_STROKE_MM * weight,
               close: false,
               ...(contourDash ? { dashMm: contourDash, cap: "round" as const } : {}),
             });
           }
         }
-      }
+      });
     }
     for (const wall of layer.plinthWalls ?? []) {
       const rings = ringsFromIsoD(wall.d, origin, scale, pageHeightMm, liftM);
@@ -266,6 +312,8 @@ export function explodedAxoChunks(
         }
       }
     }
+    if (layer.dockLegend) sheetLegend = layer.dockLegend;
+    if (layer.creditNote) sourceNotes.push(layer.creditNote);
     if (layer.sourceNote) sourceNotes.push(layer.sourceNote);
     else if (layer.unavailableNote && layer.unavailableNote !== "unavailable") sourceNotes.push(layer.unavailableNote);
     for (const marker of layer.markers ?? []) {
@@ -358,9 +406,12 @@ export function explodedAxoChunks(
   const credited = treesCredit ? `${regional} ${treesCredit}.` : regional;
   const withSatellite = satelliteNote ? `${credited} ${satelliteNote}` : credited;
   const note = sourceNotes.length ? `${withSatellite} ${sourceNotes.join(". ")}.` : withSatellite;
+  const legend = sheetLegend ? explodedAxoSheetLegend(sheetLegend, pageHeightMm) : null;
   chunks.push({
     name: "Annotation",
+    ...(legend?.paths.length ? { paths: legend.paths } : {}),
     texts: [
+      ...(legend?.texts ?? []),
       {
         x: 8,
         y: 8,

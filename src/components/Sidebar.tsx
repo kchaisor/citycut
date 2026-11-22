@@ -59,6 +59,7 @@ export function Sidebar({
   siteIntel,
   children,
   rightChildren,
+  rightBelow,
 }: {
   id: string;
   rightId?: string;
@@ -86,11 +87,14 @@ export function Sidebar({
   siteIntel?: { open: boolean; onToggle: () => void; icon: ReactNode };
   children: ReactNode;
   rightChildren?: ReactNode;
+  rightBelow?: ReactNode;
 }) {
   const narrow = useNarrow();
   const titleId = useId();
   const rightTitleId = useId();
   const resolvedRightId = rightId ?? `${id}-right`;
+  const inspectorOn =
+    (siteIntel?.open ?? true) && ((!narrow && rightItems && rightItems.length > 0) || rightChildren !== undefined);
 
   function onKeyDown(event: KeyboardEvent<HTMLElement>) {
     const buttons = [...event.currentTarget.querySelectorAll<HTMLButtonElement>("[data-rail-item]")];
@@ -291,39 +295,44 @@ export function Sidebar({
           <div className="sidebar-body">{children}</div>
           {footer && <div className="sidebar-foot">{footer}</div>}
         </section>
-        {(siteIntel?.open ?? true) && ((!narrow && rightItems && rightItems.length > 0) || rightChildren !== undefined) ? (
-          <div className="right-inspector hud-card">
-            <div className="insp-head">
-              <span className="card-title">Site Intelligence</span>
-              <span className="card-meta mono">{rightMeta}</span>
-            </div>
-            {!narrow && rightItems && rightItems.length > 0 ? (
-              <nav
-                className="sidebar-rail icon-rail is-right-rail insp-tabs"
-                role="toolbar"
-                aria-label="Model info"
-                aria-orientation="horizontal"
-                onKeyDown={onKeyDown}
-              >
-                {rightItems.map((item) => renderRailButton(item, true))}
-              </nav>
+        {inspectorOn || rightBelow ? (
+          <div className="right-hud-stack">
+            {inspectorOn ? (
+              <div className="right-inspector hud-card">
+                <div className="insp-head">
+                  <span className="card-title">Site Intelligence</span>
+                  <span className="card-meta mono">{rightMeta}</span>
+                </div>
+                {!narrow && rightItems && rightItems.length > 0 ? (
+                  <nav
+                    className="sidebar-rail icon-rail is-right-rail insp-tabs"
+                    role="toolbar"
+                    aria-label="Model info"
+                    aria-orientation="horizontal"
+                    onKeyDown={onKeyDown}
+                  >
+                    {rightItems.map((item) => renderRailButton(item, true))}
+                  </nav>
+                ) : null}
+                {rightChildren !== undefined ? (
+                  <section
+                    id={resolvedRightId}
+                    className="sidebar-panel is-right"
+                    data-panel-side="right"
+                    aria-labelledby={rightTitleId}
+                    hidden={narrow ? collapsed : false}
+                  >
+                    <header className="sidebar-head sr-only">
+                      <h2 id={rightTitleId}>{rightTitle}</h2>
+                      {rightStatus}
+                    </header>
+                    <div className="sidebar-body">{rightChildren}</div>
+                    {rightFooter && <div className="sidebar-foot">{rightFooter}</div>}
+                  </section>
+                ) : null}
+              </div>
             ) : null}
-            {rightChildren !== undefined ? (
-              <section
-                id={resolvedRightId}
-                className="sidebar-panel is-right"
-                data-panel-side="right"
-                aria-labelledby={rightTitleId}
-                hidden={narrow ? collapsed : false}
-              >
-                <header className="sidebar-head sr-only">
-                  <h2 id={rightTitleId}>{rightTitle}</h2>
-                  {rightStatus}
-                </header>
-                <div className="sidebar-body">{rightChildren}</div>
-                {rightFooter && <div className="sidebar-foot">{rightFooter}</div>}
-              </section>
-            ) : null}
+            {rightBelow}
           </div>
         ) : null}
       </div>

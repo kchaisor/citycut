@@ -13,7 +13,8 @@ import { planShadowRings, type PlanShadowInput } from "./buildingShadows";
 import { buildHeliodonGroundOverlay, type HeliodonGroundExportOptions } from "./heliodonDiagram";
 import { comBuildingHeightCreditLine } from "./comBuildingHeightCredit";
 import { comTreesCreditLine } from "./comTreesCredit";
-import { contourIsIndex, demContourLayer } from "./vicmapContours";
+import { contourIsIndex } from "./vicmapContours";
+import { drawnContourLayer } from "./drawnContours";
 import { sectorCenterDeg, type WindPeriodId } from "./windRose";
 import type { SiteWindSelection } from "./windRoseData";
 import { analyzeSiteWind, stackedSectorArmLength } from "./windRoseStats";
@@ -770,7 +771,7 @@ function addContours(
   zone: number,
 ) {
   if (model.contours === false) return;
-  const layer = model.contourLayer ?? (model.contours && model.terrain ? demContourLayer(model.terrain, model.sideM) : null);
+  const layer = drawnContourLayer(model);
   if (!layer || layer.lines.length === 0) return;
   const every = readDrawingStyle().contourIndexEvery;
   const layerIndex = ensureLayer(rhino, doc, layers, materials, "Contours", layerColors().Contours);
