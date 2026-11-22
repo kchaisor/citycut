@@ -1292,7 +1292,7 @@ async function main() {
         hasSingleBuildingsRow: rowLabels.includes("Buildings"),
         hasResidentialRow: rowLabels.includes("Residential"),
         hasCommercialRow: rowLabels.includes("Commercial"),
-        has3dResetBtn: Boolean(resetBtn && resetBtn.textContent?.trim() === "Reset colours"),
+        has3dResetBtn: Boolean(resetBtn && resetBtn.getAttribute("aria-label") === "Reset colours"),
         defaultResVal,
         editedResCss,
         rowLabels,

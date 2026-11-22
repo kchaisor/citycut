@@ -1540,17 +1540,17 @@ body,
   flex: 1 1 auto;
   min-width: 0;
   width: auto;
-  height: 28px;
+  height: 32px;
   border-radius: 5.5px;
   border: 1px solid transparent;
   background: transparent;
   font-family: var(--sans);
-  font-size: 10.5px;
-  font-weight: 600;
+  font-size: 11px;
+  font-weight: 500;
   line-height: 1;
   white-space: nowrap;
   color: var(--ink-2);
-  padding: 0 4px;
+  padding: 0 8px;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
@@ -2789,9 +2789,20 @@ body,
   background: var(--hud-track-bg) !important;
   padding: 3px !important;
   border-radius: 7px !important;
-  border: 1px solid rgb(20 20 19 / 7%) !important;
+  border: 0 !important;
+  box-shadow: inset 0 0 0 1px rgb(20 20 19 / 7%) !important;
   gap: 2px !important;
   margin: 0 0 10px !important;
+}
+
+.model .left-outliner .style-seg-caption {
+  margin: -10px 0 4px;
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.3;
+  white-space: nowrap;
+  color: var(--ink-3);
 }
 
 .model .left-outliner .style-seg .style-btn {
@@ -2799,16 +2810,16 @@ body,
   flex: 1 1 auto !important;
   min-width: 0 !important;
   width: auto !important;
-  height: 28px !important;
-  min-height: 28px !important;
-  max-height: 28px !important;
-  padding: 0 4px !important;
+  height: 32px !important;
+  min-height: 32px !important;
+  max-height: 32px !important;
+  padding: 0 8px !important;
   margin: 0 !important;
   border-radius: 5px !important;
   border: 0 !important;
   background: transparent !important;
   font-family: var(--sans) !important;
-  font-size: 10.5px !important;
+  font-size: 11px !important;
   font-weight: 500 !important;
   line-height: 1 !important;
   white-space: nowrap !important;
@@ -4598,31 +4609,44 @@ body,
   cursor: progress !important;
 }
 
-.model .outliner-section .studio-layer-head-actions {
-  display: inline-flex !important;
-  align-items: center !important;
-  gap: 6px !important;
+.model .left-outliner .card-head.scene-layers-head {
+  flex-wrap: nowrap !important;
+  justify-content: flex-start !important;
+  gap: 8px !important;
+  white-space: nowrap !important;
+}
+
+.model .left-outliner .scene-layers-head .card-title {
+  flex: 0 0 auto !important;
+  white-space: nowrap !important;
+}
+
+.model .left-outliner .scene-layers-head .scene-layers-count {
+  flex: 0 0 auto !important;
+  white-space: nowrap !important;
+  color: var(--ink-3) !important;
 }
 
 .model .outliner-section .studio-reset-colours-btn {
   appearance: none !important;
+  flex: 0 0 auto !important;
+  margin: 0 0 0 auto !important;
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
   font-family: var(--sans) !important;
-  font-size: 10.5px !important;
+  font-size: 11px !important;
   font-weight: 500 !important;
   line-height: 1 !important;
-  padding: 3px 7px !important;
-  height: 20px !important;
-  border-radius: 5px !important;
-  border: 1px solid var(--border-inner) !important;
-  background: var(--bg-elev) !important;
-  color: var(--muted-text) !important;
+  white-space: nowrap !important;
+  color: var(--ink-3) !important;
   cursor: pointer !important;
-  transition: color 120ms ease, border-color 120ms ease, background 120ms ease !important;
+  transition: color 120ms ease !important;
 }
 
 .model .outliner-section .studio-reset-colours-btn:hover {
   color: var(--ink) !important;
-  border-color: var(--ink) !important;
 }
 
 .model .outliner-section .studio-scale-row {

@@ -4,7 +4,8 @@ import { resolve } from "node:path";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { getColour, resetStoredColours } from "../lib/colours";
+import { COLOURS_KEY, getColour, resetStoredColours } from "../lib/colours";
+import { greyscaleHex } from "../lib/solarGreyscale";
 import { ROAD_COLOR } from "../lib/surfaceLayers";
 import { ModelPage } from "./ModelPage";
 import type { CityModel, Pt } from "../types";
@@ -23,6 +24,9 @@ vi.mock("./DrawingExplodedAxo", () => ({
 vi.mock("./SatellitePane", () => ({
   SatellitePane: () => <div data-testid="satellite-pane" />,
 }));
+
+const MONO_WATER_HEX = "#D6D6D2";
+const PICKED_TREE_HEX = "#2D7A47";
 
 const square = (x0: number, y0: number, x1: number, y1: number): Pt[] => [
   [x0, y0],
@@ -595,18 +599,116 @@ describe("Display panel controls by view tab", () => {
     expect(floatingCss).toMatch(/\.model \.left-outliner \.style-seg[\s\S]*padding:\s*3px/);
     const btnRule = floatingCss.match(/\.model \.left-outliner \.style-seg \.style-btn \{[^}]*\}/)?.[0] ?? "";
     expect(btnRule).toMatch(/flex:\s*1 1 auto/);
-    expect(btnRule).toMatch(/height:\s*28px/);
-    expect(btnRule).toMatch(/padding:\s*0 4px/);
+    expect(btnRule).toMatch(/height:\s*32px/);
+    expect(btnRule).toMatch(/padding:\s*0 8px/);
     expect(btnRule).toMatch(/font-family:\s*var\(--sans\)/);
-    expect(btnRule).toMatch(/font-size:\s*10\.5px/);
+    expect(btnRule).toMatch(/font-size:\s*11px/);
+    expect(btnRule).toMatch(/font-weight:\s*500/);
     expect(btnRule).toMatch(/white-space:\s*nowrap/);
+    const baseBtnRule = floatingCss.match(/\.model \.left-outliner \.style-btn \{[^}]*\}/)?.[0] ?? "";
+    expect(baseBtnRule).toMatch(/height:\s*32px/);
+    expect(baseBtnRule).toMatch(/padding:\s*0 8px/);
+    expect(baseBtnRule).toMatch(/font-size:\s*11px/);
+    expect(baseBtnRule).toMatch(/font-weight:\s*500/);
+  });
+
+  it("keeps the Scene Layers header on one row: title, visible count, then a quiet Reset, in 3D and in Drawing", async () => {
+    const user = userEvent.setup();
+    render(<ModelPage model={sampleModel({ withWater: true, withTrees: true })} onHome={vi.fn()} onNewCut={vi.fn()} />);
+    const checkHeader = () => {
+      const head = screen.getByRole("region", { name: "Layers" }).querySelector(".card-head") as HTMLElement;
+      expect(head.classList.contains("scene-layers-head")).toBe(true);
+      expect(Array.from(head.children).map((child) => child.textContent?.trim())).toEqual([
+        "Scene Layers",
+        expect.stringMatching(/^\d+ visible$/),
+        "Reset",
+      ]);
+      const reset = within(head).getByRole("button", { name: "Reset colours" });
+      expect(reset.textContent?.trim()).toBe("Reset");
+      expect(reset.getAttribute("title")).toMatch(/colours/);
+    };
+    checkHeader();
+    await user.click(screen.getByRole("tab", { name: "Drawing" }));
+    checkHeader();
+
+    const floatingCss = readFileSync(resolve(__dirname, "../floating.css"), "utf8");
+    const headRule = floatingCss.match(/\.model \.left-outliner \.card-head\.scene-layers-head \{[^}]*\}/)?.[0] ?? "";
+    expect(headRule).toMatch(/flex-wrap:\s*nowrap/);
+    expect(headRule).toMatch(/white-space:\s*nowrap/);
+    const countRule =
+      floatingCss.match(/\.model \.left-outliner \.scene-layers-head \.scene-layers-count \{[^}]*\}/)?.[0] ?? "";
+    expect(countRule).toMatch(/color:\s*var\(--ink-3\)/);
+    const resetRule = floatingCss.match(/\.model \.outliner-section \.studio-reset-colours-btn \{[^}]*\}/)?.[0] ?? "";
+    expect(resetRule).toMatch(/color:\s*var\(--ink-3\)/);
+    expect(resetRule).toMatch(/background:\s*transparent/);
+    expect(resetRule).toMatch(/border:\s*0/);
+    expect(resetRule).toMatch(/margin:\s*0 0 0 auto/);
+  });
+
+  it("shows grey Scene Layers swatches and a Colours off in B&W line only while B&W is the 3D View Style", async () => {
+    const user = userEvent.setup();
+    render(<ModelPage model={sampleModel({ withWater: true, withTrees: true })} onHome={vi.fn()} onNewCut={vi.fn()} />);
+    const group = screen.getByRole("group", { name: "Building style" });
+    const layers = screen.getByRole("region", { name: "Layers" });
+    const swatch = (label: string) =>
+      (within(layers).getByLabelText(`${label} colour`).closest(".o-swatch-wrap") as HTMLElement).style.background.toUpperCase();
+    const input = (label: string) => (within(layers).getByLabelText(`${label} colour`) as HTMLInputElement).value.toUpperCase();
+    const caption = () => screen.queryByText("Colours off in B&W");
+    const isGreyHex = (value: string) => /^#([0-9A-F]{2})\1\1$/.test(value);
+    const tree = getColour("--tree-crown").toUpperCase();
+    const water = getColour("--water-3d").toUpperCase();
+    const residential = getColour("--use-residential").toUpperCase();
+
+    for (const style of ["Primary", "Use", "Source", "Card"]) {
+      await user.click(within(group).getByRole("button", { name: style }));
+      expect(caption()).toBeNull();
+      expect(swatch("Trees")).toBe(tree);
+      expect(swatch("Water")).toBe(water);
+      expect(swatch("Residential")).toBe(residential);
+    }
+
+    await user.click(within(group).getByRole("button", { name: "Black and white" }));
+    expect(caption()?.classList.contains("style-seg-caption")).toBe(true);
+    expect(group.nextElementSibling).toBe(caption());
+    expect(swatch("Trees")).toBe(greyscaleHex(tree));
+    expect(swatch("Trees")).not.toBe(tree);
+    expect(isGreyHex(swatch("Trees"))).toBe(true);
+    expect(swatch("Residential")).toBe(greyscaleHex(residential));
+    expect(isGreyHex(swatch("Residential"))).toBe(true);
+    expect(swatch("Water")).toBe(MONO_WATER_HEX);
+    expect(swatch("Trees")).not.toBe(MONO_WATER_HEX);
+    expect(input("Trees")).toBe(tree);
+    expect(input("Water")).toBe(water);
+    expect(getColour("--tree-crown").toUpperCase()).toBe(tree);
+    expect(getColour("--water-3d").toUpperCase()).toBe(water);
+    expect(window.localStorage.getItem(COLOURS_KEY)).toBeNull();
+
+    fireEvent.change(within(layers).getByLabelText("Trees colour"), { target: { value: PICKED_TREE_HEX } });
+    expect(getColour("--tree-crown").toUpperCase()).toBe(PICKED_TREE_HEX);
+    expect(swatch("Trees")).toBe(greyscaleHex(PICKED_TREE_HEX));
+
+    await user.click(within(group).getByRole("button", { name: "Primary" }));
+    expect(caption()).toBeNull();
+    expect(swatch("Trees")).toBe(PICKED_TREE_HEX);
+    expect(swatch("Water")).toBe(water);
+
+    await user.click(screen.getByRole("tab", { name: "Drawing" }));
+    expect(caption()).toBeNull();
+    const floatingCss = readFileSync(resolve(__dirname, "../floating.css"), "utf8");
+    const captionRule = floatingCss.match(/\.model \.left-outliner \.style-seg-caption \{[^}]*\}/)?.[0] ?? "";
+    expect(captionRule).toMatch(/font-family:\s*var\(--sans\)/);
+    expect(captionRule).toMatch(/font-size:\s*11px/);
+    expect(captionRule).toMatch(/font-weight:\s*500/);
+    expect(captionRule).toMatch(/white-space:\s*nowrap/);
+    expect(captionRule).toMatch(/color:\s*var\(--ink-3\)/);
   });
 
   it("lists Primary, Use, Source, Card and B&W in the 3D View Style group, opening on Primary in colour", () => {
     render(<ModelPage model={sampleModel({})} onHome={vi.fn()} onNewCut={vi.fn()} />);
     const group = screen.getByRole("group", { name: "Building style" });
     const buttons = within(group).getAllByRole("button");
-    expect(buttons.map((button) => button.textContent)).toEqual(["Primary", "Use", "Source", "Card", "B&W"]);
+    expect(buttons.map((button) => button.textContent)).toEqual(["Primary", "Use", "Src", "Card", "B&W"]);
+    expect(within(group).getByRole("button", { name: "Source" }).textContent).toBe("Src");
     expect(within(group).getByRole("button", { name: "Black and white" }).textContent).toBe("B&W");
     expect(buttons.filter((button) => button.getAttribute("aria-pressed") === "true").map((b) => b.textContent)).toEqual([
       "Primary",
@@ -624,7 +726,7 @@ describe("Display panel controls by view tab", () => {
       within(group)
         .getAllByRole("button")
         .filter((button) => button.getAttribute("aria-pressed") === "true")
-        .map((button) => button.textContent);
+        .map((button) => button.getAttribute("aria-label"));
 
     for (const style of ["Primary", "Use", "Source", "Card"]) {
       await user.click(within(group).getByRole("button", { name: style }));

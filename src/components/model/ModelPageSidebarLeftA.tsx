@@ -3,6 +3,7 @@ import { GripVertical } from "lucide-react";
 import type { AxoLayerId } from "../../lib/explodedAxo";
 import { ISO_CORNERS } from "../../lib/isoCamera";
 import { snapWhenTogglingIsoFreeRotate } from "../../lib/isoFreeRotate";
+import { monoSwatchColour } from "../../lib/solarGreyscale";
 import { activeViewStyle, selectViewStyle3d } from "../../lib/view3dDisplay";
 import { VIEW_STYLE_SEG_OPTIONS } from "../../lib/viewStyleSegLayout";
 import { contourDrawerLabel } from "../../lib/vicmapContours";
@@ -51,6 +52,7 @@ export function ModelPageSidebarLeftA({ vm }: { vm: import("./useModelPage").Mod
     writeStoredShowManualHeights,
   } = vm;
   const viewStyle = activeViewStyle(view3dDisplay, colourByUse, showSource);
+  const monoOn = viewStyle === "mono";
 
   return (
     <>
@@ -83,6 +85,7 @@ export function ModelPageSidebarLeftA({ vm }: { vm: import("./useModelPage").Mod
                         </button>
                       ))}
                     </div>
+                    {monoOn && <p className="style-seg-caption">Colours off in B&amp;W</p>}
                     <label className="check-field sr-only">
                       <input
                         type="checkbox"
@@ -199,21 +202,20 @@ export function ModelPageSidebarLeftA({ vm }: { vm: import("./useModelPage").Mod
                     <>
                       <div className="outliner-divider" aria-hidden="true" />
                       <section className="sidebar-group outliner-section" aria-label="Layers">
-                        <div className="card-head sidebar-gh">
+                        <div className="card-head sidebar-gh scene-layers-head">
                           <h3 className="card-title">Scene Layers</h3>
-                          <div className="studio-layer-head-actions">
-                            <span className="card-meta mono">
-                              {sceneLayerRows.filter((row) => row.visible).length} visible
-                            </span>
-                            <button
-                              type="button"
-                              className="studio-reset-colours-btn"
-                              onClick={resetSceneLayerColours}
-                              title="Reset all layer and building use colours to default"
-                            >
-                              Reset colours
-                            </button>
-                          </div>
+                          <span className="card-meta mono scene-layers-count">
+                            {sceneLayerRows.filter((row) => row.visible).length} visible
+                          </span>
+                          <button
+                            type="button"
+                            className="studio-reset-colours-btn"
+                            onClick={resetSceneLayerColours}
+                            aria-label="Reset colours"
+                            title="Reset all layer and building use colours to default"
+                          >
+                            Reset
+                          </button>
                         </div>
                         <div className="outliner-rows display-switches" role="group" aria-label="3D layers">
                           {sceneLayerRows.map((layer) => (
@@ -236,7 +238,7 @@ export function ModelPageSidebarLeftA({ vm }: { vm: import("./useModelPage").Mod
                                 ) : null}
                                 <label
                                   className="o-swatch-wrap legend-swatch"
-                                  style={{ background: layer.color }}
+                                  style={{ background: monoOn ? monoSwatchColour(layer.id, layer.color) : layer.color }}
                                   title={`Change ${layer.label.toLowerCase()} colour`}
                                 >
                                   <input
@@ -514,21 +516,20 @@ export function ModelPageSidebarLeftA({ vm }: { vm: import("./useModelPage").Mod
                     <>
                       <div className="outliner-divider" aria-hidden="true" />
                       <section className="sidebar-group outliner-section" aria-label="Layers">
-                        <div className="card-head sidebar-gh">
+                        <div className="card-head sidebar-gh scene-layers-head">
                           <h3 className="card-title">Scene Layers</h3>
-                          <div className="studio-layer-head-actions">
-                            <span className="card-meta mono">
-                              {sceneLayerRows.filter((row) => row.visible).length} visible
-                            </span>
-                            <button
-                              type="button"
-                              className="studio-reset-colours-btn"
-                              onClick={resetSceneLayerColours}
-                              title="Reset all layer and building use colours to default"
-                            >
-                              Reset colours
-                            </button>
-                          </div>
+                          <span className="card-meta mono scene-layers-count">
+                            {sceneLayerRows.filter((row) => row.visible).length} visible
+                          </span>
+                          <button
+                            type="button"
+                            className="studio-reset-colours-btn"
+                            onClick={resetSceneLayerColours}
+                            aria-label="Reset colours"
+                            title="Reset all layer and building use colours to default"
+                          >
+                            Reset
+                          </button>
                         </div>
                         <div className="outliner-rows display-switches" role="group" aria-label="3D layers">
                           {sceneLayerRows.map((layer) => (

@@ -99,7 +99,7 @@ import {
 } from "../lib/perspectiveViewportFit";
 import { heliodonRadiusM } from "../lib/heliodonRadius";
 import { studioSceneLighting } from "../lib/sunStudyViewport";
-import { applySolarGreyscale } from "../lib/solarGreyscale";
+import { applySolarGreyscale, restoreFlatWater } from "../lib/solarGreyscale";
 import { SunHoursLayer } from "./SunHoursLayer";
 import type { SunHoursDirectOverlay } from "../lib/sunHoursDirectAssess";
 import type { SunHoursGroundGrid } from "../lib/sunHoursGroundPlan";
@@ -940,6 +940,7 @@ function City({
     }
   });
   useLayoutEffect(() => {
+    restoreFlatWater(group);
     refreshSceneSurfaceColors(group);
     snapshotBuildingViewportColors(group, colourMode);
     snapshotSunStudySurfaceColors(group);

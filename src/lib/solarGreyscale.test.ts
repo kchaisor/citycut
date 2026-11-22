@@ -1,6 +1,16 @@
 import * as THREE from "three";
 import { describe, expect, it } from "vitest";
-import { applySolarGreyscale, greyscaleColour, linearLuminance } from "./solarGreyscale";
+import { getColour } from "./colours";
+import {
+  MONO_WATER_FILL,
+  MONO_WATER_MESH_NAME,
+  applySolarGreyscale,
+  greyscaleColour,
+  greyscaleHex,
+  linearLuminance,
+  monoSwatchColour,
+  restoreFlatWater,
+} from "./solarGreyscale";
 import { DEFAULT_VIEW3D_DISPLAY, monoViewActive, selectViewStyle3d } from "./view3dDisplay";
 
 function isGrey(color: THREE.Color): boolean {
@@ -86,5 +96,76 @@ describe("solar greyscale", () => {
     const primary = selectViewStyle3d(mono, "primary", false).display;
     applySolarGreyscale(root, monoViewActive(primary));
     expect(material.color.getHex()).toBe(rest);
+  });
+
+  it("names the flat B&W water grey", () => {
+    expect(MONO_WATER_MESH_NAME).toBe("Water");
+    expect(MONO_WATER_FILL).toBe("--water-3d-mono");
+    expect(getColour(MONO_WATER_FILL)).toBe("#D6D6D2");
+  });
+
+  it("makes B&W water a flat, unlit #D6D6D2, leaves trees a mid-grey, and restores the real water material after", () => {
+    const root = new THREE.Group();
+    const waterMaterial = new THREE.MeshStandardMaterial({ color: "#7FBFFF", side: THREE.DoubleSide });
+    waterMaterial.polygonOffset = true;
+    waterMaterial.polygonOffsetFactor = -2;
+    waterMaterial.polygonOffsetUnits = -3;
+    const water: THREE.Mesh<THREE.BufferGeometry, THREE.Material> = new THREE.Mesh(new THREE.BoxGeometry(), waterMaterial);
+    water.name = "Water";
+    const crown = new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshStandardMaterial({ color: "#478c33" }));
+    crown.name = "TreeCrowns";
+    root.add(water, crown);
+
+    applySolarGreyscale(root, true);
+    applySolarGreyscale(root, true);
+    const flat = water.material as THREE.MeshBasicMaterial;
+    expect(flat).toBeInstanceOf(THREE.MeshBasicMaterial);
+    expect(flat).not.toBe(waterMaterial);
+    expect((flat as unknown as { isMeshStandardMaterial?: boolean }).isMeshStandardMaterial).toBeUndefined();
+    expect(flat.toneMapped).toBe(false);
+    expect(flat.color.getHexString()).toBe("d6d6d2");
+    expect(flat.side).toBe(THREE.DoubleSide);
+    expect(flat.polygonOffset).toBe(true);
+    expect(flat.polygonOffsetFactor).toBe(-2);
+    expect(flat.polygonOffsetUnits).toBe(-3);
+    expect(waterMaterial.color.getHexString()).toBe("7fbfff");
+
+    const crownColour = (crown.material as THREE.MeshStandardMaterial).color;
+    expect(crown.material).toBeInstanceOf(THREE.MeshStandardMaterial);
+    expect(isGrey(crownColour)).toBe(true);
+    expect(crownColour.getHexString()).not.toBe("d6d6d2");
+    expect(`#${crownColour.getHexString().toUpperCase()}`).toBe(greyscaleHex("#478c33"));
+
+    applySolarGreyscale(root, false);
+    expect(water.material).toBe(waterMaterial);
+    expect(waterMaterial.color.getHexString()).toBe("7fbfff");
+    expect(crownColour.getHexString()).toBe("478c33");
+  });
+
+  it("hands the real water material back for repainting, then flattens it again", () => {
+    const waterMaterial = new THREE.MeshStandardMaterial({ color: "#7FBFFF" });
+    const water: THREE.Mesh<THREE.BufferGeometry, THREE.Material> = new THREE.Mesh(new THREE.BoxGeometry(), waterMaterial);
+    water.name = "Water";
+    const root = new THREE.Group().add(water);
+
+    applySolarGreyscale(root, true);
+    const flat = water.material;
+    restoreFlatWater(root);
+    expect(water.material).toBe(waterMaterial);
+    waterMaterial.color.setStyle("#2277bb");
+    applySolarGreyscale(root, true);
+    expect(water.material).toBe(flat);
+    expect((water.material as THREE.MeshBasicMaterial).color.getHexString()).toBe("d6d6d2");
+    applySolarGreyscale(root, false);
+    expect(waterMaterial.color.getHexString()).toBe("2277bb");
+  });
+
+  it("previews Scene Layers swatches with the same grey the 3D scene uses", () => {
+    const scene = greyscaleColour(new THREE.Color("#478c33"));
+    expect(greyscaleHex("#478c33")).toBe(`#${scene.getHexString().toUpperCase()}`);
+    expect(monoSwatchColour("trees", "#478c33")).toBe(greyscaleHex("#478c33"));
+    expect(monoSwatchColour("use:residential", "#b35c44")).toBe(greyscaleHex("#b35c44"));
+    expect(monoSwatchColour("water", "#7FBFFF")).toBe("#D6D6D2");
+    expect(monoSwatchColour("trees", "#478c33")).not.toBe("#D6D6D2");
   });
 });

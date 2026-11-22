@@ -68,6 +68,13 @@ These replace item 3. Solar Study no longer greys the 3D scene. (Items 12–21 a
 33. **Solar Study no longer changes the 3D massing colours.** Turning it on or off leaves the View Style as it is. The black-and-white look is now a View Style option, "B&W", in the left drawer next to Primary / Use / Source / Card. It is one choice out of the five and works with or without an analysis on. In B&W the same things stay in colour as before: the Direct Sun Hours colouring (when it is on), the sun dome, the sun, and the on-screen controls. A new cut still opens in Primary, in colour. The Drawing View Style is unchanged (Use / Source / Uniform).
 34. **The Section Knife is removed** from the left drawer and the live UI, to be reworked later. Its "Tools" section, the 3D cutting plane, the section panel and the plan markers no longer appear. The implementation is kept in the repo so it can be restored.
 
+### Designbot polish (Kelvin's yes, 23 Nov 2026, 12:55 AM AEDT)
+
+35. **In B&W the Scene Layers swatches go grey too.** While the 3D View Style is B&W, every swatch in the 3D Scene Layers list shows the grey that layer has in the 3D scene (trees stay a mid-grey; water is the flat light grey from item 36). The real colours are kept: picking a colour still changes the real colour, nothing grey is saved, and leaving B&W brings the real swatches back. One line of helper text, "Colours off in B&W", sits directly under the View Style segment while B&W is selected and goes away for any other View Style. Drawing swatches and the Drawing View Style are unchanged.
+36. **In B&W, 3D water is a flat light grey, `#D6D6D2`, with no shading.** It does not pick up light, shade or shadows. Trees keep their mid-grey and are not retinted. Leaving B&W brings back the real water colour and its normal shading.
+37. **The View Style segment is 32 high, with Geist 11 / 500 labels and 8 px of padding on each side of every segment**, still on one row in the same 222 px track. All five full labels do not fit at that size, so "Source" is shortened to **Src** (screen readers still hear "Source"); B&W keeps its name. The Analysis bar and its yellow selected states are not changed.
+38. **The Scene Layers header stays on one row**, in 3D and in Drawing: "SCENE LAYERS" on the left, the live "14 visible" count next to it in the quiet ink colour, and a quiet text **Reset** on the right (it still resets the colours, and is still announced as "Reset colours").
+
 
 ## How we'll know it works
 
@@ -76,6 +83,10 @@ Open 40 Cleeland St, Dandenong (`?lat=-37.983826&lon=145.21555&label=40+Cleeland
 - [ ] In the Perspective view with Shadows on, in Primary and in B&W, shadows on the ground and on buildings are a strong, readable dark grey, with detail still visible in the shade and sunlit roofs and walls staying light, without the scene going muddy or black.
 - [ ] Turning Solar Study on or off keeps the current View Style colours: trees stay green in Primary, and Use / Source / Card look the same as before the click.
 - [ ] Choosing B&W in the left drawer's View Style greys the 3D scene (trees, roads, terrain and buildings), with Solar Study on or off. Choosing Primary (or Use / Source / Card) brings the colour back, including while Solar Study is on.
+- [ ] With B&W selected at Southbank (`?lat=-37.8216&lon=144.9645&km=0.5`), every 3D Scene Layers swatch is grey (Trees a mid-grey, Water `#D6D6D2`), and "Colours off in B&W" shows on one line directly under the View Style segment. Choosing Primary, Use, Src or Card removes the line and brings the real swatch colours back, including a colour picked while in B&W.
+- [ ] In B&W the river is one flat `#D6D6D2` grey with no light or shadow variation across it, and trees are a darker mid-grey; back in Primary the water is blue and shaded again.
+- [ ] The View Style segment is 32 high with 11 / 500 labels and 8 px padding each side, reads Primary / Use / Src / Card / B&W on one row in the 222 px track, and nothing wraps or clips.
+- [ ] The Scene Layers header is one row in 3D and in Drawing: SCENE LAYERS, "14 visible", then a quiet text Reset at the right, with no wrap or clipping at the 222 px inner width. Reset still restores the default colours.
 - [ ] With Shadows and 3D Sun Dome off, clicking Solar Study turns both on; so does switching to it from Wind Rose or Viewshed Walk. Sun hours does not change.
 - [ ] The left drawer has no Section Knife and no "Tools" section, and nothing of the Section Knife shows in 3D or in Drawing.
 - [ ] When the model first opens, the 3D scene is in colour, not grey, and the Analysis bar shows the full two-row Solar Study layout with an "Analysis" header, Solar Study / Wind Rose / Viewshed Walk all off, the solar readout, overlays, date presets and time slider visible but inactive, and the High / Fast quality switch at the right.

@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { getColour, type ColourKey } from "./colours";
 
 const LUMA_R = 0.2126;
 const LUMA_G = 0.7152;
@@ -8,6 +9,13 @@ const MATERIAL_COLOUR_KEYS = ["color", "emissive"] as const;
 type Rgb = readonly [number, number, number];
 type MaterialGreyState = { rest: Rgb; written: Rgb };
 type AttributeGreyState = { rest: Float32Array; version: number };
+
+export const MONO_WATER_MESH_NAME = "Water";
+export const MONO_WATER_FILL: ColourKey = "--water-3d-mono";
+export const MONO_WATER_LAYER_ID = "water";
+
+const flatWaterByRest = new WeakMap<THREE.Material, THREE.MeshBasicMaterial>();
+const restByFlatWater = new WeakMap<THREE.Material, THREE.Material>();
 
 const materialStates = new WeakMap<THREE.Material, Map<string, MaterialGreyState>>();
 const attributeStates = new WeakMap<THREE.BufferAttribute, AttributeGreyState>();
@@ -19,6 +27,53 @@ export function linearLuminance(r: number, g: number, b: number): number {
 export function greyscaleColour(color: THREE.Color): THREE.Color {
   const y = linearLuminance(color.r, color.g, color.b);
   return color.setRGB(y, y, y);
+}
+
+export function greyscaleHex(hex: string): string {
+  return `#${greyscaleColour(new THREE.Color(hex)).getHexString().toUpperCase()}`;
+}
+
+export function monoSwatchColour(layerId: string, colour: string): string {
+  return layerId === MONO_WATER_LAYER_ID ? getColour(MONO_WATER_FILL) : greyscaleHex(colour);
+}
+
+function flatWaterMaterial(rest: THREE.Material): THREE.MeshBasicMaterial {
+  const cached = flatWaterByRest.get(rest);
+  if (cached) return cached;
+  const flat = new THREE.MeshBasicMaterial({ toneMapped: false });
+  flat.name = rest.name;
+  flat.side = rest.side;
+  flat.transparent = rest.transparent;
+  flat.opacity = rest.opacity;
+  flat.depthTest = rest.depthTest;
+  flat.depthWrite = rest.depthWrite;
+  flat.polygonOffset = rest.polygonOffset;
+  flat.polygonOffsetFactor = rest.polygonOffsetFactor;
+  flat.polygonOffsetUnits = rest.polygonOffsetUnits;
+  flat.clippingPlanes = rest.clippingPlanes;
+  flatWaterByRest.set(rest, flat);
+  restByFlatWater.set(flat, rest);
+  return flat;
+}
+
+function setFlatWater(mesh: THREE.Mesh, on: boolean): boolean {
+  if (Array.isArray(mesh.material)) return false;
+  const rest = restByFlatWater.get(mesh.material);
+  if (!on) {
+    if (rest) mesh.material = rest;
+    return false;
+  }
+  const flat = rest ? (mesh.material as THREE.MeshBasicMaterial) : flatWaterMaterial(mesh.material);
+  flat.color.setStyle(getColour(MONO_WATER_FILL));
+  mesh.material = flat;
+  return true;
+}
+
+export function restoreFlatWater(root: THREE.Object3D): void {
+  root.traverse((object) => {
+    const mesh = object as THREE.Mesh;
+    if (mesh.name === MONO_WATER_MESH_NAME && mesh.material) setFlatWater(mesh, false);
+  });
 }
 
 function rgbOf(color: THREE.Color): Rgb {
@@ -81,6 +136,7 @@ export function applySolarGreyscale(root: THREE.Object3D, on: boolean): void {
   root.traverse((object) => {
     const drawable = object as THREE.Mesh;
     if (!drawable.material) return;
+    if (object.name === MONO_WATER_MESH_NAME && setFlatWater(drawable, on)) return;
     const materials = Array.isArray(drawable.material) ? drawable.material : [drawable.material];
     for (const material of materials) {
       if (seenMaterials.has(material)) continue;
