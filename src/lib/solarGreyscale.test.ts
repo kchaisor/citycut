@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { describe, expect, it } from "vitest";
 import { applySolarGreyscale, greyscaleColour, linearLuminance } from "./solarGreyscale";
+import { DEFAULT_VIEW3D_DISPLAY, monoViewActive, selectViewStyle3d } from "./view3dDisplay";
 
 function isGrey(color: THREE.Color): boolean {
   return color.r === color.g && color.g === color.b;
@@ -15,7 +16,7 @@ describe("solar greyscale", () => {
     expect(green.r).toBeCloseTo(y, 10);
   });
 
-  it("greys trees, roads, terrain vertex colours and buildings when Solar Study is active and restores them after", () => {
+  it("greys trees, roads, terrain vertex colours and buildings when the B&W view style is on and restores them after", () => {
     const root = new THREE.Group();
     const crown = new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshStandardMaterial({ color: "#478c33" }));
     crown.name = "TreeCrowns";
@@ -68,5 +69,22 @@ describe("solar greyscale", () => {
     material.color.setStyle("#3366cc");
     applySolarGreyscale(root, false);
     expect(material.color.getHexString()).toBe("3366cc");
+  });
+
+  it("follows the B&W view style, not Solar Study: B&W greys the scene and Primary brings the colour back", () => {
+    const material = new THREE.MeshStandardMaterial({ color: "#478c33" });
+    const root = new THREE.Mesh(new THREE.BoxGeometry(), material);
+    const rest = material.color.getHex();
+
+    applySolarGreyscale(root, monoViewActive(DEFAULT_VIEW3D_DISPLAY));
+    expect(material.color.getHex()).toBe(rest);
+
+    const mono = selectViewStyle3d(DEFAULT_VIEW3D_DISPLAY, "mono", false).display;
+    applySolarGreyscale(root, monoViewActive(mono));
+    expect(isGrey(material.color)).toBe(true);
+
+    const primary = selectViewStyle3d(mono, "primary", false).display;
+    applySolarGreyscale(root, monoViewActive(primary));
+    expect(material.color.getHex()).toBe(rest);
   });
 });

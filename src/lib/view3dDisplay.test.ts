@@ -4,8 +4,11 @@ import {
   DEFAULT_VIEW3D_DISPLAY,
   DEFAULT_VIEW3D_LAYERS_VISIBLE,
   LAYER_3D_IDS,
+  activeViewStyle,
   isLayer3dVisible,
+  monoViewActive,
   readStoredView3dDisplay,
+  selectViewStyle3d,
   setLayer3dVisible,
   snapWhenTogglingView3dDisplay,
   view3dDisplayForModelOpen,
@@ -258,5 +261,50 @@ describe("3D layer visibility across buildCityGroup meshes", () => {
     }
     expect(group.getObjectByName("Ground")?.visible).toBe(true);
     expect(group.getObjectByName("Blocks")?.visible).toBe(true);
+  });
+});
+
+describe("3D view styles", () => {
+  const memoryStorage = () => {
+    const store = new Map<string, string>();
+    return {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, v: string) => {
+        store.set(k, v);
+      },
+    };
+  };
+
+  it("names one active style out of Primary, Use, Source, Card and B&W", () => {
+    expect(activeViewStyle(DEFAULT_VIEW3D_DISPLAY, false, false)).toBe("primary");
+    const card = { ...DEFAULT_VIEW3D_DISPLAY, primaryView: false };
+    expect(activeViewStyle(card, true, false)).toBe("use");
+    expect(activeViewStyle(card, true, true)).toBe("source");
+    expect(activeViewStyle(card, false, false)).toBe("uniform");
+    expect(activeViewStyle({ ...DEFAULT_VIEW3D_DISPLAY, monoView: true }, false, false)).toBe("mono");
+    expect(activeViewStyle({ ...card, monoView: true }, true, true)).toBe("mono");
+  });
+
+  it("makes B&W exclusive: picking it clears Use and Source, and picking any other style turns it off", () => {
+    const mono = selectViewStyle3d({ ...DEFAULT_VIEW3D_DISPLAY, primaryView: false }, "mono", true);
+    expect(monoViewActive(mono.display)).toBe(true);
+    expect(mono.colourByUse).toBe(false);
+    expect(mono.showSource).toBe(false);
+    expect(activeViewStyle(mono.display, mono.colourByUse, mono.showSource)).toBe("mono");
+
+    for (const style of ["primary", "use", "source", "uniform"] as const) {
+      const next = selectViewStyle3d(mono.display, style, mono.colourByUse);
+      expect(monoViewActive(next.display)).toBe(false);
+      expect(activeViewStyle(next.display, next.colourByUse, next.showSource)).toBe(style);
+    }
+  });
+
+  it("is in colour by default and opens the next model in Primary after B&W was chosen", () => {
+    expect(monoViewActive(DEFAULT_VIEW3D_DISPLAY)).toBe(false);
+    const storage = memoryStorage();
+    writeStoredView3dDisplay(storage, selectViewStyle3d(DEFAULT_VIEW3D_DISPLAY, "mono", false).display);
+    const opened = view3dDisplayForModelOpen(storage);
+    expect(monoViewActive(opened)).toBe(false);
+    expect(activeViewStyle(opened, false, false)).toBe("primary");
   });
 });

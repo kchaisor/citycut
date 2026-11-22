@@ -15,6 +15,7 @@ import {
 } from "../../lib/solarSlider";
 import { SUN_STUDY_DATES } from "../../lib/solar";
 import { toggleAnalysis, type SiteAnalysisKind } from "../../lib/sidebarSections";
+import { solarSettingsOnStudyStart } from "../../lib/solarStudyView";
 import { WIND_PERIOD_LABELS, WindPeriodId } from "../../lib/windRose";
 import { withDesignWind, withWindSeason } from "../../lib/windState";
 import { DesignWindPresets } from "../DesignWindPresets";
@@ -55,6 +56,7 @@ export function ModelPageViewportFooter({ vm }: { vm: import("./useModelPage").M
     setAnalysisKind(next);
     if (next === "wind" && !windSettings.enabled) commitWind({ ...windSettings, enabled: true });
     if (next !== "wind" && windSettings.enabled) commitWind({ ...windSettings, enabled: false });
+    if (next === "solar") commitSolar(solarSettingsOnStudyStart(solar));
   };
   const seasonActive = (periodId: WindPeriodId) => designWind == null && windSettings.period === periodId;
   const windTelemetry = (

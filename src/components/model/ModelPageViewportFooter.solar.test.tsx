@@ -181,6 +181,44 @@ describe("Analysis bar", () => {
     expect(winds.at(-1)?.enabled).toBe(false);
   });
 
+  it("turns Shadows and the 3D Sun Dome on when Solar Study is clicked, leaving Sun hours off", () => {
+    const calls: SolarViewSettings[] = [];
+    render(<Footer onSolar={(next) => calls.push(next)} />);
+    expect(screen.getByRole("button", { name: "Shadows" }).getAttribute("aria-pressed")).toBe("false");
+    expect(screen.getByRole("button", { name: "3D Sun Dome" }).getAttribute("aria-pressed")).toBe("false");
+    fireEvent.click(modeButton("Solar Study"));
+    expect(calls.at(-1)).toMatchObject({ castShadows: true, showPath: true, sunHours: false });
+    expect(screen.getByRole("button", { name: "Shadows" }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByRole("button", { name: "3D Sun Dome" }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByRole("button", { name: "Sun hours" }).getAttribute("aria-pressed")).toBe("false");
+  });
+
+  it("turns Shadows and the 3D Sun Dome on when switching from Wind Rose or Viewshed Walk to Solar Study", () => {
+    for (const from of ["Wind Rose", "Viewshed Walk"]) {
+      const calls: SolarViewSettings[] = [];
+      render(<Footer onSolar={(next) => calls.push(next)} />);
+      fireEvent.click(modeButton(from));
+      expect(calls).toEqual([]);
+      fireEvent.click(modeButton("Solar Study"));
+      expect(calls.at(-1)).toMatchObject({ castShadows: true, showPath: true });
+      cleanup();
+    }
+  });
+
+  it("lets Shadows and the dome be turned off during Solar Study, keeps them as left when it is turned off, and turns both back on at the next click", () => {
+    const calls: SolarViewSettings[] = [];
+    render(<Footer onSolar={(next) => calls.push(next)} />);
+    fireEvent.click(modeButton("Solar Study"));
+    fireEvent.click(screen.getByRole("button", { name: "Shadows" }));
+    fireEvent.click(screen.getByRole("button", { name: "3D Sun Dome" }));
+    expect(calls.at(-1)).toMatchObject({ castShadows: false, showPath: false });
+    const beforeOff = calls.length;
+    fireEvent.click(modeButton("Solar Study"));
+    expect(calls.length).toBe(beforeOff);
+    fireEvent.click(modeButton("Solar Study"));
+    expect(calls.at(-1)).toMatchObject({ castShadows: true, showPath: true });
+  });
+
   it("labels the solstice date buttons with their names", () => {
     render(<Footer initialKind="solar" />);
     const dates = screen.getByRole("group", { name: "Solar date presets" });

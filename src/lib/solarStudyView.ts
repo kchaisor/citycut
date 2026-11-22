@@ -10,6 +10,10 @@ export function solarSettingsForActiveAnalysis(solar: SolarViewSettings, analysi
   return showPath === solar.showPath ? solar : { ...solar, showPath };
 }
 
+export function solarSettingsOnStudyStart(solar: SolarViewSettings): SolarViewSettings {
+  return solar.castShadows && solar.showPath ? solar : { ...solar, castShadows: true, showPath: true };
+}
+
 export function windFlowActive(windEnabled: boolean, analysisKind: ActiveAnalysis): boolean {
   return windEnabled && analysisKind === "wind";
 }

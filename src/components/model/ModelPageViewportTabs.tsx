@@ -18,7 +18,6 @@ import { SunHoursLegendDock } from "./SunHoursLegendDock";
 import { solarSettingsForActiveAnalysis, solarStudyViewActive, windFlowActive } from "../../lib/solarStudyView";
 import { ViewLegend } from "../ViewPanel";
 
-import { SectionKnifeElevationPanel } from "../SectionKnifeElevationPanel";
 
 
 import { shouldShowIntroBridgePill } from "./shouldShowIntroBridgePill";
@@ -56,7 +55,6 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
     model,
     onExportReady,
     onScale,
-    onSectionKnifePoseChange,
     overrideResult,
     persistHidden,
     showAllInCut,
@@ -72,7 +70,6 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
     resetBuildingHeight,
     saveBuildingHeight,
     sceneSelection,
-    sectionKnifeTool,
     selectForHide,
     setAxoLayerLift,
     setCompassHeadingDeg,
@@ -199,8 +196,6 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
                 importedMassing={massing.group}
                 walkLayer={walk.layer.root}
                 onScenePoint={walkDrawing ? walk.addPoint : massing.onScenePoint}
-                sectionKnife={sectionKnifeTool}
-                onSectionKnifePoseChange={onSectionKnifePoseChange}
                 quality={renderQuality}
                 sunHoursGroundGrid={solar.sunHours ? sunHoursGround.grid : null}
                 sunHoursDirectOverlay={solar.sunHours ? sunHoursGround.overlay : null}
@@ -234,9 +229,6 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
                     selectForHide(label.buildingId, false);
                   }}
                 />
-              )}
-              {tab === "3d" && sectionKnifeTool.active && (
-                <SectionKnifeElevationPanel model={displayModel} tool={sectionKnifeTool} />
               )}
               {viewAnalysisOpen && walk.clickCount > 0 && <ViewLegend />}
               {tab === "3d" && solar.sunHours ? (
@@ -318,7 +310,6 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
             ) : (
               <DrawingPlan
                 model={drawingModel}
-                sectionKnife={sectionKnifeTool}
                 kind={drawing}
                 onScale={onScale}
                 lineStyle={lineStyles}

@@ -1545,7 +1545,7 @@ body,
 
 .model .left-outliner .style-btn {
   box-sizing: border-box;
-  flex: 1 1 0;
+  flex: 1 1 auto;
   min-width: 0;
   width: auto;
   height: 28px;
@@ -1558,7 +1558,7 @@ body,
   line-height: 1;
   white-space: nowrap;
   color: var(--ink-2);
-  padding: 0 12px;
+  padding: 0 4px;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
@@ -2804,13 +2804,13 @@ body,
 
 .model .left-outliner .style-seg .style-btn {
   box-sizing: border-box !important;
-  flex: 1 1 0 !important;
+  flex: 1 1 auto !important;
   min-width: 0 !important;
   width: auto !important;
   height: 28px !important;
   min-height: 28px !important;
   max-height: 28px !important;
-  padding: 0 12px !important;
+  padding: 0 4px !important;
   margin: 0 !important;
   border-radius: 5px !important;
   border: 0 !important;

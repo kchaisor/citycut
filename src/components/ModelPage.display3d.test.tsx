@@ -10,7 +10,9 @@ import { ModelPage } from "./ModelPage";
 import type { CityModel, Pt } from "../types";
 
 vi.mock("./Scene3D", () => ({
-  Scene3D: () => <div data-testid="scene-3d" />,
+  Scene3D: ({ display }: { display: { monoView?: boolean; primaryView: boolean } }) => (
+    <div data-testid="scene-3d" data-mono={String(display.monoView === true)} data-primary={String(display.primaryView)} />
+  ),
 }));
 vi.mock("./DrawingPlan", () => ({
   DrawingPlan: () => <div data-testid="drawing-plan" />,
@@ -587,14 +589,108 @@ describe("Display panel controls by view tab", () => {
     expect(floatingCss).toMatch(/\.select\.is-loading\s+\.omnibox-stack/);
   });
 
-  it("lays out view style control as one row of equal segments", () => {
+  it("lays out view style control as one row of five segments that share the track", () => {
     const floatingCss = readFileSync(resolve(__dirname, "../floating.css"), "utf8");
     expect(floatingCss).toMatch(/\.model \.left-outliner \.style-seg[\s\S]*flex-wrap:\s*nowrap/);
     expect(floatingCss).toMatch(/\.model \.left-outliner \.style-seg[\s\S]*padding:\s*3px/);
-    expect(floatingCss).toMatch(/\.model \.left-outliner \.style-seg \.style-btn[\s\S]*flex:\s*1 1 0/);
-    expect(floatingCss).toMatch(/\.model \.left-outliner \.style-seg \.style-btn[\s\S]*height:\s*28px/);
-    expect(floatingCss).toMatch(/\.model \.left-outliner \.style-seg \.style-btn[\s\S]*padding:\s*0 12px/);
-    expect(floatingCss).toMatch(/\.model \.left-outliner \.style-seg \.style-btn[\s\S]*white-space:\s*nowrap/);
+    const btnRule = floatingCss.match(/\.model \.left-outliner \.style-seg \.style-btn \{[^}]*\}/)?.[0] ?? "";
+    expect(btnRule).toMatch(/flex:\s*1 1 auto/);
+    expect(btnRule).toMatch(/height:\s*28px/);
+    expect(btnRule).toMatch(/padding:\s*0 4px/);
+    expect(btnRule).toMatch(/font-family:\s*var\(--sans\)/);
+    expect(btnRule).toMatch(/font-size:\s*10\.5px/);
+    expect(btnRule).toMatch(/white-space:\s*nowrap/);
+  });
+
+  it("lists Primary, Use, Source, Card and B&W in the 3D View Style group, opening on Primary in colour", () => {
+    render(<ModelPage model={sampleModel({})} onHome={vi.fn()} onNewCut={vi.fn()} />);
+    const group = screen.getByRole("group", { name: "Building style" });
+    const buttons = within(group).getAllByRole("button");
+    expect(buttons.map((button) => button.textContent)).toEqual(["Primary", "Use", "Source", "Card", "B&W"]);
+    expect(within(group).getByRole("button", { name: "Black and white" }).textContent).toBe("B&W");
+    expect(buttons.filter((button) => button.getAttribute("aria-pressed") === "true").map((b) => b.textContent)).toEqual([
+      "Primary",
+    ]);
+    expect(screen.getByTestId("scene-3d").getAttribute("data-mono")).toBe("false");
+  });
+
+  it("keeps the View Style colours when Solar Study is turned on or off, for Primary, Use, Source and Card", async () => {
+    const user = userEvent.setup();
+    render(<ModelPage model={sampleModel({})} onHome={vi.fn()} onNewCut={vi.fn()} />);
+    const group = screen.getByRole("group", { name: "Building style" });
+    const envConsole = screen.getByRole("region", { name: "Environmental analysis console" });
+    const solarStudy = within(envConsole).getByRole("button", { name: "Solar Study" });
+    const pressed = () =>
+      within(group)
+        .getAllByRole("button")
+        .filter((button) => button.getAttribute("aria-pressed") === "true")
+        .map((button) => button.textContent);
+
+    for (const style of ["Primary", "Use", "Source", "Card"]) {
+      await user.click(within(group).getByRole("button", { name: style }));
+      await user.click(solarStudy);
+      expect(solarStudy.getAttribute("aria-pressed")).toBe("true");
+      expect(pressed()).toEqual([style]);
+      expect(screen.getByTestId("scene-3d").getAttribute("data-mono")).toBe("false");
+      await user.click(solarStudy);
+      expect(solarStudy.getAttribute("aria-pressed")).toBe("false");
+      expect(pressed()).toEqual([style]);
+      expect(screen.getByTestId("scene-3d").getAttribute("data-mono")).toBe("false");
+    }
+  });
+
+  it("greys the 3D scene only for the B&W View Style, with or without Solar Study, and restores colour on Primary", async () => {
+    const user = userEvent.setup();
+    render(<ModelPage model={sampleModel({})} onHome={vi.fn()} onNewCut={vi.fn()} />);
+    const group = screen.getByRole("group", { name: "Building style" });
+    const envConsole = screen.getByRole("region", { name: "Environmental analysis console" });
+    const solarStudy = within(envConsole).getByRole("button", { name: "Solar Study" });
+    const bw = within(group).getByRole("button", { name: "Black and white" });
+    const primary = within(group).getByRole("button", { name: "Primary" });
+    const scene = () => screen.getByTestId("scene-3d");
+
+    await user.click(bw);
+    expect(solarStudy.getAttribute("aria-pressed")).toBe("false");
+    expect(bw.getAttribute("aria-pressed")).toBe("true");
+    expect(primary.getAttribute("aria-pressed")).toBe("false");
+    expect(scene().getAttribute("data-mono")).toBe("true");
+
+    await user.click(solarStudy);
+    expect(bw.getAttribute("aria-pressed")).toBe("true");
+    expect(scene().getAttribute("data-mono")).toBe("true");
+
+    await user.click(primary);
+    expect(solarStudy.getAttribute("aria-pressed")).toBe("true");
+    expect(primary.getAttribute("aria-pressed")).toBe("true");
+    expect(bw.getAttribute("aria-pressed")).toBe("false");
+    expect(scene().getAttribute("data-mono")).toBe("false");
+
+    await user.click(within(group).getByRole("button", { name: "Use" }));
+    await user.click(bw);
+    expect(scene().getAttribute("data-mono")).toBe("true");
+    await user.click(within(group).getByRole("button", { name: "Card" }));
+    expect(scene().getAttribute("data-mono")).toBe("false");
+    expect(scene().getAttribute("data-primary")).toBe("false");
+  });
+
+  it("has no Section Knife or Tools section in the left Display drawer, in 3D or Drawing", async () => {
+    const user = userEvent.setup();
+    render(<ModelPage model={sampleModel({})} onHome={vi.fn()} onNewCut={vi.fn()} />);
+    const leftOutliner = document.querySelector(".left-outliner") as HTMLElement;
+    const assertNoKnife = () => {
+      expect(screen.queryByRole("region", { name: "Section Knife" })).toBeNull();
+      expect(screen.queryByRole("button", { name: /Section Knife/i })).toBeNull();
+      expect(screen.queryByText(/Section Knife/i)).toBeNull();
+      expect(within(leftOutliner).queryByRole("heading", { name: "Tools" })).toBeNull();
+      expect(document.querySelector(".section-knife-tools, .section-knife-toggle, .section-knife-elevation")).toBeNull();
+    };
+    assertNoKnife();
+    await user.click(screen.getByRole("tab", { name: "Drawing" }));
+    assertNoKnife();
+    expect(screen.queryByRole("button", { name: "Black and white" })).toBeNull();
+    for (const file of ["model/ModelPageSidebarLeftA.tsx", "model/ModelPageViewportTabs.tsx", "model/useModelPage.tsx"]) {
+      expect(readFileSync(resolve(__dirname, file), "utf8")).not.toMatch(/SectionKnife/i);
+    }
   });
 
   it("keeps the Analysis bar always on with no left-rail Site Analysis item, all analyses off, and toggles Solar Study and Wind Rose", async () => {
