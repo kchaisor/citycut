@@ -21,10 +21,10 @@ import {
   DEFAULT_COARSE_FROM_SCALE,
   DEFAULT_COARSE_INTERVAL_M,
   altitudeOnInterval,
-  demContourLayer,
   drawContours,
   drawnContourInterval,
 } from "./vicmapContours";
+import { drawnContourLayer } from "./drawnContours";
 import { modelFrameSize } from "./modelFrame";
 import type { CityModel, Pt } from "../types";
 
@@ -260,21 +260,14 @@ export function planPaths(
       r: tree.crown_diameter_m / 2,
     }));
 
-  const layer =
-    model.contours === false
-      ? null
-      : model.contourLayer
-        ? model.contourLayer
-        : model.contours && model.terrain
-          ? demContourLayer(model.terrain, model.sideM)
-          : null;
+  const layer = drawnContourLayer(model);
   const clipped = layer
     ? layer.lines.flatMap((line) =>
         clipLines(line.points, model.sideM, frameShape, frameSize).map((points) => ({ points, z: line.z })),
       )
     : [];
   const drawnInterval = layer
-    ? drawnContourInterval(layer.source, layer.interval, planScale, coarseIntervalM, coarseFromScale)
+    ? drawnContourInterval(layer.source, planScale, coarseIntervalM, coarseFromScale)
     : 0;
   const visible =
     layer && drawnInterval > layer.interval

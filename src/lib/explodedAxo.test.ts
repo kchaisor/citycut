@@ -246,7 +246,8 @@ describe("rail and tram stay off the exploded axo", () => {
     expect(transport.strokePaints ?? []).toEqual(["pt-bus"]);
     expect(transport.strokeDashed ?? []).not.toContain(true);
     expect((transport.markers ?? []).map((marker) => marker.paint)).toEqual(["rail-station", "pt-train", "pt-tram"]);
-    expect((transport.legend ?? []).map((entry) => entry.label)).not.toContain("Rail");
+    expect(transport.legend).toBeUndefined();
+    expect((transport.dockLegend?.swatches ?? []).map((entry) => entry.label)).toEqual(["Train", "Tram", "Bus"]);
   });
 
   it("keeps the roads plate to vehicular roads, with no dashed rail or tram strokes", () => {

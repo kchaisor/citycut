@@ -1,7 +1,7 @@
 import { clipPolyline } from "./clip";
 import { FIGURE_SCALES } from "./figureGround";
 import { polylineLength, toLocal } from "./geo";
-import { contourInterval, leveledContourLines } from "./terrain";
+import { DRAWN_CONTOUR_INTERVAL_M, leveledContourLines } from "./terrain";
 import type { ContourLayer, ContourSourceId, LonLat, Pt, StoredContour, TerrainField } from "../types";
 
 /**
@@ -173,20 +173,20 @@ export function altitudeOnInterval(z: number, interval: number): boolean {
   return Math.abs(z - nearest) <= Math.max(0.05, interval * 0.05);
 }
 
-export const DEFAULT_COARSE_INTERVAL_M = 5;
+export const DEFAULT_COARSE_INTERVAL_M = DRAWN_CONTOUR_INTERVAL_M;
 const FINE_CONTOUR_SOURCES: ReadonlySet<ContourSourceId> = new Set(["vicmap-metro", "cos-1m", "cos-nsw"]);
 export const DEFAULT_COARSE_FROM_SCALE = 2500;
 
 export function drawnContourInterval(
   source: ContourSourceId,
-  nativeInterval: number,
   planScale: number,
   coarseIntervalM = DEFAULT_COARSE_INTERVAL_M,
   coarseFromScale = DEFAULT_COARSE_FROM_SCALE,
 ): number {
-  if (!FINE_CONTOUR_SOURCES.has(source)) return nativeInterval;
-  if (!(coarseIntervalM > nativeInterval) || !(planScale >= coarseFromScale)) return nativeInterval;
-  return coarseIntervalM;
+  if (FINE_CONTOUR_SOURCES.has(source) && coarseIntervalM > DRAWN_CONTOUR_INTERVAL_M && planScale >= coarseFromScale) {
+    return coarseIntervalM;
+  }
+  return DRAWN_CONTOUR_INTERVAL_M;
 }
 
 export function finestContourScale(coarseFromScale: number, scales: readonly number[] = FIGURE_SCALES): number {
@@ -201,17 +201,25 @@ function intervalText(interval: number): string {
   return Number.isInteger(interval) ? String(interval) : interval.toFixed(1);
 }
 
+export function contourLinesInterpolated(layer: Pick<ContourLayer, "source" | "interval">): boolean {
+  return layer.source === "cos-nsw" || layer.interval > DRAWN_CONTOUR_INTERVAL_M;
+}
+
 export function contourDrawerLabel(
   layer: Pick<ContourLayer, "source" | "label" | "interval">,
   planScale: number,
   coarseIntervalM = DEFAULT_COARSE_INTERVAL_M,
   coarseFromScale = DEFAULT_COARSE_FROM_SCALE,
 ): string {
-  const drawn = drawnContourInterval(layer.source, layer.interval, planScale, coarseIntervalM, coarseFromScale);
-  if (drawn === layer.interval) return layer.label;
-  const fine = finestContourScale(coarseFromScale);
-  if (layer.source !== "vicmap-metro") return `${layer.label}, drawn every ${intervalText(drawn)} m (${intervalText(layer.interval)} m at 1:${fine})`;
-  return `Vicmap Elevation ${intervalText(drawn)} m (${intervalText(layer.interval)} m at 1:${fine})`;
+  const drawn = drawnContourInterval(layer.source, planScale, coarseIntervalM, coarseFromScale);
+  if (drawn > DRAWN_CONTOUR_INTERVAL_M) {
+    const fine = finestContourScale(coarseFromScale);
+    if (layer.source !== "vicmap-metro") return `${layer.label}, drawn every ${intervalText(drawn)} m (${intervalText(DRAWN_CONTOUR_INTERVAL_M)} m at 1:${fine})`;
+    return `Vicmap Elevation ${intervalText(drawn)} m (${intervalText(DRAWN_CONTOUR_INTERVAL_M)} m at 1:${fine})`;
+  }
+  if (layer.source === "dem") return `${layer.label}, every ${intervalText(drawn)} m`;
+  if (contourLinesInterpolated(layer)) return `${layer.label}; ${intervalText(drawn)} m lines in between are interpolated`;
+  return layer.label;
 }
 
 export function formatContourElevation(z: number): string {
@@ -246,8 +254,14 @@ function productLabel(source: ContourSourceId, interval: number): string {
   return `Vicmap Elevation ${metres} m`;
 }
 
+const demLayers = new WeakMap<TerrainField, Map<number, ContourLayer>>();
+
 export function demContourLayer(field: TerrainField, sideM: number): ContourLayer {
-  const interval = contourInterval(field.max - field.min);
+  const bySide = demLayers.get(field) ?? new Map<number, ContourLayer>();
+  demLayers.set(field, bySide);
+  const cached = bySide.get(sideM);
+  if (cached) return cached;
+  const interval = DRAWN_CONTOUR_INTERVAL_M;
   const half = sideM / 2;
   const lines: StoredContour[] = [];
   for (const item of leveledContourLines(field, sideM, interval)) {
@@ -256,7 +270,7 @@ export function demContourLayer(field: TerrainField, sideM: number): ContourLaye
       if (points.length >= 2) lines.push({ points, z: item.z });
     }
   }
-  return {
+  const layer: ContourLayer = {
     source: "dem",
     label: productLabel("dem", interval),
     interval,
@@ -266,6 +280,8 @@ export function demContourLayer(field: TerrainField, sideM: number): ContourLaye
     featureCount: lines.length,
     fetchMs: 0,
   };
+  bySide.set(sideM, layer);
+  return layer;
 }
 
 function cacheKey(source: ContourSourceId, center: LonLat, sideM: number): string {

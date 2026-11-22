@@ -4,7 +4,13 @@ import { clipIntersection as clipIntersectionSafe } from "./safePolygonClip";
 import { COLOUR_FALLBACK, getColour } from "./colours";
 import { fromLocal, squareBBox } from "./geo";
 import { clipPolygonRect } from "./clip";
-import { frameHalfExtents, siteFramePolygon, type FrameGroundSize, type SiteFrameShape } from "./siteFrame";
+import {
+  frameHalfExtents,
+  SITE_FRAME_CIRCLE_SEGMENTS,
+  siteFramePolygon,
+  type FrameGroundSize,
+  type SiteFrameShape,
+} from "./siteFrame";
 import type { LonLat, Pt, Ring, TerrainField } from "../types";
 
 /**
@@ -32,7 +38,7 @@ export const TERRAIN_TILE_SIZE = 512;
 export const TERRAIN_ATTRIBUTION_URL = "https://mapterhorn.com/attribution";
 export const TERRAIN_UNAVAILABLE = "Terrain tiles could not be loaded, so the ground is flat.";
 
-const MAX_GRID_NODES = 193;
+export const MAX_GRID_NODES = 600;
 
 const EARTH_M = 2 * Math.PI * 6378137;
 
@@ -318,6 +324,8 @@ export function footprintBase(field: TerrainField, ring: Ring, sideM: number): n
   return min;
 }
 
+export const DRAWN_CONTOUR_INTERVAL_M = 1;
+
 export function contourInterval(reliefM: number): number {
   if (reliefM < 8) return 1;
   if (reliefM < 25) return 2;
@@ -438,8 +446,8 @@ export function leveledContourLines(
   field: TerrainField,
   sideM: number,
   interval = contourInterval(field.max - field.min),
+  levels = contourLevels(field.min, field.max, interval),
 ): LeveledContour[] {
-  const levels = contourLevels(field.min, field.max, interval);
   if (levels.length === 0 || field.cols < 2 || field.rows < 2) return [];
   const half = sideM / 2;
   const at = (col: number, row: number) => field.heights[row * field.cols + col];
@@ -494,8 +502,7 @@ export function contourLines(field: TerrainField, sideM: number, interval = cont
 }
 
 export function terrainNote(field: TerrainField, contours: boolean): string {
-  const interval = contourInterval(field.max - field.min);
-  const contourText = contours ? ` Contours are every ${interval} m on the site plan.` : "";
+  const contourText = contours ? ` Contours are every ${DRAWN_CONTOUR_INTERVAL_M} m on the site plan.` : "";
   return `Terrain is Mapterhorn zoom ${field.zoom} (about ${field.metresPerPixel.toFixed(1)} m per tile pixel, gridded every ${field.spacingM.toFixed(1)} m). Elevations ${field.min.toFixed(1)}–${field.max.toFixed(1)} m. Each building sits on the lowest sample along its footprint.${contourText} © Mapterhorn.`;
 }
 
@@ -602,6 +609,11 @@ function appendGridTriangleClippedToCircle(
   field: TerrainField,
   relief: number,
 ): void {
+  const inner = (sideM / 2) * Math.cos(Math.PI / SITE_FRAME_CIRCLE_SEGMENTS);
+  if (tri.every(([east, north]) => east * east + north * north <= inner * inner)) {
+    pushClippedTriangle(positions, colors, indexList, tri, heights, tri, field, relief);
+    return;
+  }
   for (const ring of clipTriangleToCircle(tri, sideM)) {
     for (const part of fanTriangulate(ring)) {
       pushClippedTriangle(positions, colors, indexList, tri, heights, part, field, relief);
