@@ -16,6 +16,8 @@ import { SIDEBAR_SECTION_LABELS } from "../../lib/sidebarSections";
 import { ModelPageSidebarLeftA } from "./ModelPageSidebarLeftA";
 import { ModelPageSidebarLeftB } from "./ModelPageSidebarLeftB";
 import { ModelPageSidebarRight } from "./ModelPageSidebarRight";
+import { WindRoseHudCard } from "./WindRoseHudCard";
+import { windRoseCardOn } from "./windRoseCard";
 
 export function ModelPageSidebar({ vm }: { vm: import("./useModelPage").ModelPageViewModel }) {
   const {
@@ -89,6 +91,9 @@ export function ModelPageSidebar({ vm }: { vm: import("./useModelPage").ModelPag
               icon: <PanelRight size={16} strokeWidth={1.75} aria-hidden="true" />,
             }}
             rightMeta={`MGA${mgaCrs(model.center.lon).zone}`}
+            rightBelow={
+              windRoseCardOn({ tab, analysisKind: vm.analysisKind, siteWind: vm.siteWind }) ? <WindRoseHudCard vm={vm} /> : undefined
+            }
             brandMeta={
               <>
                 <span className="v-sep hud-sep" aria-hidden="true" />
