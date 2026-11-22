@@ -26,6 +26,7 @@ export type SunHoursDirectOverlay = {
   maxSunHours: number;
   cellM: number;
   wallCellM: number;
+  roofCellM: number;
   stepMinutes: number;
   roofPlanRaster: SunHoursGroundRaster | null;
   roofRasterSource: SunHoursRoofRasterSource | null;
@@ -109,7 +110,7 @@ function buildOverlayMesh(
   samples: DirectSunHoursSample[],
   hours: Float32Array,
   maxSunHours: number,
-  resolution: { cellM: number; wallCellM: number; stepMinutes: number },
+  resolution: { cellM: number; wallCellM: number; roofCellM: number; stepMinutes: number },
 ): SunHoursDirectOverlay {
   const positions: number[] = [];
   const colors: number[] = [];
@@ -187,14 +188,19 @@ export function assessDirectSunHoursOverlay(
   scaleMaxHours?: number,
   params: SunHoursSampleParams = FAST_SUN_HOURS_PARAMS,
 ): SunHoursDirectOverlay | null {
-  const { samples, wallCellM } = directSunHoursSampleSet(model, params);
+  const { samples, wallCellM, roofCellM } = directSunHoursSampleSet(model, params);
   const { stepMinutes } = params;
   const hours = directSunHoursAtSamples(model, samples, year, month, day, stepMinutes);
   if (!hours) return null;
   let maxSunHours = 0;
   for (const value of hours) maxSunHours = Math.max(maxSunHours, value);
   const scale = Math.max(scaleMaxHours ?? 0, maxSunHours, 0.01);
-  const overlay = buildOverlayMesh(model, samples, hours, scale, { cellM: params.cellM, wallCellM, stepMinutes });
+  const overlay = buildOverlayMesh(model, samples, hours, scale, {
+    cellM: params.cellM,
+    wallCellM,
+    roofCellM,
+    stepMinutes,
+  });
   overlay.roofRasterSource = packSunHoursRoofRasterSource(samples, hours);
   return overlay;
 }

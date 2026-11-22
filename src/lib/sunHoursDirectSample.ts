@@ -189,20 +189,26 @@ function roofSamplesAll(model: CityModel, cellM: number): DirectSunHoursSample[]
 export type DirectSunHoursSampleSet = {
   samples: DirectSunHoursSample[];
   wallCellM: number;
+  roofCellM: number;
 };
 
 export function directSunHoursSampleSet(
   model: CityModel,
   params: SunHoursSampleParams = FAST_SUN_HOURS_PARAMS,
 ): DirectSunHoursSampleSet {
-  const roofs = roofSamplesAll(model, params.cellM);
+  let roofCellM = params.cellM;
+  let roofs = roofSamplesAll(model, roofCellM);
+  while (roofs.length > params.roofSampleCap && roofCellM < SUN_HOURS_MAX_WALL_CELL_M) {
+    roofCellM = Math.min(SUN_HOURS_MAX_WALL_CELL_M, roofCellM * 2);
+    roofs = roofSamplesAll(model, roofCellM);
+  }
   let wallCellM = sunHoursStartWallCellM(params, model.buildings.length);
   let walls = wallSamplesAll(model, wallCellM);
   while (walls.length > params.wallSampleCap && wallCellM < SUN_HOURS_MAX_WALL_CELL_M) {
     wallCellM = Math.min(SUN_HOURS_MAX_WALL_CELL_M, wallCellM * 2);
     walls = wallSamplesAll(model, wallCellM);
   }
-  return { samples: [...roofs, ...walls], wallCellM };
+  return { samples: [...roofs, ...walls], wallCellM, roofCellM };
 }
 
 export function directSunHoursSamplesForModel(

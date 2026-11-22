@@ -43,6 +43,7 @@ Approved by Kelvin on 22 Nov 2026 (t81u): "Ok let's try this."
 17. **The wait is visible.** While the study is calculating, the legend shows a "Calculating …" line naming the grid and step being worked on. The previous result stays on screen until the new one is ready; before the first result, the legend shows only its title and the calculating line. The study runs off the main thread, and a new date, model or quality cancels the old run.
 18. **High / Fast still also sets 3D render quality** (ambient occlusion and SMAA), unchanged.
 19. Results cannot be more accurate than the building heights and the terrain grid they sit on.
+20. **High roofs and walls coarsen under a cap so building surfaces finish in a reasonable time.** In High, if roofs would need more than about 24,000 samples, the roof cell doubles from the High grid (up to 12 m) until they fit; walls do the same above about 52,000 samples. Every building keeps at least one roof sample. On dense or large cuts this makes High roof and wall cells coarser than the ground grid, and they can be coarser than Fast's. Fast is unchanged, and so are the High ground grid and the 5-minute step. (Added 22 Nov 2026, afternoon.)
 
 ## How we'll know it works
 
