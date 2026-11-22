@@ -93,6 +93,7 @@ export const COLOUR_KEYS = [
   "--green-3d",
   "--water-fill",
   "--water-3d",
+  "--water-3d-mono",
   "--water-sunpath",
   "--sun-study-surface",
   "--card-white",
@@ -315,7 +316,7 @@ export const COLOUR_GROUPS = [
   {
     id: "water",
     title: "Water",
-    keys: ["--water-fill", "--water-3d", "--water-sunpath", "--sun-study-surface", "--card-white", "--card-ground"],
+    keys: ["--water-fill", "--water-3d", "--water-3d-mono", "--water-sunpath", "--sun-study-surface", "--card-white", "--card-ground"],
   },
   {
     id: "trees",
@@ -453,6 +454,7 @@ export const COLOUR_LABELS: Record<ColourKey, string> = {
   "--green-3d": "Green, 3D",
   "--water-fill": "Water",
   "--water-3d": "Water, 3D",
+  "--water-3d-mono": "Water, B&W (3D)",
   "--water-sunpath": "Water, sun path (3D)",
   "--sun-study-surface": "Sun path ground (3D)",
   "--card-white": "Card buildings (3D)",

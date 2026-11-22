@@ -78,7 +78,7 @@ import {
 } from "../lib/sceneRenderLoop";
 import { WebGlContextWatch } from "./WebGlContextWatch";
 import type { ProjectionMode } from "../lib/viewMemory";
-import { isLayer3dVisible, treesVisibleIn3d, type View3dDisplaySettings } from "../lib/view3dDisplay";
+import { isLayer3dVisible, monoViewActive, treesVisibleIn3d, type View3dDisplaySettings } from "../lib/view3dDisplay";
 import { buildContourLineObject, contourLineMaterials } from "../lib/contourLines3d";
 import {
   applyPrimaryViewportTint,
@@ -99,7 +99,7 @@ import {
 } from "../lib/perspectiveViewportFit";
 import { heliodonRadiusM } from "../lib/heliodonRadius";
 import { studioSceneLighting } from "../lib/sunStudyViewport";
-import { applySolarGreyscale } from "../lib/solarGreyscale";
+import { applySolarGreyscale, restoreFlatWater } from "../lib/solarGreyscale";
 import { SunHoursLayer } from "./SunHoursLayer";
 import type { SunHoursDirectOverlay } from "../lib/sunHoursDirectAssess";
 import type { SunHoursGroundGrid } from "../lib/sunHoursGroundPlan";
@@ -940,6 +940,7 @@ function City({
     }
   });
   useLayoutEffect(() => {
+    restoreFlatWater(group);
     refreshSceneSurfaceColors(group);
     snapshotBuildingViewportColors(group, colourMode);
     snapshotSunStudySurfaceColors(group);
@@ -2452,7 +2453,7 @@ export function Scene3D({
         solarDiagramOn={solar.showPath}
         directSunHoursOn={Boolean(solar.sunHours && sunHoursDirectOverlay)}
         solarNeutralFill={solarNeutralFill}
-        solarGreyscale={solarAnalysisActive}
+        solarGreyscale={monoViewActive(display)}
         solarShadowsActive={solarShadowsActive}
         onBounds={onBounds}
         onSceneInspectPick={onSceneInspectPick}

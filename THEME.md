@@ -196,6 +196,7 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--green-3d` | `#7f9a62` | Green mesh in the 3D view, the 3D-view Illustrator green, and the Rhino Green layer. |
 | `--water-fill` | `#9ec9d1` | Water on the site plan, on screen and in the Illustrator file. |
 | `--water-3d` | `#8ebfc8` | Water mesh in the 3D view, the 3D-view Illustrator water, and the Rhino Water layer. |
+| `--water-3d-mono` | `#D6D6D2` | Flat, unlit water in the 3D view while the View Style is B&W, and the Water swatch in Scene Layers while B&W is on. |
 | `--water-sunpath` | `#4A9FE8` | Water in the 3D viewport while the sun path diagram is on. |
 | `--sun-study-surface` | `#FFFFFF` | Ground, roads, and parks in the 3D viewport while the sun path is on. |
 | `--card-white` | `#FAFAF8` | Building and surface massing in white-card 3D display mode. |

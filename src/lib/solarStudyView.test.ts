@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { SITE_ANALYSIS_KINDS } from "./sidebarSections";
-import { solarSettingsForActiveAnalysis, solarStudyViewActive, windFlowActive } from "./solarStudyView";
+import {
+  solarSettingsForActiveAnalysis,
+  solarSettingsOnStudyStart,
+  solarStudyViewActive,
+  windFlowActive,
+} from "./solarStudyView";
 import type { SolarViewSettings } from "../components/SolarHeliodon";
 
 const domeOn: SolarViewSettings = {
@@ -51,5 +56,19 @@ describe("windFlowActive", () => {
     expect(windFlowActive(true, "solar")).toBe(false);
     expect(windFlowActive(true, "view")).toBe(false);
     expect(windFlowActive(true, null)).toBe(false);
+  });
+});
+
+describe("solarSettingsOnStudyStart", () => {
+  it("turns Shadows and the 3D sun dome on and leaves Sun hours and the date alone", () => {
+    const off: SolarViewSettings = { ...domeOn, showPath: false, castShadows: false, sunHours: false };
+    expect(solarSettingsOnStudyStart(off)).toEqual({ ...off, showPath: true, castShadows: true });
+    const sunHoursOn: SolarViewSettings = { ...off, sunHours: true };
+    expect(solarSettingsOnStudyStart(sunHoursOn).sunHours).toBe(true);
+  });
+
+  it("returns the same settings when both are already on", () => {
+    const on: SolarViewSettings = { ...domeOn, castShadows: true };
+    expect(solarSettingsOnStudyStart(on)).toBe(on);
   });
 });
