@@ -1,3 +1,4 @@
+import { ChevronRight } from "lucide-react";
 import type { SiteWindSelection } from "../lib/windRoseData";
 import { formatSkippedCloserLine, plainWindCaption, skippedCloserParts, type SkippedCloserPart } from "../lib/windRoseCaptions";
 
@@ -15,7 +16,10 @@ export function WindNearbyStations({ selection, className }: { selection: SiteWi
   if (!parts.length) return null;
   return (
     <details className={`${className} wind-rose-nearby`} title={plainWindCaption(formatSkippedCloserLine(selection))}>
-      <summary>Nearby stations</summary>
+      <summary>
+        <ChevronRight className="wind-rose-nearby-chevron" size={14} strokeWidth={1.75} aria-hidden="true" />
+        Nearby stations
+      </summary>
       <ul className="wind-rose-nearby-list">
         {parts.map((part) => (
           <li key={part.name}>

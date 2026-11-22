@@ -74,6 +74,8 @@ The name is `--background`. The value is `#EBEBEB`.
 | `--control-sm` | 28 px control: the Set use select in the imported building popover. | `28px` |
 | `--control-md` | 32 px control: eye toggles in Buildings › Import, the imported-building checkbox row. | `32px` |
 | `--row-imported-building` | Height of one imported building row in Buildings › Import. | `48px` |
+| `--hud-card-head` | Height of the wind-rose card's WIND ROSE header row, which is also its collapse row (Kelvin's yes to Designbot, 22 Nov 2026). | `48px` |
+| `--fs-title` / `--lh-title` | Title step of the type scale: Site Intelligence Overview KPI values (mono 600; Designbot asked for 15, the scale has 16). | `16px` / `20px` |
 | `--radius-xs` / `--radius-sm` / `--radius-md` | Swatches and checkboxes / rows and segments / segment tracks and selects, in Buildings › Import and the imported building popover. | `4px` / `6px` / `8px` |
 | `--space-0-5` … `--space-3` | 4 pt spacing steps (2, 4, 6, 8, 12 px) used by Buildings › Import and the imported building popover. | `2px` … `12px` |
 | `--fs-caption` / `--lh-caption` | Caption type: landmark label pills, the LANDMARK header, the Wikidata link and Buildings helper captions. | `11px` / `16px` |
@@ -83,7 +85,8 @@ The name is `--background`. The value is `#EBEBEB`.
 | `--ink-2` | Secondary text: Landmark block row labels. | `#4A4945` |
 | `--ink-3` | Muted text: section headers, meta, counts, the LANDMARK header, the Wikidata link, Buildings helper captions. Darkened from `#787670` for contrast (DESIGN-SYSTEM.md). | `#6B6963` |
 | `--border-outer` | 1 px edge of HUD islands and landmark label pills. | `rgb(20 20 19 / 13%)` |
-| `--shadow-raised` | Small lift under landmark label pills. | `0 1px 2px rgb(20 20 19 / 8%)` |
+| `--shadow-raised` | Small lift under landmark label pills and the Wind streaks slider thumb. | `0 1px 2px rgb(20 20 19 / 8%)` |
+| `--slider-track` | Unfilled part of the 4 px Wind streaks slider track (ink at 15%); the filled part is `--ink`. | `rgb(20 20 19 / 15%)` |
 | `--space-0-5` / `--space-1` / `--space-1-5` | 2 / 4 / 6 px gaps inside controls: the Analysis bar date track and the gaps between its chips and icons. | `2px` / `4px` / `6px` |
 | `--space-2` / `--space-3` / `--space-4` | 8 / 12 / 16 px layout spacing: Analysis bar padding, row and group gaps, divider height. | `8px` / `12px` / `16px` |
 | `--radius-sm` / `--radius-md` / `--radius-lg` | Corner radius of chips (6), the date track (8) and the Analysis bar island (12). | `6px` / `8px` / `12px` |

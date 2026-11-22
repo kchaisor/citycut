@@ -29,6 +29,7 @@ import { GROUND_WIND_EMPTY_MASK_RECT, groundWindHudMaskFromDom, type GroundWindM
 import { SURFACE } from "../lib/surfaceLayers";
 import { sectorCenterDeg, type WindPeriodStats } from "../lib/windRose";
 import { GROUND_WIND_RAMP } from "../lib/groundWindRamp";
+import { useWindStreakDensity } from "../lib/windStreakDensity";
 
 declare global {
   interface Window {
@@ -169,7 +170,8 @@ export function GroundWindFlow({
   );
   const heightAt = useCallback((east: number, north: number) => groundWindHeightAt(model, east, north), [model]);
   const frozen = !animate || reducedMotionPreferred();
-  const count = useMemo(() => groundWindStreakCount(model), [model]);
+  const density = useWindStreakDensity();
+  const count = useMemo(() => groundWindStreakCount(model, density), [model, density]);
   const { geometry, data, vertices } = useMemo(() => createStreakGeometry(count), [count]);
   const size = useThree((state) => state.size);
   const material = useMemo(() => makeWindMaterial(size.width, size.height), []);

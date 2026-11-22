@@ -3,7 +3,7 @@ import { sectorCenterDeg, sectorLabel, WIND_SECTOR_COUNT } from "./windRose";
 import { stackedSectorArmLength } from "./windRoseStats";
 import { windBandFill } from "./windBins";
 
-export const WIND_ROSE_HUB_RADIUS_PX = 12;
+export const WIND_ROSE_HUB_RADIUS_PX = 22;
 export const WIND_ROSE_PETAL_SCALE = 0.92;
 export const WIND_ROSE_FREQUENCY_GUIDES = [0.33, 0.66] as const;
 
