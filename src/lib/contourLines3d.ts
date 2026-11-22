@@ -167,6 +167,11 @@ export function buildContourLineObject(model: CityModel, planScale = 1000): THRE
     indexLines.name = CONTOUR_3D_INDEX_NAME;
     indexLines.renderOrder = object.renderOrder;
     indexLines.userData.noScenePick = true;
+    const rendererSize = new THREE.Vector2();
+    indexLines.onBeforeRender = (renderer) => {
+      renderer.getSize(rendererSize);
+      indexMaterial.resolution.set(rendererSize.x, rendererSize.y);
+    };
     object.add(indexLines);
   }
   return object;

@@ -96,5 +96,9 @@ describe("contour drape", () => {
     expect(end.getX(0)).toBeCloseTo(40, 6);
     expect(end.getX(0)).toBeGreaterThan(CONTOUR_3D_DASH_M + CONTOUR_3D_GAP_M);
     expect(contourLineMaterials(obj)).toEqual([base, index.material]);
+    const renderer = { getSize: (target: THREE.Vector2) => target.set(1440, 900) };
+    index.onBeforeRender(renderer as unknown as THREE.WebGLRenderer);
+    expect(index.material.resolution.x).toBe(1440);
+    expect(index.material.resolution.y).toBe(900);
   });
 });
