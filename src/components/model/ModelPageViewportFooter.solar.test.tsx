@@ -89,6 +89,25 @@ describe("Solar Study console", () => {
     expect(document.querySelectorAll("[data-sun-hours-ground-chip]")).toHaveLength(1);
   });
 
+  it("keeps the High/Fast switch and never shows an inline sun dome key in the Analysis bar", () => {
+    render(<SolarFooter onSolar={() => undefined} />);
+    const dome = screen.getByRole("button", { name: "3D Sun Dome" });
+    if (dome.getAttribute("aria-pressed") !== "true") fireEvent.click(dome);
+    expect(dome.getAttribute("aria-pressed")).toBe("true");
+    expect(screen.queryByRole("list", { name: "Sun dome key" })).toBeNull();
+    expect(document.querySelector(".sun-dome-key")).toBeNull();
+    expect(screen.queryByText("Hours")).toBeNull();
+    expect(screen.getByRole("group", { name: "Render quality" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "High render quality" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Fast render quality" })).toBeTruthy();
+  });
+
+  it("does not show a sun dome key when Solar Study is off", () => {
+    render(<Footer />);
+    expect(screen.queryByRole("list", { name: "Sun dome key" })).toBeNull();
+    expect(document.querySelector(".sun-dome-key")).toBeNull();
+  });
+
   it("runs the time slider from 06:00 to 20:00 with 06 and 20 ticks and keeps the sunrise and sunset marks", () => {
     render(<SolarFooter onSolar={() => undefined} />);
     const slider = screen.getByRole("slider", { name: "Solar time of day" }) as HTMLInputElement;

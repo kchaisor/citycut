@@ -20,7 +20,6 @@ import { withDesignWind, withWindSeason } from "../../lib/windState";
 import { DesignWindPresets } from "../DesignWindPresets";
 import { WindPlanSwitch } from "./WindPlanSwitch";
 
-
 export function ModelPageViewportFooter({ vm }: { vm: import("./useModelPage").ModelPageViewModel }) {
   const {
     analysisKind,
