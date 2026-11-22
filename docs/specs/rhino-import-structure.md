@@ -35,22 +35,27 @@ Kelvin confirmed these on 21 Nov 2026:
 2. **Short names under a scheme heading.** The import list shows the short building name under a scheme heading, for example Tower A under Scheme A, not the full layer path as the row title.
 3. **A colour on the file recolours every building.** The whole-file colour is kept. Setting it overrides use colours on every building in that file. (This overrides a later suggestion to drop the file colour.)
 
-### Pending decision for a later draft (21 Nov 2026)
+### Choices (22 Nov 2026)
 
-Kelvin confirmed this on 21 Nov 2026; it is not built yet:
+Kelvin confirmed these on 22 Nov 2026. They replace the 21 Nov pending decision that imported buildings would always be white in Drawing:
 
-- **Imported buildings are always white in Drawing.** The use colour and the file colour apply in 3D only. This sits beside choice 3 above: a file colour still recolours every building in that file, but only in 3D.
+4. **Use or file colour in Drawing and 3D.** Imported buildings show their use colour, or the file colour when one is set, in both Drawing and 3D. A building with no use and no file colour shows as unclassified grey, as a filled footprint, in both views.
+5. **Direct Sun Hours.** Visible imported buildings cast and receive in Direct Sun Hours, in 3D and in Drawing. Hidden (eye-off) buildings stay excluded.
+6. **Exploded axo.** Visible imported buildings appear in the exploded axo, in their use or file colour (or unclassified grey). Hidden ones stay excluded.
 
 ## How we'll know it works
 
 Tick these on the real desktop view, with a test `.3dm` that has three buildings on three layers, one with `building`, `use` and `levels` user text:
 
 - [ ] The import panel lists three buildings under the file, as short names under a scheme heading (for example Tower A under Scheme A).
-- [ ] A building whose layer has no use word, and no `use` user text, shows as unclassified (grey).
+- [ ] A building whose layer has no use word, and no `use` user text, shows as unclassified (grey), as a filled footprint in Drawing.
 - [ ] A colour set on the file recolours every building in that file, overriding use colours.
 - [ ] Clicking each building in 3D shows its own name, use, height and (for the one with user text) levels, with "Source: your model".
 - [ ] The plan shows three footprints, not one merged outline.
 - [ ] Hiding one building hides it in 3D, Drawing, shadows, wind and exports; the other two stay.
+- [ ] Drawing (plan, exploded axo, isometric) shows each imported building in its use colour, or the file colour when set.
+- [ ] Visible imported buildings cast and receive in Direct Sun Hours, in 3D and in Drawing; a hidden one drops out.
+- [ ] Visible imported buildings appear in the exploded axo; a hidden one drops out.
 - [ ] Moving or rotating the file moves all three together.
 - [ ] A file with no layers or user text imports exactly as it does today.
 - [ ] Models already saved in the browser still load, as one building each, with no errors.

@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { computeBoundsTree, acceleratedRaycast, disposeBoundsTree } from "three-mesh-bvh";
 import { extrudePart } from "./buildCity";
+import { castsSunHoursShadow } from "./sunHoursBuildings";
 import { footprintBase } from "./terrain";
 import type { BuildingFeat, CityModel } from "../types";
 
@@ -27,7 +28,7 @@ function partsForBuilding(building: BuildingFeat, base: number): { ring: import(
 export function buildFacadeOcclusionMesh(model: CityModel): THREE.Mesh | null {
   const geometries: THREE.BufferGeometry[] = [];
   for (const building of model.buildings) {
-    if (building.meshDrawnBy != null) continue;
+    if (building.meshDrawnBy != null || !castsSunHoursShadow(building)) continue;
     const footBase = (model.terrain ? footprintBase(model.terrain, building.ring, model.sideM) : 0) + BUILDING_SURFACE_LIFT_M;
     for (const part of partsForBuilding(building, footBase)) {
       const geometry = extrudePart(part.ring, part.holes, part.height, part.base);
