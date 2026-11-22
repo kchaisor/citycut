@@ -16,7 +16,8 @@ Confirmed on 21 Nov 2026 and approved for build on 22 Nov 2026:
 - **Official lines stay official.** City of Sydney 1 m and Vicmap metro 1 m lines are drawn as published. NSW 2 m lines are drawn as published, and the 1 m lines in between (3, 5, 7 m …) are traced from the ground surface the cut already builds from those contours (the Laplace contour field). Outside the City of Sydney on a mixed cut, the same infill fills the NSW part only.
 - **DEM-only sites** (Mapterhorn terrain, about 4 m per pixel) are traced every 1 m, whatever the relief. The old relief rule (2, 5 or 10 m on hilly sites) no longer sets the drawn interval.
 - **Vicmap statewide 10 m** lines are drawn as published, and the 1 m lines in between are traced from the cut's terrain when there is one.
-- **Index contours every 5 m** (`--contour-index-every: 5`) are drawn heavier (`--contour-index-mm`) on the site plan, the isometric drawing, the exploded axo plates, the Illustrator exports, and Rhino (`index` user text). In 3D, index contours are a solid line over the dashed 1 m set.
+- **Index contours every 5 m** (`--contour-index-every: 5`) are drawn heavier (`--contour-index-mm`) on the site plan, the isometric drawing, the exploded axo plates, the Illustrator exports, and Rhino (`index` user text). In 3D, index contours are dashed like the 1 m set (6 m on, 3 m off) and drawn slightly heavier (about 1.5 px) so they still read as index; they are not solid.
+- **3D index contours are dashed, not solid** (Kelvin, 22 Nov 2026, after looking at Rozelle). The 2D drawings and exports keep their heavier index stroke unchanged.
 - **All plan scales draw 1 m**, including 1:2500 and 1:5000. `--contour-coarse-interval-m` is now `1`, so nothing is thinned. Setting it back to `5` restores the old metro thinning at `--contour-coarse-from-scale` and smaller, without touching NSW or DEM sites.
 - **Labels tell the truth about the source.** The Display panel names the source and says when the in-between lines are interpolated, for example "NSW Elevation 2 m contours; 1 m lines in between are interpolated" or "derived from terrain DEM, every 1 m".
 
@@ -32,7 +33,7 @@ Confirmed on 21 Nov 2026 and approved for build on 22 Nov 2026:
 - [x] On a NSW site, the plan shows a contour every 1 m, not every 2 m, with the official even-metre lines still there.
 - [x] On a site that only has Mapterhorn DEM terrain, the plan shows a contour every 1 m, even with more than 8 m of relief.
 - [x] Every site, whatever its terrain source, shows 1 m contours at 1:500, 1:1000 and 1:2500.
-- [x] Every 5 m contour is heavier on the plan, the exploded axo, the exports, and in 3D.
+- [x] Every 5 m contour is heavier on the plan, the exploded axo, the exports, and in 3D (dashed in 3D, never solid).
 - [x] The Display panel says where the lines come from and when 1 m lines are interpolated.
 - [x] Exploded axo with Transport on shows no source text under the Transport plate, and the Train / Tram / Bus legend sits in a card beside the Display panel.
 

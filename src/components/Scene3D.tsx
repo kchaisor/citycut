@@ -79,7 +79,7 @@ import {
 import { WebGlContextWatch } from "./WebGlContextWatch";
 import type { ProjectionMode } from "../lib/viewMemory";
 import { isLayer3dVisible, treesVisibleIn3d, type View3dDisplaySettings } from "../lib/view3dDisplay";
-import { buildContourLineObject } from "../lib/contourLines3d";
+import { buildContourLineObject, contourLineMaterials } from "../lib/contourLines3d";
 import {
   applyPrimaryViewportTint,
   snapshotPrimaryViewportColors,
@@ -1041,13 +1041,12 @@ function City({
   );
   useLayoutEffect(() => {
     if (!contours) return;
-    const mat = contours.material as THREE.LineDashedMaterial | undefined;
-    if (mat?.color) {
+    for (const mat of contourLineMaterials(contours)) {
       mat.color.setStyle(getColour("--outline-contour"));
       mat.transparent = windFlowActive;
       mat.opacity = windFlowActive ? 0.4 : 1;
-      invalidate();
     }
+    invalidate();
   }, [contours, colourTick, invalidate, windFlowActive]);
   useLayoutEffect(() => {
     if (!contours) return;

@@ -1,8 +1,14 @@
 import * as THREE from "three";
 import { describe, expect, it } from "vitest";
+import { LineMaterial } from "three/examples/jsm/lines/LineMaterial.js";
+import { LineSegments2 } from "three/examples/jsm/lines/LineSegments2.js";
 import {
   buildContourLineObject,
+  CONTOUR_3D_DASH_M,
+  CONTOUR_3D_GAP_M,
   CONTOUR_3D_INDEX_NAME,
+  CONTOUR_3D_INDEX_WIDTH_PX,
+  contourLineMaterials,
   drapeContourSegments,
   drapeContourSegmentsWithDistances,
 } from "./contourLines3d";
@@ -49,7 +55,7 @@ describe("contour drape", () => {
     expect(obj!.geometry.getAttribute("lineDistance")?.count).toBe(obj!.geometry.getAttribute("position")?.count);
   });
 
-  it("draws the 5 m index contours as a solid, heavier line over the dashed 1 m set", () => {
+  it("draws the 5 m index contours dashed like the 1 m set, as a heavier overlay", () => {
     const model = {
       center: { lat: -37.8, lon: 145 },
       sideM: 100,
@@ -69,10 +75,26 @@ describe("contour drape", () => {
     } as unknown as CityModel;
     const obj = buildContourLineObject(model)!;
     expect(obj.geometry.getAttribute("position").count).toBe(6);
-    const index = obj.getObjectByName(CONTOUR_3D_INDEX_NAME) as THREE.LineSegments;
-    expect(index).toBeInstanceOf(THREE.LineSegments);
-    expect(index.material).toBe(obj.material);
-    expect(index.geometry.getAttribute("position").count).toBe(2);
-    expect([...(index.geometry.getAttribute("lineDistance").array as Float32Array)]).toEqual([0, 0]);
+    const base = obj.material as THREE.LineDashedMaterial;
+    const index = obj.getObjectByName(CONTOUR_3D_INDEX_NAME) as LineSegments2;
+    expect(index).toBeInstanceOf(LineSegments2);
+    expect(index.geometry.getAttribute("instanceStart").count).toBe(1);
+    expect(index.material).toBeInstanceOf(LineMaterial);
+    expect(index.material.dashed).toBe(true);
+    expect(index.material.dashSize).toBe(CONTOUR_3D_DASH_M);
+    expect(index.material.gapSize).toBe(CONTOUR_3D_GAP_M);
+    expect(index.material.dashSize).toBe(base.dashSize);
+    expect(index.material.gapSize).toBe(base.gapSize);
+    expect(index.material.dashScale).toBe(base.scale);
+    expect(index.material.linewidth).toBe(CONTOUR_3D_INDEX_WIDTH_PX);
+    expect(index.material.linewidth).toBeGreaterThan(base.linewidth);
+    expect(index.material.color.getHex()).toBe(base.color.getHex());
+    expect(index.geometry.getAttribute("lineDistance")).toBeUndefined();
+    const start = index.geometry.getAttribute("instanceDistanceStart");
+    const end = index.geometry.getAttribute("instanceDistanceEnd");
+    expect(start.getX(0)).toBe(0);
+    expect(end.getX(0)).toBeCloseTo(40, 6);
+    expect(end.getX(0)).toBeGreaterThan(CONTOUR_3D_DASH_M + CONTOUR_3D_GAP_M);
+    expect(contourLineMaterials(obj)).toEqual([base, index.material]);
   });
 });

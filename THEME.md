@@ -431,7 +431,7 @@ A dash is two lengths in millimetres: how long the mark is, then how long the ga
 | `--contour-stroke-mm` | Weight of a contour | `0.1` | mm |
 | `--contour-stroke` | Colour of a contour | `#B0B0B0` | colour |
 | `--contour-dash` | Dash of a contour | `1.5 0.75` | mm, on then off |
-| `--contour-index-mm` | Weight of every Nth contour on the site plan and in exports. Same colour and dash as the other contours. The exploded axo scales its contour strokes by the same ratio, and 3D draws index contours solid | `0.18` | mm |
+| `--contour-index-mm` | Weight of every Nth contour on the site plan and in exports. Same colour and dash as the other contours. The exploded axo scales its contour strokes by the same ratio, and 3D draws index contours dashed like the 1 m lines, not solid, and slightly heavier (about 1.5 px) so they still read as index (Kelvin, 22 Nov 2026) | `0.18` | mm |
 | `--contour-index-every` | How many drawn contours between index lines. Contours are drawn every 1 m on every site (official lines plus interpolated ones), so `5` is an index line every 5 m | `5` | count |
 | `--contour-coarse-interval-m` | Interval used for metro and City of Sydney contours at small plan scales. `1` keeps 1 m at every scale (Kelvin, 22 Nov 2026). Set `5` to thin those sources to 5 m from `--contour-coarse-from-scale`; NSW 2 m and DEM sites stay at 1 m | `1` | m |
 | `--contour-coarse-from-scale` | Plan-scale denominator where a coarser interval would start if `--contour-coarse-interval-m` is above 1. `2500` is 1:2500, 1:5000, and smaller. 1:500 and 1:1000 always keep every metre | `2500` | scale denominator |
