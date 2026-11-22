@@ -1,15 +1,28 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { sweepMinute } from "./solar";
 import {
   SOLAR_SLIDER_END_MIN,
+  SOLAR_SLIDER_FULL_TICKS_MIN_TRACK_PX,
+  SOLAR_SLIDER_LATE_TICK_MIN_TRACK_PX,
   SOLAR_SLIDER_START_MIN,
   SOLAR_SLIDER_TICK_HOURS,
+  SOLAR_SLIDER_TICK_MIN_GAP_PX,
+  SOLAR_SLIDER_TICK_WIDTH_PX,
   SOLAR_SLIDER_WINDOW,
   clampSolarSliderMinutes,
   isRescodeHour,
   solarSliderPercent,
   solarSliderSpan,
+  solarSliderTickHoursAt,
+  solarSliderTickMinGap,
+  solarSliderTickTier,
 } from "./solarSlider";
+
+const source = (file: string) => readFileSync(path.resolve(process.cwd(), file), "utf8");
+const TRACK_PX_AT_1440 = 400.6;
+const TRACK_PX_AT_1280 = 240.6;
 
 describe("solar time slider", () => {
   it("runs from 6am to 8pm", () => {
@@ -44,5 +57,59 @@ describe("solar time slider", () => {
   it("plays through night hours and wraps 20:00 back to 6:00", () => {
     expect(sweepMinute(360, 1, 1, SOLAR_SLIDER_WINDOW)).toBe(420);
     expect(sweepMinute(1170, 1, 1, SOLAR_SLIDER_WINDOW)).toBe(360);
+  });
+
+  it("keeps every hour label at 1440 wide, where they all fit", () => {
+    expect(solarSliderTickHoursAt(TRACK_PX_AT_1440)).toEqual([...SOLAR_SLIDER_TICK_HOURS]);
+    expect(solarSliderTickMinGap(SOLAR_SLIDER_TICK_HOURS, TRACK_PX_AT_1440)).toBeGreaterThanOrEqual(SOLAR_SLIDER_TICK_MIN_GAP_PX);
+  });
+
+  it("drops the in-between hours at 1280 wide, where 09 to 15 would overlap", () => {
+    expect(solarSliderTickMinGap(SOLAR_SLIDER_TICK_HOURS, TRACK_PX_AT_1280)).toBeLessThan(0);
+    const shown = solarSliderTickHoursAt(TRACK_PX_AT_1280);
+    expect(shown).toEqual([6, 9, 12, 15, 18, 20]);
+    expect(solarSliderTickMinGap(shown, TRACK_PX_AT_1280)).toBeGreaterThanOrEqual(SOLAR_SLIDER_TICK_MIN_GAP_PX);
+  });
+
+  it("never lets shown hour labels touch, and always keeps 09, 12 and 15", () => {
+    for (let width = 112; width <= 720; width++) {
+      const shown = solarSliderTickHoursAt(width);
+      expect(shown).toEqual(expect.arrayContaining([6, 9, 12, 15, 20]));
+      expect(solarSliderTickMinGap(shown, width), `track ${width}px`).toBeGreaterThanOrEqual(SOLAR_SLIDER_TICK_MIN_GAP_PX);
+    }
+    expect(solarSliderTickHoursAt(SOLAR_SLIDER_FULL_TICKS_MIN_TRACK_PX - 1)).not.toContain(10);
+    expect(solarSliderTickHoursAt(SOLAR_SLIDER_LATE_TICK_MIN_TRACK_PX - 1)).not.toContain(18);
+  });
+
+  it("sorts ticks into core, late and minor tiers", () => {
+    expect(SOLAR_SLIDER_TICK_HOURS.map(solarSliderTickTier)).toEqual([
+      "core",
+      "core",
+      "minor",
+      "minor",
+      "core",
+      "minor",
+      "minor",
+      "core",
+      "late",
+      "core",
+    ]);
+  });
+
+  it("hides tiers in CSS at the same track widths and tick size the layout maths uses", () => {
+    const floating = source("src/floating.css");
+    const tierRule = (widthPx: number, tier: string) =>
+      new RegExp(
+        `@container solar-track \\(width < ${widthPx}px\\) \\{\\s*\\.model \\.bottom-bar\\.env-console \\.scrubber-tick-btn\\[data-tick-tier="${tier}"\\] \\{\\s*display: none !important;`,
+      );
+    expect(floating).toMatch(tierRule(SOLAR_SLIDER_FULL_TICKS_MIN_TRACK_PX, "minor"));
+    expect(floating).toMatch(tierRule(SOLAR_SLIDER_LATE_TICK_MIN_TRACK_PX, "late"));
+    const trackStart = floating.indexOf(".model .bottom-bar.env-console .scrubber-track {");
+    expect(floating.slice(trackStart, floating.indexOf("}", trackStart))).toMatch(/container: solar-track \/ inline-size !important;/);
+    const tickStart = floating.indexOf(".model .bottom-bar.env-console .scrubber-tick-btn {");
+    expect(floating.slice(tickStart, floating.indexOf("}", tickStart))).toMatch(
+      new RegExp(`min-width: ${SOLAR_SLIDER_TICK_WIDTH_PX}px !important;`),
+    );
+    expect(source("src/components/model/ModelPageViewportFooter.tsx")).toContain("data-tick-tier={solarSliderTickTier(h)}");
   });
 });

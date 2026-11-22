@@ -11,6 +11,7 @@ import {
   clampSolarSliderMinutes,
   isRescodeHour,
   solarSliderPercent,
+  solarSliderTickTier,
   solarSliderSpan,
 } from "../../lib/solarSlider";
 import { SUN_STUDY_DATES } from "../../lib/solar";
@@ -379,6 +380,7 @@ export function ModelPageViewportFooter({ vm }: { vm: import("./useModelPage").M
                                       ? "scrubber-tick-btn hi"
                                       : "scrubber-tick-btn"
                                 }
+                                data-tick-tier={solarSliderTickTier(h)}
                                 aria-label={`Solar time ${String(h).padStart(2, "0")}:00`}
                                 aria-pressed={solar.hour === h}
                                 onClick={() => {
