@@ -261,6 +261,36 @@ describe("High surface sample budget on dense cuts", () => {
     const highWorstCase = (SUN_HOURS_HIGH_ROOF_SAMPLE_CAP + SUN_HOURS_HIGH_WALL_SAMPLE_CAP) * highSteps;
     expect(highWorstCase).toBeLessThanOrEqual(fastKmSampleSteps * 2);
   });
+
+  it("a tall wide building at 1 m High does not overflow the call stack and stays under the caps", () => {
+    const half = 100;
+    const model: CityModel = {
+      ...boxModel(500),
+      buildings: [
+        {
+          id: 1,
+          ring: [
+            [-half, -half],
+            [half, -half],
+            [half, half],
+            [-half, half],
+            [-half, -half],
+          ],
+          holes: [],
+          height: 200,
+          use: "commercial",
+          source: "none",
+        },
+      ],
+    };
+    const high = sunHoursQualityParams("high", 500);
+    expect(high.cellM).toBe(1);
+    expect(() => directSunHoursSampleSet(model, high)).not.toThrow();
+    const set = directSunHoursSampleSet(model, high);
+    const counts = sampleCounts(set.samples);
+    expect(counts.roofs).toBeLessThanOrEqual(SUN_HOURS_HIGH_ROOF_SAMPLE_CAP);
+    expect(counts.walls).toBeLessThanOrEqual(SUN_HOURS_HIGH_WALL_SAMPLE_CAP);
+  });
 });
 
 describe("Direct Sun Hours accuracy", () => {
