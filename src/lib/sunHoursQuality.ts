@@ -1,9 +1,10 @@
 import type { RenderQuality } from "./renderQuality";
 import { SUN_HOURS_GROUND_CELL_M, SUN_HOURS_GROUND_STEP_MINUTES } from "./sunHoursGround";
 
-export const SUN_HOURS_HIGH_CELL_M = 1;
+export const SUN_HOURS_HIGH_CELL_M = 0.25;
 export const SUN_HOURS_HIGH_STEP_MINUTES = 5;
-export const SUN_HOURS_HIGH_EASED_CELLS_M = [1.5, 2] as const;
+export const SUN_HOURS_HIGH_EASED_CELLS_M = [0.5, 1, 1.5, 2] as const;
+export const SUN_HOURS_HIGH_SURFACE_CELL_M = 1;
 export const SUN_HOURS_HIGH_MAX_GROUND_CELLS = 250_000;
 export const SUN_HOURS_FAST_WALL_SAMPLE_CAP = 48_000;
 export const SUN_HOURS_HIGH_WALL_SAMPLE_CAP = 52_000;
@@ -19,6 +20,7 @@ export type SunHoursQualityParams = {
   degraded: boolean;
   wallSampleCap: number;
   roofSampleCap: number;
+  roofCellM: number;
   wallCellM: number;
   denseCutWallCellM: number;
 };
@@ -51,11 +53,13 @@ export function sunHoursQualityParams(quality: RenderQuality, sideM: number): Su
       ...FAST_SUN_HOURS_RESOLUTION,
       wallSampleCap: SUN_HOURS_FAST_WALL_SAMPLE_CAP,
       roofSampleCap: Infinity,
+      roofCellM: SUN_HOURS_GROUND_CELL_M,
       wallCellM: SUN_HOURS_GROUND_CELL_M,
       denseCutWallCellM: SUN_HOURS_GROUND_CELL_M * 2,
     };
   }
   const cellM = highCellM(sideM);
+  const surfaceCellM = Math.max(cellM, SUN_HOURS_HIGH_SURFACE_CELL_M);
   return {
     quality,
     cellM,
@@ -64,8 +68,9 @@ export function sunHoursQualityParams(quality: RenderQuality, sideM: number): Su
     degraded: cellM !== SUN_HOURS_HIGH_CELL_M,
     wallSampleCap: SUN_HOURS_HIGH_WALL_SAMPLE_CAP,
     roofSampleCap: SUN_HOURS_HIGH_ROOF_SAMPLE_CAP,
-    wallCellM: cellM,
-    denseCutWallCellM: cellM,
+    roofCellM: surfaceCellM,
+    wallCellM: surfaceCellM,
+    denseCutWallCellM: surfaceCellM,
   };
 }
 
@@ -80,7 +85,7 @@ export function sunHoursStartWallCellM(params: SunHoursSampleParams, buildingCou
 
 export type SunHoursSampleParams = Pick<
   SunHoursQualityParams,
-  "cellM" | "stepMinutes" | "wallSampleCap" | "roofSampleCap" | "wallCellM" | "denseCutWallCellM"
+  "cellM" | "stepMinutes" | "wallSampleCap" | "roofSampleCap" | "roofCellM" | "wallCellM" | "denseCutWallCellM"
 >;
 
 export const FAST_SUN_HOURS_PARAMS: SunHoursQualityParams = sunHoursQualityParams("fast", 0);

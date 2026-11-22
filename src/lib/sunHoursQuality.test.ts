@@ -6,6 +6,8 @@ import { directSunHoursSampleSet, directSunHoursSamplesForModel, type DirectSunH
 import {
   FAST_SUN_HOURS_PARAMS,
   SUN_HOURS_FAST_WALL_SAMPLE_CAP,
+  SUN_HOURS_HIGH_CELL_M,
+  SUN_HOURS_HIGH_MAX_GROUND_CELLS,
   SUN_HOURS_HIGH_ROOF_SAMPLE_CAP,
   SUN_HOURS_HIGH_WALL_SAMPLE_CAP,
   SUN_HOURS_MAX_WALL_CELL_M,
@@ -153,27 +155,53 @@ describe("sunHoursQualityParams", () => {
     expect(FAST_SUN_HOURS_PARAMS).toEqual(sunHoursQualityParams("fast", 250));
   });
 
-  it("High is a 1 m grid with 5-minute steps up to a 0.5 km cut", () => {
-    for (const sideM of [120, 250, 500]) {
+  it("High targets a 0.25 m ground grid with 5-minute steps on a cut that fits the budget", () => {
+    expect(SUN_HOURS_HIGH_CELL_M).toBe(0.25);
+    expect(SUN_HOURS_HIGH_MAX_GROUND_CELLS).toBe(250_000);
+    for (const sideM of [60, 100, 125]) {
       const high = sunHoursQualityParams("high", sideM);
-      expect(high.cellM).toBe(1);
+      expect(high.cellM).toBe(0.25);
+      expect(high.targetCellM).toBe(0.25);
       expect(high.stepMinutes).toBe(5);
       expect(high.degraded).toBe(false);
+      expect(sunHoursGroundCellCount(sideM, high.cellM)).toBeLessThanOrEqual(SUN_HOURS_HIGH_MAX_GROUND_CELLS);
     }
-    expect(sunHoursGroundCellCount(500, 1)).toBe(250_000);
+    expect(sunHoursGroundCellCount(125, 0.25)).toBe(250_000);
   });
 
-  it("High eases the grid for bigger cuts and keeps the 5-minute step", () => {
-    const mid = sunHoursQualityParams("high", 700);
-    expect(mid.cellM).toBe(1.5);
-    expect(mid.degraded).toBe(true);
-    const km = sunHoursQualityParams("high", 1000);
-    expect(km.cellM).toBe(2);
-    expect(km.stepMinutes).toBe(5);
-    expect(km.degraded).toBe(true);
-    expect(km.targetCellM).toBe(1);
-    expect(sunHoursGroundCellCount(1000, km.cellM)).toBeLessThanOrEqual(250_000);
+  it("High eases up the ladder so bigger cuts stay under the ground cell budget", () => {
+    const ladder = [
+      { sideM: 126, cellM: 0.5 },
+      { sideM: 250, cellM: 0.5 },
+      { sideM: 251, cellM: 1 },
+      { sideM: 500, cellM: 1 },
+      { sideM: 700, cellM: 1.5 },
+      { sideM: 750, cellM: 1.5 },
+      { sideM: 1000, cellM: 2 },
+    ];
+    for (const { sideM, cellM } of ladder) {
+      const high = sunHoursQualityParams("high", sideM);
+      expect(high.cellM).toBe(cellM);
+      expect(high.targetCellM).toBe(0.25);
+      expect(high.stepMinutes).toBe(5);
+      expect(high.degraded).toBe(true);
+      expect(sunHoursGroundCellCount(sideM, high.cellM)).toBeLessThanOrEqual(SUN_HOURS_HIGH_MAX_GROUND_CELLS);
+    }
+    expect(sunHoursGroundCellCount(500, 0.25)).toBe(4_000_000);
+    expect(sunHoursGroundCellCount(1000, 0.25)).toBe(16_000_000);
     expect(sunHoursQualityParams("high", 1500).cellM).toBe(2);
+  });
+
+  it("High roofs and walls never start finer than 1 m, whatever the ground grid", () => {
+    const small = sunHoursQualityParams("high", 120);
+    expect(small.cellM).toBe(0.25);
+    expect(small.roofCellM).toBe(1);
+    expect(small.wallCellM).toBe(1);
+    expect(small.denseCutWallCellM).toBe(1);
+    const km = sunHoursQualityParams("high", 1000);
+    expect(km.roofCellM).toBe(2);
+    expect(km.wallCellM).toBe(2);
+    expect(sunHoursQualityParams("fast", 120).roofCellM).toBe(3);
   });
 
   it("High raises the wall cap and samples walls and roofs on its own grid", () => {
@@ -208,7 +236,7 @@ describe("sunHoursQualityParams", () => {
     expect(roofs).toHaveLength(100);
     expect(roofs.every((sample) => sample.spanM === 2)).toBe(true);
     expect(set.wallCellM).toBe(1);
-    expect(tight.cellM).toBe(1);
+    expect(tight.cellM).toBe(0.25);
     expect(sampleCounts(set.samples).walls).toBe(sampleCounts(directSunHoursSampleSet(boxModel(), high).samples).walls);
   });
 
@@ -298,11 +326,11 @@ describe("Direct Sun Hours accuracy", () => {
   const shadedGround: [number, number] = [0.5, -15.5];
 
   it("ground grid records the cell size and step it used", () => {
-    const high = sunHoursQualityParams("high", 120);
-    const grid = computeSunHoursGroundGrid(boxModel(), ...WINTER, high.cellM, high.stepMinutes)!;
-    expect(grid.cellM).toBe(1);
+    const high = sunHoursQualityParams("high", 40);
+    const grid = computeSunHoursGroundGrid(boxModel(40), ...WINTER, high.cellM, high.stepMinutes)!;
+    expect(grid.cellM).toBe(0.25);
     expect(grid.stepMinutes).toBe(5);
-    expect(grid.cols).toBe(120);
+    expect(grid.cols).toBe(160);
     const fast = computeSunHoursGroundGrid(boxModel(), ...WINTER)!;
     expect(fast.cellM).toBe(3);
     expect(fast.stepMinutes).toBe(15);

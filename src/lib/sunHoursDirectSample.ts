@@ -201,7 +201,7 @@ export function directSunHoursSampleSet(
   model: CityModel,
   params: SunHoursSampleParams = FAST_SUN_HOURS_PARAMS,
 ): DirectSunHoursSampleSet {
-  let roofCellM = params.cellM;
+  let roofCellM = params.roofCellM;
   let roofs = roofSamplesAll(model, roofCellM);
   while (roofs.length > params.roofSampleCap && roofCellM < SUN_HOURS_MAX_WALL_CELL_M) {
     roofCellM = Math.min(SUN_HOURS_MAX_WALL_CELL_M, roofCellM * 2);

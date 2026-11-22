@@ -38,7 +38,7 @@ export function dockCompactTickLabels(maxHours: number): string[] {
 }
 
 function formatMetres(value: number): string {
-  return String(Math.round(value * 10) / 10);
+  return String(Math.round(value * 100) / 100);
 }
 
 export function sunHoursResolutionLabel(resolution: SunHoursResolution): string {

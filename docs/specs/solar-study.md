@@ -44,6 +44,7 @@ Approved by Kelvin on 22 Nov 2026 (t81u): "Ok let's try this."
 18. **High / Fast still also sets 3D render quality** (ambient occlusion and SMAA), unchanged.
 19. Results cannot be more accurate than the building heights and the terrain grid they sit on.
 20. **High roofs and walls coarsen under a cap so building surfaces finish in a reasonable time.** In High, if roofs would need more than about 24,000 samples, the roof cell doubles from the High grid (up to 12 m) until they fit; walls do the same above about 52,000 samples. Every building keeps at least one roof sample. On dense or large cuts this makes High roof and wall cells coarser than the ground grid, and they can be coarser than Fast's. Fast is unchanged, and so are the High ground grid and the 5-minute step. (Added 22 Nov 2026, afternoon.)
+21. **High ground now targets a 0.25 m grid.** Kelvin's yes, 22 Nov 2026 ("Yes, do both"). This replaces the High ground grid sizes in 14–16. High starts the ground at 0.25 m and eases up a ladder (0.25, 0.5, 1, 1.5, then 2 m) until the ground is at or under about 250,000 cells; the budget itself is unchanged. That keeps 0.25 m for cuts up to about 125 m a side and 0.5 m up to about 250 m; a 0.5 km cut still runs at 1 m and a 1 km cut at 2 m, because 0.25 m there would be 4 million and 16 million cells. The legend footnote shows the actual spacing used and says "Eased from 0.25 m grid" whenever the cut did not get 0.25 m. Roofs and walls still start no finer than 1 m, under the same caps as 20. Fast and the 5-minute step are unchanged.
 
 ## How we'll know it works
 
@@ -63,7 +64,7 @@ Open 40 Cleeland St, Dandenong (`?lat=-37.983826&lon=145.21555&label=40+Cleeland
 - [ ] The Sun hours pill is off when the model opens, and turning it on colours the site and shows the Direct Sun Hours legend.
 - [ ] In 3D with Sun hours on, the ground colour and the gaps under buildings line up with the 3D building footprints, at Dandenong and at Pyrmont (`?lat=-33.86627&lon=151.18389&km=1.5`). Before the fix, the ground colour on terrain was flipped north–south.
 - [ ] Every roof is fully coloured, with no bare white patches on large roofs. Before the fix, the roof colour sat just under the roof, so large roofs showed through.
-- [ ] With Sun hours on, the legend footnote reads "3 m grid · 15 min steps" on Fast and "1 m grid · 5 min steps" on High for a 0.5 km cut; on a 1 km cut, High reads "2 m grid · 5 min steps" and says the grid was eased from 1 m for this cut size. Switching High / Fast shows a "Calculating …" line on the legend until the new result is ready, the page stays responsive, and 3D ambient occlusion and SMAA still follow the switch.
+- [ ] With Sun hours on, the legend footnote reads "3 m grid · 15 min steps" on Fast and "1 m grid · 5 min steps" on High for a 0.5 km cut; on a 1 km cut, High reads "2 m grid · 5 min steps". Both say the grid was eased from 0.25 m for this cut size (updated 22 Nov 2026, see 21). Switching High / Fast shows a "Calculating …" line on the legend until the new result is ready, the page stays responsive, and 3D ambient occlusion and SMAA still follow the switch.
 
 ## Out of scope
 
