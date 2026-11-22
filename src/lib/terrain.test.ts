@@ -10,6 +10,7 @@ import {
   contourLevels,
   contourLines,
   decodeTerrarium,
+  DRAWN_CONTOUR_INTERVAL_M,
   footprintBase,
   heightFieldFromTiles,
   metresPerPixel,
@@ -19,6 +20,7 @@ import {
   TERRAIN_ELEVATION_MIN_M,
   TERRAIN_SPIKE_M,
   terrariumHeight,
+  terrainNote,
   basePlinthBottomY,
   basePlinthBuffers,
   basePlinthThicknessM,
@@ -250,6 +252,24 @@ describe("contours", () => {
     expect(contourInterval(79)).toBe(5);
     expect(contourInterval(80)).toBe(10);
     expect(contourLevels(10.2, 14.8, 2)).toEqual([12, 14]);
+  });
+
+  it("draws DEM contours every 1 m even where relief once picked 2, 5 or 10 m", () => {
+    expect(DRAWN_CONTOUR_INTERVAL_M).toBe(1);
+    const field: TerrainField = {
+      cols: 2,
+      rows: 2,
+      heights: Float32Array.of(0, 28, 0, 28),
+      min: 0,
+      max: 28,
+      spacingM: 100,
+      zoom: 14,
+      metresPerPixel: 4,
+      source: "Mapterhorn",
+    };
+    expect(contourInterval(28)).toBe(5);
+    expect(contourLines(field, 100, DRAWN_CONTOUR_INTERVAL_M)).toHaveLength(27);
+    expect(terrainNote(field, true)).toContain("Contours are every 1 m on the site plan.");
   });
 
   it("draws a level line across a north-south ramp", () => {
