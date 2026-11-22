@@ -5701,3 +5701,59 @@ body,
 @media (prefers-reduced-motion: reduce) {
   .import-massing-panel .massing-chevron { transition: none; }
 }
+
+.model .transport-legend-dock {
+  position: fixed;
+  left: 74px;
+  bottom: var(--transport-legend-bottom, var(--space-2));
+  z-index: var(--z-hud);
+  box-sizing: border-box;
+  width: 156px;
+  padding: 10px var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  border-radius: var(--radius-lg);
+  pointer-events: none;
+  user-select: none;
+}
+.model:has(.left-outliner:not([hidden])) .transport-legend-dock {
+  left: 330px;
+}
+.model .transport-legend-title {
+  font-family: var(--sans);
+  font-size: var(--fs-micro);
+  line-height: var(--lh-micro);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.model .transport-legend-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1-5);
+}
+.model .transport-legend-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: var(--lh-caption);
+}
+.model .transport-legend-swatch {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 3px;
+  border-radius: 2px;
+}
+.model .transport-legend-label,
+.model .transport-legend-status {
+  font-family: var(--sans);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+  font-weight: 500;
+  color: var(--ink-2);
+}

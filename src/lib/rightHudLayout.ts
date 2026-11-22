@@ -3,6 +3,7 @@ export const RIGHT_HUD_RIGHT_PX = 14;
 export const RIGHT_HUD_WIDTH_PX = 304;
 export const RIGHT_HUD_GAP_PX = 12;
 export const HUD_GUTTER_PX = 16;
+export const HUD_ISLAND_GAP_PX = 8;
 export const ENV_CONSOLE_EDGE_PX = 16;
 export const ENV_CONSOLE_MAX_PREFERRED_PX = 720;
 
@@ -62,4 +63,16 @@ export function envConsoleBox(
   const width = Math.min(Math.max(contentWidth, Math.min(ENV_CONSOLE_MAX_PREFERRED_PX, lane)), lane);
   const centre = lanes.left + lane / 2;
   return { left: centre - width / 2, right: centre + width / 2, top, bottom };
+}
+
+export function transportLegendBottom(
+  viewportHeight: number,
+  obstacles: readonly (HudBox | null)[],
+  gap: number = HUD_ISLAND_GAP_PX,
+): number {
+  let top = viewportHeight;
+  for (const box of obstacles) {
+    if (sized(box)) top = Math.min(top, box.top);
+  }
+  return Math.max(gap, Math.ceil(viewportHeight - top + gap));
 }
