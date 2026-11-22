@@ -16,12 +16,15 @@ import {
 } from "../lib/heliodonGeometry";
 import { sunDomeRadiusM } from "../lib/heliodonRadius";
 import {
+  SUN_DOME_BEARING_SIZE_PX,
+  SUN_DOME_CARDINAL_SIZE_PX,
   SUN_DOME_FIT_MS,
   SUN_DOME_HALO_PX,
   SUN_DOME_HORIZON_LINE,
   SUN_DOME_HOUR_LINE,
   SUN_DOME_KEY_DATES,
   SUN_DOME_LABEL_GAP_PX,
+  SUN_DOME_SUN_LINE,
   SUN_DOME_SUN_PX,
   SUN_DOME_TICK_PX,
   SUN_DOME_TICK_STEP_DEG,
@@ -31,6 +34,7 @@ import {
   sunDomeBearingLabels,
   sunDomeBounds,
   sunDomeHourLabel,
+  sunDomeSunLinePositions,
   type ScreenRect,
   type SunDomeLineStyle,
 } from "../lib/heliodonSunDome";
@@ -238,7 +242,7 @@ function buildDial(root: DomeRoot, ink: DomeInk, radius: number, ground: GroundH
   for (const label of sunDomeBearingLabels()) {
     const sprite = labelSprite(label.text, {
       font: ink.sans,
-      sizePx: 10,
+      sizePx: label.cardinal ? SUN_DOME_CARDINAL_SIZE_PX : SUN_DOME_BEARING_SIZE_PX,
       weight: 700,
       colour: label.cardinal ? ink.ink : ink.ink3,
       halo: ink.halo,
@@ -656,14 +660,23 @@ export function SolarHeliodon({
     const ink = domeInk(pixelRatio);
     const dot = sunDotSprite(ink);
     const drop = new LineSegmentsGeometry();
-    drop.setPositions([0, 0, 0, 0, -1, 0]);
-    const material = new LineMaterial({ color: ink.ink, linewidth: 1, depthWrite: false, transparent: true });
+    drop.setPositions([0, 0, 0, 0, 0, 0]);
+    const material = new LineMaterial({
+      color: ink.ink,
+      linewidth: SUN_DOME_SUN_LINE.widthPx,
+      depthWrite: false,
+      transparent: true,
+      dashed: true,
+      dashSize: SUN_DOME_SUN_LINE.dashPx![0],
+      gapSize: SUN_DOME_SUN_LINE.dashPx![1],
+    });
     material.toneMapped = false;
     const line = new LineSegments2(drop, material);
+    line.computeLineDistances();
     line.renderOrder = OVERLAY_ORDER + 50;
     line.frustumCulled = false;
     group.add(line, dot);
-    group.userData = { dot, drop, material };
+    group.userData = { dot, drop, line, material };
     markScreenOnly(group);
     moveToPostOverlay(group);
     return group;
@@ -674,14 +687,17 @@ export function SolarHeliodon({
   const dot = (marker.userData.dot as DomeSprite | undefined) ?? null;
   useLayoutEffect(() => {
     const drop = marker.userData.drop as LineSegmentsGeometry | undefined;
+    const line = marker.userData.line as LineSegments2 | undefined;
     dot?.position.copy(sunAt);
-    drop?.setPositions([sunAt.x, sunAt.y, sunAt.z, sunAt.x, ground(sunAt.x, sunAt.z) + HELIODON_LIFT_M, sunAt.z]);
+    drop?.setPositions(sunDomeSunLinePositions(sunAt, centre));
+    line?.computeLineDistances();
   });
   marker.visible = sunVisible;
 
-  useFrame(({ gl, size }) => {
+  useFrame(({ camera, gl, size }) => {
     const material = marker.userData.material as LineMaterial | undefined;
     material?.resolution.set(gl.domElement.clientWidth || size.width, size.height);
+    if (material && SUN_DOME_SUN_LINE.dashPx) material.dashScale = 1 / worldPerPixel(camera, centre, size.height);
   });
   const scene = useThree((state) => state.scene);
   const camera = useThree((state) => state.camera);

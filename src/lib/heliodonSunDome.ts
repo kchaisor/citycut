@@ -27,7 +27,10 @@ export const SUN_DOME_TICK_PX = 4;
 export const SUN_DOME_LABEL_STEP_DEG = 30;
 export const SUN_DOME_LABEL_GAP_PX = 6;
 export const SUN_DOME_HALO_PX = 2;
-export const SUN_DOME_SUN_PX = 10;
+export const SUN_DOME_BEARING_SIZE_PX = 10;
+export const SUN_DOME_CARDINAL_SIZE_PX = 20;
+export const SUN_DOME_SUN_PX = 14;
+export const SUN_DOME_SUN_LINE: SunDomeLineStyle = { widthPx: 1, ink: "--ink", opacity: 1, dashPx: [4, 3] };
 export const SUN_DOME_FIT_MS = 250;
 export const SUN_DOME_SAFE_PAD_PX = 16;
 
@@ -85,21 +88,11 @@ export function sunDomeArcs(selected: { month: number; day: number }): SunDomeAr
   return arcs;
 }
 
-export type SunDomeKeyItem =
-  | { kind: "line"; label: string; strong?: string; line: SunDomeLineStyle }
-  | { kind: "sun"; label: string };
-
-export function sunDomeKeyItems(selected: { month: number; day: number }): SunDomeKeyItem[] {
-  const items: SunDomeKeyItem[] = [
-    { kind: "line", strong: sunDomeDateLabel(selected.month, selected.day), label: "selected", line: SUN_DOME_SELECTED_LINE },
-  ];
-  for (const key of SUN_DOME_KEY_DATES) {
-    if (key.date.month === selected.month && key.date.day === selected.day) continue;
-    items.push({ kind: "line", label: key.keyLabel, line: key.line });
-  }
-  items.push({ kind: "line", label: "Hours", line: SUN_DOME_HOUR_LINE });
-  items.push({ kind: "sun", label: "Sun" });
-  return items;
+export function sunDomeSunLinePositions(
+  sunAt: { x: number; y: number; z: number },
+  centre: { x: number; y: number; z: number },
+): [number, number, number, number, number, number] {
+  return [sunAt.x, sunAt.y, sunAt.z, centre.x, centre.y, centre.z];
 }
 
 export type ScreenRect = { left: number; top: number; right: number; bottom: number };

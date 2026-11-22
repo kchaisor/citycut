@@ -2,7 +2,11 @@ import { describe, expect, it } from "vitest";
 import { HELIODON_LIFT_M } from "./heliodonGeometry";
 import { sunDomeRadiusM } from "./heliodonRadius";
 import {
+  SUN_DOME_BEARING_SIZE_PX,
+  SUN_DOME_CARDINAL_SIZE_PX,
   SUN_DOME_HOUR_LABELS,
+  SUN_DOME_SUN_LINE,
+  SUN_DOME_SUN_PX,
   easeInOutCubic,
   hudSafeArea,
   sunDomeArcs,
@@ -10,7 +14,7 @@ import {
   sunDomeBounds,
   sunDomeDateLabel,
   sunDomeHourLabel,
-  sunDomeKeyItems,
+  sunDomeSunLinePositions,
 } from "./heliodonSunDome";
 
 describe("sun dome labels", () => {
@@ -20,7 +24,7 @@ describe("sun dome labels", () => {
     expect(sunDomeDateLabel(3, 4)).toBe("4 Mar");
   });
 
-  it("labels the solstice arcs 21 Jun and 22 Dec, and leaves the equinox to the key", () => {
+  it("labels the solstice arcs 21 Jun and 22 Dec, and leaves the equinox unlabeled on the dome", () => {
     const labels = sunDomeArcs({ month: 3, day: 4 })
       .filter((arc) => !arc.selected)
       .map((arc) => arc.dateLabel);
@@ -60,9 +64,16 @@ describe("sun dome labels", () => {
     ]);
   });
 
-  it("keys the selected date, the other key dates, hour lines and the sun", () => {
-    const labels = sunDomeKeyItems({ month: 12, day: 22 }).map((item) => ("strong" in item && item.strong ? `${item.strong} ${item.label}` : item.label));
-    expect(labels).toEqual(["22 Dec selected", "21 Jun", "Equinox", "Hours", "Sun"]);
+  it("makes the N/E/S/W letters twice the size of the 30° bearing numbers", () => {
+    expect(SUN_DOME_BEARING_SIZE_PX).toBe(10);
+    expect(SUN_DOME_CARDINAL_SIZE_PX).toBe(2 * SUN_DOME_BEARING_SIZE_PX);
+    expect(sunDomeBearingLabels().filter((label) => label.cardinal).map((label) => label.text)).toEqual(["N", "E", "S", "W"]);
+  });
+
+  it("draws a 14 px sun and a dashed line from the sun to the dome centre", () => {
+    expect(SUN_DOME_SUN_PX).toBe(14);
+    expect(SUN_DOME_SUN_LINE).toMatchObject({ widthPx: 1, ink: "--ink", opacity: 1, dashPx: [4, 3] });
+    expect(sunDomeSunLinePositions({ x: 40, y: 80, z: 30 }, { x: 0, y: 5, z: 0 })).toEqual([40, 80, 30, 0, 5, 0]);
   });
 });
 

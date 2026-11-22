@@ -155,11 +155,11 @@ Control heights: `--control-xs` 24 · `--control-sm` 28 · `--control-md` 32 · 
 | Size | Centred on the cut. Radius = 0.6 × the cut's half-diagonal, clamped to 120–350 m (`sunDomeRadiusM`). Not a user setting. |
 | Camera | On turn-on, ease 250 ms to frame the dome itself (its radius and height, not the whole cut) in the safe area: the viewport minus the live HUD island rects plus 16 px. Reduced motion jumps. |
 | Lines | Fixed-pixel lines (Line2 / `LineMaterial`); dashes are in pixels too. At most three styles: selected date solid 2 px `--ink`; other key dates 1 px `--ink-3` (21 Jun dashed 6/4, 22 Dec dotted 2/3, equinox dashed 2/4); hour lines 0.75 px `--ink` at 35%. Horizon ring and ticks 1 px `--ink` at 25%. |
-| Labels | Constant screen size (canvas sprites rescaled every frame, never metre-sized type). Hour labels 09h / 12h / 15h on the selected path only, Geist Mono 11/600 tabular, 6 px outside the path. Date labels "21 Jun" / "22 Dec", Geist 11/500 `--ink-2`, at the sunset end. Bearings every 30° plus N / E / S / W, 10/700, 0.08 em; numbers `--ink-3`, cardinals `--ink`. Ticks every 10°, 4 px. |
+| Labels | Constant screen size (canvas sprites rescaled every frame, never metre-sized type). Hour labels 09h / 12h / 15h on the selected path only, Geist Mono 11/600 tabular, 6 px outside the path. Date labels "21 Jun" / "22 Dec", Geist 11/500 `--ink-2`, at the sunset end. Bearings every 30° in 10/700, 0.08 em, `--ink-3`; N / E / S / W at 20/700 (twice the bearing numbers; Kelvin, 22 Nov 2026), `--ink`. Ticks every 10°, 4 px. |
 | Halo | Dome labels only: a 2 px knock-out in the 3D background colour, drawn into the label's canvas, so text stays legible where it crosses a line. This is the one exception to "no text outlines" and never applies to HUD text. |
-| Accent | Only the sun: 10 px `--accent` dot, 1 px `--ink` edge, 1 px `--ink` drop line to the ground. No yellow lines, no rayed sun. |
+| Accent | Only the sun: 14 px `--accent` dot (was 10 px; about 1.4×, Kelvin 22 Nov 2026), 1 px `--ink` edge, and a 1 px `--ink` dashed 4/3 line from the sun to the dome centre (not a vertical drop to the ground). No yellow lines, no rayed sun. |
 | Visibility | Only while Solar Study is the active analysis and the 3D Sun Dome chip is on. |
-| Key | Inline in the Analysis bar top row, right after the overlay chips, while the dome is on in 3D: 14 px swatches in the three line styles plus the sun dot, labelled with the selected date (600 `--ink`), the other key dates, "Hours" and "Sun" in micro type `--ink-2`, 6 px apart so the bar stays on two rows at 1440. |
+| Key | None in the Analysis bar. The inline 21 Jun / 22 Dec / Equinox / Hours / Sun legend beside the 3D Sun Dome chip is removed; it is not moved elsewhere. The High / Fast quality switch stays at the right of the top row (Kelvin, 22 Nov 2026). |
 
 ## 9. Motion
 

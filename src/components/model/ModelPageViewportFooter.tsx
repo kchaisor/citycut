@@ -14,47 +14,11 @@ import {
   solarSliderSpan,
 } from "../../lib/solarSlider";
 import { SUN_STUDY_DATES } from "../../lib/solar";
-import { sunDomeKeyItems } from "../../lib/heliodonSunDome";
 import { toggleAnalysis, type SiteAnalysisKind } from "../../lib/sidebarSections";
 import { WIND_PERIOD_LABELS, WindPeriodId } from "../../lib/windRose";
 import { withDesignWind, withWindSeason } from "../../lib/windState";
 import { DesignWindPresets } from "../DesignWindPresets";
 import { WindPlanSwitch } from "./WindPlanSwitch";
-
-function SunDomeKey({ month, day }: { month: number; day: number }) {
-  return (
-    <div className="sun-dome-key" role="list" aria-label="Sun dome key">
-      {sunDomeKeyItems({ month, day }).map((item) => (
-        <span key={item.label + ("strong" in item ? item.strong ?? "" : "")} className="sun-dome-key-item" role="listitem">
-          {item.kind === "sun" ? (
-            <span className="sun-dome-key-sun" aria-hidden="true" />
-          ) : (
-            <svg className="sun-dome-key-swatch" width="14" height="4" viewBox="0 0 14 4" aria-hidden="true">
-              <line
-                x1="0"
-                y1="2"
-                x2="14"
-                y2="2"
-                className={item.line.ink === "--ink" ? "is-ink" : "is-ink-3"}
-                strokeWidth={item.line.widthPx}
-                strokeOpacity={item.line.opacity}
-                strokeDasharray={item.line.dashPx?.join(" ")}
-              />
-            </svg>
-          )}
-          {item.kind === "line" && item.strong ? (
-            <>
-              <strong>{item.strong}</strong>
-              <span className="sr-only">{item.label}</span>
-            </>
-          ) : (
-            <span>{item.label}</span>
-          )}
-        </span>
-      ))}
-    </div>
-  );
-}
 
 export function ModelPageViewportFooter({ vm }: { vm: import("./useModelPage").ModelPageViewModel }) {
   const {
@@ -248,7 +212,6 @@ export function ModelPageViewportFooter({ vm }: { vm: import("./useModelPage").M
                         </button>
                       )}
               </div>
-              {solarLive && solar.showPath && tab === "3d" && <SunDomeKey month={solar.month} day={solar.day} />}
               </div>
               )}
 
