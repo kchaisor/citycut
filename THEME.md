@@ -241,9 +241,9 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--sun-arc-summer` | `#1a1916` | Dec 21 sun path in the 3D heliodon, solid line (screen only). Black or grey only. |
 | `--sun-arc-equinox` | `#1a1916` | Sep/Mar sun path in the 3D heliodon, dashed line (screen only). Black or grey only. |
 | `--sun-arc-winter` | `#1a1916` | Jun 21 sun path in the 3D heliodon, dash-dot line (screen only). Black or grey only. |
-| `--sun-marker` | `#ffcc1a` | Sun icon at the current time in the 3D heliodon (screen only). The only yellow in the heliodon. |
+| `--sun-marker` | `#ffcc1a` | 14 px sun at the current time in the 3D heliodon (screen only; was 10 px, Kelvin 22 Nov 2026). The only yellow in the heliodon. A 1 px `--ink` dashed line runs from the sun to the dome centre. |
 | `--sun-compass` | `#45423c` | Dark grey of the 3D heliodon dial: 10° altitude rings, azimuth radials, 1° ticks, degree numbers and hour lines (screen only). |
-| `--sun-compass-label` | `#1a1916` | Ink of the 3D heliodon dial: horizon ring, 5° and 10° ticks, cardinal ticks, dashed axes, N/E/S/W, hour labels, arc labels and hour-dot outlines (screen only). |
+| `--sun-compass-label` | `#1a1916` | Ink of the 3D heliodon dial: horizon ring, 5° and 10° ticks, cardinal ticks, dashed axes, N/E/S/W (20/700, twice the 10/700 bearing numbers; Kelvin 22 Nov 2026), hour labels, arc labels and hour-dot outlines (screen only). |
 | `--studio-compass-chip` | `#111111` | 3D view compass (Designbot C): dark disc behind the north/south needle. |
 | `--studio-compass-chip-ring` | `#000000` | 3D view compass: 1px outer ring on the chip. |
 | `--studio-compass-needle-north` | `#ffe500` | 3D view compass: north half of the needle. |
