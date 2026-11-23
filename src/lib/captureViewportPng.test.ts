@@ -9,6 +9,7 @@ import {
   readViewportCapture,
   visibleViewportRect,
 } from "./captureViewportPng";
+import { POST_OVERLAY_LAYER, moveToPostOverlay, setPostOverlayDeferred } from "./postOverlay";
 import { markScreenOnly } from "./screenOnly";
 
 const guards = vi.hoisted(() => ({
@@ -103,6 +104,37 @@ describe("captureViewportPng", () => {
     expect(guards.cameraForExportFrame).not.toHaveBeenCalled();
     expect(guards.withStreamStillFrame).not.toHaveBeenCalled();
     expect(guards.getColour).not.toHaveBeenCalled();
+  });
+
+  it("renders post-overlay objects (sun dome, wind streaks) even when the live camera defers them", async () => {
+    stubCanvas();
+    const { gl, render } = renderer([]);
+    const scene = new THREE.Scene();
+    const dome = new THREE.Mesh();
+    const streaks = new THREE.Group();
+    streaks.add(new THREE.Mesh());
+    moveToPostOverlay(dome);
+    moveToPostOverlay(streaks);
+    const body = new THREE.Mesh();
+    scene.add(dome, streaks, body);
+    const camera = new THREE.PerspectiveCamera();
+    setPostOverlayDeferred(camera, true);
+    const maskBefore = camera.layers.mask;
+    const seen: Array<{ dome: boolean; streaks: boolean; body: boolean }> = [];
+    render.mockImplementation((_scene: THREE.Scene, live: THREE.Camera) => {
+      seen.push({
+        dome: live.layers.test(dome.layers),
+        streaks: live.layers.test(streaks.children[0]!.layers),
+        body: live.layers.test(body.layers),
+      });
+    });
+
+    await captureViewportPng(gl, scene, camera, { background: null, labels: [] });
+
+    expect(seen).toEqual([{ dome: true, streaks: true, body: true }]);
+    expect(camera.layers.isEnabled(POST_OVERLAY_LAYER)).toBe(false);
+    expect(camera.layers.mask).toBe(maskBefore);
+    expect(dome.visible).toBe(true);
   });
 
   it("rejects a canvas that is not on screen", async () => {
@@ -254,6 +286,32 @@ describe("high quality capture", () => {
     expect(scene.background).toBe(original);
     expect(raw.setPixelRatio).toHaveBeenLastCalledWith(1);
     expect(raw.setClearAlpha).toHaveBeenLastCalledWith(1);
+  });
+
+  it("renders post-overlay objects in the high quality capture and in the restoring frame", async () => {
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({
+      fillRect: vi.fn(),
+      drawImage: vi.fn(),
+    } as unknown as CanvasRenderingContext2D);
+    vi.spyOn(HTMLCanvasElement.prototype, "toBlob").mockImplementation((callback) =>
+      callback(new Blob([new Uint8Array([1])], { type: "image/png" })),
+    );
+    const { gl, raw } = hqRenderer();
+    const scene = new THREE.Scene();
+    const dome = new THREE.Mesh();
+    moveToPostOverlay(dome);
+    scene.add(dome);
+    const camera = new THREE.PerspectiveCamera();
+    setPostOverlayDeferred(camera, true);
+    const seen: boolean[] = [];
+    (raw.render as unknown as ReturnType<typeof vi.fn>).mockImplementation((_scene: THREE.Scene, live: THREE.Camera) => {
+      seen.push(live.layers.test(dome.layers));
+    });
+
+    await captureViewportPng(gl, scene, camera, { background: null, labels: [] }, { transparent: true, scale: 3 });
+
+    expect(seen).toEqual([true, true]);
+    expect(camera.layers.isEnabled(POST_OVERLAY_LAYER)).toBe(false);
   });
 
   it("caps the pixel ratio by the texture limit and crops the normal export at 1x", () => {

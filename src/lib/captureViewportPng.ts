@@ -1,4 +1,5 @@
 import type * as THREE from "three";
+import { POST_OVERLAY_LAYER } from "./postOverlay";
 
 export type ViewportOverlayLabel = {
   text: string;
@@ -181,6 +182,16 @@ function maxTextureSize(gl: THREE.WebGLRenderer): number {
   }
 }
 
+export function renderViewportWithOverlays(gl: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.Camera): void {
+  const mask = camera.layers.mask;
+  camera.layers.enable(POST_OVERLAY_LAYER);
+  try {
+    gl.render(scene, camera);
+  } finally {
+    camera.layers.mask = mask;
+  }
+}
+
 export async function captureViewportPng(
   gl: THREE.WebGLRenderer,
   scene: THREE.Scene,
@@ -204,7 +215,7 @@ export async function captureViewportPng(
     gl.setClearAlpha(0);
   }
   try {
-    gl.render(scene, camera);
+    renderViewportWithOverlays(gl, scene, camera);
     const bufferRatio = source.width / cssWidth;
     const crop = capture.crop ?? { x: 0, y: 0, width: cssWidth, height: cssHeight };
     const sx = Math.max(0, Math.round(crop.x * bufferRatio));
@@ -239,7 +250,7 @@ export async function captureViewportPng(
       scene.background = previousBackground;
       gl.setClearAlpha(previousAlpha);
       gl.setPixelRatio(previousRatio);
-      gl.render(scene, camera);
+      renderViewportWithOverlays(gl, scene, camera);
     }
   }
 }
