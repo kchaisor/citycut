@@ -86,17 +86,15 @@ describe("imported massing colour", () => {
   });
 });
 
-describe("imported buildings in Drawing keep their use or file colour", () => {
-  const residential = getColour("--use-residential");
-  const unclassified = getColour("--use-unclassified");
-  const commercial = getColour("--use-commercial");
+describe("imported buildings in Drawing take the imported white or the file colour", () => {
+  const white = getColour("--imported-massing");
 
-  it("fills the no-use Podium with unclassified grey, not an outline", () => {
-    expect(unclassified).toBe("#B8B8B8");
+  it("fills every building white, with no use colour", () => {
+    expect(white).toBe("#FFFFFF");
     const plan = display(massingDrawingBuildings([qaSchemeMassing(0)], origin, zone));
     const m = siteModel(plan);
     expect(plan.map((b) => b.overtureName)).toEqual(["Tower A", "Podium", "Tower B"]);
-    expect(plan.map((b) => planBuildingFill(m, b, "use" as never, false))).toEqual([residential, unclassified, commercial]);
+    expect(plan.map((b) => planBuildingFill(m, b, "use" as never, false))).toEqual([white, white, white]);
     for (const b of plan) {
       expect(b.ring.length).toBeGreaterThanOrEqual(4);
       expect(b.ring[0]).toEqual(b.ring.at(-1));
@@ -115,31 +113,29 @@ describe("imported buildings in Drawing keep their use or file colour", () => {
     expect(roofs).toEqual(["#3366CC", "#3366CC", "#3366CC"]);
   });
 
-  it("shows use colours in exploded axo, roof and walls per visible building", () => {
+  it("shows the imported white in exploded axo, roof and walls per visible building, and no use colour", () => {
     const axo = axoFacesByFill(massingDrawingBuildings([qaSchemeMassing(0)], origin, zone));
-    for (const colour of [residential, unclassified, commercial]) {
-      expect(axo(colour).roofs).toBe(1);
-      expect(axo(colour).walls).toBeGreaterThanOrEqual(2);
+    expect(axo(white).roofs).toBe(3);
+    expect(axo(white).walls).toBeGreaterThanOrEqual(6);
+    for (const token of ["--use-residential", "--use-commercial", "--use-unclassified"] as const) {
+      expect(axo(getColour(token))).toEqual({ roofs: 0, walls: 0 });
     }
-    expect(axoFacesByFill(massingDrawingBuildings([qaSchemeMassing(0)], origin, zone))(getColour("--imported-massing")).roofs).toBe(0);
   });
 
   it("leaves a hidden building out of the exploded axo", () => {
     const axo = axoFacesByFill(massingDrawingBuildings([hidePodium(qaSchemeMassing(0))], origin, zone));
-    expect(axo(residential).roofs).toBe(1);
-    expect(axo(commercial).roofs).toBe(1);
-    expect(axo(unclassified)).toEqual({ roofs: 0, walls: 0 });
+    expect(axo(white).roofs).toBe(2);
   });
 
-  it("shows use colours in the isometric drawing, without white caster solids", () => {
+  it("shows the imported white in the isometric drawing, without white caster solids", () => {
     const all = massingDrawingBuildings([qaSchemeMassing(0)], origin, zone);
     const solids = buildIsometricDrawing(siteModel(all)).solids.flatMap((s) => (s.kind === "building" && s.imported ? [s] : []));
     const byId = new Map(all.map((b) => [b.id, b]));
     expect(solids.every((s) => !byId.get(s.id)!.importedMassingShadowCaster)).toBe(true);
     expect(Object.fromEntries(solids.map((s) => [byId.get(s.id)!.overtureName, s.roofFill]))).toEqual({
-      "Tower A": residential,
-      Podium: unclassified,
-      "Tower B": commercial,
+      "Tower A": white,
+      Podium: white,
+      "Tower B": white,
     });
   });
 });

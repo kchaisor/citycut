@@ -8,11 +8,9 @@ import {
   layerScheme,
   levelsFromUserText,
   modelNameFromFile,
-  useFromLayerPath,
-  useFromUserText,
   visibleBuildings,
 } from "./massingBuildings";
-import type { BuildingUse, CityModel, LonLat } from "../types";
+import type { CityModel, LonLat } from "../types";
 
 export { normaliseMassingColour } from "./massingBuildings";
 
@@ -31,14 +29,12 @@ export type MassingPlacementMode = "mga" | "click";
 
 export type MassingPlacement = { e: number; n: number; base: number; rotDeg: number };
 
-export type MassingBuildingUse = Exclude<BuildingUse, "outbuilding" | "unclassified">;
-
 export type ParsedMassingBuilding = {
   id: string;
   name: string;
   layerPath: string | null;
   scheme: string | null;
-  use: MassingBuildingUse | null;
+  use: null;
   levels: number | null;
   groupedBy: "userText" | "layer" | "file";
   triStart: number;
@@ -166,16 +162,12 @@ function layerPathOf(doc: RhinoDoc, object: RhinoObject): string | null {
   return layers.get(index)?.fullPath || null;
 }
 
-type BuildingGroupCandidate = BuildingGroup & { textUse: MassingBuildingUse | null; layerUse: MassingBuildingUse | null };
-
-function buildingGroupFor(doc: RhinoDoc, object: RhinoObject, modelName: string): BuildingGroupCandidate {
+function buildingGroupFor(doc: RhinoDoc, object: RhinoObject, modelName: string): BuildingGroup {
   const text = userText(object);
   const layerPath = layerPathOf(doc, object);
-  const textUse = useFromUserText(text.get("use"));
-  const layerUse = useFromLayerPath(isDefaultLayerPath(layerPath) ? null : layerPath);
   const levels = levelsFromUserText(text.get("levels"));
   const named = text.get("building");
-  const base = { layerPath, scheme: layerScheme(layerPath), use: null, levels, textUse, layerUse };
+  const base = { layerPath, scheme: layerScheme(layerPath), use: null, levels };
   if (named) return { ...base, id: `text:${named}`, name: named, groupedBy: "userText" };
   if (!isDefaultLayerPath(layerPath)) {
     return { ...base, id: `layer:${layerPath}`, name: layerLeafName(layerPath!), groupedBy: "layer" };
@@ -200,14 +192,12 @@ export function parseMassing3dm(rhino: Rhino, bytes: Uint8Array, fileName?: stri
     const units = unitInfo(rhino, doc);
     const fileZone = fileZoneOf(doc);
     const modelName = modelNameFromFile(fileName);
-    const groups = new Map<string, BuildingGroupCandidate>();
+    const groups = new Map<string, BuildingGroup>();
     const groupMeshes = new Map<string, MeshLike[]>();
     const addMeshes = (object: RhinoObject, found: MeshLike[]) => {
       const candidate = buildingGroupFor(doc, object, modelName);
       const group = groups.get(candidate.id);
       if (group) {
-        group.textUse ??= candidate.textUse;
-        group.layerUse ??= candidate.layerUse;
         group.levels ??= candidate.levels;
       } else {
         groups.set(candidate.id, candidate);
@@ -321,7 +311,7 @@ export function parseMassing3dm(rhino: Rhino, bytes: Uint8Array, fileName?: stri
       positions[i + 2] = world[i + 2]! - anchor.z;
     }
 
-    const buildings: ParsedMassingBuilding[] = [...groups.values()].map(({ textUse, layerUse, ...group }, index) => {
+    const buildings: ParsedMassingBuilding[] = [...groups.values()].map((group, index) => {
       const range = ranges[index]!;
       let baseZ = Infinity;
       let topZ = -Infinity;
@@ -329,7 +319,7 @@ export function parseMassing3dm(rhino: Rhino, bytes: Uint8Array, fileName?: stri
         baseZ = Math.min(baseZ, world[v * 3 + 2]! - anchor.z);
         topZ = Math.max(topZ, world[v * 3 + 2]! - anchor.z);
       }
-      return { ...group, use: textUse ?? layerUse, ...range, baseZ, topZ, height: topZ - baseZ };
+      return { ...group, ...range, baseZ, topZ, height: topZ - baseZ };
     }).filter((building) => building.triEnd > building.triStart);
 
     const notes: string[] = [];

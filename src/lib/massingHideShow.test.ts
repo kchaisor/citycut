@@ -151,16 +151,16 @@ describe("hiding one of three imported buildings", () => {
 });
 
 describe("imported building colours", () => {
-  it("By use: use colour per building, unclassified grey with no use", () => {
+  it("Default: the imported white on every building, no use colours", () => {
     const plan = footprints(massingDrawingBuildings([scheme()], origin, zone));
     expect(plan.map((building) => building.importedColour)).toEqual([
-      getColour("--use-residential"),
-      getColour("--use-unclassified"),
-      getColour("--use-commercial"),
+      getColour("--imported-massing"),
+      getColour("--imported-massing"),
+      getColour("--imported-massing"),
     ]);
   });
 
-  it("Single colour: the file colour overrides use colours on every building", () => {
+  it("Single colour: the file colour replaces the default on every building", () => {
     const plan = footprints(massingDrawingBuildings([{ ...scheme(), colour: "#3366CC" }], origin, zone));
     expect(plan.map((building) => building.importedColour)).toEqual(["#3366CC", "#3366CC", "#3366CC"]);
     expect(massingExportParts([{ ...scheme(), colour: "#3366CC" }]).every((part) => part.colour === "#3366CC")).toBe(true);
@@ -184,7 +184,7 @@ describe("display footprint from the shadow-caster roofs", () => {
     const merged = plan[0]!;
     expect(merged.height).toBeCloseTo(86, 0);
     expect(merged.extrusionParts?.map((part) => Math.round(part.height)).sort((a, b) => a - b)).toEqual([18, 86]);
-    expect(merged.importedColour).toBe(getColour("--use-unclassified"));
+    expect(merged.importedColour).toBe(getColour("--imported-massing"));
     expect(plan[1]!.extrusionParts).toBeUndefined();
   });
 });

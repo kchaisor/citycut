@@ -46,12 +46,12 @@ describe("imported masses in 3D", () => {
     }
   });
 
-  it("shows use colours by use, and the file colour on every building in single colour", () => {
-    const byUse = fills(buildMassingGroup([qaSchemeMassing(0)], origin, zone)!);
-    expect(byUse.map((fill) => `#${fill.material.color.getHexString()}`.toUpperCase())).toEqual([
-      getColour("--use-residential").toUpperCase(),
-      getColour("--use-unclassified").toUpperCase(),
-      getColour("--use-commercial").toUpperCase(),
+  it("shows the imported white by default, and the file colour on every building in single colour", () => {
+    const byDefault = fills(buildMassingGroup([qaSchemeMassing(0)], origin, zone)!);
+    expect(byDefault.map((fill) => `#${fill.material.color.getHexString()}`.toUpperCase())).toEqual([
+      getColour("--imported-massing").toUpperCase(),
+      getColour("--imported-massing").toUpperCase(),
+      getColour("--imported-massing").toUpperCase(),
     ]);
     const single = fills(buildMassingGroup([{ ...qaSchemeMassing(0), colour: "#3366CC" }], origin, zone)!);
     expect(single.map((fill) => `#${fill.material.color.getHexString()}`.toUpperCase())).toEqual([

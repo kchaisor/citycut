@@ -111,7 +111,6 @@ function BuildingRow({
   onSelect?: (clientX: number, clientY: number) => void;
   onVisible?: (visible: boolean) => void;
 }) {
-  const unclassified = !item.colour && !building.colour && building.use == null;
   return (
     <li
       className={["massing-building-row", building.visible ? "" : "is-hidden", selected ? "is-selected" : ""]
@@ -128,8 +127,7 @@ function BuildingRow({
         }}
       >
         <span
-          className={unclassified ? "massing-swatch is-unclassified" : "massing-swatch"}
-          data-swatch={unclassified ? "unclassified" : "use"}
+          className="massing-swatch"
           style={{ backgroundColor: massingBuildingColour(item, building) }}
           aria-hidden="true"
         />
@@ -311,7 +309,7 @@ export function ImportMassingPanel(props: Props) {
             <p className="massing-micro massing-colour-head">Colour</p>
             <div className="massing-colour-mode" role="group" aria-label="Colour">
               <button type="button" aria-pressed={!single} onClick={() => props.onColour(item.id, null)}>
-                By use
+                Default
               </button>
               <button
                 type="button"
@@ -323,7 +321,7 @@ export function ImportMassingPanel(props: Props) {
                 Single colour
               </button>
             </div>
-            <p className="massing-helper">Single colour recolours every building and overrides use colours.</p>
+            <p className="massing-helper">Single colour recolours every building in the file.</p>
             {single && (
               <label className="massing-field massing-colour">
                 <span>Colour</span>
