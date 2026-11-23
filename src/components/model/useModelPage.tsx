@@ -139,7 +139,8 @@ import { SceneExporter } from "../Scene3D";
 
 import type { CameraMemoryRef, CameraRestoreRequest } from "../../lib/cameraMemory";
 import type { NamedViewSnapshot } from "../../lib/namedViews";
-import { useNamedViews } from "./useNamedViews";import { ExportBusy } from "../../lib/exportTiles";
+import { useNamedViews } from "./useNamedViews";
+import { waitForStudies, type StudyReadySignals } from "../../lib/studyReady";import { ExportBusy } from "../../lib/exportTiles";
 
 import { useWalkPlayback, useWalkViewshed } from "../useWalkViewshed";
 
@@ -1952,6 +1953,11 @@ export function useModelPage({
       solar,
       wind: windSettings,
       windStreaksOn,
+      windPlan: {
+        mode: windPlan.mode,
+        vectorsOn: windPlan.vectorsOn,
+        sector: designWind ? null : windPlan.sector,
+      },
       renderQuality,
       sunDomeSizeM,
       viewshed: { eyeM: walk.eyeM, radiusM: walk.radiusM },
@@ -1973,6 +1979,9 @@ export function useModelPage({
     commitSolar({ ...solar, ...snapshot.solar });
     commitWind({ ...windSettings, ...snapshot.wind });
     setWindStreaksOn(snapshot.windStreaksOn);
+    windPlan.setMode(snapshot.windPlan.mode);
+    windPlan.setVectorsOn(snapshot.windPlan.vectorsOn);
+    windPlan.restoreSector(snapshot.wind.period, snapshot.windPlan.sector);
     commitRenderQuality(snapshot.renderQuality);
     setSunDomeSizeM(snapshot.sunDomeSizeM);
     if (snapshot.viewshed.eyeM > 0) walk.setEyeM(snapshot.viewshed.eyeM);
@@ -1999,11 +2008,27 @@ export function useModelPage({
     });
   }
 
+  const studySignals = useRef<StudyReadySignals>({
+    sunHoursPending: false,
+    sunHoursSurfacesPending: false,
+    windPlanApplicable: false,
+    windPlanReady: true,
+  });
+  useEffect(() => {
+    studySignals.current = {
+      sunHoursPending: sunHoursGround.pending,
+      sunHoursSurfacesPending: sunHoursGround.pendingSurfaces,
+      windPlanApplicable: siteWind != null && windPlan.hasData,
+      windPlanReady: windPlan.ready,
+    };
+  });
+
   const namedViews = useNamedViews({
     model,
     getSnapshot: namedViewSnapshot,
     applySnapshot: applyNamedViewSnapshot,
     getExporter: () => exportRef.current,
+    waitUntilReady: (snapshot) => waitForStudies(snapshot, () => studySignals.current),
   });
   const landmarkByBuilding = useMemo(
     (): ReadonlyMap<number, WikidataLandmark> =>

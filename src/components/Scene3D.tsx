@@ -126,7 +126,7 @@ import type { PrevailingStream } from "../lib/windPrevailingStreams";
 import { createWindPlanTransformStore, WindPlanOverlay, WindPlanProjector } from "./WindPlanOverlay";
 import type { WindPlanState } from "./useWindPlan";
 import { InspectHudProjector, type InspectHudScreen } from "./InspectHudProjector";
-import { captureViewportPng, readViewportCapture } from "../lib/captureViewportPng";
+import { captureViewportPng, readViewportCapture, type ViewportPngOptions } from "../lib/captureViewportPng";
 import { LandmarkLabelProjector, type LandmarkExportLabels, type LandmarkScreenState } from "./LandmarkLabelProjector";
 import type { LandmarkLabelSource } from "../lib/landmarkLabels";
 import type { WindPeriodId } from "../lib/windRose";
@@ -140,7 +140,7 @@ const NO_LANDMARKS: readonly LandmarkLabelSource[] = [];
 
 export type SceneExporter = {
   png: () => Promise<Blob>;
-  viewportPng: () => Promise<Blob>;
+  viewportPng: (options?: ViewportPngOptions) => Promise<Blob>;
   shot: () => CameraShot;
 };
 
@@ -1913,7 +1913,7 @@ function ExportBridge({
         if (city && solarDiagramOn) return withBuildingExportColours(city, false, render);
         return render();
       },
-      viewportPng: () => captureViewportPng(gl, scene, get().camera, readViewportCapture(gl.domElement)),
+      viewportPng: (options) => captureViewportPng(gl, scene, get().camera, readViewportCapture(gl.domElement), options),
       shot: () => {
         const frame = exportFrameSize(gl.domElement);
         return shotFromCamera(cameraForExportFrame(get().camera, frame.width, frame.height), frame.width, frame.height);

@@ -12,8 +12,8 @@ export type NamedViewsPanelProps = {
   onRestore: (id: string) => void;
   onRename: (id: string, name: string) => void;
   onDelete: (id: string) => void;
-  onExportSelected: (ids: string[]) => void;
-  onExportAll: () => void;
+  onExportSelected: (ids: string[], highQuality: boolean) => void;
+  onExportAll: (highQuality: boolean) => void;
 };
 
 function viewMeta(view: NamedView): string {
@@ -28,6 +28,7 @@ export function NamedViewsPanel(props: NamedViewsPanelProps) {
   const [name, setName] = useState("");
   const [ticked, setTicked] = useState<ReadonlySet<string>>(new Set());
   const [renaming, setRenaming] = useState<{ id: string; text: string } | null>(null);
+  const [highQuality, setHighQuality] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const tickedIds = views.filter((view) => ticked.has(view.id)).map((view) => view.id);
   const exporting = busy !== null;
@@ -163,12 +164,16 @@ export function NamedViewsPanel(props: NamedViewsPanelProps) {
         </ul>
       )}
       <p className="massing-micro named-views-export-head">Export PNG</p>
+      <label className="named-views-quality">
+        <input type="checkbox" checked={highQuality} disabled={exporting} onChange={(event) => setHighQuality(event.target.checked)} />
+        <span>High quality, transparent</span>
+      </label>
       <div className="named-views-export">
         <button
           type="button"
           className="named-views-primary"
           disabled={tickedIds.length === 0 || exporting}
-          onClick={() => props.onExportSelected(tickedIds)}
+          onClick={() => props.onExportSelected(tickedIds, highQuality)}
         >
           {busy === "selected" ? "Exporting…" : "Export selected"}
         </button>
@@ -176,12 +181,12 @@ export function NamedViewsPanel(props: NamedViewsPanelProps) {
           type="button"
           className="named-views-primary"
           disabled={views.length === 0 || exporting}
-          onClick={props.onExportAll}
+          onClick={() => props.onExportAll(highQuality)}
         >
           {busy === "all" ? "Exporting…" : "Export all"}
         </button>
       </div>
-      <p className="massing-helper">One view downloads as a PNG; several download as a zip. Only 3D views export.</p>
+      <p className="massing-helper">One view downloads as a PNG; several download as a zip. Only 3D views export. High quality renders at 3x on a transparent background.</p>
       {warning && <p className="massing-warning is-error" role="alert">{warning}</p>}
     </div>
   );

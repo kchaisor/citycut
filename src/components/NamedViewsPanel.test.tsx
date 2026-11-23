@@ -16,6 +16,7 @@ const SNAPSHOT: NamedViewSnapshot = {
   solar: { showPath: false, castShadows: false, radiusFactor: 1, year: 2026, month: 6, day: 21, hour: 12, minute: 0 },
   wind: { enabled: false, period: "annual", designWind: null, daypart: "all" },
   windStreaksOn: false,
+  windPlan: { mode: "speed", vectorsOn: true, sector: null },
   renderQuality: "high",
   sunDomeSizeM: null,
   viewshed: { eyeM: 1.6, radiusM: 250 },
@@ -127,11 +128,24 @@ describe("NamedViewsPanel", () => {
     await user.click(screen.getByRole("checkbox", { name: "Tick Corner" }));
     expect(selected.disabled).toBe(false);
     await user.click(selected);
-    expect(props.onExportSelected).toHaveBeenCalledWith(["b"]);
+    expect(props.onExportSelected).toHaveBeenCalledWith(["b"], false);
     await user.click(screen.getByRole("checkbox", { name: "Tick Corner" }));
     expect(selected.disabled).toBe(true);
     await user.click(screen.getByRole("button", { name: "Export all" }));
-    expect(props.onExportAll).toHaveBeenCalledTimes(1);
+    expect(props.onExportAll).toHaveBeenCalledWith(false);
+  });
+
+  it("passes the High quality, transparent toggle through to both exports", async () => {
+    const user = userEvent.setup();
+    const props = mount();
+    const toggle = screen.getByRole("checkbox", { name: "High quality, transparent" }) as HTMLInputElement;
+    expect(toggle.checked).toBe(false);
+    await user.click(toggle);
+    await user.click(screen.getByRole("checkbox", { name: "Tick Plaza" }));
+    await user.click(screen.getByRole("button", { name: "Export selected" }));
+    expect(props.onExportSelected).toHaveBeenCalledWith(["a"], true);
+    await user.click(screen.getByRole("button", { name: "Export all" }));
+    expect(props.onExportAll).toHaveBeenCalledWith(true);
   });
 
   it("marks non-3D views as restore only and disables export while busy", () => {

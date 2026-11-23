@@ -1,7 +1,14 @@
 // @vitest-environment happy-dom
 import * as THREE from "three";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { captureViewportPng, readViewportCapture } from "./captureViewportPng";
+import {
+  captureViewportPng,
+  freeViewportBox,
+  hqPixelRatio,
+  opaqueColour,
+  readViewportCapture,
+  visibleViewportRect,
+} from "./captureViewportPng";
 import { markScreenOnly } from "./screenOnly";
 
 const guards = vi.hoisted(() => ({
@@ -119,5 +126,145 @@ describe("readViewportCapture", () => {
     const capture = readViewportCapture(document.getElementById("c") as HTMLCanvasElement);
     expect(capture.background).toBe("rgb(250, 250, 250)");
     expect(capture.labels.map((label) => label.text)).toEqual(["Flinders"]);
+  });
+});
+
+describe("visibleViewportRect", () => {
+  function canvasAt(left: number, top: number, width: number, height: number): HTMLCanvasElement {
+    const canvas = document.createElement("canvas");
+    canvas.getBoundingClientRect = () =>
+      ({ left, top, right: left + width, bottom: top + height, width, height, x: left, y: top }) as DOMRect;
+    return canvas;
+  }
+
+  it("keeps the free area between the left rail, right cards, top bar and bottom bar", () => {
+    const canvas = canvasAt(0, 0, 1440, 900);
+    const rect = visibleViewportRect(canvas, [
+      { left: 0, top: 0, right: 360, bottom: 900 },
+      { left: 1100, top: 60, right: 1440, bottom: 900 },
+      { left: 0, top: 0, right: 1440, bottom: 56 },
+      { left: 360, top: 820, right: 1100, bottom: 900 },
+    ]);
+    expect(rect).toEqual({ x: 360, y: 56, width: 740, height: 764 });
+  });
+
+  it("ignores obstacles outside the canvas and falls back to the full canvas when nothing is left", () => {
+    const canvas = canvasAt(100, 50, 800, 600);
+    expect(visibleViewportRect(canvas, [{ left: 2000, top: 0, right: 2100, bottom: 100 }])).toEqual({
+      x: 0,
+      y: 0,
+      width: 800,
+      height: 600,
+    });
+    expect(visibleViewportRect(canvas, [{ left: 0, top: 0, right: 2000, bottom: 2000 }])).toEqual({
+      x: 0,
+      y: 0,
+      width: 800,
+      height: 600,
+    });
+  });
+
+  it("cuts a card floating on one edge from the side that loses least", () => {
+    const free = freeViewportBox({ left: 0, top: 0, right: 1000, bottom: 800 }, [{ left: 0, top: 100, right: 200, bottom: 700 }]);
+    expect(free).toEqual({ left: 200, top: 0, right: 1000, bottom: 800 });
+  });
+});
+
+describe("high quality capture", () => {
+  function hqRenderer() {
+    const domElement = document.createElement("canvas");
+    Object.defineProperty(domElement, "clientWidth", { value: 400 });
+    Object.defineProperty(domElement, "clientHeight", { value: 300 });
+    domElement.width = 400;
+    domElement.height = 300;
+    let ratio = 1;
+    const log: string[] = [];
+    const gl = {
+      domElement,
+      getPixelRatio: () => ratio,
+      setPixelRatio: vi.fn((next: number) => {
+        ratio = next;
+        domElement.width = 400 * next;
+        domElement.height = 300 * next;
+        log.push(`ratio:${next}`);
+      }),
+      getClearAlpha: () => 1,
+      setClearAlpha: vi.fn((alpha: number) => log.push(`alpha:${alpha}`)),
+      getContext: () => ({ MAX_TEXTURE_SIZE: 1, getParameter: () => 8192 }),
+      render: vi.fn((scene: THREE.Scene) => log.push(`render:${scene.background === null ? "clear" : "bg"}`)),
+    };
+    return { gl: gl as unknown as THREE.WebGLRenderer, raw: gl, domElement, log };
+  }
+
+  it("renders at 3x on a transparent clear, crops at that scale and restores the scene", async () => {
+    const drawn: number[][] = [];
+    const fills: string[] = [];
+    const sizes: Array<[number, number]> = [];
+    const context = {
+      fillRect: vi.fn(),
+      drawImage: (...args: unknown[]) => drawn.push(args.slice(1).map(Number)),
+      beginPath: vi.fn(),
+      roundRect: vi.fn(),
+      fill: vi.fn(),
+      stroke: vi.fn(),
+      save: vi.fn(),
+      restore: vi.fn(),
+      clip: vi.fn(),
+      rect: vi.fn(),
+      fillText: vi.fn(),
+      globalAlpha: 1,
+      set fillStyle(value: string) {
+        fills.push(value);
+      },
+    };
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(function (this: HTMLCanvasElement) {
+      sizes.push([this.width, this.height]);
+      return context as unknown as CanvasRenderingContext2D;
+    });
+    vi.spyOn(HTMLCanvasElement.prototype, "toBlob").mockImplementation((callback) =>
+      callback(new Blob([new Uint8Array([1])], { type: "image/png" })),
+    );
+    const { gl, raw, log } = hqRenderer();
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0.9, 0.9, 0.9);
+    const original = scene.background;
+
+    await captureViewportPng(
+      gl,
+      scene,
+      new THREE.PerspectiveCamera(),
+      {
+        background: "rgb(250, 250, 250)",
+        crop: { x: 100, y: 50, width: 200, height: 100 },
+        labels: [
+          { text: "88 m", x: 150, y: 80, width: 40, height: 20, font: "500 12px sans-serif", color: "rgba(10, 10, 10, 0.4)", fill: "rgba(255, 255, 255, 0.5)", stroke: "rgb(0, 0, 0)", strokeWidth: 0, radius: 4 },
+        ],
+      },
+      { transparent: true, scale: 3 },
+    );
+
+    expect(raw.setPixelRatio.mock.calls[0]![0]).toBe(3);
+    expect(log.slice(0, 2)).toEqual(["ratio:3", "alpha:0"]);
+    expect(log).toContain("render:clear");
+    expect(drawn[0]).toEqual([300, 150, 600, 300, 0, 0, 600, 300]);
+    expect(sizes.at(-1)).toEqual([600, 300]);
+    expect(fills).not.toContain("rgb(250, 250, 250)");
+    expect(fills).toContain("rgb(255, 255, 255)");
+    expect(fills).toContain("rgb(10, 10, 10)");
+    expect(scene.background).toBe(original);
+    expect(raw.setPixelRatio).toHaveBeenLastCalledWith(1);
+    expect(raw.setClearAlpha).toHaveBeenLastCalledWith(1);
+  });
+
+  it("caps the pixel ratio by the texture limit and crops the normal export at 1x", () => {
+    expect(hqPixelRatio(400, 300, 3, 8192)).toBe(3);
+    expect(hqPixelRatio(4000, 3000, 3, 8192)).toBeCloseTo(2.048);
+    expect(hqPixelRatio(4000, 3000, 3, 4096)).toBeCloseTo(1.024);
+  });
+
+  it("paints label colours at full opacity", () => {
+    expect(opaqueColour("rgba(255, 255, 255, 0.4)")).toBe("rgb(255, 255, 255)");
+    expect(opaqueColour("rgb(1, 2, 3)")).toBe("rgb(1, 2, 3)");
+    expect(opaqueColour("color(srgb 1 1 1 / 0.5)")).toBe("color(srgb 1 1 1)");
   });
 });

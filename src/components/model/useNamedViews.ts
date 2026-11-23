@@ -18,12 +18,13 @@ import {
   type NamedViewSnapshot,
   type NamedViewsStore,
 } from "../../lib/namedViews";
+import { HQ_DEFAULT_SCALE as HQ_EXPORT_SCALE } from "../../lib/captureViewportPng";
 import { zipStore, type ZipEntry } from "../../lib/zip";
 import type { CityModel } from "../../types";
 import type { SceneExporter } from "../Scene3D";
 import type { NamedViewsBusy } from "../NamedViewsPanel";
 
-const SETTLE_MS = 1000;
+const LABEL_SETTLE_FRAMES = 6;
 const STORAGE_WARNING = "Views could not be saved in this browser, so they will be gone after a reload.";
 
 type Args = {
@@ -31,6 +32,7 @@ type Args = {
   getSnapshot: () => NamedViewSnapshot;
   applySnapshot: (snapshot: NamedViewSnapshot) => Promise<void>;
   getExporter: () => SceneExporter | null;
+  waitUntilReady?: (snapshot: NamedViewSnapshot) => Promise<void>;
 };
 
 function nextFrame(): Promise<void> {
@@ -40,19 +42,20 @@ function nextFrame(): Promise<void> {
   });
 }
 
-function needsSettling(snapshot: NamedViewSnapshot): boolean {
-  const { solar, analyses } = snapshot;
-  return Boolean(solar.sunHours || solar.sunStudy || analyses.view || analyses.wind || snapshot.landmarkLabelsOn);
+function needsLabelSettling(snapshot: NamedViewSnapshot): boolean {
+  return Boolean(snapshot.analyses.view || snapshot.landmarkLabelsOn);
 }
 
-async function settle(snapshot: NamedViewSnapshot): Promise<void> {
+async function settle(snapshot: NamedViewSnapshot, waitUntilReady?: (snapshot: NamedViewSnapshot) => Promise<void>): Promise<void> {
   await nextFrame();
   await nextFrame();
-  if (needsSettling(snapshot)) await new Promise((resolve) => setTimeout(resolve, SETTLE_MS));
+  if (waitUntilReady) await waitUntilReady(snapshot);
+  if (needsLabelSettling(snapshot)) for (let i = 0; i < LABEL_SETTLE_FRAMES; i += 1) await nextFrame();
+  await nextFrame();
   await nextFrame();
 }
 
-export function useNamedViews({ model, getSnapshot, applySnapshot, getExporter }: Args) {
+export function useNamedViews({ model, getSnapshot, applySnapshot, getExporter, waitUntilReady }: Args) {
   const cutId = modelCutSiteId(model.center, model.sideM);
   const [store, setStore] = useState<NamedViewsStore>(() => readNamedViewsStore(window.localStorage));
   const [busy, setBusy] = useState<NamedViewsBusy>(null);
@@ -87,7 +90,7 @@ export function useNamedViews({ model, getSnapshot, applySnapshot, getExporter }
   );
 
   const exportViews = useCallback(
-    async (list: NamedView[], mode: Exclude<NamedViewsBusy, null>) => {
+    async (list: NamedView[], mode: Exclude<NamedViewsBusy, null>, highQuality: boolean) => {
       const exportable = list.filter(isPngExportable);
       if (exportable.length === 0) {
         setWarning("Only 3D views can be exported as PNG. Pick a view saved in 3D.");
@@ -103,10 +106,10 @@ export function useNamedViews({ model, getSnapshot, applySnapshot, getExporter }
           const snapshot = applyNamedView(view);
           if (!snapshot) throw new Error("A saved view could not be read.");
           await applySnapshot(snapshot);
-          await settle(snapshot);
+          await settle(snapshot, waitUntilReady);
           const exporter = getExporter();
           if (!exporter) throw new Error("The 3D view is not ready.");
-          const blob = await exporter.viewportPng();
+          const blob = await exporter.viewportPng(highQuality ? { transparent: true, scale: HQ_EXPORT_SCALE } : undefined);
           entries.push({ name: names[index]!, bytes: new Uint8Array(await blob.arrayBuffer()) });
         }
         if (entries.length === 1) downloadBytes(entries[0]!.name, entries[0]!.bytes, "image/png");
@@ -122,19 +125,19 @@ export function useNamedViews({ model, getSnapshot, applySnapshot, getExporter }
         setBusy(null);
       }
     },
-    [applySnapshot, getExporter, getSnapshot, model],
+    [applySnapshot, getExporter, getSnapshot, model, waitUntilReady],
   );
 
   const exportSelected = useCallback(
-    (ids: string[]) => {
+    (ids: string[], highQuality = false) => {
       const list = selectedViews(views, ids);
-      if (list.length) void exportViews(list, "selected");
+      if (list.length) void exportViews(list, "selected", highQuality);
     },
     [exportViews, views],
   );
 
-  const exportAll = useCallback(() => {
-    if (views.length) void exportViews([...views], "all");
+  const exportAll = useCallback((highQuality = false) => {
+    if (views.length) void exportViews([...views], "all", highQuality);
   }, [exportViews, views]);
 
   return { views, busy, warning, save, rename, remove, restore, exportSelected, exportAll };

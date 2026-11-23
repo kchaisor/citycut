@@ -5,7 +5,25 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ModelPage } from "./ModelPage";
 import type { CityModel, Pt } from "../types";
 
-vi.mock("./Scene3D", () => ({ Scene3D: () => <div data-testid="scene-3d" /> }));
+const probe = vi.hoisted(() => ({ solar: null as Record<string, unknown> | null, plan: null as { mode: string; vectorsOn: boolean } | null }));
+
+vi.mock("./Scene3D", () => ({
+  Scene3D: ({ solar }: { solar?: Record<string, unknown> }) => {
+    probe.solar = solar ?? null;
+    return <div data-testid="scene-3d" />;
+  },
+}));
+vi.mock("./useWindPlan", async (original) => {
+  const actual = await original<typeof import("./useWindPlan")>();
+  return {
+    ...actual,
+    useWindPlan: (args: Parameters<typeof actual.useWindPlan>[0]) => {
+      const plan = actual.useWindPlan(args);
+      probe.plan = { mode: plan.mode, vectorsOn: plan.vectorsOn };
+      return plan;
+    },
+  };
+});
 vi.mock("./DrawingPlan", () => ({ DrawingPlan: () => <div data-testid="drawing-plan" /> }));
 vi.mock("./DrawingExplodedAxo", () => ({ DrawingExplodedAxo: () => <div data-testid="drawing-exploded-axo" /> }));
 vi.mock("./SatellitePane", () => ({ SatellitePane: () => <div data-testid="satellite-pane" /> }));
@@ -71,5 +89,56 @@ describe("Named views in ModelPage", () => {
 
     render(<ModelPage model={model} onHome={vi.fn()} onNewCut={vi.fn()} />);
     expect(screen.getByRole("button", { name: /^Corner view/, hidden: true })).toBeTruthy();
+  });
+
+  it("restores sun hours settings and the wind plan heatmap mode from a saved view", async () => {
+    const user = userEvent.setup();
+    const model = sampleModel();
+    const first = render(<ModelPage model={model} onHome={vi.fn()} onNewCut={vi.fn()} />);
+    const leftRail = screen.getByRole("toolbar", { name: "Model tools" });
+    await user.click(within(leftRail).getByRole("button", { name: "Views" }));
+    await user.type(screen.getByRole("textbox", { name: "View name" }), "Study");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    first.unmount();
+
+    const store = JSON.parse(window.localStorage.getItem("citycut.namedViews.v1")!) as {
+      byCut: Record<string, Array<{ snapshot: Record<string, unknown> }>>;
+    };
+    const entry = Object.values(store.byCut)[0]![0]!;
+    entry.snapshot = {
+      ...entry.snapshot,
+      tab: "3d",
+      view: { projection: "plan", corner: "ne", freeRotate: false },
+      analyses: { solar: true, wind: true, view: false },
+      solar: {
+        ...(entry.snapshot.solar as object),
+        sunHours: true,
+        sunHoursWindow: "9to3",
+        sunHoursPickedOnly: true,
+        showPath: true,
+        castShadows: true,
+        year: 2026,
+        month: 12,
+        day: 21,
+      },
+      renderQuality: "fast",
+      windPlan: { mode: "comfort", vectorsOn: false, sector: null },
+    };
+    window.localStorage.setItem("citycut.namedViews.v1", JSON.stringify(store));
+
+    render(<ModelPage model={model} onHome={vi.fn()} onNewCut={vi.fn()} />);
+    await user.click(within(screen.getByRole("toolbar", { name: "Model tools" })).getByRole("button", { name: "Views" }));
+    expect(probe.plan).toMatchObject({ mode: "speed", vectorsOn: true });
+    await user.click(screen.getByRole("button", { name: /^Study/ }));
+    expect(probe.plan).toMatchObject({ mode: "comfort", vectorsOn: false });
+    expect(probe.solar).toMatchObject({
+      sunHours: true,
+      sunHoursWindow: "9to3",
+      sunHoursPickedOnly: true,
+      showPath: true,
+      castShadows: true,
+      month: 12,
+      day: 21,
+    });
   });
 });

@@ -5507,6 +5507,17 @@ body,
   overflow-wrap: anywhere;
 }
 .named-views-panel .named-views-export-head { margin-top: var(--space-3); }
+.named-views-panel .named-views-quality {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-1-5);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  font-weight: 500;
+  color: var(--ink);
+  cursor: pointer;
+}
 .named-views-panel .named-views-empty { margin-bottom: 0; }
 
 .building-detail-panel.is-imported header { border-bottom: 0; padding-bottom: 0; }

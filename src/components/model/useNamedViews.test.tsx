@@ -23,6 +23,7 @@ function snapshot(tab: NamedViewSnapshot["tab"], corner: NamedViewSnapshot["view
     solar: { showPath: false, castShadows: false, radiusFactor: 1, year: 2026, month: 6, day: 21, hour: 12, minute: 0 },
     wind: { enabled: false, period: "annual", designWind: null, daypart: "all" },
     windStreaksOn: false,
+    windPlan: { mode: "speed", vectorsOn: true, sector: null },
     renderQuality: "high",
     sunDomeSizeM: null,
     viewshed: { eyeM: 1.6, radiusM: 250 },
@@ -36,7 +37,7 @@ function snapshot(tab: NamedViewSnapshot["tab"], corner: NamedViewSnapshot["view
   };
 }
 
-function mount(live: { current: NamedViewSnapshot }) {
+function mount(live: { current: NamedViewSnapshot }, waitUntilReady?: (snapshot: NamedViewSnapshot) => Promise<void>) {
   const applied: NamedViewSnapshot[] = [];
   const png = vi.fn(async () => new Blob([new Uint8Array([1, 2, 3])], { type: "image/png" }));
   const hook = renderHook(() =>
@@ -48,6 +49,7 @@ function mount(live: { current: NamedViewSnapshot }) {
         live.current = next;
       },
       getExporter: () => ({ png: vi.fn(), viewportPng: png, shot: vi.fn() }),
+      waitUntilReady,
     }),
   );
   return { hook, applied, png };
@@ -126,5 +128,36 @@ describe("useNamedViews", () => {
     );
     expect(other.result.current.views).toEqual([]);
     expect(hook.result.current.views).toHaveLength(1);
+  });
+
+  it("does not capture until the study reports ready", async () => {
+    const live = { current: snapshot("3d") };
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const waitUntilReady = vi.fn(() => gate);
+    const { hook, png } = mount(live, waitUntilReady);
+    act(() => void hook.result.current.save("Study"));
+    act(() => hook.result.current.exportAll());
+    await waitFor(() => expect(waitUntilReady).toHaveBeenCalledTimes(1));
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    expect(png).not.toHaveBeenCalled();
+    release();
+    await waitFor(() => expect(png).toHaveBeenCalledTimes(1));
+  });
+
+  it("asks for a high quality transparent capture only when the toggle is on", async () => {
+    const live = { current: snapshot("3d") };
+    const { hook, png } = mount(live);
+    act(() => void hook.result.current.save("One"));
+    act(() => hook.result.current.exportAll(false));
+    await waitFor(() => expect(hook.result.current.busy).toBeNull());
+    expect(png).toHaveBeenLastCalledWith(undefined);
+    act(() => hook.result.current.exportAll(true));
+    await waitFor(() => expect(png).toHaveBeenCalledTimes(2));
+    const options = (png.mock.calls[1] as unknown[])[0] as { transparent: boolean; scale: number };
+    expect(options.transparent).toBe(true);
+    expect(options.scale).toBeGreaterThanOrEqual(2);
   });
 });

@@ -10,9 +10,12 @@ import { NO_ANALYSES, SITE_ANALYSIS_KINDS, type ActiveAnalyses } from "./sidebar
 import type { View3dDisplaySettings } from "./view3dDisplay";
 import type { ViewMemory } from "./viewMemory";
 import type { WindViewSettings } from "./windState";
+import type { WindPlanMode } from "./windPlanField";
 
 export const NAMED_VIEWS_STORAGE_KEY = "citycut.namedViews.v1";
 export const NAMED_VIEWS_VERSION = 1;
+
+export type NamedViewWindPlan = { mode: WindPlanMode; vectorsOn: boolean; sector: number | null };
 
 export type NamedViewSnapshot = {
   view: ViewMemory;
@@ -23,6 +26,7 @@ export type NamedViewSnapshot = {
   solar: SolarViewSettings;
   wind: WindViewSettings;
   windStreaksOn: boolean;
+  windPlan: NamedViewWindPlan;
   renderQuality: RenderQuality;
   sunDomeSizeM: number | null;
   viewshed: { eyeM: number; radiusM: number };
@@ -100,6 +104,15 @@ function parseAnalyses(value: unknown): ActiveAnalyses | null {
   return SITE_ANALYSIS_KINDS.reduce<ActiveAnalyses>((set, kind) => ({ ...set, [kind]: value[kind] === true }), NO_ANALYSES);
 }
 
+function parseWindPlan(value: unknown): NamedViewWindPlan {
+  const plan = isRecord(value) ? value : {};
+  return {
+    mode: plan.mode === "comfort" ? "comfort" : "speed",
+    vectorsOn: plan.vectorsOn !== false,
+    sector: finite(plan.sector) && Number.isInteger(plan.sector) && plan.sector >= 0 ? plan.sector : null,
+  };
+}
+
 function parseSnapshot(value: unknown): NamedViewSnapshot | null {
   if (!isRecord(value)) return null;
   const view = parseViewMemory(value.view);
@@ -117,6 +130,7 @@ function parseSnapshot(value: unknown): NamedViewSnapshot | null {
     solar: { ...value.solar } as SolarViewSettings,
     wind: { ...value.wind } as WindViewSettings,
     windStreaksOn: value.windStreaksOn === true,
+    windPlan: parseWindPlan(value.windPlan),
     renderQuality: value.renderQuality === "fast" ? "fast" : "high",
     sunDomeSizeM: finite(value.sunDomeSizeM) ? value.sunDomeSizeM : null,
     viewshed: {

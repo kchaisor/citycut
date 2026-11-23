@@ -39,6 +39,7 @@ const SNAPSHOT: NamedViewSnapshot = {
   solar: { showPath: true, castShadows: true, radiusFactor: 1, year: 2026, month: 6, day: 21, hour: 9, minute: 30, sunHours: true },
   wind: { enabled: true, period: "annual", designWind: null, daypart: "all" },
   windStreaksOn: true,
+  windPlan: { mode: "comfort", vectorsOn: false, sector: 5 },
   renderQuality: "fast",
   sunDomeSizeM: 300,
   viewshed: { eyeM: 1.6, radiusM: 250 },
@@ -69,6 +70,44 @@ describe("named views capture and apply", () => {
     const reloaded = parseNamedViewsStore(JSON.stringify(saveView(emptyNamedViewsStore(), "cut", view!)));
     const restored = applyNamedView(viewsForCut(reloaded, "cut")[0]!);
     expect(restored).toEqual(SNAPSHOT);
+  });
+
+  it("round-trips the sun hours and wind plan studies", () => {
+    const study: NamedViewSnapshot = {
+      ...SNAPSHOT,
+      view: { projection: "plan", corner: "ne", freeRotate: false },
+      analyses: { solar: true, wind: true, view: false },
+      solar: {
+        ...SNAPSHOT.solar,
+        sunHours: true,
+        sunHoursWindow: "9to3",
+        sunHoursPickedOnly: true,
+        showPath: true,
+        castShadows: true,
+        year: 2026,
+        month: 12,
+        day: 21,
+      },
+      sunStudySelected: [7, 9],
+      renderQuality: "high",
+      wind: { enabled: true, period: "summer", designWind: null, daypart: "afternoon" },
+      windStreaksOn: true,
+      windPlan: { mode: "comfort", vectorsOn: true, sector: 3 },
+    };
+    const view = captureNamedView("Plan comfort", study, { id: "p" })!;
+    const reloaded = parseNamedViewsStore(JSON.stringify(saveView(emptyNamedViewsStore(), "cut", view)));
+    const restored = applyNamedView(viewsForCut(reloaded, "cut")[0]!)!;
+    expect(restored).toEqual(study);
+    expect(restored.windPlan).toEqual({ mode: "comfort", vectorsOn: true, sector: 3 });
+    expect(restored.solar.sunHoursWindow).toBe("9to3");
+  });
+
+  it("defaults the wind plan for views saved before it was stored", () => {
+    const legacy = JSON.parse(JSON.stringify(SNAPSHOT)) as Record<string, unknown>;
+    delete legacy.windPlan;
+    const raw = JSON.stringify({ version: 1, byCut: { cut: [{ id: "o", name: "Old", savedAt: 1, snapshot: legacy }] } });
+    const restored = applyNamedView(viewsForCut(parseNamedViewsStore(raw), "cut")[0]!)!;
+    expect(restored.windPlan).toEqual({ mode: "speed", vectorsOn: true, sector: null });
   });
 
   it("rejects empty or whitespace names", () => {
