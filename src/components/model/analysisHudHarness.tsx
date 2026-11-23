@@ -106,8 +106,8 @@ export function AnalysisHudHarness({
     solar,
     sunDome: { range, chosenM: sunDomeSizeM, radiusM: resolveSunDomeRadiusM(range, sunDomeSizeM) },
     sunHoursGround: sunHoursReady
-      ? { grid: { maxSunHours: 9 }, scaleMaxHours: 9, resolution: null, targetResolution: null, pending: true, pendingSurfaces: false }
-      : { grid: null, pending: false, pendingSurfaces: false },
+      ? { grid: { maxSunHours: 9 }, scaleMaxHours: 9, resolution: null, targetResolution: null, pending: true, pendingSurfaces: false, progress: null }
+      : { grid: null, pending: false, pendingSurfaces: false, progress: null },
     sunStudySelected: [],
     tab,
     walk: {

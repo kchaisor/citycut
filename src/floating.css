@@ -317,7 +317,41 @@ input[type="range"]::-moz-range-thumb { width: 18px; height: 3px; border-radius:
   overflow: hidden;
   color: var(--sun-hours-direct-dock-footnote);
 }
-.sun-hours-direct-legend-status { margin: 0; font-size: 10px; font-weight: 600; line-height: 1.2; }
+.sun-hours-direct-legend-status { display: grid; gap: 4px; margin: 0; }
+.sun-hours-direct-legend-status-copy { margin: 0; font-size: 10px; font-weight: 600; line-height: 1.2; }
+.sun-hours-direct-legend-progress { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 6px; }
+.sun-hours-direct-legend-progress-track { height: 4px; border-radius: 2px; background: var(--slider-track); border: 1px solid var(--accent-edge); overflow: hidden; min-width: 0; }
+.sun-hours-direct-legend-progress-fill { height: 100%; width: 0; background: var(--accent); border-radius: inherit; }
+.sun-hours-direct-legend-progress.is-indeterminate .sun-hours-direct-legend-progress-fill { width: 36%; animation: sun-hours-progress-slide 1.2s ease-in-out infinite; }
+.sun-hours-direct-legend-progress.is-indeterminate.is-reduced .sun-hours-direct-legend-progress-fill {
+  animation: none;
+  width: 100%;
+  background: repeating-linear-gradient(-45deg, var(--accent) 0 6px, transparent 6px 10px);
+}
+@media (prefers-reduced-motion: reduce) {
+  .sun-hours-direct-legend-progress.is-indeterminate .sun-hours-direct-legend-progress-fill {
+    animation: none;
+    width: 100%;
+    background: repeating-linear-gradient(-45deg, var(--accent) 0 6px, transparent 6px 10px);
+  }
+}
+.sun-hours-direct-legend-progress-pct {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  padding: 2px 5px;
+  border-radius: 6px;
+  background: var(--ink);
+  color: var(--accent);
+  border: 1px solid var(--accent-edge);
+}
+@keyframes sun-hours-progress-slide {
+  0% { transform: translateX(-110%); }
+  100% { transform: translateX(280%); }
+}
+
 .sun-hours-hud-card {
   position: relative;
   flex: none;

@@ -23,6 +23,7 @@ export function SunHoursLegendDock({
         resolution={grid ? resolution : null}
         pending={pending}
         pendingResolution={targetResolution}
+        progress={sunHoursGround.progress}
       />
     </div>
   );

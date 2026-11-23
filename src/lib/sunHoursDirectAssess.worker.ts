@@ -1,6 +1,7 @@
 import { assessDirectSunHoursOverlay } from "./sunHoursDirectAssess";
 import type { SunHoursDirectOverlay } from "./sunHoursDirectAssess";
 import type { SunHoursSampleParams } from "./sunHoursQuality";
+import { clampSunHoursProgress, createThrottledProgress } from "./sunHoursProgress";
 import type { CityModel } from "../types";
 
 export type SunHoursDirectWorkerRequest = {
@@ -14,6 +15,7 @@ export type SunHoursDirectWorkerRequest = {
 };
 
 export type SunHoursDirectWorkerMessage =
+  | { type: "progress"; id: number; fraction: number }
   | { type: "done"; id: number; overlay: SunHoursDirectOverlay }
   | { type: "empty"; id: number };
 
@@ -27,7 +29,10 @@ const scope = self as unknown as WorkerScope;
 scope.onmessage = (event: MessageEvent<SunHoursDirectWorkerRequest>) => {
   const { id, model, year, month, day, scaleMaxHours, params } = event.data;
   try {
-    const overlay = assessDirectSunHoursOverlay(model as CityModel, year, month, day, scaleMaxHours, params);
+    const onProgress = createThrottledProgress((fraction) => {
+      scope.postMessage({ type: "progress", id, fraction: clampSunHoursProgress(fraction) });
+    });
+    const overlay = assessDirectSunHoursOverlay(model as CityModel, year, month, day, scaleMaxHours, params, onProgress);
     if (!overlay) scope.postMessage({ type: "empty", id });
     else scope.postMessage({ type: "done", id, overlay });
   } catch {
