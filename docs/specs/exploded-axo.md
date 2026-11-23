@@ -22,6 +22,16 @@ Sketch or screenshot: Paper mock skipped (Paper weekly MCP limit, 24 Nov 2026). 
 8. **Reduced motion.** With the system reduced-motion setting on, the layers and camera jump straight to the end state with no animation.
 9. **Nothing else changes.** Building picking and selection, sun hours, the Solar Study toggle, wind and the Drawing tab work as before, exploded or not. Exploded is not saved: a reload or a new cut opens the model assembled.
 
+### As built (24 Nov 2026)
+
+- **Gap slider.** Opens at 0.15 × the cut side, rounded to 5 m (75 m on a 0.5 km cut, 150 m on a 1 km cut). It runs from 10 m to 0.6 × the cut side (300 m / 600 m) in 5 m steps. The gap choice is not saved either.
+- **Labels.** Each label sits just left of its layer, at the bottom corner nearest the left of the screen, and follows the layer as you pan or zoom. Labels fade in over the last third of the explode and are hidden the moment a collapse starts.
+- **Empty layers.** A layer with nothing showing (for example Trees switched off) is skipped: no label and no extra gap.
+- **Camera.** Exploding always uses the fixed isometric corner, so it turns Free rotate off. Changing corner while exploded keeps the model exploded and re-fits. You can still pan and zoom by hand once the animation has finished; moving the gap slider re-fits again. The fit leaves room at the sides for the labels.
+- **Landmark name labels** are hidden while the model is exploded and come back when it is assembled.
+- **Picked tree and imported-building cards** stay pinned to the thing they describe as it lifts.
+- **Known limits.** Where the site has terrain, roads are cut out of the ground surface, so the Ground layer shows road-shaped openings once the roads lift. The section knife is not adjusted for the exploded arrangement.
+
 ## How we'll know it works
 
 - [ ] Clicking Exploded axo animates four labelled layers apart in the right order, and the whole stack stays in view throughout.

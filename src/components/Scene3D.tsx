@@ -53,7 +53,6 @@ import {
 } from "../lib/sunStudySurfaceViewport";
 import {
   eyeDistance,
-  fitOrthoZoom,
   frameCentre,
   ISO_CAMERA_UP,
   isoEye,
@@ -133,6 +132,25 @@ import { analyzeSiteWind } from "../lib/windRoseStats";
 import { headingPeriodStats, type DesignWind } from "../lib/windDesignWinds";
 import type { CityModel } from "../types";
 import { introAlreadyPlayedForCut, markIntroPlayedForCut, modelCutSiteId } from "../lib/introPlayed";
+import {
+  EXPLODE_LAYERS,
+  EXPLODE_LAYER_LABELS,
+  easeInOutCubic as explodeEase,
+  explodedBounds,
+  explodeFitZoom,
+  explodeLabelOpacity,
+  explodeLayerOfObjectName,
+  explodeLayerOfSelectionKind,
+  explodeOffsets,
+  layerLabelAnchor,
+  noExplodeBoxes,
+  noExplodeOffsets,
+  prefersReducedMotion,
+  stepExplodeClock,
+  type ExplodeLayerBoxes,
+  type ExplodeLayerId,
+  type ExplodeLayerOffsets,
+} from "../lib/modelExplode";
 
 const NO_LANDMARKS: readonly LandmarkLabelSource[] = [];
 
@@ -212,11 +230,11 @@ const scratch = new THREE.Vector3();
 
 const STUDIO_FILL_RATIO = 0.28;
 
-function measureCity(group: THREE.Object3D): Aabb {
-  const box = new THREE.Box3().setFromObject(group);
+function measureObjectBox(root: THREE.Object3D): THREE.Box3 {
+  const box = new THREE.Box3().setFromObject(root);
   const instanceBox = new THREE.Box3();
   const matrix = new THREE.Matrix4();
-  group.traverse((object) => {
+  root.traverse((object) => {
     const mesh = object as THREE.InstancedMesh;
     if (!mesh.isInstancedMesh || mesh.count === 0) return;
     const geometry = mesh.geometry;
@@ -228,11 +246,196 @@ function measureCity(group: THREE.Object3D): Aabb {
       box.union(instanceBox);
     }
   });
-  if (box.isEmpty()) return { min: [-1, 0, -1], max: [1, 1, 1] };
+  return box;
+}
+
+function aabbOfBox(box: THREE.Box3): Aabb {
   return {
     min: [box.min.x, box.min.y, box.min.z],
     max: [box.max.x, box.max.y, box.max.z],
   };
+}
+
+function measureCity(group: THREE.Object3D): Aabb {
+  const box = measureObjectBox(group);
+  if (box.isEmpty()) return { min: [-1, 0, -1], max: [1, 1, 1] };
+  return aabbOfBox(box);
+}
+
+export type ExplodeRuntime = {
+  clock: number;
+  progress: number;
+  offsets: ExplodeLayerOffsets;
+  boxes: ExplodeLayerBoxes;
+  bounds: Aabb | null;
+  fitToken: number;
+};
+
+export function createExplodeRuntime(): ExplodeRuntime {
+  return { clock: 0, progress: 0, offsets: noExplodeOffsets(), boxes: noExplodeBoxes(), bounds: null, fitToken: 0 };
+}
+
+const EXPLODE_MAX_FRAME_SEC = 0.05;
+
+type ExplodeLift = { restY: number; offset: number };
+
+export function measureExplodeLayers(
+  city: THREE.Object3D,
+  importedMassing: THREE.Object3D | null,
+  overlay: THREE.Object3D | null,
+  applied: WeakMap<THREE.Object3D, ExplodeLift>,
+): ExplodeLayerBoxes {
+  const merged: Record<ExplodeLayerId, THREE.Box3> = {
+    ground: new THREE.Box3(),
+    transport: new THREE.Box3(),
+    buildings: new THREE.Box3(),
+    trees: new THREE.Box3(),
+  };
+  const settle = new THREE.Vector3();
+  const include = (object: THREE.Object3D, layer: ExplodeLayerId, liftedBy: number) => {
+    if (!object.visible) return;
+    const box = measureObjectBox(object);
+    if (box.isEmpty()) return;
+    merged[layer].union(box.translate(settle.set(0, -liftedBy, 0)));
+  };
+  for (const child of city.children) {
+    if (child.name === "IntroCutRing") continue;
+    include(child, explodeLayerOfObjectName(child.name), applied.get(child)?.offset ?? 0);
+  }
+  if (importedMassing) include(importedMassing, "buildings", overlay?.position.y ?? 0);
+  const boxes = noExplodeBoxes();
+  for (const layer of EXPLODE_LAYERS) boxes[layer] = merged[layer].isEmpty() ? null : aabbOfBox(merged[layer]);
+  return boxes;
+}
+
+export function applyExplodeOffsets(
+  city: THREE.Object3D,
+  overlay: THREE.Object3D | null,
+  offsets: ExplodeLayerOffsets,
+  applied: WeakMap<THREE.Object3D, ExplodeLift>,
+): void {
+  const lift = (object: THREE.Object3D, offset: number) => {
+    const lifted = applied.get(object) ?? { restY: object.position.y, offset: 0 };
+    if (lifted.offset === offset) return;
+    lifted.offset = offset;
+    object.position.y = lifted.restY + offset;
+    applied.set(object, lifted);
+  };
+  for (const child of city.children) lift(child, offsets[explodeLayerOfObjectName(child.name)]);
+  if (overlay) lift(overlay, offsets.buildings);
+}
+
+export function ExplodeLayers({
+  city,
+  overlayRef,
+  importedMassing,
+  runtime,
+  cityBoundsRef,
+  exploded,
+  gapM,
+  measureKey,
+  onCollapsed,
+  onTopLift,
+}: {
+  city: THREE.Group;
+  overlayRef: RefObject<THREE.Group | null>;
+  importedMassing: THREE.Object3D | null;
+  runtime: RefObject<ExplodeRuntime>;
+  cityBoundsRef: RefObject<Aabb | null>;
+  exploded: boolean;
+  gapM: number;
+  measureKey: string;
+  onCollapsed: () => void;
+  onTopLift: (liftM: number) => void;
+}) {
+  const invalidate = useThree((state) => state.invalidate);
+  const applied = useRef(new WeakMap<THREE.Object3D, ExplodeLift>());
+  const measured = useRef<{ city: THREE.Group; key: string } | null>(null);
+  const fittedGap = useRef(gapM);
+  useEffect(() => {
+    invalidate();
+  }, [city, exploded, gapM, measureKey, invalidate]);
+  useFrame((state, delta) => {
+    const rt = runtime.current;
+    const dataset = state.gl.domElement.dataset;
+    const introActive = state.scene.userData[INTRO_ACTIVE_KEY] === true;
+    const target = exploded && !introActive ? 1 : 0;
+    if (introActive) rt.clock = 0;
+    if (target === 0 && rt.clock === 0 && rt.progress === 0) {
+      dataset.exploded = "0";
+      dataset.explodeProgress = "0.000";
+      if (!exploded) onCollapsed();
+      return;
+    }
+    const stale = measured.current?.city !== city || measured.current.key !== measureKey;
+    if (stale) {
+      rt.boxes = measureExplodeLayers(city, importedMassing, overlayRef.current, applied.current);
+      measured.current = { city, key: measureKey };
+    }
+    const before = rt.progress;
+    rt.clock = stepExplodeClock(rt.clock, target, Math.min(delta, EXPLODE_MAX_FRAME_SEC) * 1000, prefersReducedMotion());
+    rt.progress = explodeEase(rt.clock);
+    rt.offsets = explodeOffsets(rt.boxes, gapM, rt.progress);
+    applyExplodeOffsets(city, overlayRef.current, rt.offsets, applied.current);
+    if (stale || before !== rt.progress || fittedGap.current !== gapM) {
+      fittedGap.current = gapM;
+      const base = cityBoundsRef.current;
+      rt.bounds = explodedBounds(base, rt.boxes, rt.offsets);
+      rt.fitToken += 1;
+      const stacked = explodedBounds(base, rt.boxes, explodeOffsets(rt.boxes, gapM, 1));
+      onTopLift(stacked && base ? Math.max(0, Math.ceil(stacked.max[1] - base.max[1])) : 0);
+    }
+    dataset.exploded = rt.clock === 1 ? "1" : "0";
+    dataset.explodeProgress = rt.progress.toFixed(3);
+    if (rt.clock !== target) {
+      state.invalidate();
+    } else if (rt.clock === 0 && !exploded) {
+      onTopLift(0);
+      onCollapsed();
+    }
+  });
+  return null;
+}
+
+function ExplodeLabelProjector({
+  runtime,
+  exploding,
+  shown,
+  labelsRef,
+}: {
+  runtime: RefObject<ExplodeRuntime>;
+  exploding: boolean;
+  shown: boolean;
+  labelsRef: RefObject<Partial<Record<ExplodeLayerId, HTMLElement | null>>>;
+}) {
+  const gl = useThree((state) => state.gl);
+  const invalidate = useThree((state) => state.invalidate);
+  const point = useMemo(() => new THREE.Vector3(), []);
+  useEffect(() => {
+    invalidate();
+  }, [shown, exploding, invalidate]);
+  useFrame(({ camera }) => {
+    const rt = runtime.current;
+    const opacity = explodeLabelOpacity(rt.progress, exploding);
+    const rect = opacity > 0 ? gl.domElement.getBoundingClientRect() : null;
+    camera.updateMatrixWorld();
+    const right = camera.matrixWorld.elements;
+    for (const layer of EXPLODE_LAYERS) {
+      const element = labelsRef.current[layer];
+      if (!element) continue;
+      const box = rt.boxes[layer];
+      if (!rect || !box) {
+        element.style.opacity = "0";
+        continue;
+      }
+      const anchor = layerLabelAnchor(box, rt.offsets[layer], [right[0], right[1], right[2]]);
+      point.set(anchor[0], anchor[1], anchor[2]).project(camera);
+      element.style.left = `${rect.left + (point.x * 0.5 + 0.5) * rect.width}px`;
+      element.style.top = `${rect.top + (-point.y * 0.5 + 0.5) * rect.height}px`;
+      element.style.opacity = opacity.toFixed(3);
+    }
+  });
+  return null;
 }
 
 function publishCamera(camera: THREE.Camera, target: THREE.Vector3, element: HTMLCanvasElement) {
@@ -580,6 +783,13 @@ function City({
   introSkip,
   introPlayed,
   importedMassing = null,
+  exploded,
+  explodeGapM,
+  explodeRuntime,
+  explodeOverlayRef,
+  cityBoundsRef,
+  onExplodeCollapsed,
+  onExplodeTopLift,
 }: {
   model: CityModel;
   uniformBuildings: boolean;
@@ -609,6 +819,13 @@ function City({
   introSkip: boolean;
   introPlayed?: { current: string | null };
   importedMassing?: THREE.Object3D | null;
+  exploded: boolean;
+  explodeGapM: number;
+  explodeRuntime: RefObject<ExplodeRuntime>;
+  explodeOverlayRef: RefObject<THREE.Group | null>;
+  cityBoundsRef: RefObject<Aabb | null>;
+  onExplodeCollapsed: () => void;
+  onExplodeTopLift: (liftM: number) => void;
 }) {
   const onBoundsRef = useRef(onBounds);
   onBoundsRef.current = onBounds;
@@ -1097,9 +1314,33 @@ function City({
     };
   }, [contours, group, invalidate]);
   useLayoutEffect(() => () => disposeObject(group), [group]);
+  const explodeMeasureKey = [
+    buildingsVisible,
+    roadsVisible,
+    footpathsVisible,
+    landscapeVisible,
+    waterVisible,
+    railVisible,
+    contoursVisible,
+    treesVisible,
+    display.showOutlines,
+    importedMassing ? `${importedMassing.uuid}:${importedMassing.visible}:${importedMassing.children.length}` : "",
+  ].join("|");
   return (
     <>
       <primitive object={group} />
+      <ExplodeLayers
+        city={group}
+        overlayRef={explodeOverlayRef}
+        importedMassing={importedMassing}
+        runtime={explodeRuntime}
+        cityBoundsRef={cityBoundsRef}
+        exploded={exploded}
+        gapM={explodeGapM}
+        measureKey={explodeMeasureKey}
+        onCollapsed={onExplodeCollapsed}
+        onTopLift={onExplodeTopLift}
+      />
       <WalkRippleBuildingBinder
         city={group}
         tint={walkRippleTint ?? null}
@@ -1472,6 +1713,76 @@ function PerspectiveClipPlanes({
   return null;
 }
 
+function placeIsoCamera(
+  camera: THREE.OrthographicCamera,
+  controls: OrbitControlsImpl,
+  fitBounds: Aabb,
+  clipBounds: Aabb,
+  corner: IsoCorner,
+  zoom: number,
+) {
+  const centre = frameCentre(fitBounds);
+  const eye = isoEye(centre, corner, eyeDistance(fitBounds));
+  const planes = orthoNearFar(clipBounds, eye, centre);
+  flushControlInertia(controls);
+  camera.up.set(ISO_CAMERA_UP[0], ISO_CAMERA_UP[1], ISO_CAMERA_UP[2]);
+  camera.position.set(eye[0], eye[1], eye[2]);
+  camera.near = planes.near;
+  camera.far = planes.far;
+  camera.zoom = zoom;
+  camera.updateProjectionMatrix();
+  controls.target.set(centre[0], centre[1], centre[2]);
+  camera.lookAt(controls.target);
+  camera.up.set(ISO_CAMERA_UP[0], ISO_CAMERA_UP[1], ISO_CAMERA_UP[2]);
+  holdControlPose(controls as HeldControl<THREE.Vector3>);
+}
+
+function ExplodeFit({
+  camera,
+  controlsRef,
+  runtime,
+  corner,
+  snapId,
+  active,
+  touchedRef,
+  fittedKey,
+  otherOrthoFittedKey,
+  extraBounds,
+}: {
+  camera: THREE.OrthographicCamera;
+  controlsRef: RefObject<OrbitControlsImpl | null>;
+  runtime: RefObject<ExplodeRuntime>;
+  corner: IsoCorner;
+  snapId: number;
+  active: boolean;
+  touchedRef: RefObject<boolean>;
+  fittedKey: MutableRefObject<string | null>;
+  otherOrthoFittedKey: MutableRefObject<string | null>;
+  extraBounds?: Aabb | null;
+}) {
+  const size = useThree((state) => state.size);
+  const fitted = useRef(0);
+  useFrame(() => {
+    const rt = runtime.current;
+    if (!active || rt.fitToken === fitted.current) return;
+    const controls = controlsRef.current;
+    if (!controls || !rt.bounds || size.width < 2 || size.height < 2) return;
+    fitted.current = rt.fitToken;
+    placeIsoCamera(
+      camera,
+      controls,
+      rt.bounds,
+      extraBounds ? unionAabb(rt.bounds, extraBounds) : rt.bounds,
+      corner,
+      explodeFitZoom(rt.bounds, isoOffset(corner), size.width, size.height, rt.progress),
+    );
+    fittedKey.current = `${snapId}:${size.width}x${size.height}`;
+    otherOrthoFittedKey.current = null;
+    touchedRef.current = false;
+  });
+  return null;
+}
+
 function IsoSnap({
   camera,
   controlsRef,
@@ -1490,6 +1801,7 @@ function IsoSnap({
   lat,
   lon,
   extraBounds,
+  explode,
 }: {
   camera: THREE.OrthographicCamera;
   controlsRef: RefObject<OrbitControlsImpl | null>;
@@ -1508,6 +1820,7 @@ function IsoSnap({
   lat: number;
   lon: number;
   extraBounds?: Aabb | null;
+  explode?: RefObject<ExplodeRuntime>;
 }) {
   const size = useThree((state) => state.size);
   const place = useCallback(() => {
@@ -1539,23 +1852,14 @@ function IsoSnap({
         }),
       );
     }
-    const centre = frameCentre(fitBounds);
-    const direction = isoOffset(corner);
-    const distance = eyeDistance(fitBounds);
-    const eye = isoEye(centre, corner, distance);
-    const clipBounds = extraBounds ? unionAabb(fitBounds, extraBounds) : fitBounds;
-    const planes = orthoNearFar(clipBounds, eye, centre);
-    flushControlInertia(controls);
-    camera.up.set(ISO_CAMERA_UP[0], ISO_CAMERA_UP[1], ISO_CAMERA_UP[2]);
-    camera.position.set(eye[0], eye[1], eye[2]);
-    camera.near = planes.near;
-    camera.far = planes.far;
-    camera.zoom = fitOrthoZoom(fitBounds, direction, size.width, size.height);
-    camera.updateProjectionMatrix();
-    controls.target.set(centre[0], centre[1], centre[2]);
-    camera.lookAt(controls.target);
-    camera.up.set(ISO_CAMERA_UP[0], ISO_CAMERA_UP[1], ISO_CAMERA_UP[2]);
-    holdControlPose(controls as HeldControl<THREE.Vector3>);
+    placeIsoCamera(
+      camera,
+      controls,
+      fitBounds,
+      extraBounds ? unionAabb(fitBounds, extraBounds) : fitBounds,
+      corner,
+      explodeFitZoom(fitBounds, isoOffset(corner), size.width, size.height, explode?.current.progress ?? 0),
+    );
     fittedKey.current = key;
     if (otherOrthoFittedKey) otherOrthoFittedKey.current = null;
     touchedRef.current = false;
@@ -1578,6 +1882,7 @@ function IsoSnap({
     size.height,
     touchedRef,
     extraBounds,
+    explode,
   ]);
   useLayoutEffect(() => {
     place();
@@ -1999,6 +2304,7 @@ export function Cameras({
   frameWidthM,
   frameHeightM,
   landmarkLabelsRef,
+  explode,
 }: {
   side: number;
   lift: number;
@@ -2021,7 +2327,17 @@ export function Cameras({
   frameWidthM: number;
   frameHeightM: number;
   landmarkLabelsRef?: RefObject<LandmarkExportLabels | null>;
+  explode?: RefObject<ExplodeRuntime>;
 }) {
+  const orthoBoundsRef = useMemo<RefObject<Aabb | null>>(
+    () => ({
+      get current() {
+        const rt = explode?.current;
+        return rt && rt.progress > 0 && rt.bounds ? rt.bounds : boundsRef.current;
+      },
+    }),
+    [explode, boundsRef],
+  );
   const perspRef = useRef<THREE.PerspectiveCamera>(null);
   const orthoRef = useRef<THREE.OrthographicCamera>(null);
   const perspControls = useRef<OrbitControlsImpl | null>(null);
@@ -2122,7 +2438,7 @@ export function Cameras({
           <IsoSnap
             camera={ortho}
             controlsRef={orthoControls}
-            boundsRef={boundsRef}
+            boundsRef={orthoBoundsRef}
             corner={corner}
             snapId={snapId}
             active={iso}
@@ -2137,7 +2453,22 @@ export function Cameras({
             lat={lat}
             lon={lon}
             extraBounds={heliodonClipBounds}
+            explode={explode}
           />
+          {explode ? (
+            <ExplodeFit
+              camera={ortho}
+              controlsRef={orthoControls}
+              runtime={explode}
+              corner={corner}
+              snapId={snapId}
+              active={iso}
+              touchedRef={touchedRef}
+              fittedKey={isoFitKey}
+              otherOrthoFittedKey={planFitKey}
+              extraBounds={heliodonClipBounds}
+            />
+          ) : null}
           <PlanSnap
             camera={ortho}
             controlsRef={orthoControls}
@@ -2154,7 +2485,7 @@ export function Cameras({
             otherOrthoFittedKey={isoFitKey}
             extraBounds={heliodonClipBounds}
           />
-          <OrthoClip camera={ortho} controlsRef={orthoControls} boundsRef={boundsRef}
+          <OrthoClip camera={ortho} controlsRef={orthoControls} boundsRef={orthoBoundsRef}
             active={orthoView}
             extraBounds={heliodonClipBounds}
           />
@@ -2261,7 +2592,7 @@ export function Scene3D({
   uniformBuildings,
   colourBySource,
   showManualEdits,
-  projection,
+  projection: chosenProjection,
   corner,
   freeRotate,
   snapId,
@@ -2305,6 +2636,9 @@ export function Scene3D({
   landmarkSources = NO_LANDMARKS,
   landmarkLabelsOn = false,
   onLandmarkScreens,
+  exploded = false,
+  explodeGapM = 0,
+  inspectAnchorLayer = "ground",
 }: {
   model: CityModel;
   windModel?: CityModel;
@@ -2356,7 +2690,34 @@ export function Scene3D({
   landmarkSources?: readonly LandmarkLabelSource[];
   landmarkLabelsOn?: boolean;
   onLandmarkScreens?: (state: LandmarkScreenState | null) => void;
+  exploded?: boolean;
+  explodeGapM?: number;
+  inspectAnchorLayer?: ExplodeLayerId;
 }) {
+  const explodeRuntime = useMemo<RefObject<ExplodeRuntime>>(() => ({ current: createExplodeRuntime() }), []);
+  const explodeOverlayRef = useRef<THREE.Group | null>(null);
+  const explodeLabelsRef = useRef<Partial<Record<ExplodeLayerId, HTMLElement | null>>>({});
+  const [explodeEngaged, setExplodeEngaged] = useState(false);
+  if (exploded && !explodeEngaged) setExplodeEngaged(true);
+  const explodeLive = exploded || explodeEngaged;
+  const projection: ProjectionMode = explodeLive ? "iso" : chosenProjection;
+  const onExplodeCollapsed = useCallback(() => setExplodeEngaged(false), []);
+  const [explodeTopLiftM, setExplodeTopLiftM] = useState(0);
+  const pickLifts = useRef(new WeakMap<SceneInspectWorld, number>());
+  const onInspectPick = useCallback(
+    (selection: SceneSelection) => {
+      pickLifts.current.set(selection.world, explodeRuntime.current.offsets[explodeLayerOfSelectionKind(selection.kind)]);
+      onSceneInspectPick(selection);
+    },
+    [explodeRuntime, onSceneInspectPick],
+  );
+  const inspectLift = useCallback(
+    () =>
+      inspectAnchor
+        ? explodeRuntime.current.offsets[inspectAnchorLayer] - (pickLifts.current.get(inspectAnchor) ?? 0)
+        : 0,
+    [explodeRuntime, inspectAnchor, inspectAnchorLayer],
+  );
   const landmarkExportRef = useRef<LandmarkExportLabels | null>(null);
   const sceneCutKey = modelCutSiteId(model.center, model.sideM);
   const introSkip = useMemo(
@@ -2499,7 +2860,7 @@ export function Scene3D({
         enabled={solar.castShadows}
         intensity={sunIntensity}
         targetY={shadowTargetY}
-        topY={siteTopY}
+        topY={siteTopY + explodeTopLiftM}
       />
       {sunHoursGroundShown(Boolean(solar.sunHours), sunHoursPickedOnly) && sunHoursGroundGrid ? (
         <SunHoursLayer
@@ -2523,7 +2884,7 @@ export function Scene3D({
         solarGreyscale={monoViewActive(display)}
         solarShadowsActive={solarShadowsActive}
         onBounds={onBounds}
-        onSceneInspectPick={onSceneInspectPick}
+        onSceneInspectPick={onInspectPick}
         onClearSceneInspect={onClearSceneInspect}
         pickBuildings={model.layers.buildings && !onScenePoint}
         onScenePoint={onScenePoint}
@@ -2540,18 +2901,27 @@ export function Scene3D({
         introSkip={introSkip}
         introPlayed={introPlayed}
         importedMassing={importedMassing}
+        exploded={exploded}
+        explodeGapM={explodeGapM}
+        explodeRuntime={explodeRuntime}
+        explodeOverlayRef={explodeOverlayRef}
+        cityBoundsRef={boundsRef}
+        onExplodeCollapsed={onExplodeCollapsed}
+        onExplodeTopLift={setExplodeTopLiftM}
       />
-      {solar.sunHours && sunHoursGroundGrid && sunHoursFaces ? (
-        <SunHoursLayer
-          grid={sunHoursGroundGrid}
-          overlay={sunHoursFaces}
-          scaleMaxHours={sunHoursScaleMax || sunHoursGroundGrid.maxSunHours}
-          model={model}
-          planView={projection === "plan"}
-          surfacesOnly
-        />
-      ) : null}
-      {importedMassing ? <primitive object={importedMassing} /> : null}
+      <group ref={explodeOverlayRef}>
+        {solar.sunHours && sunHoursGroundGrid && sunHoursFaces ? (
+          <SunHoursLayer
+            grid={sunHoursGroundGrid}
+            overlay={sunHoursFaces}
+            scaleMaxHours={sunHoursScaleMax || sunHoursGroundGrid.maxSunHours}
+            model={model}
+            planView={projection === "plan"}
+            surfacesOnly
+          />
+        ) : null}
+        {importedMassing ? <primitive object={importedMassing} /> : null}
+      </group>
       {walkLayer ? <primitive object={walkLayer} /> : null}
       {walkRippleLayer ? <primitive object={walkRippleLayer} /> : null}
       {onScenePoint ? <ScenePointLayer onScenePoint={onScenePoint} /> : null}
@@ -2568,11 +2938,12 @@ export function Scene3D({
         world={inspectAnchor}
         enabled={inspectAnchor != null}
         onScreen={onInspectHudScreen}
+        lift={inspectLift}
       />
       {onLandmarkScreens ? (
         <LandmarkLabelProjector
           sources={landmarkSources}
-          enabled={landmarkLabelsOn && active}
+          enabled={landmarkLabelsOn && active && !explodeLive}
           onScreens={onLandmarkScreens}
           exportRef={landmarkExportRef}
         />
@@ -2613,8 +2984,28 @@ export function Scene3D({
         introEnabled={!introSkip}
         gizmoOrbitLock={sectionKnifeGizmoInteraction.orbitLock}
         landmarkLabelsRef={landmarkExportRef}
+        explode={explodeRuntime}
       />
+      {explodeLive ? (
+        <ExplodeLabelProjector runtime={explodeRuntime} exploding={exploded} shown={active} labelsRef={explodeLabelsRef} />
+      ) : null}
       </Canvas>
+      {explodeLive && active ? (
+        <div className="explode-label-layer">
+          {EXPLODE_LAYERS.map((layer) => (
+            <div
+              key={layer}
+              className="explode-layer-label"
+              data-explode-layer={layer}
+              ref={(element) => {
+                explodeLabelsRef.current[layer] = element;
+              }}
+            >
+              {EXPLODE_LAYER_LABELS[layer]}
+            </div>
+          ))}
+        </div>
+      ) : null}
       {windPlanOn && windPlan ? <WindPlanOverlay model={windPlanOutlineModel ?? model} plan={windPlan} store={windPlanStore} /> : null}
     </div>
   );

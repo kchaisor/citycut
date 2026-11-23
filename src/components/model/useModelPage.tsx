@@ -167,6 +167,7 @@ import type { SitePlanExportOptions } from "../../lib/aiPlan";
 import type { PlanShadowInput } from "../../lib/buildingShadows";
 import type { HeliodonDiagramExportOptions, HeliodonGroundExportOptions } from "../../lib/heliodonDiagram";
 import { resolveSunDomeRadiusM, sunDomeRange, writeStoredHeliodonRadiusFactor } from "../../lib/heliodonRadius";
+import { explodeGapRange, resolveExplodeGapM } from "../../lib/modelExplode";
 import type { SolarViewSettings } from "../SolarHeliodon";
 import {
   isLayer3dVisible,
@@ -308,6 +309,8 @@ export function useModelPage({
     if (sidebarModelRef.current === model) return;
     sidebarModelRef.current = model;
     dispatchSidebar({ type: "new-model" });
+    setExplodedOn(false);
+    setExplodeGapChoiceM(null);
     setAnalyses(NO_ANALYSES);
     setWindStreaksOn(false);
     setWindSettings(() => {
@@ -335,6 +338,13 @@ export function useModelPage({
     planViewportExtent(model.sideM),
   );
   const [view, setView] = useState<ViewMemory>(loadView);
+  const [explodedOn, setExplodedOn] = useState(false);
+  const [explodeGapChoiceM, setExplodeGapChoiceM] = useState<number | null>(null);
+  const exploded = explodedOn && view.projection === "iso";
+  const explodeGap = useMemo(() => {
+    const range = explodeGapRange(model.sideM);
+    return { range, gapM: resolveExplodeGapM(range, explodeGapChoiceM) };
+  }, [model.sideM, explodeGapChoiceM]);
   const [isoDrawingViewport, setIsoDrawingViewport] = useState<PlanViewport>(() =>
     planViewportExtent(model.sideM),
   );
@@ -1549,6 +1559,7 @@ export function useModelPage({
   }
 
   function commitView(next: ViewMemory, snap: boolean) {
+    if (next.projection !== "iso") setExplodedOn(false);
     setView(next);
     writeStoredView(window.localStorage, next);
     const search = writeViewSearch(window.location.search, next);
@@ -1556,6 +1567,16 @@ export function useModelPage({
     const current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
     if (nextUrl !== current) window.history.replaceState(window.history.state, "", nextUrl);
     if (snap) setSnapId((id) => id + 1);
+  }
+
+  function explodeModel() {
+    commitView({ projection: "iso", corner: view.corner, freeRotate: false }, false);
+    setExplodedOn(true);
+  }
+
+  function showIsometric() {
+    setExplodedOn(false);
+    commitView({ ...view, projection: "iso" }, false);
   }
 
   async function save3dm() {
@@ -2234,6 +2255,11 @@ export function useModelPage({
     commitRenderQuality,
     commitSolar,
     commitView,
+    explodeModel,
+    showIsometric,
+    exploded,
+    explodeGap,
+    setExplodeGapM: setExplodeGapChoiceM,
     commitView3dDisplay,
     commitWind,
     compassHeadingDeg,

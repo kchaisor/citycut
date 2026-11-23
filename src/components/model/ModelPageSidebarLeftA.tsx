@@ -144,8 +144,8 @@ export function ModelPageSidebarLeftA({ vm }: { vm: import("./useModelPage").Mod
                       </button>
                       <button
                         type="button"
-                        aria-pressed={view.projection === "iso"}
-                        onClick={() => commitView({ ...view, projection: "iso" }, false)}
+                        aria-pressed={view.projection === "iso" && !vm.exploded}
+                        onClick={vm.showIsometric}
                       >
                         Isometric
                       </button>

@@ -16,6 +16,7 @@ import { SIDEBAR_SECTION_LABELS } from "../../lib/sidebarSections";
 import { ModelPageSidebarLeftA } from "./ModelPageSidebarLeftA";
 import { ModelPageSidebarLeftB } from "./ModelPageSidebarLeftB";
 import { ModelPageSidebarRight } from "./ModelPageSidebarRight";
+import { ExplodedAxoHudCard } from "./ExplodedAxoHudCard";
 import { SolarStudyHudCard } from "./SolarStudyHudCard";
 import { ViewshedHudCard } from "./ViewshedHudCard";
 import { WindRoseHudCard } from "./WindRoseHudCard";
@@ -71,7 +72,8 @@ export function ModelPageSidebar({ vm }: { vm: import("./useModelPage").ModelPag
     topbarExportTriggerRef,
     view,
   } = vm;
-  const { analysisCards, analysisCardOn, siteIntelFolded, setSiteIntelFolded } = vm;
+  const { analysisCards, analysisCardOn, siteIntelFolded, setSiteIntelFolded, exploded, explodeModel, showIsometric } = vm;
+  const explodeCardOn = tab === "3d" && exploded;
   const sunHoursLegendOn = sunHoursLegendCardOn({
     tab,
     drawing,
@@ -112,8 +114,9 @@ export function ModelPageSidebar({ vm }: { vm: import("./useModelPage").ModelPag
             }}
             rightMeta={`MGA${mgaCrs(model.center.lon).zone}`}
             rightBelow={
-              analysisCardOn || sunHoursLegendAlone ? (
+              analysisCardOn || sunHoursLegendAlone || explodeCardOn ? (
                 <>
+                  {explodeCardOn ? <ExplodedAxoHudCard vm={vm} /> : null}
                   {analysisCards.solar ? <SolarStudyHudCard vm={vm} /> : null}
                   {analysisCards.wind ? <WindRoseHudCard vm={vm} /> : null}
                   {analysisCards.view ? <ViewshedHudCard vm={vm} /> : null}
@@ -190,10 +193,14 @@ export function ModelPageSidebar({ vm }: { vm: import("./useModelPage").ModelPag
                     <select
                       className="topbar-3d-select"
                       aria-label="3D projection"
-                      value={view.projection}
+                      value={exploded ? "exploded" : view.projection}
                       onChange={(event) => {
-                        const projection = event.target.value as "perspective" | "iso" | "plan";
-                        if (projection === "plan") {
+                        const projection = event.target.value as "perspective" | "iso" | "exploded" | "plan";
+                        if (projection === "exploded") {
+                          explodeModel();
+                        } else if (projection === "iso") {
+                          showIsometric();
+                        } else if (projection === "plan") {
                           commitView({ projection: "plan", corner: view.corner, freeRotate: false }, true);
                         } else {
                           commitView({ ...view, projection }, false);
@@ -202,6 +209,7 @@ export function ModelPageSidebar({ vm }: { vm: import("./useModelPage").ModelPag
                     >
                       <option value="perspective">Perspective</option>
                       <option value="iso">Iso</option>
+                      <option value="exploded">Exploded</option>
                       <option value="plan">Plan</option>
                     </select>
                     <div className="proj-group studio-submode-pills topbar-3d-modes" role="group" aria-label="3D projection">
@@ -215,11 +223,19 @@ export function ModelPageSidebar({ vm }: { vm: import("./useModelPage").ModelPag
                       </button>
                       <button
                         type="button"
-                        className={view.projection === "iso" ? "proj-btn active studio-submode-pill is-active" : "proj-btn studio-submode-pill"}
-                        aria-pressed={view.projection === "iso"}
-                        onClick={() => commitView({ ...view, projection: "iso" }, false)}
+                        className={view.projection === "iso" && !exploded ? "proj-btn active studio-submode-pill is-active" : "proj-btn studio-submode-pill"}
+                        aria-pressed={view.projection === "iso" && !exploded}
+                        onClick={showIsometric}
                       >
                         Isometric
+                      </button>
+                      <button
+                        type="button"
+                        className={exploded ? "proj-btn active studio-submode-pill is-active" : "proj-btn studio-submode-pill"}
+                        aria-pressed={exploded}
+                        onClick={explodeModel}
+                      >
+                        Exploded axo
                       </button>
                       <button
                         type="button"
