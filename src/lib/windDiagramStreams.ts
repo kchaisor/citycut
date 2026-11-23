@@ -17,7 +17,6 @@ export const STREAM_INDICES_PER_ARROW = STREAM_SHAFT_STEPS * 6 + 9;
 export const STREAM_MESH_NAME = "WindStream";
 
 const LEAD_LENGTH = 1.3;
-const EDGE_MARGIN = 0.07;
 const EDGE_INSET = 0.04;
 const BAND_OFFSETS = [0, -0.32, 0.32, -0.64, 0.64] as const;
 const COMFORTABLE_GAP = 0.24;
@@ -111,27 +110,31 @@ export type StreamFan = {
 
 export type StreamSite = { halfWidthM: number; halfHeightM: number; spreadRadiusM?: number | null };
 
-type StreamSpread = { halfE: number; halfN: number; scale: number; centred: boolean };
+type StreamSpread = { halfE: number; halfN: number; scale: number; centred: boolean; radius?: number };
 
 function streamSpread(site: StreamSite, unit: number): StreamSpread {
   const halfE = site.halfWidthM / unit;
   const halfN = site.halfHeightM / unit;
   const radius = site.spreadRadiusM;
   if (radius == null || !(radius > 0)) return { halfE, halfN, scale: 1, centred: false };
-  const spreadE = Math.min(halfE, radius / unit);
-  const spreadN = Math.min(halfN, radius / unit);
-  return { halfE: spreadE, halfN: spreadN, scale: Math.min(spreadE, spreadN), centred: true };
+  const r = radius / unit;
+  return { halfE: r, halfN: r, scale: r, centred: true, radius: r };
 }
 
 function smooth(t: number): number {
   return t * t * (3 - 2 * t);
 }
 
-function upwindEdgeDistance(band: number, flow: StreamPoint, side: StreamPoint, halfE: number, halfN: number): number {
+function upwindEdgeDistance(band: number, flow: StreamPoint, side: StreamPoint, spread: StreamSpread): number {
+  if (spread.radius != null) {
+    const offset = Math.abs(band);
+    if (offset >= spread.radius) return 0;
+    return Math.sqrt(spread.radius * spread.radius - offset * offset);
+  }
   const e = band * side.east;
   const n = band * side.north;
-  const te = Math.abs(flow.east) > 1e-6 ? (halfE + Math.sign(flow.east) * e) / Math.abs(flow.east) : Infinity;
-  const tn = Math.abs(flow.north) > 1e-6 ? (halfN + Math.sign(flow.north) * n) / Math.abs(flow.north) : Infinity;
+  const te = Math.abs(flow.east) > 1e-6 ? (spread.halfE + Math.sign(flow.east) * e) / Math.abs(flow.east) : Infinity;
+  const tn = Math.abs(flow.north) > 1e-6 ? (spread.halfN + Math.sign(flow.north) * n) / Math.abs(flow.north) : Infinity;
   return Math.max(0, Math.min(te, tn));
 }
 
@@ -145,7 +148,7 @@ function fanCourses(stream: PrevailingStream, placement: StreamFanPlacement, spr
   const flow = downwindFromSector(stream.sector);
   const side = { east: -flow.north, north: flow.east };
   const fanLength = LEAD_LENGTH * stream.reach;
-  const fromEdge = -upwindEdgeDistance(band, flow, side, spread.halfE, spread.halfN) + EDGE_INSET * spread.scale;
+  const fromEdge = -upwindEdgeDistance(band, flow, side, spread) + EDGE_INSET * spread.scale;
   const start = spread.centred ? Math.min(fromEdge, -fanLength / 2) : fromEdge;
   const pattern = FAN_PATTERNS[stream.rank] ?? LEANING_TRIO;
   return pattern.arrows.slice(0, stream.arrows).map((arrow) => {
@@ -203,11 +206,12 @@ function minGap(a: StreamPoint[][], b: StreamPoint[][], stride = 1): number {
   return Math.sqrt(best);
 }
 
-function overshoot(lines: StreamPoint[][], halfE: number, halfN: number): number {
+function overshoot(lines: StreamPoint[][], spread: StreamSpread): number {
   let worst = 0;
   for (const line of lines) {
     for (const p of line) {
-      worst = Math.max(worst, Math.abs(p.east) - halfE, Math.abs(p.north) - halfN);
+      if (spread.radius != null) worst = Math.max(worst, Math.hypot(p.east, p.north) - spread.radius);
+      else worst = Math.max(worst, Math.abs(p.east) - spread.halfE, Math.abs(p.north) - spread.halfN);
     }
   }
   return worst;
@@ -215,13 +219,13 @@ function overshoot(lines: StreamPoint[][], halfE: number, halfN: number): number
 
 type StreamFanPlan = { spread: StreamSpread; placements: StreamFanPlacement[]; gap: number };
 
-function placeStreamFans(streams: readonly PrevailingStream[], halfE: number, halfN: number, spread: StreamSpread): StreamFanPlan {
+function placeStreamFans(streams: readonly PrevailingStream[], spread: StreamSpread): StreamFanPlan {
   const options = streams.map((stream) =>
     BAND_OFFSETS.flatMap((band) =>
       ([1, -1] as const).map((mirror) => {
         const placement: StreamFanPlacement = { band, mirror };
         const lines = fanCourses(stream, placement, spread).map(restLine);
-        return { placement, lines, outside: overshoot(lines, halfE, halfN) };
+        return { placement, lines, outside: overshoot(lines, spread) };
       }),
     ),
   );
@@ -266,11 +270,6 @@ function placeStreamFans(streams: readonly PrevailingStream[], halfE: number, ha
   return { spread, placements: best, gap: bestGap };
 }
 
-function widenSpread(from: StreamSpread, to: StreamSpread, share: number): StreamSpread {
-  const mix = (a: number, b: number) => a + (b - a) * share;
-  return { halfE: mix(from.halfE, to.halfE), halfN: mix(from.halfN, to.halfN), scale: mix(from.scale, to.scale), centred: true };
-}
-
 type ClippedCourse = { points: StreamPoint[]; cum: number[]; restTail: number; length: number };
 type CourseReach = { from: number; to: number };
 
@@ -280,17 +279,33 @@ function polylineLength(points: readonly StreamPoint[]): number {
   return total;
 }
 
-function edgeCrossing(inside: StreamPoint, outside: StreamPoint, limitE: number, limitN: number): StreamPoint {
+function edgeCrossing(inside: StreamPoint, outside: StreamPoint, spread: StreamSpread): StreamPoint {
+  const dx = outside.east - inside.east;
+  const dy = outside.north - inside.north;
   let k = 1;
-  if (Math.abs(outside.east) > limitE) k = Math.min(k, (Math.sign(outside.east) * limitE - inside.east) / (outside.east - inside.east));
-  if (Math.abs(outside.north) > limitN) k = Math.min(k, (Math.sign(outside.north) * limitN - inside.north) / (outside.north - inside.north));
-  return { east: inside.east + (outside.east - inside.east) * k, north: inside.north + (outside.north - inside.north) * k };
+  if (spread.radius != null) {
+    const r = spread.radius;
+    const a = dx * dx + dy * dy;
+    const b = 2 * (inside.east * dx + inside.north * dy);
+    const c = inside.east * inside.east + inside.north * inside.north - r * r;
+    const disc = b * b - 4 * a * c;
+    if (a > 1e-12 && disc >= 0) {
+      const s = Math.sqrt(disc);
+      const roots = [(-b - s) / (2 * a), (-b + s) / (2 * a)].filter((root) => root >= 0 && root <= 1);
+      if (roots.length > 0) k = Math.min(...roots);
+    }
+  } else {
+    if (Math.abs(outside.east) > spread.halfE) k = Math.min(k, (Math.sign(outside.east) * spread.halfE - inside.east) / (outside.east - inside.east));
+    if (Math.abs(outside.north) > spread.halfN) k = Math.min(k, (Math.sign(outside.north) * spread.halfN - inside.north) / (outside.north - inside.north));
+  }
+  return { east: inside.east + dx * k, north: inside.north + dy * k };
 }
 
-function clipCourse(course: ArrowCourse, halfE: number, halfN: number): ClippedCourse {
-  const limitE = halfE - EDGE_MARGIN;
-  const limitN = halfN - EDGE_MARGIN;
-  const inside = (p: StreamPoint) => Math.abs(p.east) <= limitE && Math.abs(p.north) <= limitN;
+function clipCourse(course: ArrowCourse, spread: StreamSpread): ClippedCourse {
+  const inside = (p: StreamPoint) =>
+    spread.radius != null
+      ? Math.hypot(p.east, p.north) <= spread.radius
+      : Math.abs(p.east) <= spread.halfE && Math.abs(p.north) <= spread.halfN;
   const rest = restLine(course);
   const restLength = polylineLength(rest);
   let anchor = -1;
@@ -300,17 +315,24 @@ function clipCourse(course: ArrowCourse, halfE: number, halfN: number): ClippedC
   let points: StreamPoint[];
   let restTailIndex = 0;
   if (anchor < 0) {
-    points = rest.map((p) => ({
-      east: Math.max(-limitE, Math.min(limitE, p.east)),
-      north: Math.max(-limitN, Math.min(limitN, p.north)),
-    }));
+    points = rest.map((p) => {
+      if (spread.radius != null) {
+        const d = Math.hypot(p.east, p.north);
+        if (d <= spread.radius || d === 0) return p;
+        return { east: (p.east / d) * spread.radius, north: (p.north / d) * spread.radius };
+      }
+      return {
+        east: Math.max(-spread.halfE, Math.min(spread.halfE, p.east)),
+        north: Math.max(-spread.halfN, Math.min(spread.halfN, p.north)),
+      };
+    });
   } else {
     const upwind: StreamPoint[] = [];
     let firstStep = anchor;
     for (let i = anchor - 1; i >= anchor - COURSE_MAX_RUN_STEPS; i--) {
       const p = courseStep(course, i);
       if (!inside(p)) {
-        upwind.push(edgeCrossing(upwind.at(-1) ?? rest[anchor]!, p, limitE, limitN));
+        upwind.push(edgeCrossing(upwind.at(-1) ?? rest[anchor]!, p, spread));
         break;
       }
       upwind.push(p);
@@ -320,7 +342,7 @@ function clipCourse(course: ArrowCourse, halfE: number, halfN: number): ClippedC
     for (let i = anchor + 1; i <= anchor + COURSE_MAX_RUN_STEPS; i++) {
       const p = courseStep(course, i);
       if (!inside(p)) {
-        downwind.push(edgeCrossing(downwind.at(-1)!, p, limitE, limitN));
+        downwind.push(edgeCrossing(downwind.at(-1)!, p, spread));
         break;
       }
       downwind.push(p);
@@ -340,9 +362,9 @@ function clipCourse(course: ArrowCourse, halfE: number, halfN: number): ClippedC
 
 type StreamFanCourses = StreamFanPlan & { courses: ClippedCourse[][] };
 
-function clipFans(streams: readonly PrevailingStream[], plan: StreamFanPlan, halfE: number, halfN: number): StreamFanCourses {
+function clipFans(streams: readonly PrevailingStream[], plan: StreamFanPlan, clipSpread = plan.spread): StreamFanCourses {
   const courses = streams.map((stream, i) =>
-    fanCourses(stream, plan.placements[i]!, plan.spread).map((course) => clipCourse(course, halfE, halfN)),
+    fanCourses(stream, plan.placements[i]!, plan.spread).map((course) => clipCourse(course, clipSpread)),
   );
   return { ...plan, courses };
 }
@@ -356,21 +378,30 @@ function planStreamFans(streams: readonly PrevailingStream[], site: StreamSite):
   const halfE = site.halfWidthM / unit;
   const halfN = site.halfHeightM / unit;
   const cut: StreamSpread = { halfE, halfN, scale: 1, centred: false };
-  const open = clipFans(streams, placeStreamFans(streams, halfE, halfN, cut), halfE, halfN);
+  const open = clipFans(streams, placeStreamFans(streams, cut));
   const wanted = streamSpread(site, unit);
   if (!wanted.centred) return open;
   const floor = streams.length < 2 ? 0 : open.gap * SPREAD_GAP_KEEP;
-  for (let step = 0; step < SPREAD_WIDEN_STEPS; step++) {
-    const spread = widenSpread(wanted, cut, step / SPREAD_WIDEN_STEPS);
-    const plan = clipFans(streams, placeStreamFans(streams, halfE, halfN, spread), halfE, halfN);
-    if (plan.gap >= floor && keepsArrowLengths(plan, open)) {
-      return {
-        ...plan,
-        courses: plan.courses.map((fan, i) =>
-          fan.map((course, k) => ({ ...course, length: Math.min(course.length, open.courses[i]![k]!.length) })),
-        ),
-      };
-    }
+  const keepLength = (plan: StreamFanCourses): StreamFanCourses => ({
+    ...plan,
+    courses: plan.courses.map((fan, i) =>
+      fan.map((course, k) => ({ ...course, length: Math.min(course.length, open.courses[i]![k]!.length) })),
+    ),
+  });
+  if (wanted.radius != null && wanted.radius >= Math.min(halfE, halfN)) {
+    const plan = clipFans(streams, placeStreamFans(streams, wanted));
+    if (plan.gap >= floor && keepsArrowLengths(plan, open)) return keepLength(plan);
+  }
+  const pulled = placeStreamFans(streams, wanted);
+  const pulledIn = clipFans(streams, pulled, cut);
+  if (pulledIn.gap >= floor && keepsArrowLengths(pulledIn, open)) return keepLength(pulledIn);
+  const inset = Math.min(halfE, halfN);
+  for (let step = 1; step <= SPREAD_WIDEN_STEPS; step++) {
+    const share = step / SPREAD_WIDEN_STEPS;
+    const radius = wanted.radius! + (inset - wanted.radius!) * share;
+    const spread: StreamSpread = { halfE: radius, halfN: radius, scale: radius, centred: true, radius };
+    const plan = clipFans(streams, placeStreamFans(streams, spread), radius >= inset ? spread : cut);
+    if (plan.gap >= floor && keepsArrowLengths(plan, open)) return keepLength(plan);
   }
   return open;
 }
