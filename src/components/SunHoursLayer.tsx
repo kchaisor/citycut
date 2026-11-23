@@ -106,30 +106,38 @@ export function SunHoursLayer({
         </mesh>
       ) : null}
       {roofGeometry ? (
-        <mesh geometry={roofGeometry} renderOrder={SUN_HOURS_ROOF_RENDER_ORDER} data-sun-hours-direct-roofs>
+        <mesh
+          geometry={roofGeometry}
+          renderOrder={SUN_HOURS_ROOF_RENDER_ORDER}
+          castShadow
+          receiveShadow={false}
+          userData={{ sunHoursFaces: true }}
+          data-sun-hours-direct-roofs
+        >
           <meshBasicMaterial
             vertexColors
             toneMapped={false}
             depthTest
-            depthWrite={false}
-            side={THREE.DoubleSide}
-            polygonOffset
-            polygonOffsetFactor={-4}
-            polygonOffsetUnits={-4}
+            depthWrite
+            side={THREE.FrontSide}
           />
         </mesh>
       ) : null}
       {wallGeometry ? (
-        <mesh geometry={wallGeometry} renderOrder={SUN_HOURS_ROOF_RENDER_ORDER} data-sun-hours-direct-walls>
+        <mesh
+          geometry={wallGeometry}
+          renderOrder={SUN_HOURS_ROOF_RENDER_ORDER}
+          castShadow
+          receiveShadow={false}
+          userData={{ sunHoursFaces: true }}
+          data-sun-hours-direct-walls
+        >
           <meshBasicMaterial
             vertexColors
             toneMapped={false}
             depthTest
-            depthWrite={false}
+            depthWrite
             side={THREE.DoubleSide}
-            polygonOffset
-            polygonOffsetFactor={-2}
-            polygonOffsetUnits={-2}
           />
         </mesh>
       ) : null}

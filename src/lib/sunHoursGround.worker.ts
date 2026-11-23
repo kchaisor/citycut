@@ -1,5 +1,6 @@
 import { computeSunHoursGroundGrid } from "./sunHoursGroundPlan";
 import { clampSunHoursProgress, createThrottledProgress } from "./sunHoursProgress";
+import type { SunHoursWindow } from "./sunHoursWindow";
 import type { CityModel } from "../types";
 
 export type SunHoursGroundWorkerRequest = {
@@ -10,6 +11,7 @@ export type SunHoursGroundWorkerRequest = {
   day: number;
   cellM: number;
   stepMinutes: number;
+  window?: SunHoursWindow;
 };
 
 export type SunHoursGroundWorkerMessage =
@@ -23,12 +25,12 @@ const scope = self as unknown as {
 };
 
 scope.onmessage = (event: MessageEvent<SunHoursGroundWorkerRequest>) => {
-  const { id, model, year, month, day, cellM, stepMinutes } = event.data;
+  const { id, model, year, month, day, cellM, stepMinutes, window } = event.data;
   try {
     const onProgress = createThrottledProgress((fraction) => {
       scope.postMessage({ type: "progress", id, fraction: clampSunHoursProgress(fraction) });
     });
-    const grid = computeSunHoursGroundGrid(model as CityModel, year, month, day, cellM, stepMinutes, onProgress);
+    const grid = computeSunHoursGroundGrid(model as CityModel, year, month, day, cellM, stepMinutes, onProgress, window);
     if (!grid) scope.postMessage({ type: "empty", id });
     else scope.postMessage({ type: "done", id, grid });
   } catch {

@@ -20,6 +20,7 @@ import { SolarStudyHudCard } from "./SolarStudyHudCard";
 import { ViewshedHudCard } from "./ViewshedHudCard";
 import { WindRoseHudCard } from "./WindRoseHudCard";
 import { SunHoursLegendDock } from "./SunHoursLegendDock";
+import { solarSettingsForActiveAnalysis } from "../../lib/solarStudyView";
 import { sunHoursLegendCardOn } from "./sunHoursLegendCard";
 
 export function ModelPageSidebar({ vm }: { vm: import("./useModelPage").ModelPageViewModel }) {
@@ -74,7 +75,7 @@ export function ModelPageSidebar({ vm }: { vm: import("./useModelPage").ModelPag
   const sunHoursLegendOn = sunHoursLegendCardOn({
     tab,
     drawing,
-    sunHours: Boolean(vm.solar.sunHours),
+    sunHours: Boolean(solarSettingsForActiveAnalysis(vm.solar, vm.analyses).sunHours),
     hasResult: vm.sunHoursGround.grid != null,
     pending: vm.sunHoursGround.pending || vm.sunHoursGround.pendingSurfaces,
   });

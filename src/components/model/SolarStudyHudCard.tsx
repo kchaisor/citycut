@@ -13,6 +13,8 @@ import {
 import { SUN_STUDY_DATES } from "../../lib/solar";
 import { analysisCardCollapsed } from "../../lib/analysisCards";
 import { sunDomeSizeFromSlider, sunDomeSizeShare } from "../../lib/heliodonRadius";
+import { SUN_HOURS_PICK_HINT_3D, SUN_HOURS_PICK_HINT_PLAN } from "../../lib/sunHoursPicked";
+import { DEFAULT_SUN_HOURS_WINDOW, SUN_HOURS_WINDOWS, SUN_HOURS_WINDOW_IDS } from "../../lib/sunHoursWindow";
 import { AnalysisHudCard } from "./AnalysisHudCard";
 import { SunHoursLegendDock } from "./SunHoursLegendDock";
 import { sunHoursLegendCardOn } from "./sunHoursLegendCard";
@@ -41,6 +43,7 @@ export function SolarStudyHudCard({ vm }: { vm: ModelPageViewModel }) {
     solar,
     sunDome,
     sunHoursGround,
+    sunHoursPickedIds,
     sunStudySelected,
     tab,
     toggleAnalysisCard,
@@ -62,6 +65,8 @@ export function SolarStudyHudCard({ vm }: { vm: ModelPageViewModel }) {
     hasResult: sunHoursGround.grid != null,
     pending: sunHoursGround.pending || sunHoursGround.pendingSurfaces,
   });
+  const sunHoursWindow = solar.sunHoursWindow ?? DEFAULT_SUN_HOURS_WINDOW;
+  const sunHoursPickedOnly = Boolean(solar.sunHoursPickedOnly);
   const overlay = (label: string, on: boolean, toggle: () => void, attrs: Record<string, boolean> = {}) => (
     <button type="button" className={on ? "ac-seg-btn is-on" : "ac-seg-btn"} aria-pressed={on} onClick={toggle} {...attrs}>
       <span className="ac-dot" aria-hidden="true" />
@@ -241,7 +246,31 @@ export function SolarStudyHudCard({ vm }: { vm: ModelPageViewModel }) {
 
       {sunHoursLegendOn ? (
         <div className="ac-section">
-          <SunHoursLegendDock sunHoursGround={sunHoursGround} embedded />
+          <div className="ac-seg ac-seg-2" role="group" aria-label="Sun hours window">
+            {SUN_HOURS_WINDOW_IDS.map((windowId) => {
+              const active = sunHoursWindow === windowId;
+              return (
+                <button
+                  key={windowId}
+                  type="button"
+                  className={active ? "ac-seg-btn is-ink" : "ac-seg-btn"}
+                  aria-pressed={active}
+                  onClick={() => commitSolar({ ...solar, sunHoursWindow: windowId })}
+                >
+                  {SUN_HOURS_WINDOWS[windowId].label}
+                </button>
+              );
+            })}
+          </div>
+          {overlay("Colour only selected", sunHoursPickedOnly, () =>
+            commitSolar({ ...solar, sunHoursPickedOnly: !sunHoursPickedOnly }),
+          )}
+          {sunHoursPickedOnly && sunHoursPickedIds.length === 0 ? (
+            <p className="ac-note" data-sun-hours-pick-hint>
+              {tab === "3d" ? SUN_HOURS_PICK_HINT_3D : SUN_HOURS_PICK_HINT_PLAN}
+            </p>
+          ) : null}
+          <SunHoursLegendDock sunHoursGround={sunHoursGround} embedded pickedOnly={sunHoursPickedOnly} />
         </div>
       ) : null}
     </AnalysisHudCard>

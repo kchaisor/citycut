@@ -168,4 +168,22 @@ describe("solar greyscale", () => {
     expect(monoSwatchColour("water", "#7FBFFF")).toBe("#D6D6D2");
     expect(monoSwatchColour("trees", "#478c33")).not.toBe("#D6D6D2");
   });
+
+  it("leaves Direct Sun Hours face colours in colour when B&W is on", () => {
+    const root = new THREE.Group();
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute("color", new THREE.BufferAttribute(new Float32Array([1, 0.4, 0.1, 0.2, 0.5, 0.9]), 3));
+    const faces = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ vertexColors: true, color: "#ff8800" }));
+    faces.userData.sunHoursFaces = true;
+    const road = new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshBasicMaterial({ color: "#c8a060" }));
+    road.name = "Roads";
+    root.add(faces, road);
+    const rest = Array.from(geometry.getAttribute("color").array);
+    applySolarGreyscale(root, true);
+    expect(Array.from(geometry.getAttribute("color").array)).toEqual(rest);
+    expect((faces.material as THREE.MeshBasicMaterial).color.getHexString()).toBe("ff8800");
+    expect((road.material as THREE.MeshBasicMaterial).color.r).toBe((road.material as THREE.MeshBasicMaterial).color.g);
+    applySolarGreyscale(root, false);
+    expect(Array.from(geometry.getAttribute("color").array)).toEqual(rest);
+  });
 });

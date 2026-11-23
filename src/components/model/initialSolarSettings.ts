@@ -1,6 +1,7 @@
 import { capturePresetFromSearch } from "../../lib/captureQuery";
 import { readStoredHeliodonRadiusFactor, resolveHeliodonRadiusFactor } from "../../lib/heliodonRadius";
 import { NO_ANALYSES, analysesOf, type ActiveAnalyses } from "../../lib/sidebarSections";
+import { DEFAULT_SUN_HOURS_WINDOW } from "../../lib/sunHoursWindow";
 import type { SolarViewSettings } from "../SolarHeliodon";
 
 export function initialSolarSettings(
@@ -17,6 +18,8 @@ export function initialSolarSettings(
     hour: 15,
     minute: 0,
     sunHours: false,
+    sunHoursWindow: DEFAULT_SUN_HOURS_WINDOW,
+    sunHoursPickedOnly: false,
   };
 }
 

@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { daylightWindowMinutes, sunAtMelbourneLocal } from "./solar";
+import { sunAtMelbourneLocal } from "./solar";
 import { buildFacadeOcclusionMesh } from "./facadeOcclusionMesh";
 import { planToWorld, worldOutward3 } from "./sunHoursWorld";
 import { sunHoursDirectRgb, sunHoursGroundFromLitSteps } from "./sunHoursGround";
@@ -8,13 +8,19 @@ import { FAST_SUN_HOURS_PARAMS, type SunHoursSampleParams } from "./sunHoursQual
 import { buildRoofFootprintMeshesForModel } from "./sunHoursRoofFootprint";
 import type { SunHoursGroundRaster } from "./sunHoursGroundRaster";
 import { packSunHoursRoofRasterSource, type SunHoursRoofRasterSource } from "./sunHoursRoofPlanRaster";
-import type { CityModel } from "../types";
+import type { CityModel, Ring } from "../types";
 import { reportSunHoursStep, type SunHoursProgressCallback } from "./sunHoursProgress";
+import { extrudedFootprintsForBuilding } from "./extrudedBuildingFootprint";
+import { openRing } from "./geo";
+import { footprintBase } from "./terrain";
+import { SURFACE } from "./surfaceLayers";
+import { sunHoursReceivers } from "./sunHoursBuildings";
+import type { SunHoursFaceRange } from "./sunHoursPicked";
+import { DEFAULT_SUN_HOURS_WINDOW, sunHoursStudyMinutes, type SunHoursWindow } from "./sunHoursWindow";
 
 const FACING_DOT_MIN = 0.04;
 const RAY_MAX_M = 4000;
 const SELF_SKIP_M = 0.05;
-const WALL_OFFSET_M = 0.08;
 
 export type SunHoursDirectOverlay = {
   positions: Float32Array;
@@ -23,6 +29,8 @@ export type SunHoursDirectOverlay = {
   roofColors: Float32Array;
   wallPositions: Float32Array;
   wallColors: Float32Array;
+  roofRanges: SunHoursFaceRange[];
+  wallRanges: SunHoursFaceRange[];
   cellCount: number;
   maxSunHours: number;
   cellM: number;
@@ -61,11 +69,10 @@ export function daylightSteps(
   month: number,
   day: number,
   stepMinutes: number,
+  window: SunHoursWindow = DEFAULT_SUN_HOURS_WINDOW,
 ): { dir: THREE.Vector3; above: boolean }[] {
-  const window = daylightWindowMinutes(lat, lon, year, month, day);
-  if (!window) return [];
   const steps: { dir: THREE.Vector3; above: boolean }[] = [];
-  for (let minuteOfDay = window.sunrise; minuteOfDay <= window.sunset; minuteOfDay += stepMinutes) {
+  for (const minuteOfDay of sunHoursStudyMinutes(window, lat, lon, year, month, day, stepMinutes)) {
     const hour = Math.floor(minuteOfDay / 60);
     const minute = minuteOfDay % 60;
     const sample = sunAtMelbourneLocal(lat, lon, year, month, day, hour, minute);
@@ -106,47 +113,96 @@ function pushQuad(
   tri(dx, dy, dz);
 }
 
-function buildOverlayMesh(
+function visibleWallBaseYM(model: CityModel, ring: Ring): number {
+  return (model.terrain ? footprintBase(model.terrain, ring, model.sideM) : 0) + SURFACE.building.lift;
+}
+
+function appendWallFacesForModel(
+  model: CityModel,
+  samples: DirectSunHoursSample[],
+  hours: Float32Array,
+  maxSunHours: number,
+  wallPositions: number[],
+  wallColors: number[],
+  wallRanges: SunHoursFaceRange[],
+) {
+  const hoursById = new Map<string, number>();
+  for (let index = 0; index < samples.length; index++) {
+    const sample = samples[index]!;
+    if (sample.kind !== "facade-bay") continue;
+    hoursById.set(sample.id, hours[index]!);
+  }
+  for (const building of sunHoursReceivers(model)) {
+    const footprints = extrudedFootprintsForBuilding(building);
+    if (footprints.length === 0) continue;
+    const baseYM = visibleWallBaseYM(model, building.ring);
+    const start = wallPositions.length / 3;
+    for (const [partIndex, part] of footprints.entries()) {
+      const open = openRing(part.ring);
+      if (open.length < 3) continue;
+      const closed = [...open, open[0]!];
+      const partBaseYM = baseYM + (part.base ?? 0);
+      const heightM = Math.max(0.5, part.height);
+      const cellM = samples.find((sample) => sample.kind === "facade-bay" && sample.buildingId === building.id)?.spanM;
+      if (!(cellM && cellM > 0)) continue;
+      for (let edge = 0; edge < closed.length - 1; edge++) {
+        const a = closed[edge]!;
+        const b = closed[edge + 1]!;
+        const dx = b[0] - a[0];
+        const dy = b[1] - a[1];
+        const length = Math.hypot(dx, dy);
+        if (length < 0.35) continue;
+        const bayCount = Math.max(1, Math.ceil(length / cellM));
+        const bandCount = Math.max(1, Math.ceil(heightM / cellM));
+        for (let bay = 0; bay < bayCount; bay++) {
+          const along0 = bay * cellM;
+          const along1 = Math.min(length, (bay + 1) * cellM);
+          for (let band = 0; band < bandCount; band++) {
+            const id = `direct-wall-${building.id}-p${partIndex}-e${edge}-b${bay}-u${band}`;
+            if (!hoursById.has(id)) continue;
+            const rgb = sunHoursDirectRgb(hoursById.get(id)!, maxSunHours);
+            const up0 = band * cellM;
+            const up1 = Math.min(heightM, (band + 1) * cellM);
+            const at = (along: number, up: number) => {
+              const t = along / length;
+              return planToWorld(a[0] + dx * t, a[1] + dy * t, partBaseYM + up);
+            };
+            const [ax, ay, az] = at(along0, up0);
+            const [bx, by, bz] = at(along1, up0);
+            const [cx, cy, cz] = at(along1, up1);
+            const [dx_, dy_, dz] = at(along0, up1);
+            pushQuad(wallPositions, wallColors, rgb, ax, ay, az, bx, by, bz, cx, cy, cz, dx_, dy_, dz);
+          }
+        }
+      }
+    }
+    wallRanges.push({ buildingId: building.id, start, count: wallPositions.length / 3 - start });
+  }
+}
+
+export function buildSunHoursFaceMeshes(
   model: CityModel,
   samples: DirectSunHoursSample[],
   hours: Float32Array,
   maxSunHours: number,
   resolution: { cellM: number; wallCellM: number; roofCellM: number; stepMinutes: number },
 ): SunHoursDirectOverlay {
-  const positions: number[] = [];
-  const colors: number[] = [];
   const wallPositions: number[] = [];
   const wallColors: number[] = [];
-  for (let index = 0; index < samples.length; index++) {
-    const sample = samples[index]!;
-    if (sample.kind !== "facade-bay") continue;
-    const half = sample.spanM * 0.5;
-    const rgb = sunHoursDirectRgb(hours[index]!, maxSunHours);
-    const [cx, cy, cz] = planToWorld(sample.east, sample.north, sample.yM);
-    const [nx, , nz] = worldOutward3(sample.outwardEast, sample.outwardNorth);
-    const len = Math.hypot(nx, nz) || 1;
-    const tx = nz / len;
-    const tz = -nx / len;
-    const corner = (along: number, up: number) => [
-      cx + tx * along + nx * WALL_OFFSET_M,
-      cy + up,
-      cz + tz * along + nz * WALL_OFFSET_M,
-    ];
-    const [a0, a1, a2] = corner(-half, -half);
-    const [b0, b1, b2] = corner(half, -half);
-    const [c0, c1, c2] = corner(half, half);
-    const [d0, d1, d2] = corner(-half, half);
-    pushQuad(wallPositions, wallColors, rgb, a0, a1, a2, b0, b1, b2, c0, c1, c2, d0, d1, d2);
-    pushQuad(positions, colors, rgb, a0, a1, a2, b0, b1, b2, c0, c1, c2, d0, d1, d2);
-  }
-  const { roofPositions, roofColors } = buildRoofFootprintMeshesForModel(model, samples, hours, maxSunHours);
+  const wallRanges: SunHoursFaceRange[] = [];
+  appendWallFacesForModel(model, samples, hours, maxSunHours, wallPositions, wallColors, wallRanges);
+  const { roofPositions, roofColors, roofRanges } = buildRoofFootprintMeshesForModel(model, samples, hours, maxSunHours);
+  const wallPos = new Float32Array(wallPositions);
+  const wallCol = new Float32Array(wallColors);
   return {
-    positions: new Float32Array(positions),
-    colors: new Float32Array(colors),
+    positions: wallPos,
+    colors: wallCol,
     roofPositions,
     roofColors,
-    wallPositions: new Float32Array(wallPositions),
-    wallColors: new Float32Array(wallColors),
+    wallPositions: wallPos,
+    wallColors: wallCol,
+    roofRanges,
+    wallRanges,
     cellCount: samples.length,
     maxSunHours,
     ...resolution,
@@ -163,11 +219,12 @@ export function directSunHoursAtSamples(
   day: number,
   stepMinutes: number,
   onProgress?: SunHoursProgressCallback,
+  window: SunHoursWindow = DEFAULT_SUN_HOURS_WINDOW,
 ): Float32Array | null {
   if (samples.length === 0) return null;
   const occlusionMesh = buildFacadeOcclusionMesh(model);
   if (!occlusionMesh) return null;
-  const sunDirs = daylightSteps(model.center.lat, model.center.lon, year, month, day, stepMinutes);
+  const sunDirs = daylightSteps(model.center.lat, model.center.lon, year, month, day, stepMinutes, window);
   const litCounts = new Uint16Array(samples.length);
   const ray = new THREE.Ray();
   const dirTotal = sunDirs.length;
@@ -194,15 +251,16 @@ export function assessDirectSunHoursOverlay(
   scaleMaxHours?: number,
   params: SunHoursSampleParams = FAST_SUN_HOURS_PARAMS,
   onProgress?: SunHoursProgressCallback,
+  window: SunHoursWindow = DEFAULT_SUN_HOURS_WINDOW,
 ): SunHoursDirectOverlay | null {
   const { samples, wallCellM, roofCellM } = directSunHoursSampleSet(model, params);
   const { stepMinutes } = params;
-  const hours = directSunHoursAtSamples(model, samples, year, month, day, stepMinutes, onProgress);
+  const hours = directSunHoursAtSamples(model, samples, year, month, day, stepMinutes, onProgress, window);
   if (!hours) return null;
   let maxSunHours = 0;
   for (const value of hours) maxSunHours = Math.max(maxSunHours, value);
   const scale = Math.max(scaleMaxHours ?? 0, maxSunHours, 0.01);
-  const overlay = buildOverlayMesh(model, samples, hours, scale, {
+  const overlay = buildSunHoursFaceMeshes(model, samples, hours, scale, {
     cellM: params.cellM,
     wallCellM,
     roofCellM,
