@@ -231,8 +231,8 @@ describe("Analysis bar", () => {
 describe("Sun hours layers follow the toggle", () => {
   it("only feeds the 3D heatmap when Sun hours is on, and keeps the legend out of the viewport", () => {
     const tabs = readFileSync(resolve(__dirname, "ModelPageViewportTabs.tsx"), "utf8");
-    expect(tabs).toContain("sunHoursGroundGrid={solar.sunHours ? sunHoursGround.grid : null}");
-    expect(tabs).toContain("sunHoursDirectOverlay={solar.sunHours ? sunHoursGround.overlay : null}");
+    expect(tabs).toContain("sunHoursGroundGrid={viewSolar.sunHours ? sunHoursGround.grid : null}");
+    expect(tabs).toContain("sunHoursDirectOverlay={viewSolar.sunHours ? sunHoursGround.overlay : null}");
     expect(tabs).not.toContain("SunHoursLegendDock");
     expect(tabs).not.toContain("ViewLegend");
     const card = readFileSync(resolve(__dirname, "SolarStudyHudCard.tsx"), "utf8");
