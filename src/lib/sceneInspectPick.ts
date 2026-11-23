@@ -3,7 +3,12 @@ import type { TreeFeat } from "../types";
 import { buildingIdFromIntersection } from "./buildingPick";
 import { sampleTerrain } from "./terrain";
 
-const CLICK_MAX_PX = 5;
+export const INSPECT_CLICK_MAX_PX = 5;
+export const INSPECT_ADDITIVE_CLICK_MAX_PX = 14;
+
+export function isInspectClick(movementPx: number, additive: boolean): boolean {
+  return movementPx <= (additive ? INSPECT_ADDITIVE_CLICK_MAX_PX : INSPECT_CLICK_MAX_PX);
+}
 
 export type SceneInspectWorld = {
   east: number;
@@ -196,6 +201,7 @@ export function attachSceneInspectPick(
   let downX = 0;
   let downY = 0;
   let downAt = 0;
+  let downAdditive = false;
 
   function setPointer(event: PointerEvent) {
     const rect = canvas.getBoundingClientRect();
@@ -208,11 +214,14 @@ export function attachSceneInspectPick(
     downX = event.clientX;
     downY = event.clientY;
     downAt = event.timeStamp;
+    downAdditive = event.shiftKey;
+    if (downAdditive) event.stopImmediatePropagation();
   }
 
   function onPointerUp(event: PointerEvent) {
     if (event.button !== 0) return;
-    if (Math.hypot(event.clientX - downX, event.clientY - downY) > CLICK_MAX_PX) return;
+    const moved = Math.hypot(event.clientX - downX, event.clientY - downY);
+    if (!isInspectClick(moved, downAdditive && event.shiftKey)) return;
     if (event.timeStamp - downAt > 800) return;
     setPointer(event);
     raycaster.setFromCamera(pointer, camera);

@@ -134,6 +134,7 @@ import {
   writeStoredHiddenBuildings,
   type HiddenBuildingStore,
 } from "../../lib/hiddenBuildings";
+import { nextHideSelection } from "../../lib/hideSelection";
 import { useImportedMassing } from "../useImportedMassing";import { DrawingKind } from "../DrawingPlan";
 
 import { isometricDrawingBounds } from "../../lib/isometricDrawing";import { SidebarItem } from "../Sidebar";
@@ -1220,10 +1221,7 @@ export function useModelPage({
   }
 
   function selectForHide(buildingId: number, additive?: boolean) {
-    setHideSelection((prev) => {
-      if (!additive) return [buildingId];
-      return prev.includes(buildingId) ? prev.filter((id) => id !== buildingId) : [...prev, buildingId];
-    });
+    setHideSelection((prev) => nextHideSelection(prev, buildingId, Boolean(additive)));
   }
 
   function persistOverrides(next: HeightOverrideStore) {

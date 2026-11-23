@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import * as THREE from "three";
 import type { TreeFeat } from "../types";
 import {
+  INSPECT_ADDITIVE_CLICK_MAX_PX,
+  INSPECT_CLICK_MAX_PX,
+  isInspectClick,
   nearestTreeIdAt,
   pickSceneSelectionFromHits,
   sceneSelectionBuildingId,
@@ -59,5 +62,35 @@ describe("scene inspect pick helpers", () => {
     if (first?.kind === "building" && second?.kind === "building") {
       expect(second.buildingId).not.toBe(first.buildingId);
     }
+  });
+
+  it("marks a Shift pick as additive so more than one building stays selected", () => {
+    const context = { trees: [] as TreeFeat[], sideM: 400 };
+    const added = pickSceneSelectionFromHits([buildingHit(9)], context, 320, 410, true);
+    expect(added).toMatchObject({ kind: "building", buildingId: 9, additive: true });
+    const replaced = pickSceneSelectionFromHits([buildingHit(9)], context, 320, 410, false);
+    expect(replaced).toMatchObject({ kind: "building", buildingId: 9, additive: false });
+  });
+
+  it("treats a Shift-click with about 10 px of jitter as a click", () => {
+    expect(isInspectClick(10, true)).toBe(true);
+    expect(isInspectClick(INSPECT_ADDITIVE_CLICK_MAX_PX, true)).toBe(true);
+  });
+
+  it("does not treat a 10 px move without Shift as a click", () => {
+    expect(isInspectClick(10, false)).toBe(false);
+    expect(isInspectClick(INSPECT_CLICK_MAX_PX, false)).toBe(true);
+    expect(isInspectClick(0, false)).toBe(true);
+  });
+
+  it("ignores a Shift drag well above the jitter cap", () => {
+    expect(isInspectClick(INSPECT_ADDITIVE_CLICK_MAX_PX + 1, true)).toBe(false);
+    expect(isInspectClick(40, true)).toBe(false);
+  });
+
+  it("keeps the no-Shift cap tight and the Shift cap within 12 to 16 px", () => {
+    expect(INSPECT_CLICK_MAX_PX).toBe(5);
+    expect(INSPECT_ADDITIVE_CLICK_MAX_PX).toBeGreaterThanOrEqual(12);
+    expect(INSPECT_ADDITIVE_CLICK_MAX_PX).toBeLessThanOrEqual(16);
   });
 });

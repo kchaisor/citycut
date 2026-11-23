@@ -255,7 +255,9 @@ export function BuildingHeightPopover({
           </div>
           {onHideSelected && (
             <div className="hide-buildings-block">
-              <p className="meta">Visibility · shift-click to add buildings</p>
+              <p className="hide-buildings-hint">
+                Hold Shift and click to add more buildings, then press Hide selected.
+              </p>
               <div className="popover-actions">
                 <button type="button" className="is-accent" onClick={onHideSelected}>
                   Hide selected ({selectedCount})

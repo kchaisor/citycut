@@ -722,6 +722,14 @@ input[type="range"]::-moz-range-thumb {
   max-height: min(72vh, 460px);
   border-radius: 10px;
 }
+.building-detail-panel.is-floating,
+.building-detail-panel.inspect-hud {
+  pointer-events: none;
+}
+.building-detail-panel.is-floating :is(button, input, select, a),
+.building-detail-panel.inspect-hud :is(button, input, select, a) {
+  pointer-events: auto;
+}
 .building-detail-panel.is-minimised {
   max-height: none;
 }
