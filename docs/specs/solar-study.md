@@ -81,7 +81,11 @@ These replace item 3. Solar Study no longer greys the 3D scene. (Items 12–21 a
 Kelvin said GO on the round-3 mocks (`mock-solar-1440.png`, `mock-wind-1440.png`, `mock-viewshed-1440.png`, `mock-all-1440.png`) at 11:45 AM AEDT, 23 Nov 2026. At 11:48 AM he added that the wind-streak fans should follow the sun dome radius without the arrows growing; that is recorded in `docs/specs/wind-streaks.md`.
 
 39. **The Solar Study card.** Items 4, 7 to 10, 22 and 30 above describe it. It sits in the right-hand column under Site Intelligence, 328 px wide (the column was 304), in the same card style as the Wind Rose card: a 48 px header reading "Solar Study" with the live date and time, a left-aligned label column for ALT / AZ / Daylight, equal-width single-line buttons, and the time badge on the left under the slider.
-40. **Sun hours left on.** If Sun hours is left on and Solar Study is then turned off, the colouring stays (as before) and its legend shows as a small card of its own until Solar Study is on again. While the Solar Study card is up, the legend is only ever inside it.
+40. **Sun hours left on.** (Superseded 23 Nov 2026 by item 42.) While the Solar Study card is up, the legend is only ever inside it.
+
+
+41. **Direct Sun Hours colours the real building faces.** Kelvin, 6:05 PM AEDT, 23 Nov 2026: the study was showing odd overlapping planes because it painted a second skin 15 cm above the roofs and 8 cm off the walls. Roofs and walls are now coloured on the actual massing faces, so there is one surface and the colours meet cleanly at roof edges and corners. The ground stays a tight drape over the site (including parks and water) with the existing colour scale. High / Fast sample caps and grids stay as they are. In B&W the sun hours colours stay in colour. Outlines stay as building edges, not a grid of sample cells. Shadows still cast from the coloured buildings. Turning Sun hours off puts the model colours back. The colouring stays inside the cropped site shape (A3 sheet and circle).
+42. **Solar Study off hides sun hours.** Kelvin, 23 Nov 2026: turning Solar Study off hides the Direct Sun Hours colouring (3D ground and building faces, plan rasters) and its legend. The Sun hours choice is remembered and returns when Solar Study is turned back on.
 
 ## How we'll know it works
 
@@ -115,6 +119,13 @@ Open 40 Cleeland St, Dandenong (`?lat=-37.983826&lon=145.21555&label=40+Cleeland
 - [ ] In 3D with Sun hours on, the ground colour and the gaps under buildings line up with the 3D building footprints, at Dandenong and at Pyrmont (`?lat=-33.86627&lon=151.18389&km=1.5`). Before the fix, the ground colour on terrain was flipped north–south.
 - [ ] Every roof is fully coloured, with no bare white patches on large roofs. Before the fix, the roof colour sat just under the roof, so large roofs showed through.
 - [ ] With Sun hours on, the legend footnote reads "3 m grid · 15 min steps" on Fast and "1 m grid · 5 min steps" on High for a 0.5 km cut; on a 1 km cut, High reads "2 m grid · 5 min steps". Both say the grid was eased from 0.25 m for this cut size (updated 22 Nov 2026, see 21). Switching High / Fast shows the landing-style loading pill in the Direct Sun Hours legend ("Calculating sun hours…", yellow track, percent or GROUND/ROOFS) until the new result is ready, the pill hides when the result is ready, the page stays responsive, and 3D ambient occlusion and SMAA still follow the switch.
+
+- [ ] In 3D with Sun hours on, the colours sit on the real roofs and walls, with no second skin floating above the roof or standing off the wall, and no overlapping planes at roof edges or corners.
+- [ ] Turning Sun hours off puts the ordinary building colours and outlines back.
+- [ ] In B&W, the Direct Sun Hours colours stay in colour; the rest of the scene stays grey.
+- [ ] Building outlines stay as the building edges (not a grid of sample cells) while Sun hours is on.
+- [ ] On an A3 or circle crop, sun hours stays inside the cropped site shape.
+- [ ] With Sun hours on, turning Solar Study off hides the sun hours colouring and its legend; turning Solar Study back on shows the Sun hours pill still on and the colouring returns.
 
 ## Out of scope
 

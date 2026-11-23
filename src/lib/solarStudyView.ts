@@ -6,8 +6,11 @@ export function solarStudyViewActive(analyses: ActiveAnalyses): boolean {
 }
 
 export function solarSettingsForActiveAnalysis(solar: SolarViewSettings, analyses: ActiveAnalyses): SolarViewSettings {
-  const showPath = solar.showPath && solarStudyViewActive(analyses);
-  return showPath === solar.showPath ? solar : { ...solar, showPath };
+  const active = solarStudyViewActive(analyses);
+  const showPath = solar.showPath && active;
+  const sunHours = solar.sunHours && active;
+  if (showPath === solar.showPath && sunHours === solar.sunHours) return solar;
+  return sunHours === undefined ? { ...solar, showPath } : { ...solar, showPath, sunHours };
 }
 
 export function solarSettingsOnStudyStart(solar: SolarViewSettings): SolarViewSettings {

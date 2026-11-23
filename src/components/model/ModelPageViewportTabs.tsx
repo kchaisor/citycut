@@ -102,7 +102,8 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
     windPlan,
     siteWind,
   } = vm;
-  const sunHoursOnPlan = Boolean(solar.sunHours) && drawing === "site";
+  const viewSolar = solarSettingsForActiveAnalysis(solar, analyses);
+  const sunHoursOnPlan = Boolean(viewSolar.sunHours) && drawing === "site";
   const [keep3d, setKeep3d] = useState(tab === "3d");
   useEffect(() => {
     if (tab === "3d") setKeep3d(true);
@@ -153,7 +154,7 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
                 corner={view.corner}
                 freeRotate={view.freeRotate}
                 snapId={snapId}
-                solar={solarSettingsForActiveAnalysis(solar, analyses)}
+                solar={viewSolar}
                 windEnabled={windFlowActive(windSettings.enabled, analyses)}
                 siteWind={siteWind}
                 windPeriod={windSettings.period}
@@ -198,9 +199,9 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
                 walkLayer={walk.layer.root}
                 onScenePoint={walkDrawing ? walk.addPoint : massing.onScenePoint}
                 quality={renderQuality}
-                sunHoursGroundGrid={solar.sunHours ? sunHoursGround.grid : null}
-                sunHoursDirectOverlay={solar.sunHours ? sunHoursGround.overlay : null}
-                sunHoursScaleMax={solar.sunHours ? sunHoursGround.scaleMaxHours : 0}
+                sunHoursGroundGrid={viewSolar.sunHours ? sunHoursGround.grid : null}
+                sunHoursDirectOverlay={viewSolar.sunHours ? sunHoursGround.overlay : null}
+                sunHoursScaleMax={viewSolar.sunHours ? sunHoursGround.scaleMaxHours : 0}
                 solarAnalysisActive={solarStudyViewActive(analyses)}
                 landmarkSources={landmarkSources}
                 landmarkLabelsOn={landmarkLabelsOn}

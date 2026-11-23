@@ -130,12 +130,17 @@ function greyscaleColourAttribute(attr: THREE.BufferAttribute, on: boolean): voi
   }
 }
 
+export function isSunHoursFaceObject(object: THREE.Object3D): boolean {
+  return Boolean(object.userData?.sunHoursFaces);
+}
+
 export function applySolarGreyscale(root: THREE.Object3D, on: boolean): void {
   const seenMaterials = new Set<THREE.Material>();
   const seenAttributes = new Set<THREE.BufferAttribute>();
   root.traverse((object) => {
     const drawable = object as THREE.Mesh;
     if (!drawable.material) return;
+    if (isSunHoursFaceObject(object)) return;
     if (object.name === MONO_WATER_MESH_NAME && setFlatWater(drawable, on)) return;
     const materials = Array.isArray(drawable.material) ? drawable.material : [drawable.material];
     for (const material of materials) {

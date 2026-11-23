@@ -53,6 +53,34 @@ describe("solarSettingsForActiveAnalysis", () => {
   });
 });
 
+describe("solarSettingsForActiveAnalysis sun hours", () => {
+  const hoursOn: SolarViewSettings = { ...domeOn, sunHours: true };
+
+  it("keeps Sun hours while Solar Study is on, alone or with Wind Rose", () => {
+    expect(solarSettingsForActiveAnalysis(hoursOn, analysesOf("solar")).sunHours).toBe(true);
+    expect(solarSettingsForActiveAnalysis(hoursOn, analysesOf("solar", "wind")).sunHours).toBe(true);
+    expect(solarSettingsForActiveAnalysis(hoursOn, analysesOf("solar"))).toBe(hoursOn);
+  });
+
+  it("hides Sun hours when Solar Study is off, without touching the stored settings", () => {
+    for (const analyses of [analysesOf("wind"), analysesOf("view"), NO_ANALYSES]) {
+      const gated = solarSettingsForActiveAnalysis(hoursOn, analyses);
+      expect(gated).not.toBe(hoursOn);
+      expect(gated.sunHours).toBe(false);
+    }
+    expect(hoursOn.sunHours).toBe(true);
+  });
+
+  it("brings Sun hours back from the same stored settings when Solar Study is turned on again", () => {
+    expect(solarSettingsForActiveAnalysis(hoursOn, NO_ANALYSES).sunHours).toBe(false);
+    expect(solarSettingsForActiveAnalysis(hoursOn, analysesOf("solar")).sunHours).toBe(true);
+  });
+
+  it("does not add a sunHours field when it was never set", () => {
+    expect(solarSettingsForActiveAnalysis(domeOn, NO_ANALYSES)).not.toHaveProperty("sunHours");
+  });
+});
+
 describe("windFlowActive", () => {
   it("runs the ground-flow while Wind Rose is on and 3D Wind Flow is enabled, with or without Solar Study", () => {
     expect(windFlowActive(true, analysesOf("wind"))).toBe(true);

@@ -171,8 +171,7 @@ describe("sunHoursRoofFootprint", () => {
         const sortedOverlay = [...overlayYs].sort((a, b) => a - b);
         const sortedTops = [...roofTops].sort((a, b) => a - b);
         sortedTops.forEach((top, index) => {
-          expect(sortedOverlay[index]! - top).toBeGreaterThanOrEqual(0.1);
-          expect(sortedOverlay[index]! - top).toBeLessThan(0.3);
+          expect(sortedOverlay[index]!).toBeCloseTo(top, 5);
         });
       }
     }

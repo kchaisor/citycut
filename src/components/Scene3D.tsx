@@ -101,6 +101,7 @@ import { heliodonRadiusM } from "../lib/heliodonRadius";
 import { studioSceneLighting } from "../lib/sunStudyViewport";
 import { applySolarGreyscale, restoreFlatWater } from "../lib/solarGreyscale";
 import { SunHoursLayer } from "./SunHoursLayer";
+import { setSunHoursMassingFillVisible } from "../lib/sunHoursFaceTint";
 import type { SunHoursDirectOverlay } from "../lib/sunHoursDirectAssess";
 import type { SunHoursGroundGrid } from "../lib/sunHoursGroundPlan";
 import { SectionKnifeScene } from "./SectionKnifeScene";
@@ -992,20 +993,17 @@ function City({
   const contoursVisible = isLayer3dVisible(display, "contours");
   const treesVisible = treesVisibleIn3d(model.layers, display);
   useLayoutEffect(() => {
+    setSunHoursMassingFillVisible(group, importedMassing, buildingsVisible, display.showOutlines, directSunHoursOn);
     group.traverse((object) => {
       const name = object.name;
-      if (name === "BuildingEdges") {
-        object.visible = display.showOutlines && buildingsVisible;
-        return;
-      }
       if (
+        name === "BuildingEdges" ||
         name === "Buildings" ||
         name === "Buildings-manual" ||
         name === "Buildings-site" ||
         name.startsWith("Buildings::") ||
         name.startsWith("source:")
       ) {
-        object.visible = buildingsVisible;
         return;
       }
       if (name === "Roads") {
@@ -1031,6 +1029,8 @@ function City({
     });
   }, [
     group,
+    importedMassing,
+    directSunHoursOn,
     display.showOutlines,
     buildingsVisible,
     roadsVisible,
