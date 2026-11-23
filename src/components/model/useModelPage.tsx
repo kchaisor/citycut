@@ -114,11 +114,7 @@ import { openRing, toLocal } from "../../lib/geo";
 import { interiorPoint, pointInPolygon } from "../../lib/useCascade";
 import type { BuildingUse, CityModel } from "../../types";
 import type { InspectHudScreen } from "../InspectHudProjector";
-import {
-  clampInspectHudPosition,
-  INSPECT_HUD_DEFAULT_HEIGHT,
-  INSPECT_HUD_DEFAULT_WIDTH,
-} from "../../lib/inspectHudLayout";
+import { inspectHudPlacement, measureInspectHudDock } from "../../lib/inspectHudLayout";
 import {
   sceneSelectionBuildingId,
   type SceneInspectWorld,
@@ -134,6 +130,7 @@ import {
   writeStoredHiddenBuildings,
   type HiddenBuildingStore,
 } from "../../lib/hiddenBuildings";
+import { nextHideSelection } from "../../lib/hideSelection";
 import { useImportedMassing } from "../useImportedMassing";import { DrawingKind } from "../DrawingPlan";
 
 import { isometricDrawingBounds } from "../../lib/isometricDrawing";import { SidebarItem } from "../Sidebar";
@@ -1182,25 +1179,26 @@ export function useModelPage({
     if (!sceneSelection) return null;
     if (sceneSelection.kind === "imported") return pickedImported?.building.visible && pickedImported.massing.visible ? sceneSelection.world : null;
     if (sceneSelection.kind === "terrain" || sceneSelection.kind === "tree") return sceneSelection.world;
-    const building = displayModel.buildings.find((item) => item.id === sceneSelection.buildingId);
-    if (!building) return sceneSelection.world;
-    const at = interiorPoint(building.ring, building.holes);
-    const base = sceneSelection.world.up;
-    return { east: at[0], north: at[1], up: base + building.height * 0.55 };
-  }, [displayModel.buildings, sceneSelection, pickedImported]);
+    return null;
+  }, [sceneSelection, pickedImported]);
 
-  const inspectHudPosition = useMemo(() => {
-    const anchor = inspectHudScreen;
-    if (!anchor || !anchor.inView) return null;
-    return clampInspectHudPosition({
-      anchorX: anchor.clientX,
-      anchorY: anchor.clientY,
-      hudWidth: INSPECT_HUD_DEFAULT_WIDTH,
-      hudHeight: INSPECT_HUD_DEFAULT_HEIGHT,
-      viewportWidth: typeof window !== "undefined" ? window.innerWidth : 1440,
-      viewportHeight: typeof window !== "undefined" ? window.innerHeight : 900,
-    });
-  }, [inspectHudScreen]);
+  const [inspectDockResize, setInspectDockResize] = useState(0);
+  useEffect(() => {
+    const onResize = () => setInspectDockResize((count) => count + 1);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+  const buildingCardOpen = sceneSelection?.kind === "building";
+  const inspectHudPosition = useMemo(
+    () =>
+      buildingCardOpen
+        ? measureInspectHudDock()
+        : inspectHudPlacement(inspectHudScreen, sceneSelection, {
+            width: typeof window !== "undefined" ? window.innerWidth : 1440,
+            height: typeof window !== "undefined" ? window.innerHeight : 900,
+          }),
+    [buildingCardOpen, inspectDockResize, inspectHudScreen, sceneSelection],
+  );
 
   function persistHidden(next: HiddenBuildingStore) {
     setHiddenStore(next);
@@ -1220,10 +1218,7 @@ export function useModelPage({
   }
 
   function selectForHide(buildingId: number, additive?: boolean) {
-    setHideSelection((prev) => {
-      if (!additive) return [buildingId];
-      return prev.includes(buildingId) ? prev.filter((id) => id !== buildingId) : [...prev, buildingId];
-    });
+    setHideSelection((prev) => nextHideSelection(prev, buildingId, Boolean(additive)));
   }
 
   function persistOverrides(next: HeightOverrideStore) {

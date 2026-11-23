@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { attachShiftPickPass } from "../../lib/shiftPickPass";
 import { BuildingHeightPopover, ImportedBuildingPopover } from "../BuildingHeightPopover";
 import { LoadingHudPill } from "../LoadingHudPill";
 import { LandmarkLabelLayer } from "../LandmarkLabelLayer";
@@ -109,6 +110,7 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
   useEffect(() => {
     if (tab === "3d") setKeep3d(true);
   }, [tab]);
+  useEffect(() => attachShiftPickPass(), []);
 
   const importedPopover = pickedImported ? (
     <ImportedBuildingPopover

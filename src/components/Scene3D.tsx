@@ -32,7 +32,7 @@ import type { RenderQuality } from "../lib/renderQuality";
 import { markScreenOnly } from "../lib/screenOnly";
 import { cameraForExportFrame, exportFrameSize } from "../lib/exportFrame";
 import { flushControlInertia, holdControlPose, type HeldControl } from "../lib/controlInertia";
-import { shouldSkipViewportSizeRefit } from "../lib/viewportAutoFit";
+import { shouldKeepPresetPose, shouldSkipViewportSizeRefit } from "../lib/viewportAutoFit";
 import {
   applyPose,
   capturePose,
@@ -393,8 +393,13 @@ function SceneInspectPickLayer({
 }) {
   const camera = useThree((state) => state.camera);
   const gl = useThree((state) => state.gl);
+  const get = useThree((state) => state.get);
   useLayoutEffect(() => {
     if (!enabled) return;
+    const onPressStart = () => {
+      const controls = get().controls as OrbitControlsImpl | null;
+      if (controls?.enabled) holdControlPose(controls);
+    };
     return attachSceneInspectPick(
       gl.domElement,
       camera,
@@ -407,9 +412,10 @@ function SceneInspectPickLayer({
         treesPickable,
         extraRoots: importedMassing ? [importedMassing] : [],
       },
-      { onPick, onClear },
+      { onPick, onClear, onPressStart },
     );
   }, [
+    get,
     importedMassing,
     buildingsPickable,
     camera,
@@ -1187,6 +1193,7 @@ function PerspectiveFit({
   touchedRef,
   fittedKey,
   introEnabled = false,
+  keepPresetPose = false,
 }: {
   camera: THREE.PerspectiveCamera;
   controlsRef: RefObject<OrbitControlsImpl | null>;
@@ -1203,6 +1210,7 @@ function PerspectiveFit({
   touchedRef: RefObject<boolean>;
   fittedKey: MutableRefObject<string | null>;
   introEnabled?: boolean;
+  keepPresetPose?: boolean;
 }) {
   const size = useThree((state) => state.size);
   const gl = useThree((state) => state.gl);
@@ -1254,6 +1262,10 @@ function PerspectiveFit({
       shouldSkipViewportSizeRefit(fittedKey.current, key, fitId, touchedRef.current) &&
       fittedKey.current !== null
     ) {
+      return;
+    }
+    if (shouldKeepPresetPose(keepPresetPose, fittedKey.current, touchedRef.current)) {
+      fittedKey.current = key;
       return;
     }
 
@@ -1323,6 +1335,7 @@ function PerspectiveFit({
   }, [
     applyIntroPose,
     introEnabled,
+    keepPresetPose,
     active,
     camera,
     controlsRef,
@@ -1718,6 +1731,7 @@ function HoldPoseWhenInactive({
 function QaCameraBridgeRegister({
   persp,
   controlsRef,
+  touchedRef,
   active,
   side,
   lift,
@@ -1730,6 +1744,7 @@ function QaCameraBridgeRegister({
 }: {
   persp: THREE.PerspectiveCamera;
   controlsRef: RefObject<OrbitControlsImpl | null>;
+  touchedRef: MutableRefObject<boolean>;
   active: boolean;
   side: number;
   lift: number;
@@ -1779,6 +1794,7 @@ function QaCameraBridgeRegister({
         target[2] + DEFAULT_PERSPECTIVE_OFFSET[2] * distance,
       ] as const;
       flushControlInertia(controls);
+      touchedRef.current = true;
       persp.position.set(eye[0], eye[1], eye[2]);
       persp.near = Math.max(0.1, side / 400);
       persp.far = Math.max(side * 40, heliodonRadius * 28, distance * 2.5);
@@ -1792,6 +1808,7 @@ function QaCameraBridgeRegister({
       setCamera(pose: QaCameraPose) {
         const controls = controlsRef.current;
         if (!controls) return;
+        touchedRef.current = true;
         persp.position.set(pose.eye.x, pose.eye.y, pose.eye.z);
         controls.target.set(pose.target.x, pose.target.y, pose.target.z);
         controls.update();
@@ -1835,6 +1852,7 @@ function QaCameraBridgeRegister({
     size.height,
     size.width,
     solar,
+    touchedRef,
   ]);
   return null;
 }
@@ -2040,10 +2058,11 @@ export function Cameras({
             lat={lat}
             lon={lon}
             fitId={snapId}
-            active={!orthoView && !qaMode}
+            active={!orthoView}
             touchedRef={touchedRef}
             fittedKey={perspFitKey}
             introEnabled={introEnabled}
+            keepPresetPose={qaMode}
           />
           <PerspectiveClipPlanes
             camera={persp}
@@ -2055,6 +2074,7 @@ export function Cameras({
           <QaCameraBridgeRegister
             persp={persp}
             controlsRef={perspControls}
+            touchedRef={touchedRef}
             active={!orthoView}
             side={side}
             lift={lift}

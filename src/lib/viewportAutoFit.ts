@@ -8,3 +8,7 @@ export function shouldSkipViewportSizeRefit(
   if (fittedKey === nextKey) return true;
   return fittedKey?.startsWith(`${snapId}:`) ?? false;
 }
+
+export function shouldKeepPresetPose(keepPresetPose: boolean, fittedKey: string | null, touched: boolean): boolean {
+  return keepPresetPose && touched && fittedKey === null;
+}

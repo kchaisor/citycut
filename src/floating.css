@@ -5111,6 +5111,14 @@ body,
 .building-detail-panel .landmark-source:hover,
 .building-detail-panel .landmark-source:focus-visible { text-decoration: underline; }
 
+.building-detail-panel .hide-buildings-hint {
+  margin: 0 0 8px;
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  font-weight: 500;
+  color: var(--ink);
+}
+
 .landmark-label-layer {
   position: fixed;
   inset: 0;

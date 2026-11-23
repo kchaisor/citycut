@@ -1,9 +1,33 @@
 import * as THREE from "three";
 import type { TreeFeat } from "../types";
 import { buildingIdFromIntersection } from "./buildingPick";
+import { isCardPassThrough } from "./shiftPickPass";
 import { sampleTerrain } from "./terrain";
 
-const CLICK_MAX_PX = 5;
+export const INSPECT_CLICK_MAX_PX = 14;
+export const INSPECT_ADDITIVE_CLICK_MAX_PX = 14;
+export const INSPECT_NEAR_MISS_PX = 8;
+
+export function isInspectClick(movementPx: number, additive: boolean): boolean {
+  return movementPx <= (additive ? INSPECT_ADDITIVE_CLICK_MAX_PX : INSPECT_CLICK_MAX_PX);
+}
+
+const NEAR_MISS_DIRECTIONS: [number, number][] = [
+  [1, 0],
+  [-1, 0],
+  [0, 1],
+  [0, -1],
+  [Math.SQRT1_2, Math.SQRT1_2],
+  [-Math.SQRT1_2, Math.SQRT1_2],
+  [Math.SQRT1_2, -Math.SQRT1_2],
+  [-Math.SQRT1_2, -Math.SQRT1_2],
+];
+
+export function inspectNearMissOffsets(radiusPx = INSPECT_NEAR_MISS_PX): [number, number][] {
+  return [radiusPx / 2, radiusPx].flatMap((radius) =>
+    NEAR_MISS_DIRECTIONS.map(([x, y]): [number, number] => [x * radius, y * radius]),
+  );
+}
 
 export type SceneInspectWorld = {
   east: number;
@@ -63,6 +87,7 @@ export function nearestTreeIdAt(east: number, north: number, trees: TreeFeat[], 
 export type SceneInspectPickHandlers = {
   onPick: (selection: SceneSelection) => void;
   onClear?: () => void;
+  onPressStart?: () => void;
 };
 
 export type SceneInspectPickContext = {
@@ -195,29 +220,55 @@ export function attachSceneInspectPick(
   const pointer = new THREE.Vector2();
   let downX = 0;
   let downY = 0;
-  let downAt = 0;
+  let downAdditive = false;
+  let downThroughCard = false;
+  let downRays: THREE.Ray[] = [];
 
-  function setPointer(event: PointerEvent) {
+  function rayAt(clientX: number, clientY: number): THREE.Ray {
     const rect = canvas.getBoundingClientRect();
-    pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-    pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+    pointer.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+    pointer.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+    raycaster.setFromCamera(pointer, camera);
+    return raycaster.ray.clone();
+  }
+
+  function selectionAlong(ray: THREE.Ray, additive: boolean): SceneSelection | null {
+    raycaster.ray.copy(ray);
+    const hits = raycaster.intersectObjects([root, ...(context.extraRoots ?? [])], true);
+    return pickSceneSelectionFromHits(hits, context, downX, downY, additive);
   }
 
   function onPointerDown(event: PointerEvent) {
     if (event.button !== 0) return;
     downX = event.clientX;
     downY = event.clientY;
-    downAt = event.timeStamp;
+    downAdditive = event.shiftKey;
+    downThroughCard = isCardPassThrough(event);
+    handlers.onPressStart?.();
+    camera.updateMatrixWorld();
+    downRays = [[0, 0] as [number, number], ...inspectNearMissOffsets()].map(([x, y]) => rayAt(downX + x, downY + y));
+    if (downAdditive) event.stopImmediatePropagation();
   }
 
   function onPointerUp(event: PointerEvent) {
     if (event.button !== 0) return;
-    if (Math.hypot(event.clientX - downX, event.clientY - downY) > CLICK_MAX_PX) return;
-    if (event.timeStamp - downAt > 800) return;
-    setPointer(event);
-    raycaster.setFromCamera(pointer, camera);
-    const hits = raycaster.intersectObjects([root, ...(context.extraRoots ?? [])], true);
-    const selection = pickSceneSelectionFromHits(hits, context, event.clientX, event.clientY, event.shiftKey);
+    const rays = downRays;
+    downRays = [];
+    if (rays.length === 0) return;
+    const moved = Math.hypot(event.clientX - downX, event.clientY - downY);
+    if (!isInspectClick(moved, downAdditive && event.shiftKey)) return;
+    const exact = selectionAlong(rays[0], event.shiftKey);
+    let selection = exact;
+    if (context.buildingsPickable !== false && (!exact || exact.kind === "terrain")) {
+      for (const ray of rays.slice(1)) {
+        const near = selectionAlong(ray, event.shiftKey);
+        if (near?.kind === "building") {
+          selection = near;
+          break;
+        }
+      }
+    }
+    if (downThroughCard && selection?.kind !== "building") return;
     if (selection) {
       handlers.onPick(selection);
       return;

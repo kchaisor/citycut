@@ -101,6 +101,7 @@ export function BuildingHeightPopover({
   const [details, setDetails] = useState<BuildingPopupDetails>(() => emptyBuildingPopupDetails(building));
   const [minimised, setMinimised] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const bodyRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setValue(formatHeightM(building.height));
@@ -127,8 +128,9 @@ export function BuildingHeightPopover({
 
   useEffect(() => {
     if (minimised) return;
-    inputRef.current?.focus();
+    inputRef.current?.focus({ preventScroll: true });
     inputRef.current?.select();
+    if (bodyRef.current) bodyRef.current.scrollTop = 0;
   }, [building.id, minimised]);
 
   useEffect(() => {
@@ -207,7 +209,22 @@ export function BuildingHeightPopover({
         </div>
       </header>
       {!minimised && (
-        <div className="building-detail-panel-body">
+        <div className="building-detail-panel-body" ref={bodyRef}>
+          {onHideSelected && (
+            <div className="hide-buildings-block">
+              <p className="hide-buildings-hint">
+                Hold Shift and click to add more buildings, then press Hide selected.
+              </p>
+              <div className="popover-actions">
+                <button type="button" className="is-accent" onClick={onHideSelected}>
+                  Hide selected ({selectedCount})
+                </button>
+                <button type="button" onClick={onShowAll} disabled={hiddenCount === 0}>
+                  Show all
+                </button>
+              </div>
+            </div>
+          )}
           <Field label="Use" value={details.useLine !== "—" ? details.useLine : building.use.replace(/_/g, " ")} />
           <Field label="Name / address" value={nameLine} />
           <Field label="Height" value={heightReadout} />
@@ -253,19 +270,6 @@ export function BuildingHeightPopover({
               </button>
             </div>
           </div>
-          {onHideSelected && (
-            <div className="hide-buildings-block">
-              <p className="meta">Visibility · shift-click to add buildings</p>
-              <div className="popover-actions">
-                <button type="button" className="is-accent" onClick={onHideSelected}>
-                  Hide selected ({selectedCount})
-                </button>
-                <button type="button" onClick={onShowAll} disabled={hiddenCount === 0}>
-                  Show all
-                </button>
-              </div>
-            </div>
-          )}
           {details.credits.length > 0 && (
             <p className="legend-note popup-credits">{details.credits.join(" ")}</p>
           )}
