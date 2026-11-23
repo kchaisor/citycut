@@ -5,9 +5,10 @@ import { getColour } from "./colours";
 import {
   levelsFromUserText,
   massingBuildingColour,
-  useFromLayerPath,
-  useFromUserText,
+  massingBuildingMeta,
 } from "./massingBuildings";
+import snapshot from "./__fixtures__/rhino-three-buildings.parsed.json";
+import { parsedFromSnapshot, type ParsedMassingSnapshot } from "./qaSchemeFixture";
 import {
   buildLayeredMassingBytes,
   buildMassingFixtureBytes,
@@ -49,7 +50,7 @@ function expectThreeBuildings(parsed: ParsedMassing) {
     "Scheme A::Podium",
     "Scheme A::Tower B",
   ]);
-  expect(parsed.buildings.map((building) => building.use)).toEqual(["residential", null, "commercial"]);
+  expect(parsed.buildings.map((building) => building.use)).toEqual([null, null, null]);
   expect(parsed.buildings.map((building) => building.levels)).toEqual([null, null, 12]);
   expect(parsed.buildings.map((building) => building.groupedBy)).toEqual(["layer", "layer", "userText"]);
   expect(byName(parsed, "Tower A").height).toBeCloseTo(86, 4);
@@ -148,27 +149,26 @@ describe("Rhino import buildings", () => {
     );
     expect(parsed.buildings.map((building) => building.name)).toEqual(["Block C", "Tower"]);
     const block = byName(parsed, "Block C");
-    expect(block.use).toBe("mixed_use");
     expect(block.layerPath).toBe("Site::Retail Podium");
     expect(block.height).toBeCloseTo(60, 4);
-    expect(byName(parsed, "Tower").use).toBeNull();
+    expect(parsed.buildings.every((building) => building.use === null)).toBe(true);
   });
 
-  it("takes use from user text over the layer word, normalising case and spelling", async () => {
+  it("never gives an import a use, from user text or a use word in the layer name", async () => {
     const parsed = await parse(
       await buildLayeredMassingBytes([
         { layer: "Residential", userText: { use: " Mixed Use " }, box: [0, 0, 0, 10, 10, 10] },
+        { layer: "Scheme A::Retail Podium", box: [20, 0, 0, 30, 10, 8] },
+        { layer: "Scheme A::Tower", userText: { building: "Tower B", use: "commercial", levels: "12" }, box: [40, 0, 0, 50, 10, 60] },
       ]),
     );
-    expect(parsed.buildings[0]!.use).toBe("mixed_use");
-    expect(useFromUserText("MIXED-USE")).toBe("mixed_use");
-    expect(useFromUserText("mixed_use")).toBe("mixed_use");
-    expect(useFromUserText("Civic")).toBe("civic");
-    expect(useFromUserText("office")).toBeNull();
-    expect(useFromLayerPath("Industrial Estate::Shed 4")).toBe("industrial");
-    expect(useFromLayerPath("Scheme A::Mixed use tower")).toBe("mixed_use");
-    expect(useFromLayerPath("Scheme A::Recreational")).toBeNull();
-    expect(useFromLayerPath("Scheme A::Podium")).toBeNull();
+    expect(parsed.buildings).toHaveLength(3);
+    expect(parsed.buildings.map((building) => building.use)).toEqual([null, null, null]);
+    expect(parsed.buildings.map((building) => massingBuildingMeta(building))).toEqual([
+      "10 m",
+      "8 m",
+      "60 m · 12 levels",
+    ]);
   });
 
   it("ignores levels that are not a whole number", async () => {
@@ -222,7 +222,7 @@ describe("Rhino import buildings", () => {
     );
     expect(parsed.buildings.map((building) => [building.name, building.groupedBy, building.use])).toEqual([
       ["Option 2", "file", null],
-      ["Civic Hall", "layer", "civic"],
+      ["Civic Hall", "layer", null],
     ]);
   });
 
@@ -292,14 +292,33 @@ describe("saved models", () => {
 });
 
 describe("imported building colour", () => {
-  it("resolves building colour, then file colour, then use colour, then unclassified grey", () => {
-    const residential = { use: "residential" as const };
-    const unclassified = { use: null };
-    expect(massingBuildingColour({}, residential)).toBe(getColour("--use-residential"));
-    expect(massingBuildingColour({}, unclassified)).toBe(getColour("--use-unclassified"));
-    expect(massingBuildingColour({ colour: "#AA0000" }, residential)).toBe("#AA0000");
-    expect(massingBuildingColour({ colour: "#AA0000" }, unclassified)).toBe("#AA0000");
-    expect(massingBuildingColour({ colour: "#AA0000" }, { ...residential, colour: "#00BB00" })).toBe("#00BB00");
-    expect(massingBuildingColour({}, { ...unclassified, colour: "#00BB00" })).toBe("#00BB00");
+  it("resolves building colour, then file colour, then the imported white, never a use colour", () => {
+    const white = getColour("--imported-massing");
+    expect(massingBuildingColour({}, {})).toBe(white);
+    expect(massingBuildingColour({}, { use: "residential" } as never)).toBe(white);
+    expect(white).not.toBe(getColour("--use-residential"));
+    expect(white).not.toBe(getColour("--use-unclassified"));
+    expect(massingBuildingColour({ colour: "#AA0000" }, {})).toBe("#AA0000");
+    expect(massingBuildingColour({ colour: "#AA0000" }, { colour: "#00BB00" })).toBe("#00BB00");
+    expect(massingBuildingColour({}, { colour: "#00BB00" })).toBe("#00BB00");
+  });
+
+  it("ignores a use saved by an earlier version when reloading", () => {
+    const parsed = parsedFromSnapshot(snapshot as ParsedMassingSnapshot);
+    const item = importedMassingFromStored(parsed, {
+      id: "qa-scheme",
+      name: "rhino-three-buildings.3dm",
+      bytes: new ArrayBuffer(1),
+      mode: "mga",
+      placement: mgaPlacement(parsed),
+      visible: true,
+      buildings: parsed.buildings.map((building) => ({ id: building.id, visible: true, use: "retail" })) as StoredMassing["buildings"],
+    });
+    expect(item.buildings.every((building) => building.use === null)).toBe(true);
+    expect(item.buildings.map((building) => massingBuildingColour(item, building))).toEqual([
+      getColour("--imported-massing"),
+      getColour("--imported-massing"),
+      getColour("--imported-massing"),
+    ]);
   });
 });

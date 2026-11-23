@@ -1,7 +1,6 @@
 import type { LonLat } from "../types";
 import {
   buildingGroupingNote,
-  isMassingBuildingUse,
   LEGACY_SINGLE_BUILDING_NOTE,
   normaliseMassingColour,
   wholeFileBuildings,
@@ -9,7 +8,6 @@ import {
 import type {
   ImportedMassing,
   ImportedMassingBuilding,
-  MassingBuildingUse,
   MassingPlacement,
   MassingPlacementMode,
   ParsedMassing,
@@ -22,7 +20,6 @@ export type StoredMassingBuildingState = {
   id: string;
   visible: boolean;
   colour?: string;
-  use?: MassingBuildingUse | null;
 };
 
 export type StoredMassing = {
@@ -39,7 +36,7 @@ export type StoredMassing = {
 };
 
 export function storedBuildingState(buildings: ImportedMassingBuilding[]): StoredMassingBuildingState[] {
-  return buildings.map(({ id, visible, colour, use }) => ({ id, visible, use, ...(colour ? { colour } : {}) }));
+  return buildings.map(({ id, visible, colour }) => ({ id, visible, ...(colour ? { colour } : {}) }));
 }
 
 function storedBuildings(
@@ -59,8 +56,7 @@ function storedBuildings(
     buildings: parsed.buildings.map((building) => {
       const state = saved.get(building.id);
       const colour = normaliseMassingColour(state?.colour);
-      const use = isMassingBuildingUse(state?.use) ? state.use : building.use;
-      return { ...building, use, visible: state?.visible !== false, ...(colour ? { colour } : {}) };
+      return { ...building, visible: state?.visible !== false, ...(colour ? { colour } : {}) };
     }),
   };
 }

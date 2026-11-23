@@ -73,14 +73,18 @@ describe("Import panel buildings", () => {
     expect(container.querySelector(".massing-scheme-title")?.textContent).toBe("Scheme A › Stage 1 · 3");
   });
 
-  it("marks unclassified with a hatch swatch and omits levels when absent", () => {
+  it("shows height and levels without a use name, and every swatch in the imported colour", () => {
     const { container } = setup([qaSchemeMassing(0)]);
     const [towerA, podium, towerB] = rows(container);
-    expect(podium!.querySelector(".massing-swatch")?.classList.contains("is-unclassified")).toBe(true);
-    expect(podium!.querySelector(".massing-building-meta")?.textContent).toBe("Unclassified · 18 m");
-    expect(towerA!.querySelector(".massing-swatch")?.classList.contains("is-unclassified")).toBe(false);
-    expect(towerA!.querySelector(".massing-building-meta")?.textContent).toBe("Residential · 86 m");
-    expect(towerB!.querySelector(".massing-building-meta")?.textContent).toBe("Commercial · 62 m · 12 levels");
+    expect(towerA!.querySelector(".massing-building-meta")?.textContent).toBe("86 m");
+    expect(podium!.querySelector(".massing-building-meta")?.textContent).toBe("18 m");
+    expect(towerB!.querySelector(".massing-building-meta")?.textContent).toBe("62 m · 12 levels");
+    for (const swatch of container.querySelectorAll<HTMLElement>(".massing-swatch")) {
+      expect(swatch.style.backgroundColor.toUpperCase()).toBe("#FFFFFF");
+    }
+    for (const label of ["Residential", "Commercial", "Unclassified"]) {
+      expect(container.textContent).not.toContain(label);
+    }
   });
 
   it("toggles a row, a scheme and the model with their eyes", () => {
@@ -114,19 +118,17 @@ describe("Import panel buildings", () => {
     expect(handlers.onSelectBuilding).toHaveBeenCalledWith("qa-scheme", "layer:Scheme A::Podium", expect.any(Number), expect.any(Number));
   });
 
-  it("switches colour mode: Single colour sets the file colour, By use clears it", () => {
+  it("switches colour mode: Single colour sets the file colour, Default clears it", () => {
     const massing = qaSchemeMassing(0);
-    const byUse = setup([massing]);
-    expect(byUse.container.querySelector('input[type="color"]')).toBeNull();
+    const byDefault = setup([massing]);
+    expect(byDefault.container.querySelector('input[type="color"]')).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Single colour" }));
-    expect(byUse.handlers.onColour).toHaveBeenCalledWith("qa-scheme", expect.stringMatching(/^#[0-9A-F]{6}$/i));
+    expect(byDefault.handlers.onColour).toHaveBeenCalledWith("qa-scheme", expect.stringMatching(/^#[0-9A-F]{6}$/i));
     cleanup();
     const single = setup([{ ...massing, colour: "#3366CC" }]);
     expect(single.container.querySelector('input[type="color"]')).not.toBeNull();
-    single.container.querySelectorAll(".massing-swatch").forEach((swatch) => {
-      expect(swatch.classList.contains("is-unclassified")).toBe(false);
-    });
-    fireEvent.click(screen.getByRole("button", { name: "By use" }));
+    expect(single.container.textContent).not.toMatch(/use colour/i);
+    fireEvent.click(screen.getByRole("button", { name: "Default" }));
     expect(single.handlers.onColour).toHaveBeenCalledWith("qa-scheme", null);
   });
 
@@ -153,7 +155,7 @@ describe("Import panel buildings", () => {
   it("keeps the full building meta in a title so a clipped line can still be read", () => {
     const { container } = setup([qaSchemeMassing(0)]);
     const meta = rows(container)[2]!.querySelector(".massing-building-meta")!;
-    expect(meta.getAttribute("title")).toBe("Commercial · 62 m · 12 levels");
+    expect(meta.getAttribute("title")).toBe("62 m · 12 levels");
   });
 
   it("keeps the row meta and the placement line on one line each, clipped with an ellipsis", () => {

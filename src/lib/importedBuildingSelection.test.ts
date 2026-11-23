@@ -18,10 +18,10 @@ describe("imported building selection and storage", () => {
     expect(qaMassingFromSearch("?qaMassing=podium")).toBe("podium");
   });
 
-  it("keeps a use set in the popover and a hidden building across reloads", () => {
+  it("keeps a hidden building across reloads", () => {
     const massing = qaSchemeMassing(0);
     const edited = massing.buildings.map((building) =>
-      building.name === "Podium" ? { ...building, use: "retail" as const, visible: false } : building,
+      building.name === "Podium" ? { ...building, visible: false } : building,
     );
     const reloaded = importedMassingFromStored(parsedFromSnapshot(snapshot as ParsedMassingSnapshot), {
       id: massing.id,
@@ -33,9 +33,8 @@ describe("imported building selection and storage", () => {
       buildings: storedBuildingState(edited),
     });
     const podium = reloaded.buildings.find((building) => building.name === "Podium")!;
-    expect(podium.use).toBe("retail");
     expect(podium.visible).toBe(false);
-    expect(reloaded.buildings.find((building) => building.name === "Tower B")!.use).toBe("commercial");
+    expect(reloaded.buildings.every((building) => building.use === null)).toBe(true);
   });
 
   it("picks the imported building under the pointer in 3D", () => {

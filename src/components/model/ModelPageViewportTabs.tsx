@@ -113,7 +113,6 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
     <ImportedBuildingPopover
       building={pickedImported.building}
       fileName={pickedImported.massing.name}
-      onSetUse={(use) => massing.setBuildingUse(pickedImported.massing.id, pickedImported.building.id, use)}
       onClose={clearImportedSelection}
       floatingScreen={inspectHudPosition}
     />

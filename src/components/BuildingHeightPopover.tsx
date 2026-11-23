@@ -16,14 +16,11 @@ import { fromLocal } from "../lib/geo";
 import type { DamFloorRecord } from "../lib/comDevelopmentFloors";
 import { footprintArea } from "../lib/useCascade";
 import type { BuildingFeat, LonLat } from "../types";
-import type { ImportedMassingBuilding, MassingBuildingUse } from "../lib/massingImport";
+import type { ImportedMassingBuilding } from "../lib/massingImport";
 import {
   formatMassingHeight,
-  isMassingBuildingUse,
-  massingBuildingUses,
   massingLayerDisplay,
   massingSourceLine,
-  massingUseLabel,
 } from "../lib/massingBuildings";
 
 type Props = {
@@ -294,13 +291,11 @@ function floatingStyle(floatingScreen: { left: number; top: number } | null) {
 export function ImportedBuildingPopover({
   building,
   fileName,
-  onSetUse,
   onClose,
   floatingScreen = null,
 }: {
   building: ImportedMassingBuilding;
   fileName: string;
-  onSetUse: (use: MassingBuildingUse) => void;
   onClose: () => void;
   floatingScreen?: { left: number; top: number } | null;
 }) {
@@ -329,31 +324,6 @@ export function ImportedBuildingPopover({
         </button>
       </header>
       <div className="building-detail-panel-body">
-        <div className="imported-popover-row">
-          <span className="imported-popover-label">Use</span>
-          <span className={building.use ? "imported-popover-value" : "imported-popover-value is-empty"}>
-            {building.use ? massingUseLabel(building.use) : "Not set"}
-          </span>
-        </div>
-        <div className="imported-popover-aside">
-          <select
-            className="imported-popover-select"
-            aria-label={building.use ? "Change use" : "Set use"}
-            value=""
-            onChange={(event) => {
-              if (isMassingBuildingUse(event.target.value)) onSetUse(event.target.value);
-            }}
-          >
-            <option value="" disabled>
-              {building.use ? "Change use" : "Set use"}
-            </option>
-            {massingBuildingUses().map((use) => (
-              <option key={use} value={use}>
-                {massingUseLabel(use)}
-              </option>
-            ))}
-          </select>
-        </div>
         <div className="imported-popover-row">
           <span className="imported-popover-label">Height</span>
           <span className="imported-popover-value is-numeric">{formatMassingHeight(building.height)}</span>

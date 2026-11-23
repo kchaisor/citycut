@@ -1,10 +1,7 @@
-import { BUILDING_USE_META } from "./buildingUse";
 import { getColour } from "./colours";
-import type { BuildingUse } from "../types";
 import type {
   ImportedMassing,
   ImportedMassingBuilding,
-  MassingBuildingUse,
   ParsedMassing,
   ParsedMassingBuilding,
 } from "./massingImport";
@@ -16,43 +13,6 @@ export function normaliseMassingColour(value: unknown): string | null {
 export const LAYER_PATH_SEPARATOR = "::";
 export const DEFAULT_LAYER_NAME = "Default";
 export const FALLBACK_MODEL_NAME = "Imported model";
-
-const USE_WORDS: { pattern: RegExp; use: MassingBuildingUse }[] = [
-  { pattern: /\bmixed[\s_-]*use\b/i, use: "mixed_use" },
-  { pattern: /\bresidential\b/i, use: "residential" },
-  { pattern: /\bcommercial\b/i, use: "commercial" },
-  { pattern: /\bretail\b/i, use: "retail" },
-  { pattern: /\bindustrial\b/i, use: "industrial" },
-  { pattern: /\bcivic\b/i, use: "civic" },
-  { pattern: /\brecreation\b/i, use: "recreation" },
-];
-
-function firstUseWord(text: string): MassingBuildingUse | null {
-  let best: { at: number; use: MassingBuildingUse } | null = null;
-  for (const { pattern, use } of USE_WORDS) {
-    const at = text.search(pattern);
-    if (at >= 0 && (best == null || at < best.at)) best = { at, use };
-  }
-  return best?.use ?? null;
-}
-
-export function useFromUserText(value: string | null | undefined): MassingBuildingUse | null {
-  if (value == null) return null;
-  const normalised = value.trim().toLowerCase().replace(/[\s_-]+/g, " ");
-  if (normalised === "mixed use") return "mixed_use";
-  const match = USE_WORDS.find(({ use }) => use === normalised);
-  return match?.use ?? null;
-}
-
-export function useFromLayerPath(layerPath: string | null): MassingBuildingUse | null {
-  if (!layerPath) return null;
-  const segments = splitLayerPath(layerPath);
-  for (let i = segments.length - 1; i >= 0; i--) {
-    const use = firstUseWord(segments[i]!);
-    if (use) return use;
-  }
-  return null;
-}
 
 export function levelsFromUserText(value: string | null | undefined): number | null {
   if (value == null) return null;
@@ -141,42 +101,17 @@ export function visibleBuildings(buildings: ParsedMassingBuilding[]): ImportedMa
 
 export function massingBuildingColour(
   massing: Pick<ImportedMassing, "colour">,
-  building: Pick<ImportedMassingBuilding, "colour" | "use">,
+  building: Pick<ImportedMassingBuilding, "colour">,
 ): string {
-  if (building.colour) return building.colour;
-  if (massing.colour) return massing.colour;
-  const use: BuildingUse = building.use ?? "unclassified";
-  return getColour(BUILDING_USE_META[use].key);
-}
-
-const MASSING_BUILDING_USES: readonly MassingBuildingUse[] = [
-  "residential",
-  "commercial",
-  "retail",
-  "mixed_use",
-  "industrial",
-  "civic",
-  "recreation",
-];
-
-export function massingBuildingUses(): readonly MassingBuildingUse[] {
-  return MASSING_BUILDING_USES;
-}
-
-export function isMassingBuildingUse(value: unknown): value is MassingBuildingUse {
-  return typeof value === "string" && (MASSING_BUILDING_USES as readonly string[]).includes(value);
-}
-
-export function massingUseLabel(use: MassingBuildingUse | null): string {
-  return BUILDING_USE_META[use ?? "unclassified"].label;
+  return building.colour ?? massing.colour ?? getColour("--imported-massing");
 }
 
 export function formatMassingHeight(height: number): string {
   return `${Math.round(height)} m`;
 }
 
-export function massingBuildingMeta(building: Pick<ParsedMassingBuilding, "use" | "height" | "levels">): string {
-  const parts = [massingUseLabel(building.use), formatMassingHeight(building.height)];
+export function massingBuildingMeta(building: Pick<ParsedMassingBuilding, "height" | "levels">): string {
+  const parts = [formatMassingHeight(building.height)];
   if (building.levels != null) parts.push(`${building.levels} level${building.levels === 1 ? "" : "s"}`);
   return parts.join(" · ");
 }

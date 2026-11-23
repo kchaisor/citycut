@@ -5,7 +5,6 @@ import {
   normaliseMassingColour,
   type ImportedMassing,
   type ImportedMassingBuilding,
-  type MassingBuildingUse,
   type MassingPlacement,
 } from "../lib/massingImport";
 import { massingExportParts, visibleMassingBuildings } from "../lib/massingBuildings";
@@ -221,12 +220,6 @@ export function useImportedMassing(model: Pick<CityModel, "center" | "sideM" | "
     [patchBuildings],
   );
 
-  const setBuildingUse = useCallback(
-    (id: string, buildingId: string, use: MassingBuildingUse) =>
-      patchBuildings(id, (building) => (building.id === buildingId ? { ...building, use } : building)),
-    [patchBuildings],
-  );
-
   const setAllVisible = useCallback(
     (visible: boolean) => {
       for (const item of imported) if (item.visible !== visible) patch(item.id, { visible });
@@ -313,7 +306,6 @@ export function useImportedMassing(model: Pick<CityModel, "center" | "sideM" | "
     toggleVisible,
     setAllVisible,
     setBuildingsVisible,
-    setBuildingUse,
     setColour,
     remove,
     onScenePoint,

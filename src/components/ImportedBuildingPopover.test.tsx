@@ -10,18 +10,16 @@ const massing = qaSchemeMassing(0);
 const byName = (name: string) => massing.buildings.find((building) => building.name === name)!;
 
 function setup(name: string, overrides = {}) {
-  const onSetUse = vi.fn();
   const onClose = vi.fn();
   const view = render(
     <ImportedBuildingPopover
       building={{ ...byName(name), ...overrides }}
       fileName={massing.name}
-      onSetUse={onSetUse}
       onClose={onClose}
       floatingScreen={{ left: 600, top: 200 }}
     />,
   );
-  return { ...view, onSetUse, onClose };
+  return { ...view, onClose };
 }
 
 function row(container: HTMLElement, label: string) {
@@ -31,14 +29,19 @@ function row(container: HTMLElement, label: string) {
 }
 
 describe("imported building popover", () => {
-  it("shows Not set with a Set use select that sets the use", () => {
-    const { container, onSetUse } = setup("Podium");
-    expect(container.querySelector(".imported-popover-title")?.textContent).toBe("Podium");
-    const use = row(container, "Use")!.querySelector(".imported-popover-value")!;
-    expect(use.textContent).toBe("Not set");
-    expect(use.classList.contains("is-empty")).toBe(true);
-    fireEvent.change(screen.getByLabelText("Set use"), { target: { value: "retail" } });
-    expect(onSetUse).toHaveBeenCalledWith("retail");
+  it("has no Use row and no Set use or Change use control, with or without user text", () => {
+    for (const name of ["Tower A", "Podium", "Tower B"]) {
+      const { container } = setup(name);
+      expect(container.querySelector(".imported-popover-title")?.textContent).toBe(name);
+      expect(row(container, "Use")).toBeUndefined();
+      expect(container.querySelector("select")).toBeNull();
+      expect(screen.queryByLabelText("Set use")).toBeNull();
+      expect(screen.queryByLabelText("Change use")).toBeNull();
+      for (const label of ["Residential", "Commercial", "Unclassified", "Not set"]) {
+        expect(container.textContent).not.toContain(label);
+      }
+      cleanup();
+    }
   });
 
   it("shows height in metres and levels as — Not in model when the file has none", () => {
@@ -48,9 +51,8 @@ describe("imported building popover", () => {
     expect(container.textContent).toContain("Not in model");
   });
 
-  it("shows levels from user text and the use when set", () => {
+  it("shows levels from user text", () => {
     const { container } = setup("Tower B");
-    expect(row(container, "Use")!.querySelector(".imported-popover-value")?.textContent).toBe("Commercial");
     expect(row(container, "Levels")!.querySelector(".imported-popover-value")?.textContent).toBe("12");
     expect(container.textContent).not.toContain("Not in model");
   });
