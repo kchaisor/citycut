@@ -43,6 +43,12 @@ Kelvin confirmed these on 22 Nov 2026. They replace the 21 Nov pending decision 
 5. **Direct Sun Hours.** Visible imported buildings cast and receive in Direct Sun Hours, in 3D and in Drawing. Hidden (eye-off) buildings stay excluded.
 6. **Exploded axo.** Visible imported buildings appear in the exploded axo, in their use or file colour (or unclassified grey). Hidden ones stay excluded.
 
+### Choices (23 Nov 2026)
+
+Kelvin asked for this on 23 Nov 2026 at 6:04 PM AEDT and confirmed it at 6:06 PM:
+
+7. **No floating name labels.** Imported buildings do not show a floating name label next to the building in 3D or Drawing. Names stay in the import list and the building card. Wikidata landmark labels are unchanged.
+
 ## How we'll know it works
 
 Tick these on the real desktop view, with a test `.3dm` that has three buildings on three layers, one with `building`, `use` and `levels` user text:
