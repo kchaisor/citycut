@@ -1,22 +1,17 @@
 // @vitest-environment happy-dom
-import { readFileSync } from "node:fs";
-import path from "node:path";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { useState } from "react";
 import { afterEach, describe, expect, it } from "vitest";
 import type { CityModel } from "../types";
 import { designWindsFor, findDesignWind } from "../lib/windDesignWinds";
-import type { SiteWindSelection, WindRoseAsset } from "../lib/windRoseData";
+import type { SiteWindSelection } from "../lib/windRoseData";
+import { siteWindFromPublishedAsset } from "../lib/windAssetDisk";
 import { DEFAULT_WIND_SETTINGS, withDesignWind, withWindSeason } from "../lib/windState";
-import { siteWindSelection } from "../lib/windStation";
 import { DesignWindPresets } from "./DesignWindPresets";
 import { useWindPlan } from "./useWindPlan";
 import { WindPlanRows } from "./WindPlanCard";
 
-const asset = JSON.parse(
-  readFileSync(path.join(process.cwd(), "public/wind/australia-tmyx.json"), "utf8"),
-) as WindRoseAsset;
-const pyrmont = siteWindSelection(asset, -33.86627, 151.18389)!;
+const pyrmont = siteWindFromPublishedAsset(-33.86627, 151.18389)!;
 
 const openModel: CityModel = {
   placeLabel: "Test",

@@ -8,21 +8,40 @@ import {
 import {
   type SiteWindSelection,
   type WindRose,
+  type WindRoseDaypartRecord,
   type WindRoseSeasonId,
   type WindRoseSeasonRecord,
   WIND_SPEED_BIN_EDGES_MS,
 } from "./windRoseData";
 import { speedBinMidMs } from "./windRoseEpw";
+import type { WindDaypartId } from "./windDayparts";
 
-export function seasonRecord(selection: SiteWindSelection, period: WindPeriodId): WindRoseSeasonRecord | null {
-  if (period.startsWith("month-")) return null;
-  const rec = selection.asset.stations.find((s) => s.id === selection.station.id);
-  return rec?.seasons[period as WindRoseSeasonId] ?? null;
+export function seasonDaypart(record: WindRoseSeasonRecord, daypart: WindDaypartId = "all"): WindRoseDaypartRecord | null {
+  if (daypart === "all") {
+    const { morning: _morning, afternoon: _afternoon, ...allDay } = record;
+    return allDay;
+  }
+  return record[daypart] ?? null;
 }
 
-export function buildWindRose(selection: SiteWindSelection, period: WindPeriodId): WindRose | null {
+export function seasonRecord(
+  selection: SiteWindSelection,
+  period: WindPeriodId,
+  daypart: WindDaypartId = "all",
+): WindRoseDaypartRecord | null {
   if (period.startsWith("month-")) return null;
-  const record = seasonRecord(selection, period);
+  const rec = selection.asset.stations.find((s) => s.id === selection.station.id);
+  if (!rec) return null;
+  return seasonDaypart(rec.seasons[period as WindRoseSeasonId], daypart);
+}
+
+export function buildWindRose(
+  selection: SiteWindSelection,
+  period: WindPeriodId,
+  daypart: WindDaypartId = "all",
+): WindRose | null {
+  if (period.startsWith("month-")) return null;
+  const record = seasonRecord(selection, period, daypart);
   if (!record) return null;
   const edges = selection.asset.speedBinEdgesMs;
   return {
@@ -39,8 +58,12 @@ export function buildWindRose(selection: SiteWindSelection, period: WindPeriodId
   };
 }
 
-export function analyzeSiteWind(selection: SiteWindSelection, period: WindPeriodId): WindPeriodStats | null {
-  const record = seasonRecord(selection, period);
+export function analyzeSiteWind(
+  selection: SiteWindSelection,
+  period: WindPeriodId,
+  daypart: WindDaypartId = "all",
+): WindPeriodStats | null {
+  const record = seasonRecord(selection, period, daypart);
   if (!record) return null;
   const sectorTotals = record.sectors.map((bins) => bins.reduce((a, b) => a + b, 0));
   const windyHoursFrac = sectorTotals.reduce((a, b) => a + b, 0);

@@ -1,8 +1,8 @@
 import type { WindPeriodId } from "./windRose";
 import { CALM_SPEED_MS, WIND_SPEED_BIN_EDGES_MS } from "./windBins";
 
-export const WIND_ROSE_ASSET_VERSION = 2;
-export const WIND_ROSE_SUPPORTED_ASSET_VERSIONS: readonly number[] = [1, WIND_ROSE_ASSET_VERSION];
+export const WIND_ROSE_ASSET_VERSION = 3;
+export const WIND_ROSE_SUPPORTED_ASSET_VERSIONS: readonly number[] = [1, 2, WIND_ROSE_ASSET_VERSION];
 export { CALM_SPEED_MS, WIND_SPEED_BIN_EDGES_MS };
 export const WIND_ROSE_SOURCE = "climate.onebuilding.org TMYx EPW";
 
@@ -35,12 +35,17 @@ export type WindRose = {
   meanSpeedMs: number;
 };
 
-export type WindRoseSeasonRecord = {
+export type WindRoseDaypartRecord = {
   calmPct: number;
   prevailingDirDeg: number;
   meanSpeedMs: number;
   sectors: number[][];
   sectorMeanSpeedMs?: number[];
+};
+
+export type WindRoseSeasonRecord = WindRoseDaypartRecord & {
+  morning?: WindRoseDaypartRecord;
+  afternoon?: WindRoseDaypartRecord;
 };
 
 export type WindRoseStationRecord = {
@@ -79,3 +84,30 @@ export type SiteWindSelection = {
   station: SiteWindStationMeta;
   asset: WindRoseAsset;
 };
+
+export type WindRoseStationIndexRecord = {
+  id: string;
+  name: string;
+  lat: number;
+  lon: number;
+  heightM?: number;
+  periodStart: string;
+  periodEnd: string;
+  years?: number;
+  sourceZip?: string;
+  annualCalmPct: number;
+  winterCalmPct: number;
+};
+
+export type WindRoseIndex = {
+  version: number;
+  speedBinEdgesMs: number[];
+  source: string;
+  stations: WindRoseStationIndexRecord[];
+};
+
+export const WIND_STATION_FILE_DIR = "wind/stations";
+
+export function windStationFilePath(stationId: string): string {
+  return `${WIND_STATION_FILE_DIR}/${stationId}.json`;
+}

@@ -22,8 +22,13 @@ export function siteIntelAutoFolded(analysisCardOn: boolean): boolean {
   return analysisCardOn;
 }
 
-export function windRoseCardMeta(periodLabel: string, years: number | null | undefined): string {
-  return years != null ? `${periodLabel} · ${years} yrs` : periodLabel;
+export function windRoseCardMeta(
+  periodLabel: string,
+  years: number | null | undefined,
+  daypartLabel?: string | null,
+): string {
+  const title = daypartLabel && daypartLabel !== "All day" ? `${periodLabel} · ${daypartLabel}` : periodLabel;
+  return years != null ? `${title} · ${years} yrs` : title;
 }
 
 export type WindPrevailingStats = {

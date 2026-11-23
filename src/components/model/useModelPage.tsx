@@ -1332,8 +1332,8 @@ export function useModelPage({
     [model.center.lat, model.center.lon, solar.year, solar.month, solar.day, solar.hour, solar.minute],
   );
   const consoleWindStats = useMemo(
-    () => (siteWind ? analyzeSiteWind(siteWind, windSettings.period) : null),
-    [siteWind, windSettings.period],
+    () => (siteWind ? analyzeSiteWind(siteWind, windSettings.period, windSettings.daypart) : null),
+    [siteWind, windSettings.period, windSettings.daypart],
   );
   const windModel = useMemo(
     () => windObstacleModel(displayModel, massing.drawingBuildings),
@@ -1363,6 +1363,7 @@ export function useModelPage({
     model: windModel,
     siteWind,
     period: windSettings.period,
+    daypart: windSettings.daypart,
     designWind,
     designWinds,
     clearDesignWind: () => commitWind({ ...windSettings, designWind: null }),
@@ -1380,7 +1381,7 @@ export function useModelPage({
       root.setAttribute("data-wind-period", `${siteWind.station.periodStart}–${siteWind.station.periodEnd}`);
       root.setAttribute("data-wind-years", String(siteWind.station.years ?? ""));
       root.setAttribute("data-wind-reason", siteWind.station.reason);
-      const record = seasonRecord(siteWind, windSettings.period);
+      const record = seasonRecord(siteWind, windSettings.period, windSettings.daypart);
       root.setAttribute(
         "data-ground-wind-deg",
         String(
@@ -1391,6 +1392,7 @@ export function useModelPage({
         ),
       );
       root.setAttribute("data-ground-wind-season", designWind?.id ?? windSettings.period);
+      root.setAttribute("data-wind-daypart", windSettings.daypart);
     } else {
       root.removeAttribute("data-wind-station");
       root.removeAttribute("data-wind-distance-km");
@@ -1399,8 +1401,9 @@ export function useModelPage({
       root.removeAttribute("data-wind-reason");
       root.removeAttribute("data-ground-wind-deg");
       root.removeAttribute("data-ground-wind-season");
+      root.removeAttribute("data-wind-daypart");
     }
-  }, [siteWind, consoleWindStats, windSettings.period, designWind, windPlan.sector]);
+  }, [siteWind, consoleWindStats, windSettings.period, windSettings.daypart, designWind, windPlan.sector]);
 
   useEffect(() => {
     if (!consolePlaying) return;

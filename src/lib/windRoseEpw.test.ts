@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   aggregateEpwSeason,
+  aggregateEpwSeasonDayparts,
   parseEpwDataRow,
   parseEpwPeriodComment,
   parseEpwWindRows,
@@ -59,5 +60,38 @@ describe("windRoseEpw", () => {
     expect(winter.sectorMeanSpeedMs).toHaveLength(16);
     expect(winter.sectorMeanSpeedMs![8]).toBeCloseTo(4, 6);
     expect(winter.sectorMeanSpeedMs![0]).toBe(0);
+  });
+
+  it("keeps the EPW hour and drops rows with an invalid hour", () => {
+    const row = parseEpwDataRow("2023,1,1,7,0,?9,0,0,0,0,0,0,0,0,0,0,0,0,0,0,180,4.0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0");
+    expect(row).toMatchObject({ month: 1, hour: 7, dirDeg: 180, speedMs: 4 });
+    expect(parseEpwDataRow("2023,1,1,0,0,?9,0,0,0,0,0,0,0,0,0,0,0,0,0,0,180,4.0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0")).toBeNull();
+    expect(parseEpwDataRow("2023,1,1,25,0,?9,0,0,0,0,0,0,0,0,0,0,0,0,0,0,180,4.0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0")).toBeNull();
+  });
+
+  it("filters hours before ranking morning and afternoon, and leaves all-day unchanged", () => {
+    const rows = [
+      { month: 6, hour: 8, speedMs: 6, dirDeg: 0 },
+      { month: 6, hour: 9, speedMs: 5, dirDeg: 0 },
+      { month: 6, hour: 11, speedMs: 4, dirDeg: 22 },
+      { month: 6, hour: 14, speedMs: 8, dirDeg: 180 },
+      { month: 6, hour: 16, speedMs: 7, dirDeg: 180 },
+      { month: 6, hour: 21, speedMs: 3, dirDeg: 270 },
+    ];
+    const allDay = aggregateEpwSeason(rows, "winter");
+    const morning = aggregateEpwSeason(rows, "winter", undefined, "morning");
+    const afternoon = aggregateEpwSeason(rows, "winter", undefined, "afternoon");
+    const packed = aggregateEpwSeasonDayparts(rows, "winter");
+    expect(allDay.prevailingDirDeg).toBe(0);
+    expect(morning.prevailingDirDeg).toBe(0);
+    expect(afternoon.prevailingDirDeg).toBe(180);
+    expect(morning.sectors[0]!.reduce((a, b) => a + b, 0)).toBeCloseTo(2 / 3, 5);
+    expect(afternoon.sectors[8]!.reduce((a, b) => a + b, 0)).toBe(1);
+    expect(afternoon.meanSpeedMs).toBeCloseTo(7.5, 5);
+    expect(packed.calmPct).toBe(allDay.calmPct);
+    expect(packed.prevailingDirDeg).toBe(allDay.prevailingDirDeg);
+    expect(packed.morning?.prevailingDirDeg).toBe(0);
+    expect(packed.afternoon?.prevailingDirDeg).toBe(180);
+    expect(allDay.sectors[12]!.reduce((a, b) => a + b, 0)).toBeCloseTo(1 / 6, 5);
   });
 });

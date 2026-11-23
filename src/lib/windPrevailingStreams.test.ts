@@ -1,10 +1,7 @@
-import { readFileSync } from "node:fs";
-import path from "node:path";
 import { describe, expect, it } from "vitest";
 import type { WindPeriodStats } from "./windRose";
-import type { WindRoseAsset } from "./windRoseData";
+import { siteWindFromPublishedAsset } from "./windAssetDisk";
 import { analyzeSiteWind } from "./windRoseStats";
-import { siteWindSelection } from "./windStation";
 import {
   PREVAILING_STREAM_MAX_ARROWS,
   PREVAILING_STREAM_MIN_SHARE,
@@ -100,8 +97,7 @@ describe("prevailing wind streams", () => {
   });
 
   it("reads believable streams from the real station table for every season option", () => {
-    const asset = JSON.parse(readFileSync(path.join(process.cwd(), "public/wind/australia-tmyx.json"), "utf8")) as WindRoseAsset;
-    const southbank = siteWindSelection(asset, -37.8216, 144.9645)!;
+    const southbank = siteWindFromPublishedAsset(-37.8216, 144.9645)!;
     for (const period of ["annual", "summer", "autumn", "winter", "spring"] as const) {
       const streams = prevailingStreams(analyzeSiteWind(southbank, period));
       expect(streams.length, period).toBeGreaterThanOrEqual(1);

@@ -268,6 +268,8 @@ describe("Wind streaks slider chrome", () => {
 describe("wind rose card header", () => {
   it("reads period and station years in the meta, and is a 48px row", () => {
     expect(windRoseCardMeta("Annual", 15)).toBe("Annual · 15 yrs");
+    expect(windRoseCardMeta("Annual", 15, "All day")).toBe("Annual · 15 yrs");
+    expect(windRoseCardMeta("Annual", 15, "Morning")).toBe("Annual · Morning · 15 yrs");
     expect(windRoseCardMeta("Jan", undefined)).toBe("Jan");
     const head = block(css("src/index.css"), ".analysis-card-head");
     expect(head).toMatch(/height: var\(--hud-card-head\);/);

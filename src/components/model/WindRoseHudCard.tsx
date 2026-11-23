@@ -4,7 +4,8 @@ import { PrevailingStreamsLegend } from "../PrevailingStreamsLegend";
 import { DesignWindPresets } from "../DesignWindPresets";
 import { windPlanSeasonLabel } from "../WindPlanCard";
 import { analysisCardCollapsed, analysisStackTight } from "../../lib/analysisCards";
-import { withDesignWind, withWindSeason } from "../../lib/windState";
+import { withDesignWind, withWindDaypart, withWindSeason } from "../../lib/windState";
+import { WIND_DAYPART_CARD_NOTE, WIND_DAYPART_IDS, WIND_DAYPARTS } from "../../lib/windDayparts";
 import { AnalysisHudCard } from "./AnalysisHudCard";
 import { WindPlanSwitch } from "./WindPlanSwitch";
 import { WIND_SEASON_IDS, windPrevailingBadge, windRoseCardMeta, windStreaksSliderOn } from "./windRoseCard";
@@ -42,7 +43,7 @@ export function WindRoseHudCard({ vm }: { vm: ModelPageViewModel }) {
       title="Wind Rose"
       label="Wind rose panel"
       className={classes.join(" ")}
-      meta={windRoseCardMeta(seasonLabel, siteWind?.station.years)}
+      meta={windRoseCardMeta(seasonLabel, siteWind?.station.years, WIND_DAYPARTS[windSettings.daypart].label)}
       collapsed={analysisCardCollapsed(analysisCardOpen, "wind")}
       onToggle={() => toggleAnalysisCard("wind")}
     >
@@ -52,7 +53,13 @@ export function WindRoseHudCard({ vm }: { vm: ModelPageViewModel }) {
         </div>
       ) : null}
       {siteWind ? (
-        <WindRosePanel selection={siteWind} period={windSettings.period} plan={windPlan} flowHeading={flowing} />
+        <WindRosePanel
+          selection={siteWind}
+          period={windSettings.period}
+          daypart={windSettings.daypart}
+          plan={windPlan}
+          flowHeading={flowing}
+        />
       ) : (
         <p className="ac-note">Wind data is not available for this site yet.</p>
       )}
@@ -82,6 +89,29 @@ export function WindRoseHudCard({ vm }: { vm: ModelPageViewModel }) {
             );
           })}
         </div>
+      </div>
+
+      <div className="ac-section">
+        <span className="ac-kicker">Time of day</span>
+        <div className="ac-seg ac-seg-3" role="group" aria-label="Wind time of day">
+          {WIND_DAYPART_IDS.map((daypartId) => {
+            const part = WIND_DAYPARTS[daypartId];
+            const active = windSettings.daypart === daypartId;
+            return (
+              <button
+                key={daypartId}
+                type="button"
+                className={active ? "ac-seg-btn is-ink" : "ac-seg-btn"}
+                aria-pressed={active}
+                title={part.note}
+                onClick={() => commitWind(withWindDaypart(windSettings, daypartId))}
+              >
+                {part.label}
+              </button>
+            );
+          })}
+        </div>
+        <p className="ac-note">{WIND_DAYPART_CARD_NOTE}</p>
       </div>
 
       <div className="ac-section">

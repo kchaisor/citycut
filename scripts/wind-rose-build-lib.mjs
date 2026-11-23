@@ -1,4 +1,5 @@
 import { areWindSeasonsSane, isCalmConsistentWithRecent } from "../src/lib/windStationSanity.ts";
+import { hourInDaypart } from "../src/lib/windDayparts.ts";
 
 export const WIND_ROSE_SOURCE = "climate.onebuilding.org TMYx EPW";
 export const CALM_SPEED_KMH = 2;
@@ -55,13 +56,15 @@ export function parseEpwDataRow(line) {
   const parts = line.split(",");
   if (parts.length < 22) return null;
   const month = Number(parts[1]);
+  const hour = Number(parts[3]);
   const speedMs = Number(parts[21]);
   const dirDeg = Number(parts[20]);
   if (month < 1 || month > 12) return null;
+  if (hour < 1 || hour > 24) return null;
   if (!Number.isFinite(speedMs) || !Number.isFinite(dirDeg)) return null;
   if (speedMs >= EPW_WIND_SPEED_MISSING || dirDeg >= EPW_WIND_DIR_MISSING) return null;
   if (speedMs < 0) return null;
-  return { month, speedMs, dirDeg };
+  return { month, hour, speedMs, dirDeg };
 }
 
 export function parseEpwWindRows(text) {
@@ -84,7 +87,7 @@ export function parseEpwWindRows(text) {
   return { location, period, rows };
 }
 
-export function aggregateEpwSeason(rows, season) {
+export function aggregateEpwSeason(rows, season, daypart = "all") {
   const months = new Set(SOUTHERN_SEASON_MONTHS[season]);
   const bandCount = WIND_SPEED_BIN_EDGES_MS.length - 1;
   const counts = Array.from({ length: WIND_SECTOR_COUNT }, () => new Array(bandCount).fill(0));
@@ -96,6 +99,7 @@ export function aggregateEpwSeason(rows, season) {
   const sectorSpeedCounts = new Array(WIND_SECTOR_COUNT).fill(0);
   for (const row of rows) {
     if (!months.has(row.month)) continue;
+    if (!hourInDaypart(row.hour, daypart)) continue;
     total += 1;
     if (row.speedMs < CALM_SPEED_MS) {
       calm += 1;
@@ -131,13 +135,21 @@ export function aggregateEpwSeason(rows, season) {
   };
 }
 
+export function aggregateEpwSeasonDayparts(rows, season) {
+  return {
+    ...aggregateEpwSeason(rows, season, "all"),
+    morning: aggregateEpwSeason(rows, season, "morning"),
+    afternoon: aggregateEpwSeason(rows, season, "afternoon"),
+  };
+}
+
 export function aggregateEpwAllSeasons(rows) {
   return {
-    annual: aggregateEpwSeason(rows, "annual"),
-    summer: aggregateEpwSeason(rows, "summer"),
-    autumn: aggregateEpwSeason(rows, "autumn"),
-    winter: aggregateEpwSeason(rows, "winter"),
-    spring: aggregateEpwSeason(rows, "spring"),
+    annual: aggregateEpwSeasonDayparts(rows, "annual"),
+    summer: aggregateEpwSeasonDayparts(rows, "summer"),
+    autumn: aggregateEpwSeasonDayparts(rows, "autumn"),
+    winter: aggregateEpwSeasonDayparts(rows, "winter"),
+    spring: aggregateEpwSeasonDayparts(rows, "spring"),
   };
 }
 
@@ -188,10 +200,19 @@ export { areWindSeasonsSane, isCalmConsistentWithRecent };
 const roundTo = (value, digits) => Number(value.toFixed(digits));
 const roundSignificant = (value, digits) => (value === 0 ? 0 : Number(value.toPrecision(digits)));
 
-export function compactSeasonRecord(season) {
+function compactDaypartRecord(season) {
   return {
-    ...season,
+    calmPct: season.calmPct,
+    prevailingDirDeg: season.prevailingDirDeg,
+    meanSpeedMs: season.meanSpeedMs,
     sectors: season.sectors.map((bands) => bands.map((f) => roundSignificant(f, 5))),
     sectorMeanSpeedMs: season.sectorMeanSpeedMs.map((v) => roundTo(v, 2)),
   };
+}
+
+export function compactSeasonRecord(season) {
+  const compact = compactDaypartRecord(season);
+  if (season.morning) compact.morning = compactDaypartRecord(season.morning);
+  if (season.afternoon) compact.afternoon = compactDaypartRecord(season.afternoon);
+  return compact;
 }

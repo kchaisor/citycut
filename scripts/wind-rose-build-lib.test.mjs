@@ -157,3 +157,32 @@ describe("sector mean speeds", () => {
     expect(compact.sectorMeanSpeedMs).toEqual([4.23, 0]);
   });
 });
+
+describe("hour dayparts", () => {
+  it("filters hours before ranking morning and afternoon, and leaves all-day unchanged", () => {
+    const rows = [
+      { month: 6, hour: 8, speedMs: 6, dirDeg: 0 },
+      { month: 6, hour: 9, speedMs: 5, dirDeg: 0 },
+      { month: 6, hour: 11, speedMs: 4, dirDeg: 22 },
+      { month: 6, hour: 14, speedMs: 8, dirDeg: 180 },
+      { month: 6, hour: 16, speedMs: 7, dirDeg: 180 },
+      { month: 6, hour: 21, speedMs: 3, dirDeg: 270 },
+    ];
+    const allDay = aggregateEpwSeason(rows, "winter");
+    const morning = aggregateEpwSeason(rows, "winter", "morning");
+    const afternoon = aggregateEpwSeason(rows, "winter", "afternoon");
+    expect(allDay.prevailingDirDeg).toBe(0);
+    expect(morning.prevailingDirDeg).toBe(0);
+    expect(afternoon.prevailingDirDeg).toBe(180);
+    expect(morning.sectors[0].reduce((a, b) => a + b, 0)).toBeCloseTo(2 / 3, 5);
+    expect(afternoon.meanSpeedMs).toBeCloseTo(7.5, 5);
+    const compact = compactSeasonRecord({
+      ...allDay,
+      morning,
+      afternoon,
+    });
+    expect(compact.prevailingDirDeg).toBe(0);
+    expect(compact.morning.prevailingDirDeg).toBe(0);
+    expect(compact.afternoon.prevailingDirDeg).toBe(180);
+  });
+});

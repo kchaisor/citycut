@@ -1,6 +1,6 @@
 import { describe, expect, it, beforeEach } from "vitest";
 import { loadSiteWind, loadWindRoseAsset, resetWindRoseAssetCache } from "./windLoad";
-import type { WindRoseAsset } from "./windRoseData";
+import type { WindRoseAsset, WindRoseIndex } from "./windRoseData";
 
 const fixture: WindRoseAsset = {
   version: 1,
@@ -59,5 +59,56 @@ describe("windLoad", () => {
   it("rejects an unknown asset version", async () => {
     const fetchImpl: typeof fetch = async () => new Response(JSON.stringify({ ...fixture, version: 99 }), { status: 200 });
     expect(await loadWindRoseAsset(fetchImpl)).toBeNull();
+  });
+
+  it("loads only the chosen station file from a version 3 index", async () => {
+    const station = fixture.stations[0]!;
+    const index: WindRoseIndex = {
+      version: 3,
+      speedBinEdgesMs: fixture.speedBinEdgesMs,
+      source: fixture.source,
+      stations: [
+        {
+          id: station.id,
+          name: station.name,
+          lat: station.lat,
+          lon: station.lon,
+          periodStart: station.periodStart,
+          periodEnd: station.periodEnd,
+          annualCalmPct: 4,
+          winterCalmPct: 4,
+        },
+        {
+          id: "999999",
+          name: "Other.Station",
+          lat: -33.8,
+          lon: 151.2,
+          periodStart: "2011",
+          periodEnd: "2025",
+          annualCalmPct: 2,
+          winterCalmPct: 2,
+        },
+      ],
+    };
+    const requested: string[] = [];
+    const fetchImpl: typeof fetch = async (input) => {
+      const url = String(input);
+      requested.push(url);
+      if (url.includes("australia-tmyx.json")) {
+        return new Response(JSON.stringify(index), { status: 200 });
+      }
+      if (url.endsWith("stations/948700.json")) {
+        return new Response(JSON.stringify({ ...station, seasons: { ...station.seasons, annual: { ...station.seasons.annual, morning: station.seasons.annual, afternoon: station.seasons.annual } } }), { status: 200 });
+      }
+      return new Response("missing", { status: 404 });
+    };
+    const result = await loadSiteWind(-37.983826, 145.21555, fetchImpl);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.selection.station.id).toBe("948700");
+    expect(result.selection.asset.stations).toHaveLength(1);
+    expect(result.selection.asset.stations[0]?.seasons.annual.morning).toBeDefined();
+    expect(requested.some((url) => url.endsWith("stations/948700.json"))).toBe(true);
+    expect(requested.some((url) => url.endsWith("stations/999999.json"))).toBe(false);
   });
 });

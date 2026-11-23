@@ -7,19 +7,15 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { CityModel } from "../types";
 import { designWindsFor, findDesignWind, headingPeriodStats } from "../lib/windDesignWinds";
 import { sectorLabel } from "../lib/windRose";
-import type { WindRoseAsset } from "../lib/windRoseData";
+import { siteWindFromPublishedAsset } from "../lib/windAssetDisk";
 import { analyzeSiteWind } from "../lib/windRoseStats";
 import { DEFAULT_WIND_SETTINGS, withDesignWind, type WindViewSettings } from "../lib/windState";
-import { siteWindSelection } from "../lib/windStation";
 import { NO_ANALYSES, analysesOf, type ActiveAnalyses } from "../lib/sidebarSections";
 import { analysisCardsOn } from "../lib/analysisCards";
 import { useWindPlan } from "./useWindPlan";
 import { WindRosePanel } from "./WindRosePanel";
 
-const asset = JSON.parse(
-  readFileSync(path.join(process.cwd(), "public/wind/australia-tmyx.json"), "utf8"),
-) as WindRoseAsset;
-const pyrmont = siteWindSelection(asset, -33.86627, 151.18389)!;
+const pyrmont = siteWindFromPublishedAsset(-33.86627, 151.18389)!;
 
 const openModel: CityModel = {
   placeLabel: "Test",
