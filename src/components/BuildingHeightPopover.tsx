@@ -208,6 +208,21 @@ export function BuildingHeightPopover({
       </header>
       {!minimised && (
         <div className="building-detail-panel-body">
+          {onHideSelected && (
+            <div className="hide-buildings-block">
+              <p className="hide-buildings-hint">
+                Hold Shift and click to add more buildings, then press Hide selected.
+              </p>
+              <div className="popover-actions">
+                <button type="button" className="is-accent" onClick={onHideSelected}>
+                  Hide selected ({selectedCount})
+                </button>
+                <button type="button" onClick={onShowAll} disabled={hiddenCount === 0}>
+                  Show all
+                </button>
+              </div>
+            </div>
+          )}
           <Field label="Use" value={details.useLine !== "—" ? details.useLine : building.use.replace(/_/g, " ")} />
           <Field label="Name / address" value={nameLine} />
           <Field label="Height" value={heightReadout} />
@@ -253,21 +268,6 @@ export function BuildingHeightPopover({
               </button>
             </div>
           </div>
-          {onHideSelected && (
-            <div className="hide-buildings-block">
-              <p className="hide-buildings-hint">
-                Hold Shift and click to add more buildings, then press Hide selected.
-              </p>
-              <div className="popover-actions">
-                <button type="button" className="is-accent" onClick={onHideSelected}>
-                  Hide selected ({selectedCount})
-                </button>
-                <button type="button" onClick={onShowAll} disabled={hiddenCount === 0}>
-                  Show all
-                </button>
-              </div>
-            </div>
-          )}
           {details.credits.length > 0 && (
             <p className="legend-note popup-credits">{details.credits.join(" ")}</p>
           )}
