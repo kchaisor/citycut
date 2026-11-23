@@ -51,6 +51,23 @@ export function clampInspectHudPosition(input: ClampInspectHudInput): InspectHud
   return { left: placed.x, top: placed.y };
 }
 
+export type InspectHudScreenPoint = { clientX: number; clientY: number };
+
+export function inspectHudPlacement(
+  screen: (InspectHudScreenPoint & { inView: boolean }) | null,
+  lastPick: InspectHudScreenPoint | null,
+  viewport: ViewportSize,
+): InspectHudPlacement | null {
+  if (!screen) return null;
+  const anchor = screen.inView || !lastPick ? screen : lastPick;
+  return clampInspectHudPosition({
+    anchorX: Number.isFinite(anchor.clientX) ? anchor.clientX : 0,
+    anchorY: Number.isFinite(anchor.clientY) ? anchor.clientY : 0,
+    viewportWidth: viewport.width,
+    viewportHeight: viewport.height,
+  });
+}
+
 export function inspectHudInViewport(
   anchorX: number,
   anchorY: number,

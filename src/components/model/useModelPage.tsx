@@ -114,11 +114,7 @@ import { openRing, toLocal } from "../../lib/geo";
 import { interiorPoint, pointInPolygon } from "../../lib/useCascade";
 import type { BuildingUse, CityModel } from "../../types";
 import type { InspectHudScreen } from "../InspectHudProjector";
-import {
-  clampInspectHudPosition,
-  INSPECT_HUD_DEFAULT_HEIGHT,
-  INSPECT_HUD_DEFAULT_WIDTH,
-} from "../../lib/inspectHudLayout";
+import { inspectHudPlacement } from "../../lib/inspectHudLayout";
 import {
   sceneSelectionBuildingId,
   type SceneInspectWorld,
@@ -1190,18 +1186,14 @@ export function useModelPage({
     return { east: at[0], north: at[1], up: base + building.height * 0.55 };
   }, [displayModel.buildings, sceneSelection, pickedImported]);
 
-  const inspectHudPosition = useMemo(() => {
-    const anchor = inspectHudScreen;
-    if (!anchor || !anchor.inView) return null;
-    return clampInspectHudPosition({
-      anchorX: anchor.clientX,
-      anchorY: anchor.clientY,
-      hudWidth: INSPECT_HUD_DEFAULT_WIDTH,
-      hudHeight: INSPECT_HUD_DEFAULT_HEIGHT,
-      viewportWidth: typeof window !== "undefined" ? window.innerWidth : 1440,
-      viewportHeight: typeof window !== "undefined" ? window.innerHeight : 900,
-    });
-  }, [inspectHudScreen]);
+  const inspectHudPosition = useMemo(
+    () =>
+      inspectHudPlacement(inspectHudScreen, sceneSelection, {
+        width: typeof window !== "undefined" ? window.innerWidth : 1440,
+        height: typeof window !== "undefined" ? window.innerHeight : 900,
+      }),
+    [inspectHudScreen, sceneSelection],
+  );
 
   function persistHidden(next: HiddenBuildingStore) {
     setHiddenStore(next);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { shouldSkipViewportSizeRefit } from "./viewportAutoFit";
+import { shouldKeepPresetPose, shouldSkipViewportSizeRefit } from "./viewportAutoFit";
 
 describe("shouldSkipViewportSizeRefit", () => {
   it("skips a resize refit after the user has orbited at the same snap id", () => {
@@ -18,3 +18,19 @@ describe("shouldSkipViewportSizeRefit", () => {
     expect(shouldSkipViewportSizeRefit("2:800x600", "3:800x600", 3, true)).toBe(false);
   });
 });
+
+describe("shouldKeepPresetPose", () => {
+  it("runs the first fit in QA while the camera is still on the unfitted default", () => {
+    expect(shouldKeepPresetPose(true, null, false)).toBe(false);
+  });
+
+  it("keeps a QA setCamera pose that landed before the first fit", () => {
+    expect(shouldKeepPresetPose(true, null, true)).toBe(true);
+  });
+
+  it("never applies outside QA or once a fit has run", () => {
+    expect(shouldKeepPresetPose(false, null, true)).toBe(false);
+    expect(shouldKeepPresetPose(true, "0:1440x900", true)).toBe(false);
+  });
+});
+
