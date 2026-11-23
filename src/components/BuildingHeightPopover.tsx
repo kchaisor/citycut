@@ -101,6 +101,7 @@ export function BuildingHeightPopover({
   const [details, setDetails] = useState<BuildingPopupDetails>(() => emptyBuildingPopupDetails(building));
   const [minimised, setMinimised] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const bodyRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setValue(formatHeightM(building.height));
@@ -127,8 +128,9 @@ export function BuildingHeightPopover({
 
   useEffect(() => {
     if (minimised) return;
-    inputRef.current?.focus();
+    inputRef.current?.focus({ preventScroll: true });
     inputRef.current?.select();
+    if (bodyRef.current) bodyRef.current.scrollTop = 0;
   }, [building.id, minimised]);
 
   useEffect(() => {
@@ -207,7 +209,7 @@ export function BuildingHeightPopover({
         </div>
       </header>
       {!minimised && (
-        <div className="building-detail-panel-body">
+        <div className="building-detail-panel-body" ref={bodyRef}>
           {onHideSelected && (
             <div className="hide-buildings-block">
               <p className="hide-buildings-hint">

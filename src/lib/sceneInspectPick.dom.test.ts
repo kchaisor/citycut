@@ -25,8 +25,15 @@ function setup() {
   const controlsOnCanvas = vi.fn();
   host.addEventListener("pointerdown", controlsOnHost);
   canvas.addEventListener("pointerdown", controlsOnCanvas);
-  const detach = attachSceneInspectPick(canvas, camera, buildingRoot(7), { trees: [], sideM: 400 }, { onPick, onClear });
-  return { host, canvas, onPick, onClear, controlsOnHost, controlsOnCanvas, detach };
+  const onPressStart = vi.fn();
+  const detach = attachSceneInspectPick(
+    canvas,
+    camera,
+    buildingRoot(7),
+    { trees: [], sideM: 400 },
+    { onPick, onClear, onPressStart },
+  );
+  return { host, canvas, camera, onPick, onClear, onPressStart, controlsOnHost, controlsOnCanvas, detach };
 }
 
 function fire(canvas: HTMLCanvasElement, type: string, init: MouseEventInit) {
@@ -48,13 +55,75 @@ describe("attachSceneInspectPick pointer handling", () => {
     expect(onPick.mock.calls[0][0]).toMatchObject({ kind: "building", buildingId: 7, additive: true });
   });
 
-  it("lets an ordinary left press reach the camera controls", () => {
+  it("lets an ordinary left press reach the camera controls and still picks with 10 px of jitter", () => {
     const { canvas, onPick, controlsOnHost, controlsOnCanvas } = setup();
     fire(canvas, "pointerdown", { clientX: 100, clientY: 100 });
     expect(controlsOnHost).toHaveBeenCalledTimes(1);
     expect(controlsOnCanvas).toHaveBeenCalledTimes(1);
     fire(canvas, "pointerup", { clientX: 106, clientY: 108 });
+    expect(onPick).toHaveBeenCalledTimes(1);
+    expect(onPick.mock.calls[0][0]).toMatchObject({ kind: "building", buildingId: 7, additive: false });
+  });
+
+  it("picks on a plain click that wanders 14 px", () => {
+    const { canvas, onPick } = setup();
+    fire(canvas, "pointerdown", { clientX: 100, clientY: 100 });
+    fire(canvas, "pointerup", { clientX: 114, clientY: 100 });
+    expect(onPick).toHaveBeenCalledTimes(1);
+  });
+
+  it("leaves a plain drag past the cap to the camera", () => {
+    const { canvas, onPick, onClear } = setup();
+    fire(canvas, "pointerdown", { clientX: 100, clientY: 100 });
+    fire(canvas, "pointerup", { clientX: 116, clientY: 100 });
     expect(onPick).not.toHaveBeenCalled();
+    expect(onClear).not.toHaveBeenCalled();
+  });
+
+  it("picks what was under the pointer at press, not at release", () => {
+    const { canvas, onPick, onClear } = setup();
+    fire(canvas, "pointerdown", { clientX: 120, clientY: 100 });
+    fire(canvas, "pointerup", { clientX: 132, clientY: 100 });
+    expect(onPick).toHaveBeenCalledTimes(1);
+    expect(onPick.mock.calls[0][0]).toMatchObject({ kind: "building", buildingId: 7, clientX: 120, clientY: 100 });
+
+    fire(canvas, "pointerdown", { clientX: 140, clientY: 100 });
+    fire(canvas, "pointerup", { clientX: 128, clientY: 100 });
+    expect(onPick).toHaveBeenCalledTimes(1);
+    expect(onClear).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the press ray when the camera moves before release", () => {
+    const { canvas, camera, onPick } = setup();
+    fire(canvas, "pointerdown", { clientX: 100, clientY: 100 });
+    camera.position.set(40, 0, 10);
+    camera.updateMatrixWorld(true);
+    fire(canvas, "pointerup", { clientX: 100, clientY: 100 });
+    expect(onPick).toHaveBeenCalledTimes(1);
+    expect(onPick.mock.calls[0][0]).toMatchObject({ kind: "building", buildingId: 7 });
+  });
+
+  it("settles the camera before taking the press ray", () => {
+    const { canvas, camera, onPick, onPressStart } = setup();
+    camera.position.set(40, 0, 10);
+    onPressStart.mockImplementation(() => camera.position.set(0, 0, 10));
+    fire(canvas, "pointerdown", { clientX: 100, clientY: 100 });
+    fire(canvas, "pointerup", { clientX: 100, clientY: 100 });
+    expect(onPressStart).toHaveBeenCalledTimes(1);
+    expect(onPick).toHaveBeenCalledTimes(1);
+  });
+
+  it("finds a building a few pixels beside the press and clears on a real miss", () => {
+    const { canvas, onPick, onClear } = setup();
+    fire(canvas, "pointerdown", { clientX: 129, clientY: 100 });
+    fire(canvas, "pointerup", { clientX: 129, clientY: 100 });
+    expect(onPick).toHaveBeenCalledTimes(1);
+    expect(onPick.mock.calls[0][0]).toMatchObject({ kind: "building", buildingId: 7, clientX: 129, clientY: 100 });
+
+    fire(canvas, "pointerdown", { clientX: 140, clientY: 100 });
+    fire(canvas, "pointerup", { clientX: 140, clientY: 100 });
+    expect(onPick).toHaveBeenCalledTimes(1);
+    expect(onClear).toHaveBeenCalledTimes(1);
   });
 
   it("lets Shift with the right or middle button reach the camera controls", () => {
@@ -84,10 +153,10 @@ describe("attachSceneInspectPick pointer handling", () => {
     expect(onClear).not.toHaveBeenCalled();
   });
 
-  it("uses the strict cap when Shift is only pressed after the drag began", () => {
+  it("does not pick when Shift is only pressed after a real drag began", () => {
     const { canvas, onPick } = setup();
     fire(canvas, "pointerdown", { clientX: 100, clientY: 100 });
-    fire(canvas, "pointerup", { clientX: 110, clientY: 100, shiftKey: true });
+    fire(canvas, "pointerup", { clientX: 120, clientY: 100, shiftKey: true });
     expect(onPick).not.toHaveBeenCalled();
   });
 

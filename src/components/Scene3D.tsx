@@ -393,8 +393,13 @@ function SceneInspectPickLayer({
 }) {
   const camera = useThree((state) => state.camera);
   const gl = useThree((state) => state.gl);
+  const get = useThree((state) => state.get);
   useLayoutEffect(() => {
     if (!enabled) return;
+    const onPressStart = () => {
+      const controls = get().controls as OrbitControlsImpl | null;
+      if (controls?.enabled) holdControlPose(controls);
+    };
     return attachSceneInspectPick(
       gl.domElement,
       camera,
@@ -407,9 +412,10 @@ function SceneInspectPickLayer({
         treesPickable,
         extraRoots: importedMassing ? [importedMassing] : [],
       },
-      { onPick, onClear },
+      { onPick, onClear, onPressStart },
     );
   }, [
+    get,
     importedMassing,
     buildingsPickable,
     camera,

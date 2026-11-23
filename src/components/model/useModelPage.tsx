@@ -114,7 +114,7 @@ import { openRing, toLocal } from "../../lib/geo";
 import { interiorPoint, pointInPolygon } from "../../lib/useCascade";
 import type { BuildingUse, CityModel } from "../../types";
 import type { InspectHudScreen } from "../InspectHudProjector";
-import { inspectHudPlacement } from "../../lib/inspectHudLayout";
+import { inspectHudPlacement, measureInspectHudDock } from "../../lib/inspectHudLayout";
 import {
   sceneSelectionBuildingId,
   type SceneInspectWorld,
@@ -1179,20 +1179,25 @@ export function useModelPage({
     if (!sceneSelection) return null;
     if (sceneSelection.kind === "imported") return pickedImported?.building.visible && pickedImported.massing.visible ? sceneSelection.world : null;
     if (sceneSelection.kind === "terrain" || sceneSelection.kind === "tree") return sceneSelection.world;
-    const building = displayModel.buildings.find((item) => item.id === sceneSelection.buildingId);
-    if (!building) return sceneSelection.world;
-    const at = interiorPoint(building.ring, building.holes);
-    const base = sceneSelection.world.up;
-    return { east: at[0], north: at[1], up: base + building.height * 0.55 };
-  }, [displayModel.buildings, sceneSelection, pickedImported]);
+    return null;
+  }, [sceneSelection, pickedImported]);
 
+  const [inspectDockResize, setInspectDockResize] = useState(0);
+  useEffect(() => {
+    const onResize = () => setInspectDockResize((count) => count + 1);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+  const buildingCardOpen = sceneSelection?.kind === "building";
   const inspectHudPosition = useMemo(
     () =>
-      inspectHudPlacement(inspectHudScreen, sceneSelection, {
-        width: typeof window !== "undefined" ? window.innerWidth : 1440,
-        height: typeof window !== "undefined" ? window.innerHeight : 900,
-      }),
-    [inspectHudScreen, sceneSelection],
+      buildingCardOpen
+        ? measureInspectHudDock()
+        : inspectHudPlacement(inspectHudScreen, sceneSelection, {
+            width: typeof window !== "undefined" ? window.innerWidth : 1440,
+            height: typeof window !== "undefined" ? window.innerHeight : 900,
+          }),
+    [buildingCardOpen, inspectDockResize, inspectHudScreen, sceneSelection],
   );
 
   function persistHidden(next: HiddenBuildingStore) {

@@ -4,6 +4,8 @@ import type { TreeFeat } from "../types";
 import {
   INSPECT_ADDITIVE_CLICK_MAX_PX,
   INSPECT_CLICK_MAX_PX,
+  INSPECT_NEAR_MISS_PX,
+  inspectNearMissOffsets,
   isInspectClick,
   nearestTreeIdAt,
   pickSceneSelectionFromHits,
@@ -77,10 +79,15 @@ describe("scene inspect pick helpers", () => {
     expect(isInspectClick(INSPECT_ADDITIVE_CLICK_MAX_PX, true)).toBe(true);
   });
 
-  it("does not treat a 10 px move without Shift as a click", () => {
-    expect(isInspectClick(10, false)).toBe(false);
+  it("treats a 10 to 14 px move without Shift as a click", () => {
+    expect(isInspectClick(10, false)).toBe(true);
     expect(isInspectClick(INSPECT_CLICK_MAX_PX, false)).toBe(true);
     expect(isInspectClick(0, false)).toBe(true);
+  });
+
+  it("ignores a plain drag past the cap", () => {
+    expect(isInspectClick(INSPECT_CLICK_MAX_PX + 1, false)).toBe(false);
+    expect(isInspectClick(40, false)).toBe(false);
   });
 
   it("ignores a Shift drag well above the jitter cap", () => {
@@ -88,9 +95,17 @@ describe("scene inspect pick helpers", () => {
     expect(isInspectClick(40, true)).toBe(false);
   });
 
-  it("keeps the no-Shift cap tight and the Shift cap within 12 to 16 px", () => {
-    expect(INSPECT_CLICK_MAX_PX).toBe(5);
-    expect(INSPECT_ADDITIVE_CLICK_MAX_PX).toBeGreaterThanOrEqual(12);
-    expect(INSPECT_ADDITIVE_CLICK_MAX_PX).toBeLessThanOrEqual(16);
+  it("uses the same 14 px cap with and without Shift", () => {
+    expect(INSPECT_CLICK_MAX_PX).toBe(14);
+    expect(INSPECT_ADDITIVE_CLICK_MAX_PX).toBe(14);
+  });
+
+  it("retries a near miss on two rings no further than 8 px out", () => {
+    const offsets = inspectNearMissOffsets();
+    expect(INSPECT_NEAR_MISS_PX).toBe(8);
+    expect(offsets).toHaveLength(16);
+    const distances = offsets.map(([x, y]) => Math.hypot(x, y));
+    expect(Math.max(...distances)).toBeCloseTo(8);
+    expect(distances.slice(0, 8).every((distance) => Math.abs(distance - 4) < 1e-9)).toBe(true);
   });
 });

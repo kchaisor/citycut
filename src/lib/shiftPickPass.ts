@@ -5,11 +5,31 @@ export function setShiftPickClass(on: boolean): void {
   document.documentElement.classList.toggle(SHIFT_PICK_CLASS, on);
 }
 
+export const CARD_CONTROL_SELECTOR = "button, input, select, textarea, a, label";
+
+const passedThroughCard = new WeakSet<Event>();
+
+export function isCardPassThrough(event: Event): boolean {
+  return passedThroughCard.has(event);
+}
+
+const OVERLAY_SCROLLBAR_PX = 14;
+
+function onScrollbar(target: Element, event: MouseEvent): boolean {
+  if (!(target instanceof HTMLElement) || target.scrollHeight <= target.clientHeight) return false;
+  const rect = target.getBoundingClientRect();
+  const gutter = Math.max(target.offsetWidth - target.clientWidth - target.clientLeft * 2, OVERLAY_SCROLLBAR_PX);
+  return event.clientX >= rect.right - target.clientLeft - gutter;
+}
+
 function cardSurfaceUnder(event: MouseEvent): Element | null {
-  if (!event.shiftKey || event.button !== 0) return null;
+  if (event.button !== 0) return null;
   const target = event.target;
   if (!(target instanceof Element)) return null;
-  return target.closest(SHIFT_PICK_CARD_SELECTOR);
+  const card = target.closest(SHIFT_PICK_CARD_SELECTOR);
+  if (!card || event.shiftKey) return card;
+  if (target.closest(CARD_CONTROL_SELECTOR) || onScrollbar(target, event)) return null;
+  return card;
 }
 
 export function canvasUnderCard(card: Element, clientX: number, clientY: number): HTMLCanvasElement | null {
@@ -48,7 +68,9 @@ function retargetToCanvas(event: MouseEvent): void {
     isPrimary: pointer.isPrimary,
   };
   const Ctor = event.constructor as typeof PointerEvent;
-  canvas.dispatchEvent(new Ctor(event.type, init));
+  const passed = new Ctor(event.type, init);
+  passedThroughCard.add(passed);
+  canvas.dispatchEvent(passed);
 }
 
 function keepFocusOnCardPick(event: MouseEvent): void {

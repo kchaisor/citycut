@@ -5,7 +5,9 @@ import {
   INSPECT_HUD_MARGIN,
   INSPECT_HUD_OFFSET,
   clampInspectHudPosition,
+  inspectHudDock,
   inspectHudPlacement,
+  measureInspectHudDock,
 } from "./inspectHudLayout";
 
 describe("inspectHudLayout", () => {
@@ -64,5 +66,49 @@ describe("inspectHudLayout", () => {
       top: 408,
     });
     expect(inspectHudPlacement(null, { clientX: 10, clientY: 10 }, viewport)).toBeNull();
+  });
+
+  describe("building card dock", () => {
+    const viewport = { width: 1440, height: 900 };
+    const topCentre = { left: 405, top: 14, right: 985, bottom: 56 };
+    const topRight = { left: 1055, top: 14, right: 1426, bottom: 56 };
+    const rightColumn = { left: 1098, top: 68, right: 1426, bottom: 700 };
+
+    it("docks top-right of the scene, 16 px clear of the top bars and the right column", () => {
+      const dock = inspectHudDock({ viewport, above: [topCentre, topRight], beside: [rightColumn] });
+      expect(dock).toEqual({ left: 1098 - 16 - INSPECT_HUD_DEFAULT_WIDTH, top: 56 + 16 });
+    });
+
+    it("uses the plain top-right corner when nothing is in the way", () => {
+      expect(inspectHudDock({ viewport })).toEqual({
+        left: 1440 - 16 - INSPECT_HUD_DEFAULT_WIDTH,
+        top: INSPECT_HUD_MARGIN,
+      });
+    });
+
+    it("does not depend on where the selected building is on screen", () => {
+      const dock = inspectHudDock({ viewport, above: [topCentre, topRight], beside: [rightColumn] });
+      const glued = inspectHudPlacement({ clientX: 700, clientY: 400, inView: true }, null, viewport);
+      expect(dock).not.toEqual(glued);
+      expect(inspectHudDock({ viewport, above: [topCentre, topRight], beside: [rightColumn] })).toEqual(dock);
+    });
+
+    it("ignores bars that do not sit above the card and stays on screen in a narrow window", () => {
+      const farLeft = { left: 14, top: 14, right: 290, bottom: 56 };
+      expect(inspectHudDock({ viewport, above: [farLeft] }).top).toBe(INSPECT_HUD_MARGIN);
+      const narrow = inspectHudDock({
+        viewport: { width: 560, height: 700 },
+        beside: [{ left: 218, top: 68, right: 546, bottom: 600 }],
+      });
+      expect(narrow.left).toBeGreaterThanOrEqual(INSPECT_HUD_MARGIN);
+      expect(narrow.left + INSPECT_HUD_DEFAULT_WIDTH).toBeLessThanOrEqual(560 - INSPECT_HUD_MARGIN);
+    });
+
+    it("always measures to an on-screen position, never null", () => {
+      const dock = measureInspectHudDock();
+      expect(dock).not.toBeNull();
+      expect(dock.left).toBeGreaterThanOrEqual(INSPECT_HUD_MARGIN);
+      expect(dock.top).toBeGreaterThanOrEqual(INSPECT_HUD_MARGIN);
+    });
   });
 });

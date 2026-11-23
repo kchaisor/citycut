@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+import { readFileSync } from "node:fs";
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import * as THREE from "three";
@@ -61,6 +62,9 @@ function setup() {
 
   let hideSelection: number[] = [];
   const onHideSelected = vi.fn();
+  const onClose = vi.fn();
+  const onClear = vi.fn();
+  const focus = vi.spyOn(HTMLElement.prototype, "focus");
   const detachPick = attachSceneInspectPick(
     canvas,
     camera,
@@ -71,6 +75,7 @@ function setup() {
         if (selection.kind !== "building") return;
         hideSelection = nextHideSelection(hideSelection, selection.buildingId, Boolean(selection.additive));
       },
+      onClear,
     },
   );
   const detachPass = attachShiftPickPass();
@@ -82,7 +87,7 @@ function setup() {
       center={{ lat: -37.8216, lon: 144.9645 }}
       onSave={() => undefined}
       onReset={() => undefined}
-      onClose={() => undefined}
+      onClose={onClose}
       selectedCount={1}
       onHideSelected={onHideSelected}
       onShowAll={() => undefined}
@@ -103,6 +108,9 @@ function setup() {
     input,
     hideButton,
     onHideSelected,
+    onClose,
+    onClear,
+    focus,
     selection: () => hideSelection,
     detach: () => {
       detachPick();
@@ -117,6 +125,7 @@ afterEach(() => {
   detach?.();
   detach = null;
   cleanup();
+  vi.restoreAllMocks();
   document.body.innerHTML = "";
   document.documentElement.classList.remove(SHIFT_PICK_CLASS);
 });
@@ -165,9 +174,12 @@ describe("Shift-click with the floating building card in the way", () => {
     expect(ctx.selection()).toEqual([A]);
   });
 
-  it("keeps a press without Shift on the card", () => {
+  it("does not retarget a plain press when nothing but the card is over a non-canvas panel", () => {
     const ctx = setup();
     detach = ctx.detach;
+    const panel = document.createElement("div");
+    document.body.appendChild(panel);
+    document.elementsFromPoint = () => [ctx.hint, ctx.card, panel];
     const onCard = vi.fn();
     ctx.card.addEventListener("pointerdown", onCard);
     press(ctx.hint, AT_B, false);
@@ -183,5 +195,103 @@ describe("Shift-click with the floating building card in the way", () => {
     document.elementsFromPoint = () => [ctx.hint, ctx.card, panel];
     press(ctx.hint, AT_B, true);
     expect(ctx.selection()).toEqual([A]);
+  });
+});
+
+describe("plain click with the floating building card in the way", () => {
+  it("replaces the selection with the building under the card without closing it", () => {
+    const ctx = setup();
+    detach = ctx.detach;
+    expect(ctx.selection()).toEqual([A]);
+    expect(document.activeElement).toBe(ctx.input);
+
+    press(ctx.hint, AT_B, false);
+
+    expect(ctx.selection()).toEqual([B]);
+    expect(ctx.onClose).not.toHaveBeenCalled();
+    expect(ctx.onClear).not.toHaveBeenCalled();
+    expect(document.documentElement.classList.contains(SHIFT_PICK_CLASS)).toBe(false);
+  });
+
+  it("replaces from the card body and header too", () => {
+    const ctx = setup();
+    detach = ctx.detach;
+    press(ctx.card.querySelector(".building-detail-panel-body")!, AT_B, false);
+    expect(ctx.selection()).toEqual([B]);
+    press(ctx.canvas, AT_A, false);
+    press(ctx.card.querySelector("header strong")!, AT_B, false);
+    expect(ctx.selection()).toEqual([B]);
+  });
+
+  it("adds with Shift from the same spot on the card", () => {
+    const ctx = setup();
+    detach = ctx.detach;
+    press(ctx.hint, AT_B, true);
+    expect(ctx.selection()).toEqual([A, B]);
+    expect(ctx.onClose).not.toHaveBeenCalled();
+  });
+
+  it("leaves presses on Hide selected, the height field and Close to those controls", () => {
+    const ctx = setup();
+    detach = ctx.detach;
+    const onCanvas = vi.fn();
+    ctx.canvas.addEventListener("pointerdown", onCanvas);
+    const close = screen.getByRole("button", { name: "Close" });
+    for (const control of [ctx.hideButton, ctx.input, close, close.querySelector("svg")!]) {
+      const reached = vi.fn();
+      control.addEventListener("pointerdown", reached);
+      press(control, AT_B, false);
+      expect(reached).toHaveBeenCalledTimes(1);
+    }
+    expect(onCanvas).not.toHaveBeenCalled();
+    expect(ctx.selection()).toEqual([A]);
+    ctx.hideButton.click();
+    expect(ctx.onHideSelected).toHaveBeenCalledTimes(1);
+  });
+
+  it("never clears or closes when a press through the card finds no building", () => {
+    const ctx = setup();
+    detach = ctx.detach;
+    const empty = { clientX: 110, clientY: 190 };
+    press(ctx.hint, empty, false);
+    press(ctx.hint, empty, true);
+    expect(ctx.selection()).toEqual([A]);
+    expect(ctx.onClear).not.toHaveBeenCalled();
+    expect(ctx.onClose).not.toHaveBeenCalled();
+    press(ctx.canvas, { clientX: 10, clientY: 190 }, false);
+    expect(ctx.onClear).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("the Shift hint on the building card", () => {
+  it("shows the hint and Hide selected first in the body from the first selection", () => {
+    const ctx = setup();
+    detach = ctx.detach;
+    const body = ctx.card.querySelector(".building-detail-panel-body")!;
+    const block = body.firstElementChild!;
+    expect(block.classList.contains("hide-buildings-block")).toBe(true);
+    expect(block.contains(ctx.hint)).toBe(true);
+    expect(block.contains(ctx.hideButton)).toBe(true);
+    expect(ctx.hideButton.textContent).toBe("Hide selected (1)");
+    expect(screen.getByRole("button", { name: "Show all" })).toBeTruthy();
+  });
+
+  it("focuses the height field without scrolling the hint away", () => {
+    const ctx = setup();
+    detach = ctx.detach;
+    expect(document.activeElement).toBe(ctx.input);
+    expect(ctx.focus).toHaveBeenCalledWith({ preventScroll: true });
+    expect(ctx.focus.mock.calls.every(([options]) => options?.preventScroll === true)).toBe(true);
+    expect((ctx.card.querySelector(".building-detail-panel-body") as HTMLElement).scrollTop).toBe(0);
+  });
+
+  it("pins the hide block to the top of the scrolling body", () => {
+    const css = readFileSync("src/index.css", "utf8");
+    const rule = /\n\.hide-buildings-block \{([^}]*)\}/.exec(css)?.[1] ?? "";
+    expect(rule).toMatch(/position:\s*sticky/);
+    expect(rule).toMatch(/top:\s*-8px/);
+    expect(rule).toMatch(/margin:\s*-8px/);
+    expect(rule).toMatch(/background:/);
+    expect(rule).not.toMatch(/margin-top|border-top/);
   });
 });

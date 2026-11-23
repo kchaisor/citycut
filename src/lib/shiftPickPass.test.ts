@@ -1,6 +1,12 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it } from "vitest";
-import { SHIFT_PICK_CLASS, attachShiftPickPass, canvasUnderCard, setShiftPickClass } from "./shiftPickPass";
+import {
+  SHIFT_PICK_CLASS,
+  attachShiftPickPass,
+  canvasUnderCard,
+  isCardPassThrough,
+  setShiftPickClass,
+} from "./shiftPickPass";
 
 afterEach(() => {
   document.documentElement.classList.remove(SHIFT_PICK_CLASS);
@@ -50,6 +56,39 @@ describe("attachShiftPickPass", () => {
     expect(canvasUnderCard(card, 40, 40)).toBe(canvas);
     card.remove();
     overlay.remove();
+    model.remove();
+  });
+
+  it("passes a plain press on the card surface to the canvas but leaves the scrollbar alone", () => {
+    const detach = attachShiftPickPass();
+    const card = document.createElement("aside");
+    card.className = "building-detail-panel is-floating inspect-hud";
+    const body = document.createElement("div");
+    card.append(body);
+    const model = document.createElement("div");
+    model.className = "model";
+    const canvas = document.createElement("canvas");
+    model.append(canvas);
+    document.body.append(card, model);
+    document.elementsFromPoint = () => [body, card, canvas];
+    Object.defineProperty(body, "scrollHeight", { value: 900 });
+    Object.defineProperty(body, "clientHeight", { value: 400 });
+    body.getBoundingClientRect = () => ({ left: 800, top: 100, right: 1080, bottom: 500, width: 280, height: 400 }) as DOMRect;
+    const seen: { x: number; shift: boolean; passed: boolean }[] = [];
+    canvas.addEventListener("pointerdown", (event) =>
+      seen.push({ x: event.clientX, shift: event.shiftKey, passed: isCardPassThrough(event) }),
+    );
+    const down = (clientX: number, shiftKey = false) =>
+      body.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, cancelable: true, button: 0, clientX, clientY: 200, shiftKey }));
+    down(900);
+    down(1074);
+    down(900, true);
+    expect(seen).toEqual([
+      { x: 900, shift: false, passed: true },
+      { x: 900, shift: true, passed: true },
+    ]);
+    detach();
+    card.remove();
     model.remove();
   });
 });
