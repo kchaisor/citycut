@@ -6,9 +6,11 @@ import {
   WIND_SPEED_BIN_EDGES_MS,
 } from "./windBins";
 import { type WindRoseSeasonId, type WindRoseSeasonRecord } from "./windRoseData";
+import { hourInDaypart, type WindDaypartId } from "./windDayparts";
 
 export type EpwHourRow = {
   month: number;
+  hour: number;
   speedMs: number;
   dirDeg: number;
 };
@@ -64,19 +66,22 @@ export function parseEpwDataRow(line: string): EpwHourRow | null {
   const parts = line.split(",");
   if (parts.length < 22) return null;
   const month = Number(parts[1]);
+  const hour = Number(parts[3]);
   const speedMs = Number(parts[21]);
   const dirDeg = Number(parts[20]);
   if (month < 1 || month > 12) return null;
+  if (hour < 1 || hour > 24) return null;
   if (!Number.isFinite(speedMs) || !Number.isFinite(dirDeg)) return null;
   if (speedMs >= EPW_WIND_SPEED_MISSING || dirDeg >= EPW_WIND_DIR_MISSING) return null;
   if (speedMs < 0) return null;
-  return { month, speedMs, dirDeg };
+  return { month, hour, speedMs, dirDeg };
 }
 
 export function aggregateEpwSeason(
   rows: readonly EpwHourRow[],
   season: WindRoseSeasonId,
   edges: readonly number[] = WIND_SPEED_BIN_EDGES_MS,
+  daypart: WindDaypartId = "all",
 ): WindRoseSeasonRecord {
   const months = new Set(SOUTHERN_SEASON_MONTHS[season]);
   const bandCount = edges.length - 1;
@@ -90,6 +95,7 @@ export function aggregateEpwSeason(
 
   for (const row of rows) {
     if (!months.has(row.month)) continue;
+    if (!hourInDaypart(row.hour, daypart)) continue;
     total += 1;
     if (row.speedMs < CALM_SPEED_MS) {
       calm += 1;
@@ -128,13 +134,25 @@ export function aggregateEpwSeason(
   };
 }
 
+export function aggregateEpwSeasonDayparts(
+  rows: readonly EpwHourRow[],
+  season: WindRoseSeasonId,
+  edges: readonly number[] = WIND_SPEED_BIN_EDGES_MS,
+): WindRoseSeasonRecord {
+  return {
+    ...aggregateEpwSeason(rows, season, edges, "all"),
+    morning: aggregateEpwSeason(rows, season, edges, "morning"),
+    afternoon: aggregateEpwSeason(rows, season, edges, "afternoon"),
+  };
+}
+
 export function aggregateEpwAllSeasons(rows: readonly EpwHourRow[]): Record<WindRoseSeasonId, WindRoseSeasonRecord> {
   return {
-    annual: aggregateEpwSeason(rows, "annual"),
-    summer: aggregateEpwSeason(rows, "summer"),
-    autumn: aggregateEpwSeason(rows, "autumn"),
-    winter: aggregateEpwSeason(rows, "winter"),
-    spring: aggregateEpwSeason(rows, "spring"),
+    annual: aggregateEpwSeasonDayparts(rows, "annual"),
+    summer: aggregateEpwSeasonDayparts(rows, "summer"),
+    autumn: aggregateEpwSeasonDayparts(rows, "autumn"),
+    winter: aggregateEpwSeasonDayparts(rows, "winter"),
+    spring: aggregateEpwSeasonDayparts(rows, "spring"),
   };
 }
 

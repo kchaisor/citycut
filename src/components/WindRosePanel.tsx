@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import type { WindPeriodId } from "../lib/windRose";
+import type { WindDaypartId } from "../lib/windDayparts";
 import type { SiteWindSelection } from "../lib/windRoseData";
 import { analyzeSiteWind } from "../lib/windRoseStats";
 import { windRoseStationLines } from "../lib/windRoseCaptions";
@@ -21,15 +22,17 @@ export function windRosePickerOn(
 export function WindRosePanel({
   selection,
   period,
+  daypart = "all",
   plan = null,
   flowHeading = false,
 }: {
   selection: SiteWindSelection;
   period: WindPeriodId;
+  daypart?: WindDaypartId;
   plan?: WindPlanState | null;
   flowHeading?: boolean;
 }) {
-  const stats = useMemo(() => analyzeSiteWind(selection, period), [selection, period]);
+  const stats = useMemo(() => analyzeSiteWind(selection, period, daypart), [selection, period, daypart]);
   const lines = useMemo(() => windRoseStationLines(selection), [selection]);
   const pickerOn = windRosePickerOn(plan, flowHeading);
   const picker = useMemo<WindRosePicker | undefined>(() => {

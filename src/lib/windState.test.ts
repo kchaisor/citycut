@@ -4,8 +4,10 @@ import {
   readStoredWindSettings,
   windSettingsForModelOpen,
   withDesignWind,
+  withWindDaypart,
   withWindSeason,
   writeStoredWindSettings,
+  WIND_DAYPART_KEY,
   WIND_DESIGN_WIND_KEY,
   WIND_ENABLED_KEY,
 } from "./windState";
@@ -76,5 +78,38 @@ describe("design wind settings", () => {
     const storage = memoryStorage();
     storage.setItem(WIND_DESIGN_WIND_KEY, "north-east");
     expect(readStoredWindSettings(storage).designWind).toBeNull();
+  });
+});
+
+describe("wind daypart settings", () => {
+  function memoryStorage(): Storage {
+    const data: Record<string, string> = {};
+    return {
+      get length() {
+        return Object.keys(data).length;
+      },
+      clear() {
+        for (const key of Object.keys(data)) delete data[key];
+      },
+      getItem: (key: string) => data[key] ?? null,
+      key: (index: number) => Object.keys(data)[index] ?? null,
+      removeItem(key: string) {
+        delete data[key];
+      },
+      setItem(key: string, value: string) {
+        data[key] = value;
+      },
+    };
+  }
+
+  it("defaults to All day and only changes when Morning or Afternoon is stored", () => {
+    const storage = memoryStorage();
+    expect(readStoredWindSettings(storage).daypart).toBe("all");
+    expect(DEFAULT_WIND_SETTINGS.daypart).toBe("all");
+    writeStoredWindSettings(storage, withWindDaypart(DEFAULT_WIND_SETTINGS, "morning"));
+    expect(readStoredWindSettings(storage).daypart).toBe("morning");
+    expect(storage.getItem(WIND_DAYPART_KEY)).toBe("morning");
+    storage.setItem(WIND_DAYPART_KEY, "night");
+    expect(readStoredWindSettings(storage).daypart).toBe("all");
   });
 });

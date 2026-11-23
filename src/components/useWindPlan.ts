@@ -4,6 +4,7 @@ import { sectorCenterDeg, sectorIndex, sectorLabel, WIND_SECTOR_COUNT, type Wind
 import type { SiteWindSelection, WindRoseSeasonId } from "../lib/windRoseData";
 import type { DesignWind, DesignWindId } from "../lib/windDesignWinds";
 import { seasonRecord } from "../lib/windRoseStats";
+import type { WindDaypartId } from "../lib/windDayparts";
 import { windSeasonWeights, type WindSeasonWeights } from "../lib/windComfort";
 import { comfortShares, type ComfortShares } from "../lib/windComfortShares";
 import { windPlanSiteClip } from "../lib/windPlanSiteClip";
@@ -63,16 +64,20 @@ export type WindPlanState = {
   comfortShares: ComfortShares | null;
 };
 
-function seasonKey(siteWind: SiteWindSelection, period: WindPeriodId | DesignWindId): string {
-  return `${siteWind.station.id}:${period}`;
+function seasonKey(siteWind: SiteWindSelection, period: WindPeriodId | DesignWindId, daypart: WindDaypartId = "all"): string {
+  return `${siteWind.station.id}:${period}:${daypart}`;
 }
 
 const SCALE_SEASONS: readonly WindRoseSeasonId[] = ["annual", "summer", "autumn", "winter", "spring"];
 
-export function windPlanScaleViews(siteWind: SiteWindSelection, designWinds: readonly DesignWind[]): WindPlanView[] {
+export function windPlanScaleViews(
+  siteWind: SiteWindSelection,
+  designWinds: readonly DesignWind[],
+  daypart: WindDaypartId = "all",
+): WindPlanView[] {
   const views: WindPlanView[] = [];
   for (const season of SCALE_SEASONS) {
-    const record = seasonRecord(siteWind, season);
+    const record = seasonRecord(siteWind, season, daypart);
     if (!record) continue;
     const sector = sectorIndex(record.prevailingDirDeg);
     const referenceMs = windPlanReferenceMs(windSeasonWeights(record, siteWind.asset.speedBinEdgesMs), sector);
@@ -109,6 +114,7 @@ export function useWindPlan({
   model,
   siteWind,
   period,
+  daypart = "all",
   designWind = null,
   designWinds = NO_DESIGN_WINDS,
   clearDesignWind,
@@ -118,6 +124,7 @@ export function useWindPlan({
   model: CityModel;
   siteWind: SiteWindSelection | null;
   period: WindPeriodId;
+  daypart?: WindDaypartId;
   designWind?: DesignWind | null;
   designWinds?: readonly DesignWind[];
   clearDesignWind?: () => void;
@@ -131,22 +138,25 @@ export function useWindPlan({
 
   const weights = useMemo<WindSeasonWeights | null>(() => {
     if (!siteWind) return null;
-    const record = seasonRecord(siteWind, period);
+    const record = seasonRecord(siteWind, period, daypart);
     return record ? windSeasonWeights(record, siteWind.asset.speedBinEdgesMs) : null;
-  }, [siteWind, period]);
+  }, [siteWind, period, daypart]);
 
   const prevailing = useMemo(() => {
     if (!siteWind) return null;
-    const record = seasonRecord(siteWind, period);
+    const record = seasonRecord(siteWind, period, daypart);
     return record ? sectorIndex(record.prevailingDirDeg) : null;
-  }, [siteWind, period]);
+  }, [siteWind, period, daypart]);
 
-  const scaleViews = useMemo(() => (siteWind ? windPlanScaleViews(siteWind, designWinds) : []), [siteWind, designWinds]);
+  const scaleViews = useMemo(
+    () => (siteWind ? windPlanScaleViews(siteWind, designWinds, daypart) : []),
+    [siteWind, designWinds, daypart],
+  );
   const scaleKey = windPlanScaleKey(scaleViews);
 
   const sector = designWind ? designWind.sector : override && override.period === period ? override.sector : prevailing;
-  const key = siteWind ? seasonKey(siteWind, period) : null;
-  const speedKey = siteWind && designWind ? seasonKey(siteWind, designWind.id) : key;
+  const key = siteWind ? seasonKey(siteWind, period, daypart) : null;
+  const speedKey = siteWind && designWind ? seasonKey(siteWind, designWind.id, daypart) : key;
   const referenceMs = designWind
     ? designWind.referenceMs
     : weights && sector != null

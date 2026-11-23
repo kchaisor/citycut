@@ -1530,29 +1530,15 @@ input[type="range"].wind-streaks-input::-moz-range-thumb {
   min-width: var(--wind-rose-size);
   margin: var(--space-3) auto 0;
 }
-@media (max-height: 999px) {
-  .wind-rose-analysis-card .wind-rose-chart {
-    width: var(--wind-rose-size);
-    margin: calc(-1 * var(--space-2)) auto calc(-1 * var(--space-3));
-  }
+.wind-rose-analysis-card .wind-rose-chart {
+  width: 100%;
+  min-width: 0;
+  margin: var(--space-2) auto 0;
 }
 .analysis-hud-card.is-tight .wind-rose-chart {
-  width: var(--wind-rose-size-tight);
-  min-width: var(--wind-rose-size-tight);
-  margin: calc(-1 * var(--space-2)) auto calc(-1 * var(--space-3));
-}
-.analysis-hud-card.is-tight .wind-rose-calm {
-  display: none;
-}
-@media (max-height: 859px) {
-  .wind-rose-analysis-card .wind-rose-chart {
-    width: var(--wind-rose-size-tight);
-    min-width: var(--wind-rose-size-tight);
-    margin: calc(-1 * var(--space-2)) auto calc(-1 * var(--space-3));
-  }
-  .wind-rose-analysis-card .wind-rose-calm {
-    display: none;
-  }
+  width: 100%;
+  min-width: 0;
+  margin: var(--space-2) auto 0;
 }
 .wind-rose-panel-svg {
   display: block;

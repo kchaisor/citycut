@@ -3,15 +3,11 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { cleanup, render } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
-import type { WindRoseAsset } from "../lib/windRoseData";
-import { siteWindSelection } from "../lib/windStation";
+import { siteWindFromPublishedAsset } from "../lib/windAssetDisk";
 import type { WindPlanState } from "./useWindPlan";
 import { WindRosePanel } from "./WindRosePanel";
 
-const asset = JSON.parse(
-  readFileSync(path.join(process.cwd(), "public/wind/australia-tmyx.json"), "utf8"),
-) as WindRoseAsset;
-const pyrmont = siteWindSelection(asset, -33.86627, 151.18389)!;
+const pyrmont = siteWindFromPublishedAsset(-33.86627, 151.18389)!;
 
 function stubPlan(mode: WindPlanState["mode"], scaleMaxMs: number | null, comfortShares: WindPlanState["comfortShares"] = null): WindPlanState {
   return {
