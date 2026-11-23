@@ -6,19 +6,33 @@ import { COLOUR_FALLBACK, getColour } from "./colours";
 import { applySolarGreyscale } from "./solarGreyscale";
 import { SECTOR_LABELS, downwindFromSector } from "./windRose";
 import {
+  STREAM_FADE_IN,
+  STREAM_FADE_OUT,
   STREAM_INDICES_PER_ARROW,
+  STREAM_PERIOD_MAX_S,
+  STREAM_PERIOD_MIN_S,
   STREAM_RENDER_ORDER,
   STREAM_VERTS_PER_ARROW,
   createStreamFanMesh,
   layoutStreamFans,
-  streamAlpha,
   streamArrowCount,
   streamFanClearanceM,
   streamPlaneHeightM,
+  streamPoseSeconds,
+  streamTrackPoint,
+  streamTravelFade,
+  streamTravelPeriodS,
+  streamTravelPose,
+  streamTravelProgress,
   tintStreamFanMesh,
-  writeStreamAlphas,
+  withStreamStillFrame,
+  writeStreamFanPose,
   type StreamArrow,
+  type StreamFan,
+  type StreamFanMesh,
+  type StreamSite,
 } from "./windDiagramStreams";
+import { advanceWindClock } from "./windStreakMotion";
 import { PREVAILING_STREAM_MAX_ARROWS, PREVAILING_STREAM_TOKENS, type PrevailingStream } from "./windPrevailingStreams";
 
 const SITE = { halfWidthM: 250, halfHeightM: 250 };
@@ -228,24 +242,292 @@ describe("wind diagram meshes", () => {
     expect(scene3d.indexOf("<WindDiagramStreams")).toBeGreaterThan(scene3d.indexOf("<SolarHeliodon"));
     expect(source("src/components/WindDiagramStreams.tsx")).toContain("moveToPostOverlay(group);");
   });
+});
 
-  it("travels a soft pulse along the arrows and holds still when the clock is paused", () => {
-    const fan = fans[0]!;
-    const mesh = createStreamFanMesh(fan, 0);
-    const at = (seconds: number) => {
-      writeStreamAlphas(fan, seconds, mesh.userData.colours);
-      return Array.from({ length: mesh.userData.colours.length / 4 }, (_, i) => mesh.userData.colours[i * 4 + 3]!);
-    };
-    const start = at(1);
-    expect(at(1)).toEqual(start);
-    expect(at(2.2)).not.toEqual(start);
-    for (const alpha of start) {
-      expect(alpha).toBeGreaterThan(0.3);
-      expect(alpha).toBeLessThanOrEqual(1);
+const WIDE_SITE = { halfWidthM: 400, halfHeightM: 250 };
+const EDGE_EPSILON_M = 0.01;
+const TAIL_ALPHA_FLOOR = Math.fround(0.45);
+
+function meshPositions(mesh: StreamFanMesh): number[] {
+  return Array.from(mesh.geometry.getAttribute("position").array);
+}
+
+function meshAlphas(mesh: StreamFanMesh): number[] {
+  return Array.from({ length: mesh.userData.colours.length / 4 }, (_, i) => mesh.userData.colours[i * 4 + 3]!);
+}
+
+function expectInsideCut(mesh: StreamFanMesh, site: StreamSite, label: string) {
+  const positions = mesh.geometry.getAttribute("position");
+  let east = 0;
+  let north = 0;
+  for (let i = 0; i < positions.count; i++) {
+    east = Math.max(east, Math.abs(positions.getX(i)));
+    north = Math.max(north, Math.abs(positions.getZ(i)));
+  }
+  expect(east, label).toBeLessThanOrEqual(site.halfWidthM + EDGE_EPSILON_M);
+  expect(north, label).toBeLessThanOrEqual(site.halfHeightM + EDGE_EPSILON_M);
+}
+
+function fanAlphas(fan: StreamFan, seconds: number): number[] {
+  return fan.arrows.map((arrow) => streamTravelFade(streamTravelProgress(seconds, fan.periodS, arrow.phase)));
+}
+
+describe("wind diagram travel loop", () => {
+  const fans = layoutStreamFans(streamsFrom([0, 1, 8]), SITE);
+
+  it("fades in at the upwind start, holds fully visible, and fades to nothing at the far end", () => {
+    expect(streamTravelFade(0)).toBe(0);
+    expect(streamTravelFade(1)).toBe(0);
+    expect(streamTravelFade(STREAM_FADE_IN / 2)).toBeGreaterThan(0.2);
+    expect(streamTravelFade(STREAM_FADE_IN / 2)).toBeLessThan(0.8);
+    expect(streamTravelFade(STREAM_FADE_IN)).toBe(1);
+    expect(streamTravelFade(0.5)).toBe(1);
+    expect(streamTravelFade(1 - STREAM_FADE_OUT)).toBe(1);
+    expect(streamTravelFade(1 - STREAM_FADE_OUT / 2)).toBeLessThan(0.8);
+    for (let p = 0.01; p <= STREAM_FADE_IN; p += 0.01) expect(streamTravelFade(p)).toBeGreaterThan(streamTravelFade(p - 0.01));
+    for (let p = 1 - STREAM_FADE_OUT + 0.01; p <= 1; p += 0.01) expect(streamTravelFade(p)).toBeLessThan(streamTravelFade(p - 0.01));
+  });
+
+  it("slides each dart downwind along its own curved path, from the upwind start to the far end, then loops", () => {
+    for (const triple of TRIPLES) {
+      const streams = streamsFrom(triple);
+      layoutStreamFans(streams, SITE).forEach((fan, i) => {
+        const flow = downwindFromSector(streams[i]!.sector);
+        for (const arrow of fan.arrows) {
+          const { track } = arrow;
+          const start = streamTravelPose(arrow, 0);
+          const end = streamTravelPose(arrow, 1);
+          expect(start.tailM).toBe(track.fromM);
+          expect(start.alpha).toBe(0);
+          expect(end.tipM).toBeCloseTo(track.toM, 6);
+          expect(end.alpha).toBe(0);
+          expect(end.tipM - start.tipM, `${triple} fan ${i}`).toBeGreaterThan(100);
+          let previous = start;
+          for (let p = 0.05; p <= 1.0001; p += 0.05) {
+            const pose = streamTravelPose(arrow, Math.min(1, p));
+            expect(pose.tipM).toBeGreaterThan(previous.tipM);
+            expect(pose.tailM).toBeGreaterThanOrEqual(previous.tailM);
+            expect(pose.tipM - pose.tailM).toBeLessThanOrEqual(arrow.lengthM + 1e-6);
+            const from = streamTrackPoint(track, previous.tipM);
+            const to = streamTrackPoint(track, pose.tipM);
+            expect((to.east - from.east) * flow.east + (to.north - from.north) * flow.north).toBeGreaterThan(0);
+            previous = pose;
+          }
+          expect(track.fromM).toBeLessThanOrEqual(arrow.restTailM);
+          expect(track.toM).toBeGreaterThanOrEqual(arrow.restTailM + arrow.lengthM - 1e-3);
+        }
+        expect(streamTravelProgress(fan.periodS * 3 + 1, fan.periodS, 0.25)).toBeCloseTo(streamTravelProgress(1, fan.periodS, 0.25), 9);
+      });
     }
-    expect(streamAlpha(0.9, 0, 0)).toBeGreaterThan(streamAlpha(0.02, 0, 0));
+  });
+
+  it("staggers the arrows so every fan always has one fully visible and never pops as a whole", () => {
+    for (const triple of [...TRIPLES, [4]]) {
+      const laidOut = layoutStreamFans(streamsFrom(triple), SITE);
+      for (const fan of laidOut) {
+        expect(new Set(fan.arrows.map((arrow) => arrow.phase.toFixed(3))).size).toBe(fan.arrows.length);
+        for (let seconds = 0.05; seconds < 90; seconds += 0.05) {
+          const alphas = fanAlphas(fan, seconds);
+          expect(Math.max(...alphas)).toBe(1);
+          expect(alphas.filter((alpha) => alpha < 0.5).length).toBeLessThan(fan.arrows.length - 1);
+        }
+      }
+      for (let seconds = 0.05; seconds < 90; seconds += 0.05) {
+        const fading = laidOut.flatMap((fan) => fanAlphas(fan, seconds)).filter((alpha) => alpha < 0.5).length;
+        expect(fading).toBeLessThanOrEqual(streamArrowCount(laidOut) / 2);
+      }
+    }
+  });
+
+  it("travels faster in a faster stream, but always at a calm pace", () => {
+    expect(streamTravelPeriodS(8)).toBeLessThan(streamTravelPeriodS(4));
+    expect(streamTravelPeriodS(4)).toBeLessThan(streamTravelPeriodS(3));
+    expect(streamTravelPeriodS(1)).toBe(STREAM_PERIOD_MAX_S);
+    expect(streamTravelPeriodS(0)).toBe(STREAM_PERIOD_MAX_S);
+    expect(streamTravelPeriodS(Number.NaN)).toBe(STREAM_PERIOD_MAX_S);
+    expect(streamTravelPeriodS(40)).toBe(STREAM_PERIOD_MIN_S);
+    expect(STREAM_PERIOD_MIN_S).toBeGreaterThanOrEqual(5);
+    const paced = (meanSpeedMs: number) => {
+      const fan = layoutStreamFans([{ ...streamsFrom([0])[0]!, meanSpeedMs }], SITE)[0]!;
+      const arrow = fan.arrows[0]!;
+      const tipAt = (seconds: number) => streamTravelPose(arrow, streamTravelProgress(seconds, fan.periodS, 0)).tipM;
+      return tipAt(2) - tipAt(1);
+    };
+    expect(paced(8)).toBeGreaterThan(paced(3));
+    for (const speed of [0.5, 3, 8, 40]) {
+      expect(paced(speed)).toBeGreaterThan(0);
+      expect(paced(speed)).toBeLessThan((SITE.halfWidthM * 2) / 5);
+    }
+    expect(fans.map((fan) => fan.periodS)).toEqual([4, 3, 2].map(streamTravelPeriodS));
+  });
+
+  it("freezes the travelling pose on Pause and carries on from it on Play", () => {
+    const mesh = createStreamFanMesh(fans[0]!, 0);
+    const clock = { seconds: 0 };
+    const draw = () => {
+      writeStreamFanPose(mesh, streamPoseSeconds(clock.seconds));
+      return { positions: meshPositions(mesh), alphas: meshAlphas(mesh) };
+    };
+    advanceWindClock(clock, 2.4, false);
+    const playing = draw();
+    advanceWindClock(clock, 5, true);
+    advanceWindClock(clock, 0.016, true);
+    expect(clock.seconds).toBe(2.4);
+    expect(draw()).toEqual(playing);
+    advanceWindClock(clock, 0.5, false);
+    const resumed = draw();
+    expect(resumed.positions).not.toEqual(playing.positions);
+    writeStreamFanPose(mesh, 2.9);
+    expect(meshPositions(mesh)).toEqual(resumed.positions);
+    expect(meshAlphas(mesh)).toEqual(resumed.alphas);
+    const arrow = fans[0]!.arrows[0]!;
+    const before = streamTravelPose(arrow, streamTravelProgress(2.4, fans[0]!.periodS, arrow.phase));
+    const after = streamTravelPose(arrow, streamTravelProgress(2.9, fans[0]!.periodS, arrow.phase));
+    expect(after.tipM - before.tipM).toBeGreaterThan(0);
+    expect(after.tipM - before.tipM).toBeLessThan(60);
+  });
+
+  it("moves the darts by rewriting the same buffers, never by rebuilding the geometry", () => {
+    const mesh = createStreamFanMesh(fans[0]!, 22);
+    const geometry = mesh.geometry;
+    const positions = geometry.getAttribute("position").array;
+    const index = geometry.getIndex()!.array;
+    const attribute = geometry.getAttribute("position") as THREE.BufferAttribute;
+    const version = attribute.version;
+    for (const seconds of [0.4, 3.1, 7.7]) writeStreamFanPose(mesh, seconds);
+    expect(mesh.geometry).toBe(geometry);
+    expect(geometry.getAttribute("position").array).toBe(positions);
+    expect(geometry.getIndex()!.array).toBe(index);
+    expect(geometry.getAttribute("position")).toBe(attribute);
+    expect(attribute.version).toBeGreaterThan(version);
+    for (let i = 0; i < geometry.getAttribute("position").count; i++) expect(geometry.getAttribute("position").getY(i)).toBe(22);
     for (let i = 0; i < mesh.userData.colours.length; i += 4) {
       expect([mesh.userData.colours[i], mesh.userData.colours[i + 1], mesh.userData.colours[i + 2]]).toEqual([1, 1, 1]);
+    }
+  });
+
+  it("shows a still, fully visible rest pose until the clock first runs (reduced motion)", () => {
+    expect(streamPoseSeconds(0)).toBeNull();
+    expect(streamPoseSeconds(0.016)).toBe(0.016);
+    const fan = fans[0]!;
+    const mesh = createStreamFanMesh(fan, 0);
+    const rest = { positions: meshPositions(mesh), alphas: meshAlphas(mesh) };
+    writeStreamFanPose(mesh, streamPoseSeconds(advanceWindClock({ seconds: 0 }, 0.016, true)));
+    expect({ positions: meshPositions(mesh), alphas: meshAlphas(mesh) }).toEqual(rest);
+    expect(mesh.userData.poseSeconds).toBeNull();
+    fan.arrows.forEach((arrow, k) => {
+      const base = k * STREAM_VERTS_PER_ARROW;
+      for (let i = 0; i < STREAM_VERTS_PER_ARROW; i++) {
+        expect(rest.positions[(base + i) * 3]).toBe(arrow.positions[i * 2]);
+        expect(rest.positions[(base + i) * 3 + 2]).toBe(-arrow.positions[i * 2 + 1]!);
+        expect(rest.alphas[base + i]).toBeGreaterThanOrEqual(TAIL_ALPHA_FLOOR);
+      }
+      expect(rest.alphas[base + STREAM_VERTS_PER_ARROW - 1]).toBe(1);
+    });
+  });
+
+  it("keeps the still pose and every travelling pose inside the cut, fading to nothing at the boundary", () => {
+    for (const site of [SITE, WIDE_SITE]) {
+      for (const triple of [...TRIPLES, [2], [9]]) {
+        for (const fan of layoutStreamFans(streamsFrom(triple), site)) {
+          const mesh = createStreamFanMesh(fan, 0);
+          expectInsideCut(mesh, site, `${triple} still`);
+          for (let seconds = 0.25; seconds < 2 * fan.periodS; seconds += 0.25) {
+            writeStreamFanPose(mesh, seconds);
+            expectInsideCut(mesh, site, `${triple} at ${seconds}s`);
+          }
+          for (const arrow of fan.arrows) {
+            const reach = Math.max(...arrow.track.points.map(Math.abs));
+            expect(reach).toBeLessThan(Math.max(site.halfWidthM, site.halfHeightM));
+            expect(streamTravelPose(arrow, 1).tipM).toBeLessThanOrEqual(arrow.track.cum.at(-1)! + 1e-3);
+            expect(streamTravelPose(arrow, 1).alpha).toBe(0);
+            expect(streamTravelPose(arrow, 0.999).alpha).toBeLessThan(0.001);
+          }
+        }
+      }
+    }
+  });
+
+  it("keeps a travelling fan from cutting across another fan", () => {
+    const dartLine = (arrow: StreamArrow, fan: StreamFan, seconds: number) => {
+      const pose = streamTravelPose(arrow, streamTravelProgress(seconds, fan.periodS, arrow.phase));
+      return Array.from({ length: 13 }, (_, i) => streamTrackPoint(arrow.track, pose.tailM + ((pose.tipM - pose.tailM) * i) / 12));
+    };
+    for (const triple of TRIPLES) {
+      const laidOut = layoutStreamFans(streamsFrom(triple), SITE);
+      let closest = Infinity;
+      for (let seconds = 0.5; seconds < 30; seconds += 0.5) {
+        const lines = laidOut.map((fan) => fan.arrows.flatMap((arrow) => dartLine(arrow, fan, seconds)));
+        for (let a = 0; a < lines.length; a++) {
+          for (let b = a + 1; b < lines.length; b++) {
+            for (const p of lines[a]!) for (const q of lines[b]!) closest = Math.min(closest, Math.hypot(p.east - q.east, p.north - q.north));
+          }
+        }
+      }
+      expect(closest, triple.join(",")).toBeGreaterThan(25);
+    }
+  });
+});
+
+describe("wind diagram still frame for exports", () => {
+  const fans = layoutStreamFans(streamsFrom([0, 1, 8]), SITE);
+  const source = (file: string) => readFileSync(path.join(process.cwd(), file), "utf8");
+
+  it("renders exports from the still pose, fully visible and inside the cut, then puts the travelling pose back", () => {
+    const scene = new THREE.Scene();
+    const group = new THREE.Group();
+    const meshes = fans.map((fan) => createStreamFanMesh(fan, 30));
+    group.add(...meshes);
+    scene.add(group, new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial()));
+    const pausedMidFade = fans[0]!.periodS * (1 - fans[0]!.arrows[0]!.phase) - 0.05;
+    for (const mesh of meshes) writeStreamFanPose(mesh, pausedMidFade);
+    const travelling = meshes.map((mesh) => ({ positions: meshPositions(mesh), alphas: meshAlphas(mesh) }));
+    expect(Math.min(...travelling[0]!.alphas)).toBeLessThan(0.05);
+    const captured = withStreamStillFrame(scene, () => {
+      meshes.forEach((mesh, f) => {
+        expectInsideCut(mesh, SITE, "export still");
+        const alphas = meshAlphas(mesh);
+        expect(Math.min(...alphas)).toBeGreaterThanOrEqual(TAIL_ALPHA_FLOOR);
+        fans[f]!.arrows.forEach((arrow, k) => {
+          const base = k * STREAM_VERTS_PER_ARROW;
+          expect(alphas[base + STREAM_VERTS_PER_ARROW - 1]).toBe(1);
+          expect(mesh.geometry.getAttribute("position").getX(base + STREAM_VERTS_PER_ARROW - 1)).toBe(arrow.positions.at(-2));
+        });
+      });
+      return "frame";
+    });
+    expect(captured).toBe("frame");
+    meshes.forEach((mesh, f) => {
+      expect(mesh.userData.poseSeconds).toBe(pausedMidFade);
+      expect({ positions: meshPositions(mesh), alphas: meshAlphas(mesh) }).toEqual(travelling[f]);
+    });
+  });
+
+  it("puts the travelling pose back even when the render throws", () => {
+    const scene = new THREE.Scene();
+    const mesh = createStreamFanMesh(fans[0]!, 0);
+    scene.add(mesh);
+    writeStreamFanPose(mesh, 4.2);
+    const travelling = meshPositions(mesh);
+    expect(() =>
+      withStreamStillFrame(scene, () => {
+        throw new Error("lost context");
+      }),
+    ).toThrow("lost context");
+    expect(meshPositions(mesh)).toEqual(travelling);
+  });
+
+  it("wires the still frame into the PNG capture and the Rhino download, and nowhere into Drawing or .ai", () => {
+    const capture = source("src/lib/capturePng.ts");
+    expect(capture).toMatch(/withStreamStillFrame\(scene, \(\) =>\s+withScreenOnlyHidden\(scene, \(\) => \{\s+gl\.render\(scene, renderCamera\);/);
+    const scene3d = source("src/components/Scene3D.tsx");
+    const bridge = scene3d.slice(scene3d.indexOf("function ExportBridge("), scene3d.indexOf("function CameraMemoryBridge("));
+    expect(bridge).toContain("captureViewPng(gl, scene,");
+    expect(source("src/components/model/useModelPage.tsx")).toContain(
+      "windStreaks: windDiagramActive(windStreaksOn, analyses) ? windStreams : null,",
+    );
+    for (const file of ["src/lib/aiPlan.ts", "src/lib/aiView.ts", "src/lib/svgPlan.ts", "src/lib/planRhinoExport.ts", "src/components/DrawingPlan.tsx"]) {
+      expect(source(file), file).not.toContain("windDiagramStreams");
     }
   });
 });

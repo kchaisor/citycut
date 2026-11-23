@@ -1,34 +1,47 @@
 import * as THREE from "three";
+import type { CityModel } from "../types";
 import { downwindFromSector } from "./windRose";
 import type { PrevailingStream, PrevailingStreamToken } from "./windPrevailingStreams";
 
 export const STREAM_ROOF_CLEARANCE_M = 6;
 export const STREAM_ROOF_PERCENTILE = 0.85;
 export const STREAM_MIN_PLANE_M = 12;
-export const STREAM_FLOW_PERIOD_S = 4.5;
+export const STREAM_PERIOD_MIN_S = 6;
+export const STREAM_PERIOD_MAX_S = 11;
+export const STREAM_FADE_IN = 0.18;
+export const STREAM_FADE_OUT = 0.22;
 export const STREAM_RENDER_ORDER = 1030;
 export const STREAM_SHAFT_STEPS = 22;
 export const STREAM_VERTS_PER_ARROW = (STREAM_SHAFT_STEPS + 1) * 2 + 3;
 export const STREAM_INDICES_PER_ARROW = STREAM_SHAFT_STEPS * 6 + 9;
+export const STREAM_MESH_NAME = "WindStream";
 
 const LEAD_LENGTH = 1.3;
+const EDGE_MARGIN = 0.07;
 const EDGE_INSET = 0.04;
 const BAND_OFFSETS = [0, -0.32, 0.32, -0.64, 0.64] as const;
 const COMFORTABLE_GAP = 0.24;
 const OFFSET_COST = 0.03;
+const OUTSIDE_COST = 4;
+const PLACEMENT_SLIDE_ALLOWANCE = 0.1;
 const PLACEMENT_SAMPLE_STRIDE = 3;
-const OUTSIDE_ALLOWANCE = 0.1;
 const TAIL_GAP = 0.062;
 const HEAD_GAP = 0.105;
 const NECK_HALF = 0.018;
 const TAIL_HALF = 0.003;
 const HEAD_HALF = 0.054;
 const HEAD_LENGTH = 0.145;
+const HEAD_MAX_SHARE = 0.4;
 const RANK_WEIGHT = [1, 0.95, 0.9] as const;
-const ALPHA_REST = 0.8;
-const ALPHA_PEAK = 1;
 const TAIL_FADE_SPAN = 0.2;
 const TAIL_FADE_FLOOR = 0.45;
+const COURSE_STEPS = STREAM_SHAFT_STEPS + 2;
+const COURSE_MAX_RUN_STEPS = 600;
+const RUN_OUT_EASE = 0.35;
+const TRACK_CLEARANCE = 0.14;
+const ENTRY_LENGTH_SHARE = 0.35;
+const PERIOD_SPEED_PRODUCT = 28;
+const FAN_PHASE_STEP = 0.21;
 
 type ArrowPattern = { slot: number; length: number; lag: number; curl: number; sway: number; barb: number };
 type FanPattern = { swoop: number; arrows: readonly ArrowPattern[] };
@@ -67,6 +80,10 @@ const FAN_PATTERNS = [TALL_CENTRE, SWOOP_AND_ECHOES, LEANING_TRIO] as const;
 
 export type StreamPoint = { east: number; north: number };
 
+export type StreamTrack = { points: Float32Array; cum: Float32Array; fromM: number; toM: number };
+
+export type StreamArrowShape = { tailHalf: number; neckHalf: number; headHalf: number; headLength: number; barb: number };
+
 export type StreamArrow = {
   rank: number;
   centre: StreamPoint[];
@@ -74,6 +91,10 @@ export type StreamArrow = {
   along: Float32Array;
   indices: Uint16Array;
   phase: number;
+  track: StreamTrack;
+  restTailM: number;
+  lengthM: number;
+  shape: StreamArrowShape;
 };
 
 export type StreamFan = {
@@ -81,6 +102,7 @@ export type StreamFan = {
   sector: number;
   token: PrevailingStreamToken;
   band: number;
+  periodS: number;
   arrows: StreamArrow[];
 };
 
@@ -100,7 +122,9 @@ function upwindEdgeDistance(band: number, flow: StreamPoint, side: StreamPoint, 
 
 export type StreamFanPlacement = { band: number; mirror: 1 | -1 };
 
-function fanCentrelines(stream: PrevailingStream, placement: StreamFanPlacement, halfE: number, halfN: number): StreamPoint[][] {
+type ArrowCourse = (t: number) => StreamPoint;
+
+function fanCourses(stream: PrevailingStream, placement: StreamFanPlacement, halfE: number, halfN: number): ArrowCourse[] {
   const { band, mirror } = placement;
   const flow = downwindFromSector(stream.sector);
   const side = { east: -flow.north, north: flow.east };
@@ -110,21 +134,37 @@ function fanCentrelines(stream: PrevailingStream, placement: StreamFanPlacement,
   return pattern.arrows.slice(0, stream.arrows).map((arrow) => {
     const length = fanLength * arrow.length;
     const u0 = start + fanLength * arrow.lag;
-    const centre: StreamPoint[] = [];
-    for (let i = 0; i <= STREAM_SHAFT_STEPS + 2; i++) {
-      const t = i / (STREAM_SHAFT_STEPS + 2);
-      const u = u0 + length * t;
+    const restLateral = (t: number) => {
       const along = arrow.lag + arrow.length * t;
-      const lateral =
+      return (
         arrow.slot * (TAIL_GAP + (HEAD_GAP - TAIL_GAP) * smooth(along)) +
         pattern.swoop * fanLength * along * along +
         arrow.curl * length * t * t +
-        arrow.sway * Math.sin(Math.PI * 2 * t);
-      const v = band + mirror * lateral;
-      centre.push({ east: u * flow.east + v * side.east, north: u * flow.north + v * side.north });
-    }
-    return centre;
+        arrow.sway * Math.sin(Math.PI * 2 * t)
+      );
+    };
+    const step = 1 / COURSE_STEPS;
+    const entrySlope = (restLateral(step) - restLateral(0)) / (length * step);
+    const exitSlope = (restLateral(1) - restLateral(1 - step)) / (length * step);
+    const lateral = (t: number) => {
+      if (t < 0) return restLateral(0) + entrySlope * RUN_OUT_EASE * (Math.exp((length * t) / RUN_OUT_EASE) - 1);
+      if (t > 1) return restLateral(1) + exitSlope * RUN_OUT_EASE * (1 - Math.exp((-length * (t - 1)) / RUN_OUT_EASE));
+      return restLateral(t);
+    };
+    return (t: number) => {
+      const u = u0 + length * t;
+      const v = band + mirror * lateral(t);
+      return { east: u * flow.east + v * side.east, north: u * flow.north + v * side.north };
+    };
   });
+}
+
+function courseStep(course: ArrowCourse, step: number): StreamPoint {
+  return course(step / COURSE_STEPS);
+}
+
+function restLine(course: ArrowCourse): StreamPoint[] {
+  return Array.from({ length: COURSE_STEPS + 1 }, (_, i) => courseStep(course, i));
 }
 
 function minGap(a: StreamPoint[][], b: StreamPoint[][], stride = 1): number {
@@ -164,7 +204,7 @@ export function streamFanPlacements(streams: readonly PrevailingStream[], site: 
     BAND_OFFSETS.flatMap((band) =>
       ([1, -1] as const).map((mirror) => {
         const placement: StreamFanPlacement = { band, mirror };
-        const lines = fanCentrelines(stream, placement, halfE, halfN);
+        const lines = fanCourses(stream, placement, halfE, halfN).map(restLine);
         return { placement, lines, outside: overshoot(lines, halfE, halfN) };
       }),
     ),
@@ -189,7 +229,7 @@ export function streamFanPlacements(streams: readonly PrevailingStream[], site: 
       for (let i = 0; i < depth; i++) {
         const option = options[i]![pick[i]!]!;
         cost += Math.abs(option.placement.band) * OFFSET_COST * (streams.length - i);
-        cost += Math.max(0, option.outside - OUTSIDE_ALLOWANCE) * 4;
+        cost += Math.max(0, option.outside - PLACEMENT_SLIDE_ALLOWANCE) * OUTSIDE_COST;
         for (let j = i + 1; j < depth; j++) gap = Math.min(gap, gapBetween(i, pick[i]!, j, pick[j]!));
       }
       const score = gap - cost;
@@ -208,57 +248,118 @@ export function streamFanPlacements(streams: readonly PrevailingStream[], site: 
   return best;
 }
 
-function arrowMesh(centre: StreamPoint[], weight: number, barb: number, lengthShare: number): Pick<StreamArrow, "positions" | "along" | "indices"> {
-  const scale = weight * (0.7 + 0.3 * lengthShare);
-  const neckHalf = NECK_HALF * scale;
-  const tailHalf = TAIL_HALF * scale;
-  const headHalf = HEAD_HALF * scale;
-  const last = centre.length - 1;
-  const tip = centre[last]!;
+type ClippedCourse = { points: StreamPoint[]; cum: number[]; restTail: number; length: number };
+type CourseReach = { from: number; to: number };
+
+function polylineLength(points: readonly StreamPoint[]): number {
   let total = 0;
-  for (let i = 1; i <= last; i++) total += Math.hypot(centre[i]!.east - centre[i - 1]!.east, centre[i]!.north - centre[i - 1]!.north);
-  const headLength = Math.min(HEAD_LENGTH * scale, total * 0.4);
-  const neckShare = 1 - headLength / total;
-  const positions = new Float32Array(STREAM_VERTS_PER_ARROW * 2);
-  const along = new Float32Array(STREAM_VERTS_PER_ARROW);
-  const at = (share: number): { point: StreamPoint; normal: StreamPoint; tangent: StreamPoint } => {
-    const f = share * last;
-    const i = Math.min(last - 1, Math.floor(f));
-    const a = centre[i]!;
-    const b = centre[i + 1]!;
-    const k = f - i;
-    const de = b.east - a.east;
-    const dn = b.north - a.north;
-    const len = Math.hypot(de, dn) || 1;
-    const tangent = { east: de / len, north: dn / len };
-    return {
-      point: { east: a.east + de * k, north: a.north + dn * k },
-      tangent,
-      normal: { east: -tangent.north, north: tangent.east },
-    };
-  };
-  let v = 0;
-  const put = (east: number, north: number, share: number) => {
-    positions[v * 2] = east;
-    positions[v * 2 + 1] = north;
-    along[v] = share;
-    v += 1;
-  };
-  for (let i = 0; i <= STREAM_SHAFT_STEPS; i++) {
-    const s = i / STREAM_SHAFT_STEPS;
-    const share = s * neckShare;
-    const { point, normal } = at(share);
-    const half = tailHalf + (neckHalf - tailHalf) * Math.pow(s, 1.5);
-    put(point.east + normal.east * half, point.north + normal.north * half, share);
-    put(point.east - normal.east * half, point.north - normal.north * half, share);
+  for (let i = 1; i < points.length; i++) total += Math.hypot(points[i]!.east - points[i - 1]!.east, points[i]!.north - points[i - 1]!.north);
+  return total;
+}
+
+function edgeCrossing(inside: StreamPoint, outside: StreamPoint, limitE: number, limitN: number): StreamPoint {
+  let k = 1;
+  if (Math.abs(outside.east) > limitE) k = Math.min(k, (Math.sign(outside.east) * limitE - inside.east) / (outside.east - inside.east));
+  if (Math.abs(outside.north) > limitN) k = Math.min(k, (Math.sign(outside.north) * limitN - inside.north) / (outside.north - inside.north));
+  return { east: inside.east + (outside.east - inside.east) * k, north: inside.north + (outside.north - inside.north) * k };
+}
+
+function clipCourse(course: ArrowCourse, halfE: number, halfN: number): ClippedCourse {
+  const limitE = halfE - EDGE_MARGIN;
+  const limitN = halfN - EDGE_MARGIN;
+  const inside = (p: StreamPoint) => Math.abs(p.east) <= limitE && Math.abs(p.north) <= limitN;
+  const rest = restLine(course);
+  const restLength = polylineLength(rest);
+  let anchor = -1;
+  for (let i = 0; i <= COURSE_STEPS; i++) {
+    if (inside(rest[i]!) && (anchor < 0 || Math.abs(i - COURSE_STEPS / 2) < Math.abs(anchor - COURSE_STEPS / 2))) anchor = i;
   }
-  const neck = at(neckShare);
-  const sweep = headLength * barb;
-  const baseE = neck.point.east - neck.tangent.east * sweep;
-  const baseN = neck.point.north - neck.tangent.north * sweep;
-  put(baseE + neck.normal.east * headHalf, baseN + neck.normal.north * headHalf, neckShare);
-  put(baseE - neck.normal.east * headHalf, baseN - neck.normal.north * headHalf, neckShare);
-  put(tip.east, tip.north, 1);
+  let points: StreamPoint[];
+  let restTailIndex = 0;
+  if (anchor < 0) {
+    points = rest.map((p) => ({
+      east: Math.max(-limitE, Math.min(limitE, p.east)),
+      north: Math.max(-limitN, Math.min(limitN, p.north)),
+    }));
+  } else {
+    const upwind: StreamPoint[] = [];
+    let firstStep = anchor;
+    for (let i = anchor - 1; i >= anchor - COURSE_MAX_RUN_STEPS; i--) {
+      const p = courseStep(course, i);
+      if (!inside(p)) {
+        upwind.push(edgeCrossing(upwind.at(-1) ?? rest[anchor]!, p, limitE, limitN));
+        break;
+      }
+      upwind.push(p);
+      firstStep = i;
+    }
+    const downwind: StreamPoint[] = [rest[anchor]!];
+    for (let i = anchor + 1; i <= anchor + COURSE_MAX_RUN_STEPS; i++) {
+      const p = courseStep(course, i);
+      if (!inside(p)) {
+        downwind.push(edgeCrossing(downwind.at(-1)!, p, limitE, limitN));
+        break;
+      }
+      downwind.push(p);
+    }
+    restTailIndex = firstStep <= 0 ? upwind.length - (anchor - firstStep) - firstStep : 0;
+    points = [...upwind.reverse(), ...downwind];
+  }
+  if (points.length < 2) points.push({ ...points[0]! });
+  const cum = [0];
+  for (let i = 1; i < points.length; i++) {
+    cum.push(cum[i - 1]! + Math.hypot(points[i]!.east - points[i - 1]!.east, points[i]!.north - points[i - 1]!.north));
+  }
+  const total = cum.at(-1)!;
+  const length = Math.min(restLength, total);
+  return { points, cum, length, restTail: Math.min(cum[restTailIndex]!, total - length) };
+}
+
+function pointsWithin(courses: readonly ClippedCourse[], reaches: readonly CourseReach[]): StreamPoint[] {
+  return courses.flatMap((course, i) => course.points.filter((_, j) => course.cum[j]! >= reaches[i]!.from && course.cum[j]! <= reaches[i]!.to));
+}
+
+function clearReach(course: ClippedCourse, others: readonly StreamPoint[]): CourseReach {
+  const crowded = (p: StreamPoint) => {
+    for (const q of others) {
+      const de = p.east - q.east;
+      const dn = p.north - q.north;
+      if (de * de + dn * dn < TRACK_CLEARANCE * TRACK_CLEARANCE) return true;
+    }
+    return false;
+  };
+  const { points, cum, restTail } = course;
+  const restTip = restTail + course.length;
+  let to = cum.at(-1)!;
+  for (let j = 0; j < points.length; j++) {
+    if (cum[j]! > restTip && crowded(points[j]!)) {
+      to = Math.max(restTip, cum[j - 1]!);
+      break;
+    }
+  }
+  let from = 0;
+  for (let j = points.length - 1; j >= 0; j--) {
+    if (cum[j]! < restTail && crowded(points[j]!)) {
+      from = Math.min(restTail, cum[j + 1]!);
+      break;
+    }
+  }
+  return { from, to };
+}
+
+function fanReaches(fans: readonly ClippedCourse[][]): CourseReach[][] {
+  let reaches = fans.map((fan) => fan.map<CourseReach>((course) => ({ from: course.restTail, to: course.restTail + course.length })));
+  for (let pass = 0; pass < 2; pass++) {
+    const settled = reaches;
+    reaches = fans.map((fan, f) => {
+      const others = fans.flatMap((other, g) => (g === f ? [] : pointsWithin(other, settled[g]!)));
+      return fan.map((course) => clearReach(course, others));
+    });
+  }
+  return reaches;
+}
+
+const ARROW_INDICES = (() => {
   const indices = new Uint16Array(STREAM_INDICES_PER_ARROW);
   let o = 0;
   for (let i = 0; i < STREAM_SHAFT_STEPS; i++) {
@@ -270,9 +371,89 @@ function arrowMesh(centre: StreamPoint[], weight: number, barb: number, lengthSh
   const neckRight = neckLeft + 1;
   const barbLeft = neckLeft + 2;
   const barbRight = neckLeft + 3;
-  const tipAt = neckLeft + 4;
-  indices.set([neckLeft, barbLeft, tipAt, neckLeft, tipAt, neckRight, neckRight, tipAt, barbRight], o);
-  return { positions, along, indices };
+  const tip = neckLeft + 4;
+  indices.set([neckLeft, barbLeft, tip, neckLeft, tip, neckRight, neckRight, tip, barbRight], o);
+  return indices;
+})();
+
+function trackSegment(track: StreamTrack, s: number, from: number): number {
+  const last = track.cum.length - 2;
+  let i = Math.min(from, last);
+  while (i < last && track.cum[i + 1]! < s) i += 1;
+  while (i > 0 && track.cum[i]! > s) i -= 1;
+  return i;
+}
+
+export function streamTrackPoint(track: StreamTrack, s: number): StreamPoint {
+  const i = trackSegment(track, s, 0);
+  const span = track.cum[i + 1]! - track.cum[i]! || 1;
+  const k = (s - track.cum[i]!) / span;
+  return {
+    east: track.points[i * 2]! + (track.points[i * 2 + 2]! - track.points[i * 2]!) * k,
+    north: track.points[i * 2 + 1]! + (track.points[i * 2 + 3]! - track.points[i * 2 + 1]!) * k,
+  };
+}
+
+export function writeStreamArrowOutline(
+  track: StreamTrack,
+  tailM: number,
+  tipM: number,
+  shape: StreamArrowShape,
+  positions: Float32Array,
+  along: Float32Array,
+): void {
+  const total = Math.max(tipM - tailM, 1e-6);
+  const headLength = Math.min(shape.headLength, total * HEAD_MAX_SHARE);
+  const headHalf = shape.headHalf * (headLength / shape.headLength);
+  const neckShare = 1 - headLength / total;
+  let segment = 0;
+  let east = 0;
+  let north = 0;
+  let tangentEast = 0;
+  let tangentNorth = 0;
+  let v = 0;
+  for (let i = 0; i <= STREAM_SHAFT_STEPS; i++) {
+    const s = i / STREAM_SHAFT_STEPS;
+    const share = s * neckShare;
+    const at = tailM + total * share;
+    segment = trackSegment(track, at, segment);
+    const ae = track.points[segment * 2]!;
+    const an = track.points[segment * 2 + 1]!;
+    const de = track.points[segment * 2 + 2]! - ae;
+    const dn = track.points[segment * 2 + 3]! - an;
+    const span = track.cum[segment + 1]! - track.cum[segment]! || 1;
+    const k = (at - track.cum[segment]!) / span;
+    east = ae + de * k;
+    north = an + dn * k;
+    tangentEast = de / span;
+    tangentNorth = dn / span;
+    const half = shape.tailHalf + (shape.neckHalf - shape.tailHalf) * Math.pow(s, 1.5);
+    positions[v * 2] = east - tangentNorth * half;
+    positions[v * 2 + 1] = north + tangentEast * half;
+    positions[v * 2 + 2] = east + tangentNorth * half;
+    positions[v * 2 + 3] = north - tangentEast * half;
+    along[v] = share;
+    along[v + 1] = share;
+    v += 2;
+  }
+  const sweep = headLength * shape.barb;
+  const baseEast = east - tangentEast * sweep;
+  const baseNorth = north - tangentNorth * sweep;
+  positions[v * 2] = baseEast - tangentNorth * headHalf;
+  positions[v * 2 + 1] = baseNorth + tangentEast * headHalf;
+  positions[v * 2 + 2] = baseEast + tangentNorth * headHalf;
+  positions[v * 2 + 3] = baseNorth - tangentEast * headHalf;
+  along[v] = neckShare;
+  along[v + 1] = neckShare;
+  const tip = streamTrackPoint(track, tipM);
+  positions[v * 2 + 4] = tip.east;
+  positions[v * 2 + 5] = tip.north;
+  along[v + 2] = 1;
+}
+
+export function streamTravelPeriodS(meanSpeedMs: number): number {
+  if (!(meanSpeedMs > 0)) return STREAM_PERIOD_MAX_S;
+  return Math.max(STREAM_PERIOD_MIN_S, Math.min(STREAM_PERIOD_MAX_S, PERIOD_SPEED_PRODUCT / meanSpeedMs));
 }
 
 export function layoutStreamFans(streams: readonly PrevailingStream[], site: StreamSite): StreamFan[] {
@@ -281,17 +462,44 @@ export function layoutStreamFans(streams: readonly PrevailingStream[], site: Str
   const halfE = site.halfWidthM / unit;
   const halfN = site.halfHeightM / unit;
   const placements = streamFanPlacements(streams, site);
+  const courses = streams.map((stream, i) => fanCourses(stream, placements[i]!, halfE, halfN).map((course) => clipCourse(course, halfE, halfN)));
+  const reaches = fanReaches(courses);
   return streams.map((stream, i) => {
     const pattern = FAN_PATTERNS[stream.rank] ?? LEANING_TRIO;
     const weight = RANK_WEIGHT[stream.rank] ?? 0.9;
-    const arrows = fanCentrelines(stream, placements[i]!, halfE, halfN).map((line, k) => {
+    const arrows = courses[i]!.map((course, k) => {
       const spec = pattern.arrows[k]!;
-      const centre = line.map((p) => ({ east: p.east * unit, north: p.north * unit }));
-      const mesh = arrowMesh(line, weight, spec.barb, spec.length * stream.reach);
-      for (let j = 0; j < mesh.positions.length; j++) mesh.positions[j] = mesh.positions[j]! * unit;
-      return { rank: stream.rank, centre, phase: (k * 0.37 + stream.rank * 0.21) % 1, ...mesh };
+      const scale = weight * (0.7 + 0.3 * spec.length * stream.reach) * unit;
+      const shape: StreamArrowShape = {
+        tailHalf: TAIL_HALF * scale,
+        neckHalf: NECK_HALF * scale,
+        headHalf: HEAD_HALF * scale,
+        headLength: HEAD_LENGTH * scale,
+        barb: spec.barb,
+      };
+      const track: StreamTrack = {
+        points: Float32Array.from(course.points.flatMap((p) => [p.east * unit, p.north * unit])),
+        cum: Float32Array.from(course.cum, (s) => s * unit),
+        fromM: reaches[i]![k]!.from * unit,
+        toM: reaches[i]![k]!.to * unit,
+      };
+      const restTailM = course.restTail * unit;
+      const lengthM = course.length * unit;
+      const positions = new Float32Array(STREAM_VERTS_PER_ARROW * 2);
+      const along = new Float32Array(STREAM_VERTS_PER_ARROW);
+      writeStreamArrowOutline(track, restTailM, restTailM + lengthM, shape, positions, along);
+      const centre = Array.from({ length: COURSE_STEPS + 1 }, (_, j) => streamTrackPoint(track, restTailM + (lengthM * j) / COURSE_STEPS));
+      const phase = (k / courses[i]!.length + stream.rank * FAN_PHASE_STEP) % 1;
+      return { rank: stream.rank, centre, positions, along, indices: ARROW_INDICES, phase, track, restTailM, lengthM, shape };
     });
-    return { rank: stream.rank, sector: stream.sector, token: stream.token, band: placements[i]!.band * unit, arrows };
+    return {
+      rank: stream.rank,
+      sector: stream.sector,
+      token: stream.token,
+      band: placements[i]!.band * unit,
+      periodS: streamTravelPeriodS(stream.meanSpeedMs),
+      arrows,
+    };
   });
 }
 
@@ -316,47 +524,107 @@ export function streamPlaneHeightM(buildingHeights: readonly number[]): number {
   return Math.max(STREAM_MIN_PLANE_M, roof + STREAM_ROOF_CLEARANCE_M);
 }
 
-export function streamAlpha(along: number, arrowPhase: number, clockSeconds: number): number {
-  const travel = along - clockSeconds / STREAM_FLOW_PERIOD_S + arrowPhase;
-  const pulse = 0.5 + 0.5 * Math.cos(Math.PI * 2 * travel);
-  const tail = TAIL_FADE_FLOOR + (1 - TAIL_FADE_FLOOR) * smooth(Math.min(1, along / TAIL_FADE_SPAN));
-  return tail * (ALPHA_REST + (ALPHA_PEAK - ALPHA_REST) * pulse);
+export function streamSite(model: CityModel): StreamSite {
+  return { halfWidthM: (model.widthM ?? model.sideM) / 2, halfHeightM: (model.heightM ?? model.sideM) / 2 };
 }
 
-export function writeStreamAlphas(fan: StreamFan, clockSeconds: number, colours: Float32Array): void {
-  let v = 0;
-  for (const arrow of fan.arrows) {
-    for (let i = 0; i < arrow.along.length; i++) {
-      colours[v * 4 + 3] = streamAlpha(arrow.along[i]!, arrow.phase, clockSeconds);
-      v += 1;
-    }
-  }
+export function streamPlaneY(model: CityModel): number {
+  const base = model.terrain ? (model.terrain.min + model.terrain.max) / 2 : 0;
+  return base + streamPlaneHeightM(model.buildings.map((building) => building.height));
+}
+
+export function streamTravelProgress(clockSeconds: number, periodS: number, phase: number): number {
+  const turns = clockSeconds / periodS + phase;
+  return turns - Math.floor(turns);
+}
+
+export function streamTravelFade(progress: number): number {
+  const fadeIn = smooth(Math.max(0, Math.min(1, progress / STREAM_FADE_IN)));
+  const fadeOut = smooth(Math.max(0, Math.min(1, (1 - progress) / STREAM_FADE_OUT)));
+  return fadeIn * fadeOut;
+}
+
+export type StreamTravelPose = { tailM: number; tipM: number; alpha: number };
+
+export function streamTravelPose(arrow: Pick<StreamArrow, "track" | "lengthM">, progress: number): StreamTravelPose {
+  const { fromM, toM } = arrow.track;
+  const entryTipM = Math.min(fromM + arrow.lengthM * ENTRY_LENGTH_SHARE, toM);
+  const tipM = entryTipM + (toM - entryTipM) * progress;
+  return { tailM: Math.max(fromM, tipM - arrow.lengthM), tipM, alpha: streamTravelFade(progress) };
+}
+
+export function streamPoseSeconds(clockSeconds: number): number | null {
+  return clockSeconds > 0 ? clockSeconds : null;
+}
+
+function tailFade(along: number): number {
+  return TAIL_FADE_FLOOR + (1 - TAIL_FADE_FLOOR) * smooth(Math.min(1, along / TAIL_FADE_SPAN));
 }
 
 export type StreamFanMesh = THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial> & {
-  userData: { fan: StreamFan; colours: Float32Array };
+  userData: { fan: StreamFan; colours: Float32Array; poseSeconds: number | null };
 };
 
+const poseOutline = new Float32Array(STREAM_VERTS_PER_ARROW * 2);
+const poseAlong = new Float32Array(STREAM_VERTS_PER_ARROW);
+
+export function writeStreamFanPose(mesh: StreamFanMesh, poseSeconds: number | null): void {
+  const { fan, colours } = mesh.userData;
+  const position = mesh.geometry.getAttribute("position") as THREE.BufferAttribute;
+  const positions = position.array as Float32Array;
+  let v = 0;
+  for (const arrow of fan.arrows) {
+    let outline = arrow.positions;
+    let along = arrow.along;
+    let alpha = 1;
+    if (poseSeconds !== null) {
+      const pose = streamTravelPose(arrow, streamTravelProgress(poseSeconds, fan.periodS, arrow.phase));
+      writeStreamArrowOutline(arrow.track, pose.tailM, pose.tipM, arrow.shape, poseOutline, poseAlong);
+      outline = poseOutline;
+      along = poseAlong;
+      alpha = pose.alpha;
+    }
+    for (let i = 0; i < STREAM_VERTS_PER_ARROW; i++) {
+      positions[v * 3] = outline[i * 2]!;
+      positions[v * 3 + 2] = -outline[i * 2 + 1]!;
+      colours[v * 4 + 3] = tailFade(along[i]!) * alpha;
+      v += 1;
+    }
+  }
+  position.needsUpdate = true;
+  mesh.geometry.getAttribute("color").needsUpdate = true;
+  mesh.userData.poseSeconds = poseSeconds;
+}
+
+export function withStreamStillFrame<T>(root: THREE.Object3D, render: () => T): T {
+  const meshes: StreamFanMesh[] = [];
+  root.traverse((object) => {
+    if ((object as THREE.Mesh).isMesh && object.name.startsWith(STREAM_MESH_NAME)) meshes.push(object as StreamFanMesh);
+  });
+  const travelling = meshes.map((mesh) => mesh.userData.poseSeconds);
+  for (const mesh of meshes) writeStreamFanPose(mesh, null);
+  try {
+    return render();
+  } finally {
+    meshes.forEach((mesh, i) => writeStreamFanPose(mesh, travelling[i]!));
+  }
+}
+
 export function createStreamFanMesh(fan: StreamFan, planeY: number): StreamFanMesh {
-  const vertexCount = fan.arrows.reduce((sum, arrow) => sum + arrow.along.length, 0);
-  const indexCount = fan.arrows.reduce((sum, arrow) => sum + arrow.indices.length, 0);
+  const vertexCount = fan.arrows.length * STREAM_VERTS_PER_ARROW;
   const positions = new Float32Array(vertexCount * 3);
   const colours = new Float32Array(vertexCount * 4).fill(1);
-  const indices = new Uint16Array(indexCount);
-  let v = 0;
-  let o = 0;
-  for (const arrow of fan.arrows) {
-    for (let i = 0; i < arrow.along.length; i++) {
-      positions[(v + i) * 3] = arrow.positions[i * 2]!;
-      positions[(v + i) * 3 + 1] = planeY;
-      positions[(v + i) * 3 + 2] = -arrow.positions[i * 2 + 1]!;
+  const indices = new Uint16Array(fan.arrows.length * STREAM_INDICES_PER_ARROW);
+  fan.arrows.forEach((arrow, k) => {
+    for (let i = 0; i < STREAM_VERTS_PER_ARROW; i++) positions[(k * STREAM_VERTS_PER_ARROW + i) * 3 + 1] = planeY;
+    for (let i = 0; i < STREAM_INDICES_PER_ARROW; i++) {
+      indices[k * STREAM_INDICES_PER_ARROW + i] = arrow.indices[i]! + k * STREAM_VERTS_PER_ARROW;
     }
-    for (let i = 0; i < arrow.indices.length; i++) indices[o + i] = arrow.indices[i]! + v;
-    v += arrow.along.length;
-    o += arrow.indices.length;
-  }
+  });
   const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+  const positionAttribute = new THREE.BufferAttribute(positions, 3);
+  positionAttribute.setUsage(THREE.DynamicDrawUsage);
+  geometry.setAttribute("position", positionAttribute);
   const colourAttribute = new THREE.BufferAttribute(colours, 4);
   colourAttribute.setUsage(THREE.DynamicDrawUsage);
   geometry.setAttribute("color", colourAttribute);
@@ -369,12 +637,13 @@ export function createStreamFanMesh(fan: StreamFan, planeY: number): StreamFanMe
     toneMapped: false,
   });
   const mesh = new THREE.Mesh(geometry, material) as StreamFanMesh;
-  mesh.name = `WindStream${fan.rank + 1}`;
+  mesh.name = `${STREAM_MESH_NAME}${fan.rank + 1}`;
   mesh.renderOrder = STREAM_RENDER_ORDER + fan.rank;
   mesh.frustumCulled = false;
   mesh.castShadow = false;
   mesh.receiveShadow = false;
-  mesh.userData = { fan, colours };
+  mesh.userData = { fan, colours, poseSeconds: null };
+  writeStreamFanPose(mesh, null);
   return mesh;
 }
 

@@ -157,6 +157,7 @@ import {
 } from "../../lib/windState";
 import { useWindStreakMotion } from "../../lib/windStreakMotion";
 import { prevailingStreams } from "../../lib/windPrevailingStreams";
+import { windDiagramActive } from "../../lib/solarStudyView";
 import { siteIntelAutoFolded, windRoseCardOn } from "./windRoseCard";
 import type { SitePlanExportOptions } from "../../lib/aiPlan";
 import type { PlanShadowInput } from "../../lib/buildingShadows";
@@ -1526,6 +1527,7 @@ export function useModelPage({
           windSettings.enabled && siteWind
             ? { selection: siteWind, period: windSettings.period }
             : null,
+        windStreaks: windDiagramActive(windStreaksOn, analyses) ? windStreams : null,
         hideTrees: view3dDisplay.hideTrees,
         importedMassing: massing.forExport.length ? massing.forExport : null,
         buildingsAsMesh,

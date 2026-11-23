@@ -9,9 +9,11 @@ import {
   createStreamFanMesh,
   layoutStreamFans,
   streamArrowCount,
-  streamPlaneHeightM,
+  streamPlaneY,
+  streamPoseSeconds,
+  streamSite,
   tintStreamFanMesh,
-  writeStreamAlphas,
+  writeStreamFanPose,
   type StreamFanMesh,
 } from "../lib/windDiagramStreams";
 import type { PrevailingStream } from "../lib/windPrevailingStreams";
@@ -43,13 +45,9 @@ export function WindDiagramStreams({
   const animateRef = useRef(animate);
   animateRef.current = animate;
 
-  const halfWidthM = (model.widthM ?? model.sideM) / 2;
-  const halfHeightM = (model.heightM ?? model.sideM) / 2;
+  const { halfWidthM, halfHeightM } = streamSite(model);
   const fans = useMemo(() => layoutStreamFans(streams, { halfWidthM, halfHeightM }), [streams, halfWidthM, halfHeightM]);
-  const planeY = useMemo(() => {
-    const base = model.terrain ? (model.terrain.min + model.terrain.max) / 2 : 0;
-    return base + streamPlaneHeightM(model.buildings.map((building) => building.height));
-  }, [model]);
+  const planeY = useMemo(() => streamPlaneY(model), [model]);
 
   const root = useMemo(() => {
     const group = new THREE.Group();
@@ -101,10 +99,7 @@ export function WindDiagramStreams({
     const seconds = advanceWindClock(clock.current, Math.min(delta, MAX_FRAME_DT), !animateRef.current);
     if (seconds !== drawnAt.current) {
       drawnAt.current = seconds;
-      for (const child of root.children as StreamFanMesh[]) {
-        writeStreamAlphas(child.userData.fan, seconds, child.userData.colours);
-        child.geometry.getAttribute("color").needsUpdate = true;
-      }
+      for (const child of root.children as StreamFanMesh[]) writeStreamFanPose(child, streamPoseSeconds(seconds));
     }
     if (animateRef.current) invalidate();
   });

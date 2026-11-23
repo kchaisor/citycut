@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { projectLocal } from "./crs";
 import { colourRgb } from "./colours";
-import { cityModelTo3dm, loadRhino, rhinoLayerColourKeys } from "./rhinoExport";
+import { WIND_STREAKS_LAYER, cityModelTo3dm, loadRhino, rhinoLayerColourKeys, windStreakStillArrows } from "./rhinoExport";
+import { STREAM_VERTS_PER_ARROW, layoutStreamFans, streamPlaneY, streamSite } from "./windDiagramStreams";
+import { PREVAILING_STREAM_TOKENS, type PrevailingStream } from "./windPrevailingStreams";
+import { SECTOR_LABELS } from "./windRose";
 import { SURFACE } from "./surfaceLayers";
 import { footprintBase } from "./terrain";
 import { treesVisibleIn3d } from "./view3dDisplay";
@@ -419,6 +422,10 @@ describe("rhino export", () => {
         "Site::Boundary",
         "Buildings::Site",
         "Wind",
+        WIND_STREAKS_LAYER,
+        `${WIND_STREAKS_LAYER}::Stream 1`,
+        `${WIND_STREAKS_LAYER}::Stream 2`,
+        `${WIND_STREAKS_LAYER}::Stream 3`,
         "Blocks",
       ]);
       for (const path of Object.keys(keys)) {
@@ -537,3 +544,82 @@ describe("rhino export: Trees layer × Hide trees", () => {
     else expect(count).toBe(0);
   });
 });
+
+describe("rhino export wind streaks", () => {
+  const streams: PrevailingStream[] = [0, 4, 8].map((sector, rank) => ({
+    rank,
+    sector,
+    label: SECTOR_LABELS[sector]!,
+    fromDeg: sector * 22.5,
+    share: 0.3 - rank * 0.08,
+    meanSpeedMs: 4 - rank,
+    arrows: [5, 4, 3][rank]!,
+    reach: [1, 0.84, 0.74][rank]!,
+    token: PREVAILING_STREAM_TOKENS[rank]!,
+    legend: "",
+  }));
+
+  it("lists the still-frame arrows, flat above the roofs and inside the cut", () => {
+    const arrows = windStreakStillArrows(model, streams);
+    const still = layoutStreamFans(streams, streamSite(model)).flatMap((fan) => fan.arrows);
+    expect(arrows).toHaveLength(12);
+    expect(arrows.map((arrow) => arrow.layer)).toEqual([
+      ...Array.from({ length: 5 }, () => "Wind streaks::Stream 1"),
+      ...Array.from({ length: 4 }, () => "Wind streaks::Stream 2"),
+      ...Array.from({ length: 3 }, () => "Wind streaks::Stream 3"),
+    ]);
+    arrows.forEach((arrow, k) => {
+      expect(arrow.vertices).toHaveLength(STREAM_VERTS_PER_ARROW);
+      arrow.vertices.forEach(([east, north, z], i) => {
+        expect(east).toBe(still[k]!.positions[i * 2]);
+        expect(north).toBe(still[k]!.positions[i * 2 + 1]);
+        expect(z).toBe(streamPlaneY(model));
+        expect(Math.abs(east)).toBeLessThanOrEqual(model.sideM / 2);
+        expect(Math.abs(north)).toBeLessThanOrEqual(model.sideM / 2);
+      });
+      expect(arrow.faces).toHaveLength(still[k]!.indices.length / 3);
+    });
+    expect(windStreakStillArrows(model, [])).toEqual([]);
+  });
+
+  it("writes the arrows as static meshes on their own layers only when Wind streaks is on", async () => {
+    const rhino = await loadRhino();
+    const streakMeshes = (bytes: Uint8Array) => {
+      const doc = rhino.File3dm.fromByteArray(bytes);
+      try {
+        const layers = new Map<number, string>();
+        for (let i = 0; i < doc.layers().count; i++) layers.set(i, doc.layers().get(i).fullPath);
+        const found: { layer: string; vertices: number[][] }[] = [];
+        for (let i = 0; i < doc.objects().count; i++) {
+          const object = doc.objects().get(i);
+          const layer = layers.get(object.attributes().layerIndex) ?? "";
+          if (!layer.startsWith(WIND_STREAKS_LAYER)) continue;
+          const mesh = object.geometry() as unknown as ReadMesh;
+          expect(mesh.objectType).toBe(rhino.ObjectType.Mesh);
+          expect(object.attributes().name).toBe("Wind streak");
+          found.push({ layer, vertices: Array.from({ length: mesh.vertices().count }, (_, v) => mesh.vertices().point3dAt(v)) });
+        }
+        return found;
+      } finally {
+        doc.destroy();
+      }
+    };
+    const on = streakMeshes(await cityModelTo3dm(model, { windStreaks: streams }));
+    expect(on).toHaveLength(12);
+    expect(new Set(on.map((mesh) => mesh.layer))).toEqual(
+      new Set(["Wind streaks::Stream 1", "Wind streaks::Stream 2", "Wind streaks::Stream 3"]),
+    );
+    const [centreE, centreN] = projectLocal([0, 0], origin, 55);
+    for (const mesh of on) {
+      expect(mesh.vertices).toHaveLength(STREAM_VERTS_PER_ARROW);
+      for (const [easting, northing, z] of mesh.vertices) {
+        expect(Math.abs(easting! - centreE)).toBeLessThanOrEqual(model.sideM / 2 + 0.05);
+        expect(Math.abs(northing! - centreN)).toBeLessThanOrEqual(model.sideM / 2 + 0.05);
+        expect(z).toBeCloseTo(streamPlaneY(model), 4);
+      }
+    }
+    expect(streakMeshes(await cityModelTo3dm(model, { windStreaks: null }))).toHaveLength(0);
+    expect(streakMeshes(await cityModelTo3dm(model))).toHaveLength(0);
+  });
+});
+
