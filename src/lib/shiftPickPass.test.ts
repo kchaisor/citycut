@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it } from "vitest";
-import { SHIFT_PICK_CLASS, attachShiftPickPass, setShiftPickClass } from "./shiftPickPass";
+import { SHIFT_PICK_CLASS, attachShiftPickPass, canvasUnderCard, setShiftPickClass } from "./shiftPickPass";
 
 afterEach(() => {
   document.documentElement.classList.remove(SHIFT_PICK_CLASS);
@@ -36,5 +36,20 @@ describe("attachShiftPickPass", () => {
     document.body.dispatchEvent(new MouseEvent("pointermove", { bubbles: true, shiftKey: false }));
     expect(document.documentElement.classList.contains(SHIFT_PICK_CLASS)).toBe(false);
     detach();
+  });
+
+  it("finds the 3D canvas even when another overlay sits between the card and the canvas", () => {
+    const card = document.createElement("aside");
+    const overlay = document.createElement("div");
+    const canvas = document.createElement("canvas");
+    const model = document.createElement("div");
+    model.className = "model";
+    model.append(canvas);
+    document.body.append(card, overlay, model);
+    document.elementsFromPoint = () => [card, overlay, model, canvas];
+    expect(canvasUnderCard(card, 40, 40)).toBe(canvas);
+    card.remove();
+    overlay.remove();
+    model.remove();
   });
 });

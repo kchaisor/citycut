@@ -178,7 +178,7 @@ describe("Shift-click with the floating building card in the way", () => {
     detach = ctx.detach;
     const panel = document.createElement("div");
     document.body.appendChild(panel);
-    document.elementsFromPoint = () => [ctx.hint, ctx.card, panel, ctx.canvas];
+    document.elementsFromPoint = () => [ctx.hint, ctx.card, panel];
     press(ctx.hint, AT_B, true);
     expect(ctx.selection()).toEqual([A]);
   });

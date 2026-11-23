@@ -18,8 +18,10 @@ function cardSurfaceUnder(event: MouseEvent): Element | null {
 
 export function canvasUnderCard(card: Element, clientX: number, clientY: number): HTMLCanvasElement | null {
   if (typeof document.elementsFromPoint !== "function") return null;
-  const below = document.elementsFromPoint(clientX, clientY).find((element) => !card.contains(element));
-  return below instanceof HTMLCanvasElement ? below : null;
+  const hits = document.elementsFromPoint(clientX, clientY).filter(
+    (element): element is HTMLCanvasElement => element instanceof HTMLCanvasElement && !card.contains(element),
+  );
+  return hits.find((canvas) => canvas.closest(".model") && !canvas.closest(".is-parked")) ?? hits[0] ?? null;
 }
 
 function retargetToCanvas(event: MouseEvent): void {
