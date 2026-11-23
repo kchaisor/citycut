@@ -31,7 +31,7 @@ function snapshot(tab: NamedViewSnapshot["tab"], corner: NamedViewSnapshot["view
     colourByUse: false,
     showSource: false,
     hiddenUses: [],
-    landmarkLabelsOn: true,
+    landmarkLabelsOn: false,
     lineStyles: null,
   };
 }
@@ -47,7 +47,7 @@ function mount(live: { current: NamedViewSnapshot }) {
         applied.push(next);
         live.current = next;
       },
-      getExporter: () => ({ png, shot: vi.fn() }),
+      getExporter: () => ({ png: vi.fn(), viewportPng: png, shot: vi.fn() }),
     }),
   );
   return { hook, applied, png };

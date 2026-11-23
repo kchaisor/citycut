@@ -5448,9 +5448,11 @@ body,
   font-size: var(--font-size-drawer);
 }
 .named-views-panel .named-views-primary {
-  flex: 1;
+  flex: 1 0 auto;
+  min-width: max-content;
   height: var(--control-md);
   padding: 0 var(--space-3);
+  white-space: nowrap;
   border: 1px solid var(--accent-edge);
   border-radius: var(--radius-sm);
   background: var(--accent);
@@ -5489,7 +5491,7 @@ body,
   min-width: 0;
   align-self: stretch;
   align-content: center;
-  padding: 0 var(--space-1-5);
+  padding: var(--space-1) var(--space-1-5);
   border: 0;
   border-radius: var(--radius-md);
   background: transparent;
@@ -5497,6 +5499,12 @@ body,
   font: inherit;
   text-align: left;
   cursor: pointer;
+}
+.named-views-panel .named-views-name .massing-building-name {
+  overflow: visible;
+  white-space: normal;
+  text-overflow: clip;
+  overflow-wrap: anywhere;
 }
 .named-views-panel .named-views-export-head { margin-top: var(--space-3); }
 .named-views-panel .named-views-empty { margin-bottom: 0; }

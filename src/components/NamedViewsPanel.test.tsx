@@ -1,6 +1,8 @@
 // @vitest-environment happy-dom
 import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { captureNamedView, type NamedView, type NamedViewSnapshot } from "../lib/namedViews";
 import { NamedViewsPanel, type NamedViewsPanelProps } from "./NamedViewsPanel";
@@ -138,5 +140,18 @@ describe("NamedViewsPanel", () => {
     expect(within(corner).getByText(/restore only/)).toBeTruthy();
     expect((screen.getByRole("button", { name: "Exporting…" }) as HTMLButtonElement).disabled).toBe(true);
     expect(screen.getByRole("alert").textContent).toContain("skipped");
+  });
+
+  it("wraps long view names, keeps a tooltip and keeps the export buttons on one line", () => {
+    const css = readFileSync(join(__dirname, "..", "floating.css"), "utf8");
+    const nameRule = css.match(/\.named-views-panel \.named-views-name \.massing-building-name \{([^}]*)\}/)?.[1] ?? "";
+    expect(nameRule).toContain("white-space: normal");
+    expect(nameRule).not.toContain("white-space: nowrap");
+    expect(nameRule).toContain("text-overflow: clip");
+    const buttonRule = css.match(/\.named-views-panel \.named-views-primary \{([^}]*)\}/)?.[1] ?? "";
+    expect(buttonRule).toContain("white-space: nowrap");
+    expect(buttonRule).toContain("min-width: max-content");
+    mount({ views: [captureNamedView("Southbank Isometric Perspective Solar Study", SNAPSHOT, { id: "c" })!] });
+    expect(screen.getByTitle("Southbank Isometric Perspective Solar Study")).toBeTruthy();
   });
 });

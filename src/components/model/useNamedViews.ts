@@ -23,7 +23,7 @@ import type { CityModel } from "../../types";
 import type { SceneExporter } from "../Scene3D";
 import type { NamedViewsBusy } from "../NamedViewsPanel";
 
-const SETTLE_MS = 800;
+const SETTLE_MS = 1000;
 const STORAGE_WARNING = "Views could not be saved in this browser, so they will be gone after a reload.";
 
 type Args = {
@@ -42,7 +42,7 @@ function nextFrame(): Promise<void> {
 
 function needsSettling(snapshot: NamedViewSnapshot): boolean {
   const { solar, analyses } = snapshot;
-  return Boolean(solar.sunHours || solar.sunStudy || analyses.view || analyses.wind);
+  return Boolean(solar.sunHours || solar.sunStudy || analyses.view || analyses.wind || snapshot.landmarkLabelsOn);
 }
 
 async function settle(snapshot: NamedViewSnapshot): Promise<void> {
@@ -106,7 +106,7 @@ export function useNamedViews({ model, getSnapshot, applySnapshot, getExporter }
           await settle(snapshot);
           const exporter = getExporter();
           if (!exporter) throw new Error("The 3D view is not ready.");
-          const blob = await exporter.png();
+          const blob = await exporter.viewportPng();
           entries.push({ name: names[index]!, bytes: new Uint8Array(await blob.arrayBuffer()) });
         }
         if (entries.length === 1) downloadBytes(entries[0]!.name, entries[0]!.bytes, "image/png");
