@@ -404,14 +404,7 @@ export function useModelPage({
     };
   }
 
-  function heliodonDiagramExport(): HeliodonDiagramExportOptions | null {
-    if (!solar.showPath) return null;
-    return {
-      ...planShadowInput(),
-      sideM: model.sideM,
-      radiusFactor: solar.radiusFactor,
-    };
-  }
+  const sunDomeOn = solarSettingsForActiveAnalysis(solar, analyses).showPath;
 
   function heliodonPlanDiagramBase(): HeliodonDiagramExportOptions {
     return {
@@ -421,14 +414,12 @@ export function useModelPage({
     };
   }
 
+  function heliodonDiagramExport(): HeliodonDiagramExportOptions | null {
+    return planHeliodonForExport({ showPath: sunDomeOn, diagram: heliodonPlanDiagramBase() });
+  }
+
   function planHeliodonForSiteExport(): HeliodonDiagramExportOptions | null {
-    const direct = heliodonDiagramExport();
-    if (direct) return direct;
-    return planHeliodonForExport({
-      showPath: solar.showPath,
-      sunStudyDate,
-      diagram: heliodonPlanDiagramBase(),
-    });
+    return heliodonDiagramExport();
   }
 
   function sitePlanExportOptions(): SitePlanExportOptions {
@@ -477,8 +468,8 @@ export function useModelPage({
   }, [wantWindTable, model.center.lat, model.center.lon, model.siteAnchor?.lat, model.siteAnchor?.lon]);
 
   function heliodonRhinoExport(): HeliodonGroundExportOptions | null {
-    if (!solar.showPath) return null;
-    return { ...heliodonDiagramExport()!, radiusFactor: solar.radiusFactor };
+    const diagram = heliodonDiagramExport();
+    return diagram ? { ...diagram, radiusFactor: solar.radiusFactor } : null;
   }
   const exportRef = useRef<SceneExporter | null>(null);
   const onExportReady = useCallback((exporter: SceneExporter | null) => {
