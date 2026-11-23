@@ -68,7 +68,7 @@ import {
 import { resolveBuildingHeightsAfterCom } from "../../lib/buildingHeightPipeline";import { formatLengthKm } from "../../lib/geo";
 
 import { useSidebarCollapsed } from "../../lib/sidebarCollapse";
-import { cutSizeLabel } from "../../lib/placeLabel";import { SIDEBAR_SECTION_LABELS, availableSidebarSections, initialSidebarState, isRightSidebarSection, reduceSidebar, resolveLeftSidebarSection, resolveRightSidebarSection, resolveSidebarSection, LeftSidebarSectionId, RightSidebarSectionId, NO_ANALYSES, isSiteAnalysisKind, withAnalysisOn, type ActiveAnalyses } from "../../lib/sidebarSections";
+import { cutSizeLabel } from "../../lib/placeLabel";import { SIDEBAR_SECTION_LABELS, availableSidebarSections, initialSidebarState, isRightSidebarSection, reduceSidebar, resolveLeftSidebarSection, resolveRightSidebarSection, resolveSidebarSection, LeftSidebarSectionId, RightSidebarSectionId, NO_ANALYSES, isSiteAnalysisKind, withAnalysisOn, type ActiveAnalyses, type SiteAnalysisKind } from "../../lib/sidebarSections";
 import { buildDataSources, countLoaded } from "../../lib/dataSources";
 import { useWikidataLandmarks } from "../useWikidataLandmarks";
 import {
@@ -157,12 +157,19 @@ import {
 } from "../../lib/windState";
 import { useWindStreakMotion } from "../../lib/windStreakMotion";
 import { prevailingStreams } from "../../lib/windPrevailingStreams";
-import { windDiagramActive } from "../../lib/solarStudyView";
-import { siteIntelAutoFolded, windRoseCardOn } from "./windRoseCard";
+import { solarSettingsForActiveAnalysis, windDiagramActive } from "../../lib/solarStudyView";
+import { siteIntelAutoFolded } from "./windRoseCard";
+import {
+  analysisCardsOn,
+  anyAnalysisCardOn,
+  initialAnalysisCardFocus,
+  nextAnalysisCardFocus,
+  toggleAnalysisCard as focusAnalysisCard,
+} from "../../lib/analysisCards";
 import type { SitePlanExportOptions } from "../../lib/aiPlan";
 import type { PlanShadowInput } from "../../lib/buildingShadows";
 import type { HeliodonDiagramExportOptions, HeliodonGroundExportOptions } from "../../lib/heliodonDiagram";
-import { writeStoredHeliodonRadiusFactor } from "../../lib/heliodonRadius";
+import { resolveSunDomeRadiusM, sunDomeRange, writeStoredHeliodonRadiusFactor } from "../../lib/heliodonRadius";
 import type { SolarViewSettings } from "../SolarHeliodon";
 import {
   isLayer3dVisible,
@@ -1344,9 +1351,19 @@ export function useModelPage({
   const designWinds = useMemo(() => (siteWind ? designWindsFor(siteWind) : []), [siteWind]);
   const designWind = findDesignWind(designWinds, windSettings.designWind);
   const windStreams = useMemo(() => prevailingStreams(consoleWindStats, designWind), [consoleWindStats, designWind]);
-  const windRoseOn = windRoseCardOn({ tab, analyses, siteWind });
-  const [siteIntelFolded, setSiteIntelFolded] = useState(() => siteIntelAutoFolded(windRoseOn));
-  useEffect(() => setSiteIntelFolded(siteIntelAutoFolded(windRoseOn)), [windRoseOn]);
+  const analysisCards = analysisCardsOn(tab, analyses);
+  const analysisCardOn = anyAnalysisCardOn(tab, analyses);
+  const [analysisCardFocus, setAnalysisCardFocus] = useState(() => initialAnalysisCardFocus(analyses));
+  if (analysisCardFocus.seen !== analyses) setAnalysisCardFocus(nextAnalysisCardFocus(analysisCardFocus, analyses));
+  const toggleAnalysisCard = (kind: SiteAnalysisKind) => setAnalysisCardFocus((focus) => focusAnalysisCard(focus, kind));
+  const [siteIntelFolded, setSiteIntelFolded] = useState(() => siteIntelAutoFolded(analysisCardOn));
+  useEffect(() => setSiteIntelFolded(siteIntelAutoFolded(analysisCardOn)), [analysisCardOn]);
+  const [sunDomeSizeM, setSunDomeSizeM] = useState<number | null>(null);
+  const sunDome = useMemo(() => {
+    const range = sunDomeRange(model);
+    return { range, chosenM: sunDomeSizeM, radiusM: resolveSunDomeRadiusM(range, sunDomeSizeM) };
+  }, [model, sunDomeSizeM]);
+  const windSpreadRadiusM = solarSettingsForActiveAnalysis(solar, analyses).showPath ? sunDome.radiusM : null;
   const windPlan = useWindPlan({
     model: windModel,
     siteWind,
@@ -1528,6 +1545,7 @@ export function useModelPage({
             ? { selection: siteWind, period: windSettings.period }
             : null,
         windStreaks: windDiagramActive(windStreaksOn, analyses) ? windStreams : null,
+        windStreaksSpreadRadiusM: windSpreadRadiusM,
         hideTrees: view3dDisplay.hideTrees,
         importedMassing: massing.forExport.length ? massing.forExport : null,
         buildingsAsMesh,
@@ -2359,8 +2377,14 @@ export function useModelPage({
     siteIntelOpen,
     setSiteIntelOpen,
     siteIntelFolded,
+    analysisCards,
+    analysisCardOn,
+    analysisCardOpen: analysisCardFocus.open,
+    toggleAnalysisCard,
+    sunDome,
+    setSunDomeSizeM,
+    windSpreadRadiusM,
     setSiteIntelFolded,
-    windRoseOn,
     sidebarModelRef,
     sitePlanExportOptions,
     snapId,

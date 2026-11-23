@@ -15,7 +15,6 @@ import { qaHideHeightPopoverFromSearch } from "../../lib/qaCameraBridge";
 import { sunStudyMutedOn, toggleSelection } from "../../lib/sunStudyPlan";
 import { SceneBoundary } from "../SceneBoundary";
 import { solarSettingsForActiveAnalysis, solarStudyViewActive, windDiagramActive, windFlowActive } from "../../lib/solarStudyView";
-import { ViewLegend } from "../ViewPanel";
 
 
 
@@ -91,12 +90,13 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
     tab,
     view,
     view3dDisplay,
-    viewAnalysisOpen,
     walk,
     walkDrawing,
     windMotion,
     windStreams,
     windStreaksOn,
+    windSpreadRadiusM,
+    sunDome,
     windSettings,
     designWind,
     windPlan,
@@ -164,6 +164,8 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
                 windSector={windPlan.sector}
                 windAnimateStreaks={windMotion.animateStreaks}
                 windDiagramStreams={windDiagramActive(windStreaksOn, analyses) ? windStreams : null}
+                windSpreadRadiusM={windSpreadRadiusM}
+                sunDomeRadiusM={sunDome.radiusM}
                 windPlan={windPlan.active ? windPlan : null}
                 onExportReady={onExportReady}
                 onSceneInspectPick={(selection) => {
@@ -232,7 +234,6 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
                   }}
                 />
               )}
-              {viewAnalysisOpen && walk.clickCount > 0 && <ViewLegend />}
               {pickedBuilding && !qaHideHeightPopoverFromSearch(window.location.search) && (
                 <BuildingHeightPopover
                   building={pickedBuilding}

@@ -12,7 +12,7 @@ import { analyzeSiteWind } from "../lib/windRoseStats";
 import { DEFAULT_WIND_SETTINGS, withDesignWind, type WindViewSettings } from "../lib/windState";
 import { siteWindSelection } from "../lib/windStation";
 import { NO_ANALYSES, analysesOf, type ActiveAnalyses } from "../lib/sidebarSections";
-import { windRoseCardOn } from "./model/windRoseCard";
+import { analysisCardsOn } from "../lib/analysisCards";
 import { useWindPlan } from "./useWindPlan";
 import { WindRosePanel } from "./WindRosePanel";
 
@@ -71,7 +71,7 @@ function FlowHarness({ initialDesign = null, flowHeading = true }: { initialDesi
 }
 
 describe("the wind rose card", () => {
-  const card = (tab: string, analyses: ActiveAnalyses) => windRoseCardOn({ tab, analyses, siteWind: pyrmont });
+  const card = (tab: string, analyses: ActiveAnalyses) => analysisCardsOn(tab, analyses).wind;
 
   it("shows in wind analysis on the 3D and Drawing tabs", () => {
     expect(card("3d", analysesOf("wind"))).toBe(true);
@@ -87,12 +87,11 @@ describe("the wind rose card", () => {
     expect(card("satellite", analysesOf("wind"))).toBe(false);
     expect(card("3d", analysesOf("solar"))).toBe(false);
     expect(card("3d", NO_ANALYSES)).toBe(false);
-    expect(windRoseCardOn({ tab: "3d", analyses: analysesOf("wind"), siteWind: null })).toBe(false);
   });
 
   it("has no Wind Rose chip and mounts no floating rose overlay", () => {
     expect(source("src/components/model/ModelPageViewportFooter.tsx")).not.toMatch(/windRoseChipOn|toggleWindRoseChip|showRose/);
-    expect(source("src/components/model/useModelPage.tsx")).toContain("windRoseCardOn(");
+    expect(source("src/components/model/useModelPage.tsx")).toContain("analysisCardsOn(tab, analyses)");
     expect(source("src/components/model/ModelPageViewportTabs.tsx")).not.toContain("WindRoseOverlay");
     expect(source("src/index.css")).not.toContain(".wind-rose-overlay");
   });

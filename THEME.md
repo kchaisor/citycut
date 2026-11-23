@@ -45,11 +45,13 @@ The name is `--background`. The value is `#EBEBEB`.
 | `--font-size-stat` | The size of the big numbers in the model summary. | `22px` |
 | `--font-size-title` | The size of the large title in the model summary. | `28px` |
 | `--wind-rose-size` | Smallest width of the wind rose in the Wind Rose card; the rose never shrinks below it (Kelvin, 23 Nov 2026; was 168px). | `176px` |
+| `--wind-rose-size-tight` | Width of the wind rose when another analysis card shares the right-hand column, or the window is under 860 tall, so Flow / Streaks / Density stay in view (Kelvin, 23 Nov 2026). | `124px` |
+| `--analysis-label-col` | Width of the left-aligned label column on the analysis cards (ALT / AZ / Daylight, Eye height / Radius), so values and pills start on one x. | `80px` |
 | `--shape-toggle-on-bg` | Fill of the selected Square / Circle pill on the landing map. | `#1A1916` |
 | `--shape-toggle-on-text` | Label on the selected Square / Circle pill. | `#FFFCF8` |
 | `--accent` | The one accent colour in the model sidebar. Only ever a fill, with `--accent-ink` on top and a 1 px `--accent-edge` outline: the selected rail icon, a switch that is on, the selected segment (such as Colour by), and the Ready dot. Never used for text or thin lines. It is its own setting, separate from `--site-building`, so changing one does not change the other. | `#FFF500` |
 | `--accent-ink` | Text and icons on an `--accent` fill, and the knob of a switch that is on. | `#1A1916` |
-| `--on-ink` | Text on an `--ink` fill, such as the selected date and season pills in the Analysis bar (Kelvin, 23 Nov 2026). | `#FFFFFF` |
+| `--on-ink` | Text on an `--ink` fill, such as the selected date and season pills on the analysis cards (Kelvin, 23 Nov 2026). | `#FFFFFF` |
 | `--accent-edge` | The 1 px outline around every `--accent` fill, so the yellow still reads on the near-white sidebar. | `#1A1916` |
 | `--accent-hover` | An `--accent` control under the pointer. | `#FFF9A6` |
 | `--sidebar-bg` | The model sidebar and its icon rail. | `#FFFCF8` |
@@ -70,12 +72,12 @@ The name is `--background`. The value is `#EBEBEB`.
 | `--sidebar-panel-w` | Width of the sidebar panel next to the rail. | `320px` |
 | `--z-studio-inspector` | Stacking order of the fixed Site Intelligence panel. | `30` |
 | `--z-studio-topbar` | Stacking order of the floating top-bar HUD (menus paint above the inspector). | `40` |
-| `--fs-micro` / `--lh-micro` | Micro caps type: the ANALYSIS header and the ALT / AZ / DAYLIGHT labels in the Analysis bar; the IMPORT, scheme and COLOUR headers in Buildings › Import. | `10px` / `12px` |
+| `--fs-micro` / `--lh-micro` | Micro caps type: the ANALYSIS header in the Analysis bar and the kickers and ALT / AZ / DAYLIGHT labels on the analysis cards; the IMPORT, scheme and COLOUR headers in Buildings › Import. | `10px` / `12px` |
 | `--fs-body` | Body type: rows in the imported building popover. | `13px` |
 | `--control-sm` | 28 px control: the Set use select in the imported building popover. | `28px` |
 | `--control-md` | 32 px control: eye toggles in Buildings › Import, the imported-building checkbox row. | `32px` |
 | `--row-imported-building` | Height of one imported building row in Buildings › Import. | `48px` |
-| `--hud-card-head` | Height of the wind-rose card's WIND ROSE header row, which is also its collapse row (Kelvin's yes to Designbot, 22 Nov 2026). | `48px` |
+| `--hud-card-head` | Height of the header row on every right-hand analysis card (Solar Study, Wind Rose, Viewshed Walk) and of folded Site Intelligence; the row is also the card's fold toggle (Kelvin's yes to Designbot, 22 Nov 2026; all three cards since 23 Nov 2026). | `48px` |
 | `--fs-title` / `--lh-title` | Title step of the type scale: Site Intelligence Overview KPI values (mono 600; Designbot asked for 15, the scale has 16). | `16px` / `20px` |
 | `--radius-xs` / `--radius-sm` / `--radius-md` | Swatches and checkboxes / rows and segments / segment tracks and selects, in Buildings › Import and the imported building popover. | `4px` / `6px` / `8px` |
 | `--space-0-5` … `--space-3` | 4 pt spacing steps (2, 4, 6, 8, 12 px) used by Buildings › Import and the imported building popover. | `2px` … `12px` |
@@ -86,11 +88,11 @@ The name is `--background`. The value is `#EBEBEB`.
 | `--ink-2` | Secondary text: Landmark block row labels. | `#4A4945` |
 | `--ink-3` | Muted text: section headers, meta, counts, the LANDMARK header, the Wikidata link, Buildings helper captions. Darkened from `#787670` for contrast (DESIGN-SYSTEM.md). | `#6B6963` |
 | `--border-outer` | 1 px edge of HUD islands and landmark label pills. | `rgb(20 20 19 / 13%)` |
-| `--shadow-raised` | Small lift under landmark label pills and the Wind streaks slider thumb. | `0 1px 2px rgb(20 20 19 / 8%)` |
-| `--slider-track` | Unfilled part of the 4 px Wind streaks slider track (ink at 15%); the filled part is `--ink`. | `rgb(20 20 19 / 15%)` |
-| `--space-0-5` / `--space-1` / `--space-1-5` | 2 / 4 / 6 px gaps inside controls: the Analysis bar date track and the gaps between its chips and icons. | `2px` / `4px` / `6px` |
+| `--shadow-raised` | Small lift under landmark label pills and the analysis-card slider thumbs (Density, Sun dome size, walk position). | `0 1px 2px rgb(20 20 19 / 8%)` |
+| `--slider-track` | Unfilled part of the 4 px analysis-card slider tracks (Density, Sun dome size, walk position; ink at 15%); the filled part is `--ink`. | `rgb(20 20 19 / 15%)` |
+| `--space-0-5` / `--space-1` / `--space-1-5` | 2 / 4 / 6 px gaps inside controls: the High / Fast track and the gaps between chips, icons and segmented buttons on the Analysis bar and cards. | `2px` / `4px` / `6px` |
 | `--space-2` / `--space-3` / `--space-4` | 8 / 12 / 16 px layout spacing: Analysis bar padding, row and group gaps, divider height. | `8px` / `12px` / `16px` |
-| `--radius-sm` / `--radius-md` / `--radius-lg` | Corner radius of chips (6), the date track (8) and the Analysis bar island (12). | `6px` / `8px` / `12px` |
+| `--radius-sm` / `--radius-md` / `--radius-lg` | Corner radius of chips and card buttons (6), the High / Fast track (8) and the Analysis bar and card islands (12). | `6px` / `8px` / `12px` |
 | `--control-xs` / `--control-sm` | Control heights: date options and the time readout (24), mode and overlay chips and the play button (28). | `24px` / `28px` |
 | `--z-hud` | Stacking band of the HUD islands. | `30` |
 | `--z-landmark-labels` | Landmark label pills in 3D and plan, just below `--z-hud`. | `29` |

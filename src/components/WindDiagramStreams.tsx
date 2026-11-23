@@ -30,10 +30,12 @@ const MAX_FRAME_DT = 0.1;
 export function WindDiagramStreams({
   model,
   streams,
+  spreadRadiusM = null,
   animate,
 }: {
   model: CityModel;
   streams: readonly PrevailingStream[];
+  spreadRadiusM?: number | null;
   animate: boolean;
 }) {
   const scene = useThree((state) => state.scene);
@@ -46,7 +48,10 @@ export function WindDiagramStreams({
   animateRef.current = animate;
 
   const { halfWidthM, halfHeightM } = streamSite(model);
-  const fans = useMemo(() => layoutStreamFans(streams, { halfWidthM, halfHeightM }), [streams, halfWidthM, halfHeightM]);
+  const fans = useMemo(
+    () => layoutStreamFans(streams, { halfWidthM, halfHeightM, spreadRadiusM }),
+    [streams, halfWidthM, halfHeightM, spreadRadiusM],
+  );
   const planeY = useMemo(() => streamPlaneY(model), [model]);
 
   const root = useMemo(() => {

@@ -612,10 +612,12 @@ export function SolarHeliodon({
   terrain,
   settings,
   hideDiagram,
+  radiusM,
 }: {
   lat: number;
   lon: number;
   sideM: number;
+  radiusM?: number;
   groundY: number;
   terrain?: TerrainField;
   settings: SolarViewSettings;
@@ -625,7 +627,7 @@ export function SolarHeliodon({
   const colourTick = useColourRevision();
   const fontsTick = useDomeFontsTick();
   const pixelRatio = useThree((state) => Math.ceil(state.viewport.dpr));
-  const radius = sunDomeRadiusM(sideM);
+  const radius = radiusM ?? sunDomeRadiusM(sideM);
   const show = settings.showPath && !hideDiagram;
   const { year, month, day } = settings;
   const dialPlaneY = useMemo(

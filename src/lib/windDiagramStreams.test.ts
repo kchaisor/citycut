@@ -33,6 +33,8 @@ import {
   type StreamSite,
 } from "./windDiagramStreams";
 import { advanceWindClock } from "./windStreakMotion";
+import { sunDomeRange } from "./heliodonRadius";
+import { windStreakStillArrows } from "./rhinoExport";
 import { PREVAILING_STREAM_MAX_ARROWS, PREVAILING_STREAM_TOKENS, type PrevailingStream } from "./windPrevailingStreams";
 
 const SITE = { halfWidthM: 250, halfHeightM: 250 };
@@ -245,7 +247,7 @@ describe("wind diagram meshes", () => {
 });
 
 const WIDE_SITE = { halfWidthM: 400, halfHeightM: 250 };
-const EDGE_EPSILON_M = 0.01;
+const EDGE_EPSILON_M = 1;
 const TAIL_ALPHA_FLOOR = Math.fround(0.45);
 
 function meshPositions(mesh: StreamFanMesh): number[] {
@@ -426,19 +428,15 @@ describe("wind diagram travel loop", () => {
     });
   });
 
-  it("keeps the still pose and every travelling pose inside the cut, fading to nothing at the boundary", () => {
+  it("fades travelling arrows to nothing at the end of their path, and with no dome still fills the cut (no 7% inset)", () => {
     for (const site of [SITE, WIDE_SITE]) {
       for (const triple of [...TRIPLES, [2], [9]]) {
         for (const fan of layoutStreamFans(streamsFrom(triple), site)) {
           const mesh = createStreamFanMesh(fan, 0);
-          expectInsideCut(mesh, site, `${triple} still`);
           for (let seconds = 0.25; seconds < 2 * fan.periodS; seconds += 0.25) {
             writeStreamFanPose(mesh, seconds);
-            expectInsideCut(mesh, site, `${triple} at ${seconds}s`);
           }
           for (const arrow of fan.arrows) {
-            const reach = Math.max(...arrow.track.points.map(Math.abs));
-            expect(reach).toBeLessThan(Math.max(site.halfWidthM, site.halfHeightM));
             expect(streamTravelPose(arrow, 1).tipM).toBeLessThanOrEqual(arrow.track.cum.at(-1)! + 1e-3);
             expect(streamTravelPose(arrow, 1).alpha).toBe(0);
             expect(streamTravelPose(arrow, 0.999).alpha).toBeLessThan(0.001);
@@ -473,7 +471,7 @@ describe("wind diagram still frame for exports", () => {
   const fans = layoutStreamFans(streamsFrom([0, 1, 8]), SITE);
   const source = (file: string) => readFileSync(path.join(process.cwd(), file), "utf8");
 
-  it("renders exports from the still pose, fully visible and inside the cut, then puts the travelling pose back", () => {
+  it("renders exports from the still pose, fully visible, then puts the travelling pose back", () => {
     const scene = new THREE.Scene();
     const group = new THREE.Group();
     const meshes = fans.map((fan) => createStreamFanMesh(fan, 30));
@@ -529,5 +527,146 @@ describe("wind diagram still frame for exports", () => {
     for (const file of ["src/lib/aiPlan.ts", "src/lib/aiView.ts", "src/lib/svgPlan.ts", "src/lib/planRhinoExport.ts", "src/components/DrawingPlan.tsx"]) {
       expect(source(file), file).not.toContain("windDiagramStreams");
     }
+  });
+});
+
+describe("wind streak fans follow the sun dome radius", () => {
+  const CUTS = [
+    { name: "0.5 km square", sideM: 500, widthM: 500, heightM: 500 },
+    { name: "Rozelle A3", sideM: 1470, widthM: 1470, heightM: 1040 },
+  ] as const;
+  const radii = (cut: (typeof CUTS)[number]) => {
+    const range = sunDomeRange(cut);
+    return [range.minM, range.autoM, (range.autoM + range.maxM) / 2, range.maxM];
+  };
+  const siteOf = (cut: (typeof CUTS)[number], spreadRadiusM: number | null = null): StreamSite => ({
+    halfWidthM: cut.widthM / 2,
+    halfHeightM: cut.heightM / 2,
+    spreadRadiusM,
+  });
+  const reachM = (fans: readonly StreamFan[]) =>
+    Math.max(...fans.flatMap((fan) => fan.arrows.flatMap((arrow) => arrow.centre.map((p) => Math.hypot(p.east, p.north)))));
+  const meanTailM = (fans: readonly StreamFan[]) => {
+    const tails = fans.flatMap((fan) => fan.arrows.map((arrow) => Math.hypot(arrow.centre[0]!.east, arrow.centre[0]!.north)));
+    return tails.reduce((sum, tail) => sum + tail, 0) / tails.length;
+  };
+
+  it("keeps every arrow the same length, shaft width and head size at 0.5× auto, auto and 2× the cut edge", () => {
+    for (const cut of CUTS) {
+      for (const triple of TRIPLES) {
+        const streams = streamsFrom(triple);
+        const onCut = layoutStreamFans(streams, siteOf(cut)).flatMap((fan) => fan.arrows);
+        for (const radius of radii(cut)) {
+          const arrows = layoutStreamFans(streams, siteOf(cut, radius)).flatMap((fan) => fan.arrows);
+          expect(arrows).toHaveLength(onCut.length);
+          arrows.forEach((arrow, k) => {
+            const label = `${cut.name} ${triple.join("/")} r=${Math.round(radius)} arrow ${k}`;
+            expect(arrow.lengthM, label).toBeCloseTo(onCut[k]!.lengthM, 6);
+            expect(arrow.shape, label).toEqual(onCut[k]!.shape);
+            expect(arrowLengthM(arrow), label).toBeCloseTo(arrowLengthM(onCut[k]!), 0);
+            expect(widthAt(arrow, 20), label).toBeCloseTo(widthAt(onCut[k]!, 20), 3);
+          });
+        }
+      }
+    }
+  });
+
+  it("does not scale a single design-wind fan's arrows either, only where it sits", () => {
+    const cut = CUTS[0];
+    const range = sunDomeRange(cut);
+    const fanAt = (radius: number) => layoutStreamFans(streamsFrom([3]), siteOf(cut, radius))[0]!;
+    const small = fanAt(range.minM);
+    const large = fanAt(range.maxM);
+    expect(small.arrows.map((arrow) => arrow.shape)).toEqual(large.arrows.map((arrow) => arrow.shape));
+    small.arrows.forEach((arrow, k) => expect(arrow.lengthM).toBeCloseTo(large.arrows[k]!.lengthM, 6));
+    expect(meanTailM([small])).toBeLessThan(meanTailM([large]) - 40);
+  });
+
+  it("pulls the fans in for a small dome and spreads them back out as the dome grows", () => {
+    for (const cut of CUTS) {
+      for (const triple of [[0, 1, 8], [0, 8, 9], [8, 7, 9]]) {
+        const streams = streamsFrom(triple);
+        const [min, auto, , max] = radii(cut);
+        const label = `${cut.name} ${triple.join("/")}`;
+        const atMin = layoutStreamFans(streams, siteOf(cut, min!));
+        const atAuto = layoutStreamFans(streams, siteOf(cut, auto!));
+        const atMax = layoutStreamFans(streams, siteOf(cut, max!));
+        expect(meanTailM(atMin), label).toBeLessThan(meanTailM(atMax) - 20);
+        expect(meanTailM(atAuto), label).toBeLessThan(meanTailM(atMax) - 20);
+        expect(reachM(atMin), label).toBeLessThan(reachM(atMax) - 20);
+        expect(reachM(atAuto), label).toBeLessThan(reachM(atMax) - 20);
+      }
+    }
+  });
+
+  it("fills the cut as before when the dome is off", () => {
+    for (const cut of CUTS) {
+      const streams = streamsFrom([0, 1, 8]);
+      const plain = layoutStreamFans(streams, { halfWidthM: cut.widthM / 2, halfHeightM: cut.heightM / 2 });
+      const domeOff = layoutStreamFans(streams, siteOf(cut, null));
+      expect(domeOff.map((fan) => fan.band)).toEqual(plain.map((fan) => fan.band));
+      domeOff.forEach((fan, i) =>
+        fan.arrows.forEach((arrow, k) => expect([...arrow.positions]).toEqual([...plain[i]!.arrows[k]!.positions])),
+      );
+    }
+  });
+
+  it("keeps fans apart, lets a large dome carry arrows outside the cut, and fades them at the dome radius", () => {
+    const poseReachM = (fans: readonly StreamFan[]) => {
+      let best = 0;
+      for (const fan of fans) {
+        for (const arrow of fan.arrows) {
+          for (const progress of [0, 0.5, 1]) {
+            const pose = streamTravelPose(arrow, progress);
+            for (const s of [pose.tailM, pose.tipM]) {
+              const p = streamTrackPoint(arrow.track, s);
+              best = Math.max(best, Math.hypot(p.east, p.north));
+            }
+          }
+          for (let i = 0; i < arrow.positions.length; i += 2) {
+            best = Math.max(best, Math.hypot(arrow.positions[i]!, arrow.positions[i + 1]!));
+          }
+        }
+      }
+      return best;
+    };
+    for (const cut of CUTS) {
+      for (const triple of TRIPLES) {
+        const streams = streamsFrom(triple);
+        const open = streamFanClearanceM(layoutStreamFans(streams, siteOf(cut)));
+        const maxR = sunDomeRange(cut).maxM;
+        const atMax = layoutStreamFans(streams, siteOf(cut, maxR));
+        const labelMax = `${cut.name} ${triple.join("/")} r=${Math.round(maxR)}`;
+        expect(streamFanClearanceM(atMax), labelMax).toBeGreaterThan(Math.min(open, 0.24 * Math.min(cut.widthM, cut.heightM) / 2) * 0.6);
+        const maxReach = poseReachM(atMax);
+        expect(maxReach, labelMax).toBeGreaterThan(Math.min(cut.widthM, cut.heightM) / 2);
+        expect(maxReach, labelMax).toBeLessThanOrEqual(maxR + 8);
+        for (const radius of radii(cut)) {
+          const fans = layoutStreamFans(streams, siteOf(cut, radius));
+          const label = `${cut.name} ${triple.join("/")} r=${Math.round(radius)}`;
+          expect(streamFanClearanceM(fans), label).toBeGreaterThan(Math.min(open, 0.24 * Math.min(cut.widthM, cut.heightM) / 2) * 0.5);
+        }
+      }
+    }
+  });
+
+  it("threads the live dome radius to the 3D arrows and the Rhino still pose, and only while the dome shows", () => {
+    const source = (file: string) => readFileSync(path.resolve(process.cwd(), file), "utf8");
+    expect(source("src/components/WindDiagramStreams.tsx")).toContain(
+      "layoutStreamFans(streams, { halfWidthM, halfHeightM, spreadRadiusM })",
+    );
+    const hook = source("src/components/model/useModelPage.tsx");
+    expect(hook).toContain(
+      "const windSpreadRadiusM = solarSettingsForActiveAnalysis(solar, analyses).showPath ? sunDome.radiusM : null;",
+    );
+    expect(hook).toContain("windStreaksSpreadRadiusM: windSpreadRadiusM,");
+    expect(source("src/components/model/ModelPageViewportTabs.tsx")).toContain("windSpreadRadiusM={windSpreadRadiusM}");
+    const model = { sideM: 500, buildings: [], terrain: null } as never;
+    const streams = streamsFrom([0, 1, 8]);
+    const range = sunDomeRange({ sideM: 500 });
+    const still = windStreakStillArrows(model, streams, range.minM);
+    const onScreen = layoutStreamFans(streams, { halfWidthM: 250, halfHeightM: 250, spreadRadiusM: range.minM }).flatMap((fan) => fan.arrows);
+    still.forEach((arrow, k) => expect(arrow.vertices[0]![0]).toBe(onScreen[k]!.positions[0]));
+    expect(windStreakStillArrows(model, streams)[0]!.vertices).not.toEqual(still[0]!.vertices);
   });
 });

@@ -1,8 +1,8 @@
 import { useLayoutEffect, type RefObject } from "react";
-import { envConsoleLanes, leftOutlinerMaxHeight, rightHudMaxHeight, transportLegendBottom, type HudBox } from "../../lib/rightHudLayout";
+import { envConsoleLanes, rightHudMaxHeight, transportLegendBottom, type HudBox } from "../../lib/rightHudLayout";
 
 const RESYNC_MS = 500;
-const RIGHT_ANALYSIS_CARD = ".wind-rose-analysis-card, .sun-hours-hud-card";
+const RIGHT_ANALYSIS_CARD = ".analysis-hud-card, .sun-hours-hud-card";
 
 function box(el: Element | null): HudBox | null {
   if (!el) return null;
@@ -40,21 +40,13 @@ export function useRightHudLayout(rootRef: RefObject<HTMLElement | null>, deps: 
       for (const el of [stackEl, consoleEl, railEl, outlinerEl, toastEl, analysisCardEl]) watch(el);
       const stack = box(stackEl);
       const consoleBar = box(consoleEl);
-      const outliner = box(outlinerEl);
-      const outlinerYields = consoleBar != null && outliner != null && consoleEl!.classList.contains("is-combined");
-      setVar(
-        root,
-        "--left-outliner-max-height",
-        outlinerYields ? `${leftOutlinerMaxHeight(consoleBar, outliner)}px` : null,
-      );
+      const maxHeight = stack
+        ? rightHudMaxHeight(window.innerHeight, stack, [consoleBar, box(compassEl)], analysisCardEl ? consoleBar : null)
+        : null;
+      setVar(root, "--right-hud-max-height", maxHeight == null ? null : `${maxHeight}px`);
       if (consoleBar) {
-        const lanes = envConsoleLanes(
-          window.innerWidth,
-          consoleBar,
-          [box(railEl), outlinerYields ? null : outliner],
-          stack,
-          box(analysisCardEl) != null,
-        );
+        const capped = stack && maxHeight != null ? { ...stack, bottom: Math.min(stack.bottom, stack.top + maxHeight) } : stack;
+        const lanes = envConsoleLanes(window.innerWidth, consoleBar, [box(railEl), box(outlinerEl)], capped);
         setVar(root, "--env-console-lane-left", `${lanes.left}px`);
         setVar(root, "--env-console-lane-right", `${lanes.right}px`);
       } else {
@@ -63,12 +55,6 @@ export function useRightHudLayout(rootRef: RefObject<HTMLElement | null>, deps: 
       }
       const legendBottom = transportLegendBottom(window.innerHeight, [consoleBar, box(toastEl)]);
       setVar(root, "--transport-legend-bottom", `${legendBottom}px`);
-      if (stack) {
-        const maxHeight = rightHudMaxHeight(window.innerHeight, stack, [box(consoleEl), box(compassEl)]);
-        setVar(root, "--right-hud-max-height", `${maxHeight}px`);
-      } else {
-        setVar(root, "--right-hud-max-height", null);
-      }
     };
     sync();
     const timer = window.setInterval(sync, RESYNC_MS);

@@ -9,7 +9,6 @@ import {
   SOLAR_SLIDER_START_MIN,
   SOLAR_SLIDER_TICK_HOURS,
   SOLAR_SLIDER_TICK_MIN_GAP_PX,
-  SOLAR_SLIDER_TICK_WIDTH_PX,
   SOLAR_SLIDER_WINDOW,
   clampSolarSliderMinutes,
   isRescodeHour,
@@ -19,6 +18,7 @@ import {
   solarSliderTickMinGap,
   solarSliderTickTier,
 } from "./solarSlider";
+import { SOLAR_CARD_TICK_HOURS } from "../components/model/solarStudyCard";
 
 const source = (file: string) => readFileSync(path.resolve(process.cwd(), file), "utf8");
 const TRACK_PX_AT_1440 = 400.6;
@@ -96,36 +96,25 @@ describe("solar time slider", () => {
     ]);
   });
 
-  it("hides tiers in CSS at the same track widths and tick size the layout maths uses", () => {
-    const floating = source("src/floating.css");
-    const tierRule = (widthPx: number, tier: string) =>
-      new RegExp(
-        `@container solar-track \\(width < ${widthPx}px\\) \\{\\s*\\.model \\.bottom-bar\\.env-console \\.scrubber-tick-btn\\[data-tick-tier="${tier}"\\] \\{\\s*display: none !important;`,
-      );
-    expect(floating).toMatch(tierRule(SOLAR_SLIDER_FULL_TICKS_MIN_TRACK_PX, "minor"));
-    expect(floating).toMatch(tierRule(SOLAR_SLIDER_LATE_TICK_MIN_TRACK_PX, "late"));
-    const trackStart = floating.indexOf(".model .bottom-bar.env-console .scrubber-track {");
-    expect(floating.slice(trackStart, floating.indexOf("}", trackStart))).toMatch(/container: solar-track \/ inline-size !important;/);
-    const tickStart = floating.indexOf(".model .bottom-bar.env-console .scrubber-tick-btn {");
-    expect(floating.slice(tickStart, floating.indexOf("}", tickStart))).toMatch(
-      new RegExp(`min-width: ${SOLAR_SLIDER_TICK_WIDTH_PX}px !important;`),
-    );
-    expect(source("src/components/model/ModelPageViewportFooter.tsx")).toContain("data-tick-tier={solarSliderTickTier(h)}");
+  it("labels the card slider with the core and late hours, under a rail that shares the thumb inset", () => {
+    expect(SOLAR_CARD_TICK_HOURS).toEqual([6, 9, 12, 15, 18, 20]);
+    expect(SOLAR_CARD_TICK_HOURS).toEqual(solarSliderTickHoursAt(SOLAR_SLIDER_LATE_TICK_MIN_TRACK_PX));
+    expect(solarSliderTickHoursAt(SOLAR_SLIDER_FULL_TICKS_MIN_TRACK_PX)).toEqual([...SOLAR_SLIDER_TICK_HOURS]);
+    const card = source("src/components/model/SolarStudyHudCard.tsx");
+    expect(card).toContain("SOLAR_CARD_TICK_HOURS.map");
+    expect(card).toContain("min={SOLAR_SLIDER_START_MIN}");
+    expect(card).toContain("max={SOLAR_SLIDER_END_MIN}");
+    const index = source("src/index.css");
+    const rule = (selector: string) => {
+      const start = index.indexOf(`${selector} {`);
+      expect(start).toBeGreaterThanOrEqual(0);
+      return index.slice(start, index.indexOf("}", start));
+    };
+    const inset = /margin: (0 calc\([^;]+\));/.exec(rule(".ac-scrub"))?.[1];
+    expect(inset).toBeTruthy();
+    expect(rule(".ac-ticks")).toContain(`margin: ${inset};`);
+    expect(rule(".ac-ticks")).toMatch(/grid-column: 3;/);
+    expect(source("src/floating.css")).not.toContain("scrubber-tick-btn");
+    expect(source("src/components/model/ModelPageViewportFooter.tsx")).not.toContain("Solar time of day");
   });
-
-  it("keeps the daylight scrubber wide enough to wrap instead of collapsing the track", () => {
-    const floating = source("src/floating.css");
-    const scrubberStart = floating.indexOf(".model .bottom-bar.env-console .daylight-scrubber {");
-    const scrubber = floating.slice(scrubberStart, floating.indexOf("}", scrubberStart));
-    expect(scrubber).toMatch(/min-width: calc\(var\(--control-md\) \* 6\)/);
-    expect(scrubber).not.toMatch(/min-width: 0;/);
-    const trackStart = floating.indexOf(".model .bottom-bar.env-console .scrubber-track {");
-    const track = floating.slice(trackStart, floating.indexOf("}", trackStart));
-    expect(track).toMatch(new RegExp(`min-width: ${SOLAR_SLIDER_LATE_TICK_MIN_TRACK_PX}px`));
-    const bottomStart = floating.indexOf(".model .bottom-bar.env-console .env-solar-bottom {");
-    const bottom = floating.slice(bottomStart, floating.indexOf("}", bottomStart));
-    expect(bottom).toMatch(/flex-wrap: wrap/);
-    expect(bottom).not.toMatch(/flex-wrap: nowrap/);
-  });
-
 });

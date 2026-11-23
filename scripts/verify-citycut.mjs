@@ -50,6 +50,10 @@ async function ensureAnalysisOn(page, kind) {
   if ((await btn.getAttribute("aria-pressed", { timeout: 30_000 })) !== "true") {
     await btn.click({ timeout: 30_000 });
   }
+  const head = page.locator(`.model [data-analysis-card="${kind}"] .analysis-card-head`);
+  if ((await head.count()) > 0 && (await head.getAttribute("aria-expanded")) !== "true") {
+    await head.click({ timeout: 30_000 });
+  }
 }
 
 async function rasterizeSvgPng(browser, svg, width, height) {
@@ -1323,28 +1327,29 @@ async function main() {
       const envConsole = document.querySelector(".model .env-console");
       const envRect = envConsole?.getBoundingClientRect();
       const topRow = envConsole?.querySelector(".env-top-row");
-      const bottomRow = envConsole?.querySelector(".env-bottom-row");
+      const solarCard = document.querySelector('.model [data-analysis-card="solar"]');
+      const barButtons = Array.from(envConsole?.querySelectorAll("button") ?? []).map((b) => b.textContent?.trim());
       const hasBottomCompass = Boolean(document.querySelector(".model .bottom-bar .compass-mini"));
       const hasBottomReset = Boolean(document.querySelector(".model .bottom-bar .cam-reset"));
       const hasTopCenterReset = Boolean(document.querySelector(".model .top-bar-center .cam-reset"));
-      const envText = envConsole?.textContent ?? "";
+      const envText = solarCard?.textContent ?? "";
       const noHorizontalOverflow = Boolean(
         envConsole &&
           topRow &&
-          bottomRow &&
           envConsole.scrollWidth <= envConsole.clientWidth + 1 &&
-          topRow.scrollWidth <= topRow.clientWidth + 1 &&
-          bottomRow.scrollWidth <= bottomRow.clientWidth + 1,
+          topRow.scrollWidth <= topRow.clientWidth + 1,
       );
       return {
         visibleLeftDrawerCount: visibleLeftDrawers.length,
-        hasEnvConsole: Boolean(envConsole && envRect && envRect.width > 400 && envRect.height > 50),
-        hasTwoRows: Boolean(topRow && bottomRow),
+        hasEnvConsole: Boolean(envConsole && envRect && envRect.width > 400 && envRect.height > 40),
+        hasOneRow: Boolean(topRow && envConsole.children.length === 1 && envRect && envRect.height < 64),
+        barIsModesAndQuality: barButtons.join("|") === "Solar Study|Wind Rose|Viewshed Walk|High|Fast",
+        hasSolarCard: Boolean(solarCard && solarCard.querySelector('input[aria-label="Solar time of day"]')),
         hasBottomCompass,
         hasBottomReset,
         hasTopCenterReset,
         noHorizontalOverflow,
-        has3dSunDomeIn3d: envText.includes("3D Sun Dome"),
+        has3dSunDomeIn3d: envText.includes("Sun dome"),
         hasPlanFanIn3d: envText.includes("9–3pm Plan Fan"),
         hasDuplicateResCodeInRow2: envText.includes("ResCode 9–3"),
         envConsoleRect: envRect
@@ -1355,9 +1360,11 @@ async function main() {
 
     assertCheck(
       "site-analysis-direction-a",
-      "Turning Solar Study on opens the non-overflowing 2-row bottom Analysis bar without N ▲ or Reset view, places Reset view in .top-bar-center, and shows 3D Sun Dome (not 9–3pm Plan Fan) in 3D view",
+      "Turning Solar Study on keeps the one-row Analysis bar (three analysis toggles plus High / Fast, no N ▲ or Reset view), places Reset view in .top-bar-center, and opens the Solar Study card with the time slider and Sun dome (not 9–3pm Plan Fan) in 3D view",
       analysisInfo.hasEnvConsole &&
-        analysisInfo.hasTwoRows &&
+        analysisInfo.hasOneRow &&
+        analysisInfo.barIsModesAndQuality &&
+        analysisInfo.hasSolarCard &&
         !analysisInfo.hasBottomCompass &&
         !analysisInfo.hasBottomReset &&
         analysisInfo.hasTopCenterReset &&
@@ -1365,7 +1372,7 @@ async function main() {
         analysisInfo.has3dSunDomeIn3d &&
         !analysisInfo.hasPlanFanIn3d &&
         !analysisInfo.hasDuplicateResCodeInRow2,
-      `visibleLeftDrawers=${analysisInfo.visibleLeftDrawerCount}, noOverflow=${analysisInfo.noHorizontalOverflow}, topReset=${analysisInfo.hasTopCenterReset}, bottomCompass=${analysisInfo.hasBottomCompass}, 3dDome=${analysisInfo.has3dSunDomeIn3d}, planFanIn3d=${analysisInfo.hasPlanFanIn3d}, rect=${JSON.stringify(analysisInfo.envConsoleRect)}`,
+      `visibleLeftDrawers=${analysisInfo.visibleLeftDrawerCount}, oneRow=${analysisInfo.hasOneRow}, barOnly=${analysisInfo.barIsModesAndQuality}, solarCard=${analysisInfo.hasSolarCard}, noOverflow=${analysisInfo.noHorizontalOverflow}, topReset=${analysisInfo.hasTopCenterReset}, bottomCompass=${analysisInfo.hasBottomCompass}, 3dDome=${analysisInfo.has3dSunDomeIn3d}, planFanIn3d=${analysisInfo.hasPlanFanIn3d}, rect=${JSON.stringify(analysisInfo.envConsoleRect)}`,
     );
 
     await ensureAnalysisOn(page, "wind");
@@ -1407,7 +1414,7 @@ async function main() {
       seasonAttr === "winter" && (annualDeg === winterDeg || annualDeg !== winterDeg),
       `season=${seasonAttr}, annual=${annualDeg}, winter=${winterDeg}`,
     );
-    const windChip = page.locator("button.ov-chip", { hasText: "3D Wind Flow" }).first();
+    const windChip = page.locator('.model [data-analysis-card="wind"] button[aria-label="3D Wind Flow"]').first();
     await windChip.waitFor({ state: "visible", timeout: 60_000 });
     if ((await windChip.getAttribute("aria-pressed")) !== "true") await windChip.click();
     await page.waitForTimeout(12000);
@@ -1576,13 +1583,13 @@ async function main() {
     await analysisBtn.click();
     await page.waitForTimeout(300);
 
-    const planFanBtn = page.locator(".model .env-console .overlay-chips button", { hasText: "9–3pm Plan Fan" });
+    const planFanBtn = page.locator('.model [data-analysis-card="solar"] .ac-seg button', { hasText: "9–3pm Plan Fan" });
     await planFanBtn.click();
     await page.waitForSelector("svg.plan [data-shadow-hour] path", { timeout: 10000 });
     await page.waitForTimeout(300);
 
     const beforeSelectInfo = await page.evaluate(() => {
-      const envText = document.querySelector(".model .env-console")?.textContent ?? "";
+      const envText = document.querySelector('.model [data-analysis-card="solar"]')?.textContent ?? "";
       const shadowPathEls = Array.from(document.querySelectorAll("svg.plan [data-shadow-hour] path"));
       const shadowPaths = shadowPathEls.length;
       const shadowDLength = shadowPathEls.reduce((acc, p) => acc + (p.getAttribute("d")?.length ?? 0), 0);
@@ -1931,7 +1938,7 @@ async function main() {
     const sydneyAnalysis = sydneyPage.getByRole("button", { name: "Analysis" }).first();
     await sydneyAnalysis.click({ timeout: 60_000 });
     await sydneyPage.waitForTimeout(400);
-    const sydneyPlanFanBtn = sydneyPage.locator(".model .env-console .overlay-chips button", { hasText: "9–3pm Plan Fan" });
+    const sydneyPlanFanBtn = sydneyPage.locator('.model [data-analysis-card="solar"] .ac-seg button', { hasText: "9–3pm Plan Fan" });
     await sydneyPlanFanBtn.click({ timeout: 30_000 });
     await sydneyPage.waitForSelector("svg.plan [data-shadow-hour] path", { timeout: 60_000 });
     await sydneyPage.waitForSelector("svg.plan .plan-north-arrow", { timeout: 60_000 });
@@ -1953,8 +1960,8 @@ async function main() {
         (await sydneyPage.locator("svg.plan .heliodon-plan").count()) > 0,
       "north arrow and heliodon layer present",
     );
-    const sydneySunDome = sydneyPage.locator(".model .env-console .overlay-chips button", {
-      hasText: "3D Sun Dome",
+    const sydneySunDome = sydneyPage.locator('.model [data-analysis-card="solar"] .ac-seg button', {
+      hasText: "Sun dome",
     });
     if ((await sydneySunDome.count()) > 0 && (await sydneySunDome.getAttribute("aria-pressed")) === "true") {
       await sydneySunDome.click({ timeout: 30_000 });
@@ -2275,7 +2282,7 @@ async function main() {
       );
       await importPage.getByRole("tab", { name: "3D" }).click({ timeout: 60_000 });
       await ensureAnalysisOn(importPage, "solar");
-      const importShadowsOn = importPage.locator(".model .env-console .overlay-chips button", { hasText: "Shadows" });
+      const importShadowsOn = importPage.locator('.model [data-analysis-card="solar"] .ac-seg button', { hasText: "Shadows" });
       if ((await importShadowsOn.getAttribute("aria-pressed")) !== "true") {
         await importShadowsOn.click({ timeout: 30_000 });
       }
@@ -2294,9 +2301,9 @@ async function main() {
       await importPage.waitForSelector("svg.plan", { timeout: 120_000 });
       await ensureAnalysisOn(importPage, "solar");
       await importPage.waitForTimeout(300);
-      const shadowsChip = importPage.locator(".model .env-console .overlay-chips button", { hasText: "Shadows" });
+      const shadowsChip = importPage.locator('.model [data-analysis-card="solar"] .ac-seg button', { hasText: "Shadows" });
       await shadowsChip.click({ timeout: 30_000 });
-      const importPlanFanBtn = importPage.locator(".model .env-console .overlay-chips button", {
+      const importPlanFanBtn = importPage.locator('.model [data-analysis-card="solar"] .ac-seg button', {
         hasText: "9–3pm Plan Fan",
       });
       await importPlanFanBtn.click({ timeout: 30_000 });
@@ -2436,10 +2443,10 @@ async function main() {
       await importPage.waitForTimeout(400);
       await ensureAnalysisOn(importPage, "solar");
       await importPage.waitForTimeout(250);
-      const envFanBtn = importPage.locator(".model .env-console .overlay-chips button", {
+      const envFanBtn = importPage.locator('.model [data-analysis-card="solar"] .ac-seg button', {
         hasText: "9–3pm Plan Fan",
       });
-      const envShadowsBtn = importPage.locator(".model .env-console .overlay-chips button", { hasText: "Shadows" });
+      const envShadowsBtn = importPage.locator('.model [data-analysis-card="solar"] .ac-seg button', { hasText: "Shadows" });
       if ((await envFanBtn.count()) > 0 && (await envFanBtn.getAttribute("aria-pressed")) === "true") {
         await envFanBtn.click({ timeout: 30_000 });
       }

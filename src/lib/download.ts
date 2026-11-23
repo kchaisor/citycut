@@ -62,6 +62,7 @@ export type RhinoDownloadOptions = {
   colourBySource?: boolean;
   wind?: { selection: import("./windRoseData").SiteWindSelection; period: import("./windRose").WindPeriodId } | null;
   windStreaks?: readonly import("./windPrevailingStreams").PrevailingStream[] | null;
+  windStreaksSpreadRadiusM?: number | null;
   hideTrees?: boolean;
   importedMassing?: import("./rhinoExport").ImportedMassingExport[] | null;
   buildingsAsMesh?: boolean;

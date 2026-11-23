@@ -10,7 +10,7 @@ import { sunHoursLegendCardOn } from "./sunHoursLegendCard";
 import { sunHoursQualityParams, sunHoursResolution } from "../../lib/sunHoursQuality";
 import type { useSunHoursGround } from "../useSunHoursGround";
 import { WindStreaksSlider } from "../WindStreaksSlider";
-import { siteIntelAutoFolded, windRoseCardAutoCollapsed, windRoseCardMeta, windStreaksSliderOn } from "./windRoseCard";
+import { siteIntelAutoFolded, windRoseCardMeta, windStreaksSliderOn } from "./windRoseCard";
 import { analysesOf } from "../../lib/sidebarSections";
 import { PrevailingStreamsLegend } from "../PrevailingStreamsLegend";
 import { prevailingStreams } from "../../lib/windPrevailingStreams";
@@ -31,7 +31,7 @@ const block = (source: string, selector: string) => {
   return source.slice(start, source.indexOf("}", start));
 };
 
-const windCard = <div className="wind-rose-analysis-card hud-card" aria-label="Wind rose panel" />;
+const windCard = <div className="wind-rose-analysis-card analysis-hud-card hud-card" aria-label="Wind rose panel" />;
 
 function sunHoursState(sideM: number, pending = false): ReturnType<typeof useSunHoursGround> {
   const resolution = sunHoursResolution(sunHoursQualityParams("high", sideM));
@@ -83,7 +83,7 @@ describe("right HUD stack", () => {
     expect(stack).toBeTruthy();
     expect([...stack!.children].map((el) => el.className)).toEqual([
       "right-inspector hud-card",
-      "wind-rose-analysis-card hud-card",
+      "wind-rose-analysis-card analysis-hud-card hud-card",
     ]);
     expect(stack!.querySelector(".right-inspector .sidebar-panel.is-right")).toBeTruthy();
   });
@@ -95,13 +95,13 @@ describe("right HUD stack", () => {
     expect(stack?.querySelector(".wind-rose-analysis-card")).toBeTruthy();
   });
 
-  it("pins the column at top 68 / right 14, 304px wide, with a 12px gap", () => {
+  it("pins the column at top 68 / right 14, 328px wide, with a 12px gap", () => {
     const floating = css("src/floating.css");
     const stack = block(floating, ".model .right-hud-stack");
     expect(stack).toMatch(/position: fixed;/);
     expect(stack).toMatch(/top: 68px;/);
     expect(stack).toMatch(/right: 14px;/);
-    expect(stack).toMatch(/width: 304px;/);
+    expect(stack).toMatch(/width: 328px;/);
     expect(stack).toMatch(/gap: var\(--space-3\);/);
     expect(stack).toMatch(/max-height: var\(--right-hud-max-height/);
     const inspector = block(floating, ".model .right-inspector");
@@ -112,7 +112,7 @@ describe("right HUD stack", () => {
 
   it("makes the wind rose card a full-width stack card with no left placement", () => {
     const index = css("src/index.css");
-    const card = block(index, ".wind-rose-analysis-card");
+    const card = block(index, ".analysis-hud-card");
     expect(card).toMatch(/width: 100%;/);
     expect(card).toMatch(/border-radius: var\(--radius-lg\);/);
     expect(card).toMatch(/background: var\(--bg-card\);/);
@@ -122,12 +122,13 @@ describe("right HUD stack", () => {
     expect(index).not.toMatch(/wind-rose-analysis-card\.is-plan \{/);
     expect(index).not.toMatch(/272px/);
     expect(index).not.toMatch(/--wind-plan-card-/);
+    expect(index).not.toMatch(/^\.wind-rose-analysis-card \{/m);
     expect(block(index, ".wind-streaks")).toMatch(/flex: none;/);
-    expect(block(index, ".wind-rose-analysis-card.is-collapsed")).toMatch(/flex: none;/);
-    expect(block(index, ".wind-rose-analysis-card.is-collapsed")).toMatch(/min-height: var\(--hud-card-head\);/);
+    expect(block(index, ".analysis-hud-card.is-collapsed")).toMatch(/flex: none;/);
+    expect(block(index, ".analysis-hud-card.is-collapsed")).toMatch(/min-height: var\(--hud-card-head\);/);
   });
 
-  it("stacks the Direct Sun Hours legend in the same column, under the wind rose card", () => {
+  it("stacks the stand-alone Direct Sun Hours legend in the same column when Solar Study is off", () => {
     const { container } = renderSidebar(
       true,
       <>
@@ -138,7 +139,7 @@ describe("right HUD stack", () => {
     const stack = container.querySelector(".right-hud-stack")!;
     expect([...stack.children].map((el) => el.className)).toEqual([
       "right-inspector hud-card",
-      "wind-rose-analysis-card hud-card",
+      "wind-rose-analysis-card analysis-hud-card hud-card",
       "sun-hours-hud-card hud-card",
     ]);
     const card = stack.querySelector(".sun-hours-hud-card")!;
@@ -186,8 +187,12 @@ describe("right HUD stack", () => {
     const tabs = css("src/components/model/ModelPageViewportTabs.tsx");
     expect(tabs).not.toContain("SunHoursLegendDock");
     const sidebar = css("src/components/model/ModelPageSidebar.tsx");
-    expect(sidebar).toContain("{sunHoursLegendOn ? <SunHoursLegendDock sunHoursGround={vm.sunHoursGround} /> : null}");
-    expect(sidebar).toContain("{windRoseOn ? <WindRoseHudCard vm={vm} /> : null}");
+    expect(sidebar).toContain("{sunHoursLegendAlone ? <SunHoursLegendDock sunHoursGround={vm.sunHoursGround} /> : null}");
+    expect(sidebar).toContain("{analysisCards.solar ? <SolarStudyHudCard vm={vm} /> : null}");
+    expect(sidebar).toContain("{analysisCards.wind ? <WindRoseHudCard vm={vm} /> : null}");
+    expect(sidebar).toContain("{analysisCards.view ? <ViewshedHudCard vm={vm} /> : null}");
+    expect(sidebar.indexOf("<SolarStudyHudCard")).toBeLessThan(sidebar.indexOf("<WindRoseHudCard"));
+    expect(sidebar.indexOf("<WindRoseHudCard")).toBeLessThan(sidebar.indexOf("<ViewshedHudCard"));
   });
 
   it("centres the Analysis console in the lane left clear by the rail and the right stack", () => {
@@ -209,9 +214,11 @@ describe("Wind streaks slider", () => {
     expect(windStreaksSliderOn({ ...on, planActive: true })).toBe(false);
   });
 
-  it("is named Wind streaks, defaults to 1.0x and drives the streak count", () => {
+  it("is named Density, defaults to 1.0x and drives the streak count", () => {
     render(<WindStreaksSlider />);
-    const slider = screen.getByRole("slider", { name: "Wind streaks" });
+    const slider = screen.getByRole("slider", { name: "Density" });
+    expect(screen.queryByRole("slider", { name: "Wind streaks" })).toBeNull();
+    expect(document.querySelector(".wind-streaks-title")?.textContent?.trim()).toBe("Density");
     expect((slider as HTMLInputElement).value).toBe("1");
     expect(slider.getAttribute("min")).toBe("0.5");
     expect(slider.getAttribute("max")).toBe("2.5");
@@ -239,7 +246,7 @@ describe("Wind streaks slider chrome", () => {
     expect(thumb).toMatch(/background: var\(--bg-elev\);/);
     expect(thumb).toMatch(/box-shadow: var\(--shadow-raised\);/);
     expect(block(index, ".wind-streaks-input")).toMatch(/height: var\(--control-md\);/);
-    expect(block(index, ".wind-streaks")).toMatch(/padding: var\(--space-4\) 0;/);
+    expect(block(index, ".wind-streaks-row")).toMatch(/align-items: center;/);
     expect(css("src/theme.css")).toMatch(/--slider-track: rgb\(20 20 19 \/ 15%\);/);
     const { container } = render(<WindStreaksSlider />);
     expect(container.querySelector<HTMLElement>(".wind-streaks-track")!.style.getPropertyValue("--wind-streaks-tick")).toBe("0.25");
@@ -259,18 +266,10 @@ describe("Wind streaks slider chrome", () => {
 });
 
 describe("wind rose card header", () => {
-  it("auto-collapses for Buildings or Trees below 1440 and expands otherwise", () => {
-    expect(windRoseCardAutoCollapsed("buildings", 1280)).toBe(true);
-    expect(windRoseCardAutoCollapsed("trees", 1439)).toBe(true);
-    expect(windRoseCardAutoCollapsed("summary", 1280)).toBe(false);
-    expect(windRoseCardAutoCollapsed("buildings", 1440)).toBe(false);
-    expect(windRoseCardAutoCollapsed("trees", 1920)).toBe(false);
-  });
-
   it("reads period and station years in the meta, and is a 48px row", () => {
     expect(windRoseCardMeta("Annual", 15)).toBe("Annual · 15 yrs");
     expect(windRoseCardMeta("Jan", undefined)).toBe("Jan");
-    const head = block(css("src/index.css"), ".wind-rose-card-head");
+    const head = block(css("src/index.css"), ".analysis-card-head");
     expect(head).toMatch(/height: var\(--hud-card-head\);/);
     expect(css("src/theme.css")).toMatch(/--hud-card-head: 48px;/);
   });
@@ -320,12 +319,13 @@ describe("Site Intelligence chrome", () => {
 });
 
 describe("Site Intelligence beside the Wind Rose card", () => {
-  it("folds to its 48px header when the Wind Rose card opens and unfolds when it closes", () => {
+  it("folds to its 48px header when any analysis card opens and unfolds when the last one closes", () => {
     expect(siteIntelAutoFolded(true)).toBe(true);
     expect(siteIntelAutoFolded(false)).toBe(false);
     const hook = css("src/components/model/useModelPage.tsx");
-    expect(hook).toContain("useEffect(() => setSiteIntelFolded(siteIntelAutoFolded(windRoseOn)), [windRoseOn]);");
+    expect(hook).toContain("useEffect(() => setSiteIntelFolded(siteIntelAutoFolded(analysisCardOn)), [analysisCardOn]);");
     const folded = block(css("src/floating.css"), ".model .right-inspector.is-folded");
+    expect(hook).toContain("const analysisCardOn = anyAnalysisCardOn(tab, analyses);");
     expect(folded).toMatch(/height: var\(--hud-card-head\);/);
     expect(folded).toMatch(/flex: none;/);
     expect(css("src/theme.css")).toMatch(/--hud-card-head: 48px;/);
@@ -337,7 +337,7 @@ describe("Site Intelligence beside the Wind Rose card", () => {
     const stack = container.querySelector(".right-hud-stack")!;
     expect([...stack.children].map((el) => el.className)).toEqual([
       "right-inspector hud-card is-folded",
-      "wind-rose-analysis-card hud-card",
+      "wind-rose-analysis-card analysis-hud-card hud-card",
     ]);
     const inspector = stack.querySelector(".right-inspector")!;
     expect(inspector.children).toHaveLength(1);
@@ -366,7 +366,7 @@ describe("Site Intelligence beside the Wind Rose card", () => {
     );
     expect([...container.querySelector(".right-hud-stack")!.children].map((el) => el.className)).toEqual([
       "right-inspector hud-card is-folded",
-      "wind-rose-analysis-card hud-card",
+      "wind-rose-analysis-card analysis-hud-card hud-card",
       "sun-hours-hud-card hud-card",
     ]);
   });
@@ -378,7 +378,7 @@ describe("Wind Rose card size", () => {
 
   it("caps the stack at the viewport minus 80", () => {
     for (const vh of [800, 900]) {
-      const stack = { left: 962, right: 1266, top: RIGHT_HUD_TOP_PX, bottom: vh };
+      const stack = { left: 938, right: 1266, top: RIGHT_HUD_TOP_PX, bottom: vh };
       expect(rightHudMaxHeight(vh, stack, [])).toBe(vh - 80);
     }
     expect(block(css("src/floating.css"), ".model .right-hud-stack")).toMatch(
@@ -387,14 +387,14 @@ describe("Wind Rose card size", () => {
     expect(css("src/theme.css")).toMatch(/--space-3: 12px;/);
   });
 
-  it("never draws the rose under 176px and scrolls the card body instead of cutting it off", () => {
+  it("never draws the rose under 176px while Wind Rose is the only analysis, and scrolls the card body instead of cutting it off", () => {
     const index = css("src/index.css");
     expect(css("src/theme.css")).toMatch(/--wind-rose-size: 176px;/);
     const chart = block(index, ".wind-rose-chart");
     expect(chart).toMatch(/min-width: var\(--wind-rose-size\);/);
     expect(chart).toMatch(/flex: none;/);
-    expect(block(index, ".wind-rose-card-body")).toMatch(/overflow-y: auto;/);
-    expect(block(index, ".wind-rose-card-body")).toMatch(/min-height: 0;/);
+    expect(block(index, ".analysis-card-body")).toMatch(/overflow-y: auto;/);
+    expect(block(index, ".analysis-card-body")).toMatch(/min-height: 0;/);
   });
 
   it("leaves room for the whole rose at 1440x900 and 1280x800 with Site Intelligence folded", () => {

@@ -795,7 +795,7 @@ describe("Display panel controls by view tab", () => {
     }
   });
 
-  it("keeps the Analysis bar always on with no left-rail Site Analysis item, all analyses off, and toggles Solar Study and Wind Rose", async () => {
+  it("keeps the one-row Analysis bar always on, opens each analysis in its own right card, and folds the others like an accordion", async () => {
     const user = userEvent.setup();
     render(
       <ModelPage
@@ -826,32 +826,61 @@ describe("Display panel controls by view tab", () => {
       expect(within(envConsole).getByRole("button", { name }).getAttribute("aria-pressed")).toBe("false");
     }
     expect(within(envConsole).queryByRole("button", { name: "Walk Ripple" })).toBeNull();
-    expect(within(envConsole).getByLabelText("Live solar telemetry").textContent).toContain("ALT");
-    expect(within(envConsole).getByRole("group", { name: "Scene overlay toggles" })).toBeTruthy();
-    expect(within(envConsole).getByRole("group", { name: "Solar date presets" })).toBeTruthy();
     expect(within(envConsole).getByRole("group", { name: "Render quality" })).toBeTruthy();
-    expect(envConsole.querySelector(".env-solar-idle")).toBeTruthy();
+    expect(within(envConsole).getAllByRole("button").map((button) => button.textContent)).toEqual([
+      "Solar Study",
+      "Wind Rose",
+      "Viewshed Walk",
+      "High",
+      "Fast",
+    ]);
+    expect(document.querySelector(".analysis-hud-card")).toBeNull();
+    expect(screen.queryByLabelText("Live solar telemetry")).toBeNull();
     expect(screen.queryByRole("region", { name: "Solar and camera controls" })).toBeNull();
+    const card = (kind: string) => document.querySelector<HTMLElement>(`[data-analysis-card="${kind}"]`);
+    const expanded = (kind: string) => card(kind)?.querySelector(".analysis-card-head")?.getAttribute("aria-expanded");
 
     await user.click(within(envConsole).getByRole("button", { name: "Solar Study" }));
     expect(leftOutliner.hidden).toBe(false);
-    expect(within(envConsole).getByLabelText("Live solar telemetry").textContent).toContain("ALT");
-    expect(envConsole.querySelector(".env-solar-idle")).toBeNull();
+    const solarCard = card("solar")!;
+    expect(expanded("solar")).toBe("true");
+    expect(within(solarCard).getByLabelText("Live solar telemetry").textContent).toContain("Alt");
+    expect(within(solarCard).getByRole("group", { name: "Solar overlays" })).toBeTruthy();
+    expect(within(solarCard).getByRole("group", { name: "Solar date presets" })).toBeTruthy();
+    expect(within(solarCard).getByRole("slider", { name: "Solar time of day" })).toBeTruthy();
+    expect(within(solarCard).getByRole("slider", { name: "Sun dome size" })).toBeTruthy();
+    expect(within(envConsole).queryByLabelText("Live solar telemetry")).toBeNull();
+    expect(document.querySelector(".right-inspector")?.className).toContain("is-folded");
 
     await user.click(within(envConsole).getByRole("button", { name: "Wind Rose" }));
     expect(within(envConsole).getByRole("button", { name: "Solar Study" }).getAttribute("aria-pressed")).toBe("true");
-    expect(within(envConsole).getByRole("group", { name: "Wind season presets" })).toBeTruthy();
-    expect(within(envConsole).getByLabelText("Live solar telemetry")).toBeTruthy();
-    expect(envConsole.querySelector(".env-solar-idle")).toBeNull();
+    expect(expanded("wind")).toBe("true");
+    expect(expanded("solar")).toBe("false");
+    expect(card("solar")!.querySelector(".analysis-card-body")).toBeNull();
+    expect(within(card("wind")!).getByRole("group", { name: "Wind season presets" })).toBeTruthy();
+    expect(within(envConsole).queryByRole("group", { name: "Wind season presets" })).toBeNull();
+
+    await user.click(card("solar")!.querySelector<HTMLElement>(".analysis-card-head")!);
+    expect(expanded("solar")).toBe("true");
+    expect(expanded("wind")).toBe("false");
+
+    await user.click(within(envConsole).getByRole("button", { name: "Viewshed Walk" }));
+    expect(expanded("view")).toBe("true");
+    expect(expanded("solar")).toBe("false");
+    expect(expanded("wind")).toBe("false");
+    expect(within(card("view")!).getByRole("button", { name: "Draw path" })).toBeTruthy();
+
+    await user.click(within(envConsole).getByRole("button", { name: "Viewshed Walk" }));
+    expect(card("view")).toBeNull();
+    expect(expanded("solar")).toBe("true");
 
     await user.click(within(envConsole).getByRole("button", { name: "Solar Study" }));
-    expect(within(envConsole).getByLabelText("Live wind telemetry").textContent).toContain("PREVAILING");
-    expect(within(envConsole).queryByLabelText("Live solar telemetry")).toBeNull();
+    expect(card("solar")).toBeNull();
+    expect(expanded("wind")).toBe("true");
 
     await user.click(within(envConsole).getByRole("button", { name: "Wind Rose" }));
-    expect(within(envConsole).queryByLabelText("Live wind telemetry")).toBeNull();
-    expect(within(envConsole).getByLabelText("Live solar telemetry")).toBeTruthy();
-    expect(envConsole.querySelector(".env-solar-idle")).toBeTruthy();
+    expect(document.querySelector(".analysis-hud-card")).toBeNull();
+    expect(document.querySelector(".right-inspector")?.className).not.toContain("is-folded");
     expect(screen.getByRole("region", { name: "Environmental analysis console" })).toBeTruthy();
   });
 });
