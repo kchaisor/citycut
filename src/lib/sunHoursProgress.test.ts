@@ -5,8 +5,10 @@ import {
   combineSunHoursProgress,
   createThrottledProgress,
   reportSunHoursStep,
+  SUN_HOURS_CALCULATING_PILL_LABEL,
   sunHoursLegendBusy,
   sunHoursProgressPercent,
+  sunHoursProgressStage,
 } from "./sunHoursProgress";
 
 describe("sun hours calculating progress", () => {
@@ -27,6 +29,12 @@ describe("sun hours calculating progress", () => {
     expect(combineSunHoursProgress(1, null, "ground")).toBe(SUN_HOURS_GROUND_PROGRESS_SHARE);
     expect(combineSunHoursProgress(1, 0, "surfaces")).toBe(SUN_HOURS_GROUND_PROGRESS_SHARE);
     expect(combineSunHoursProgress(1, 1, "surfaces")).toBe(1);
+  });
+
+  it("names the ground and roofs stages, and uses a short pill label", () => {
+    expect(sunHoursProgressStage(false)).toBe("GROUND");
+    expect(sunHoursProgressStage(true)).toBe("ROOFS");
+    expect(SUN_HOURS_CALCULATING_PILL_LABEL).toBe("Calculating sun hours…");
   });
 
   it("hides the bar once both jobs are done", () => {

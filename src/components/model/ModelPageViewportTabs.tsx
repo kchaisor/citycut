@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { BuildingHeightPopover, ImportedBuildingPopover } from "../BuildingHeightPopover";
+import { LoadingHudPill } from "../LoadingHudPill";
 import { LandmarkLabelLayer } from "../LandmarkLabelLayer";
 import { ImportedLabelLayer } from "../ImportedLabelLayer";
 import type { ImportedLabelState } from "../ImportedLabelProjector";
@@ -127,16 +128,13 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
               const samples = typeof window !== "undefined" ? window.__citycutProgressSamples : undefined;
               const currentPct = Array.isArray(samples) && samples.length > 0 ? (samples[samples.length - 1] ?? 0) : 0;
               return (
-                <div className="loading-card loading-hud-pill is-model-bridge hud-card" aria-hidden="true" data-progress-pct={currentPct}>
-                  <div className="loading-hud-row">
-                    <span className="loading-pulse-dot" />
-                    <strong>Building 3D site cut · LiDAR + Vicmap…</strong>
-                    <div className="loading-prog-track">
-                      <div className="loading-prog-fill" style={{ width: `${currentPct}%` }} />
-                    </div>
-                    <span className="loading-prog-pct">{currentPct}%</span>
-                  </div>
-                </div>
+                <LoadingHudPill
+                  className="loading-card is-model-bridge"
+                  label="Building 3D site cut · LiDAR + Vicmap…"
+                  progress={currentPct / 100}
+                  aria-hidden="true"
+                  data-progress-pct={currentPct}
+                />
               );
             })()}
             {model.heightSourceLoadWarnings?.map((line) => (

@@ -1,5 +1,14 @@
 export type SunHoursProgressCallback = (fraction: number) => void;
 
+export type SunHoursProgressStage = "GROUND" | "ROOFS";
+
+export const SUN_HOURS_CALCULATING_PILL_LABEL = "Calculating sun hours…";
+
+export function sunHoursProgressStage(pendingSurfaces: boolean): SunHoursProgressStage {
+  return pendingSurfaces ? "ROOFS" : "GROUND";
+}
+
+
 export const SUN_HOURS_GROUND_PROGRESS_SHARE = 0.65;
 
 export function clampSunHoursProgress(value: number): number {
