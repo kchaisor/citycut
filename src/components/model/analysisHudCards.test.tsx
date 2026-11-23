@@ -354,14 +354,15 @@ describe("Wind Rose card", () => {
     expect(wind.getByRole("group", { name: "Wind season presets" })).toBeTruthy();
   });
 
-  it("caps the rose at 124px while another analysis shares the stack", () => {
+  it("keeps the rose full card width while another analysis shares the stack", () => {
     render(<Hud initialKinds={["wind"]} />);
     expect(card("wind")!.className).not.toContain("is-tight");
     fireEvent.click(mode("Solar Study"));
     expect(card("wind")!.className).toContain("is-tight");
     const tight = block(".analysis-hud-card.is-tight .wind-rose-chart");
-    expect(tight).toMatch(/width: var\(--wind-rose-size-tight\);/);
-    expect(readFileSync(path.join(process.cwd(), "src/theme.css"), "utf8")).toMatch(/--wind-rose-size-tight: 124px;/);
+    expect(tight).toMatch(/width: 100%;/);
+    const cardChart = block(".wind-rose-analysis-card .wind-rose-chart");
+    expect(cardChart).toMatch(/width: 100%;/);
   });
 });
 

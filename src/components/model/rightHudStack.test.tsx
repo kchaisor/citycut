@@ -389,12 +389,14 @@ describe("Wind Rose card size", () => {
     expect(css("src/theme.css")).toMatch(/--space-3: 12px;/);
   });
 
-  it("never draws the rose under 176px while Wind Rose is the only analysis, and scrolls the card body instead of cutting it off", () => {
+  it("fills the Wind Rose card width and scrolls the card body instead of shrinking the rose", () => {
     const index = css("src/index.css");
     expect(css("src/theme.css")).toMatch(/--wind-rose-size: 176px;/);
     const chart = block(index, ".wind-rose-chart");
     expect(chart).toMatch(/min-width: var\(--wind-rose-size\);/);
     expect(chart).toMatch(/flex: none;/);
+    const cardChart = block(index, ".wind-rose-analysis-card .wind-rose-chart");
+    expect(cardChart).toMatch(/width: 100%;/);
     expect(block(index, ".analysis-card-body")).toMatch(/overflow-y: auto;/);
     expect(block(index, ".analysis-card-body")).toMatch(/min-height: 0;/);
   });
