@@ -1,19 +1,21 @@
 import * as THREE from "three";
 import { planToWorld } from "./sunHoursWorld";
+import { clipPolygonRect } from "./clip";
 import {
   extrudedFootprintsForBuilding,
   extrudedBuildingsForModel,
   type ExtrudedFootprint,
 } from "./extrudedBuildingFootprint";
 import { openRing } from "./geo";
-import { sunHoursDirectRgb } from "./sunHoursGround";
+import { SUN_HOURS_GROUND_CELL_M, sunHoursDirectRgb } from "./sunHoursGround";
 import { receivesSunHours, sunHoursReceivers } from "./sunHoursBuildings";
 import { SURFACE } from "./surfaceLayers";
 import { footprintBase } from "./terrain";
+import { pointInPolygon } from "./useCascade";
 import type { DirectSunHoursSample } from "./sunHoursDirectSample";
 import type { BuildingFeat, CityModel, Pt, Ring } from "../types";
 
-export const ROOF_OVERLAY_CLEARANCE_M = 0.15;
+export const ROOF_OVERLAY_CLEARANCE_M = 0;
 
 export function ringCentroid(ring: Ring): Pt {
   const open = openRing(ring);
@@ -73,6 +75,25 @@ function roofHoursNearPlanPoint(
   return 0;
 }
 
+function hoursForRoofCell(
+  buildingId: number,
+  minE: number,
+  maxE: number,
+  minN: number,
+  maxN: number,
+  samples: DirectSunHoursSample[],
+  hours: Float32Array,
+): number {
+  for (let index = 0; index < samples.length; index++) {
+    const sample = samples[index]!;
+    if (sample.kind !== "roof-cell" || sample.buildingId !== buildingId) continue;
+    if (sample.east >= minE && sample.east < maxE && sample.north >= minN && sample.north < maxN) {
+      return hours[index]!;
+    }
+  }
+  return roofHoursNearPlanPoint(buildingId, (minE + maxE) / 2, (minN + maxN) / 2, samples, hours);
+}
+
 function pushRoofTriangle(
   roofPositions: number[],
   roofColors: number[],
@@ -104,6 +125,75 @@ function triangulateRoof(contour: THREE.Vector2[], holes: THREE.Vector2[][]) {
   return { faces: THREE.ShapeUtils.triangulateShape(contour, []), vertices: contour };
 }
 
+function ringBounds(ring: Ring): { minE: number; maxE: number; minN: number; maxN: number } {
+  let minE = Infinity;
+  let maxE = -Infinity;
+  let minN = Infinity;
+  let maxN = -Infinity;
+  for (const [east, north] of openRing(ring)) {
+    minE = Math.min(minE, east);
+    maxE = Math.max(maxE, east);
+    minN = Math.min(minN, north);
+    maxN = Math.max(maxN, north);
+  }
+  return { minE, maxE, minN, maxN };
+}
+
+function clipRingToAxisRect(ring: Ring, minE: number, maxE: number, minN: number, maxN: number): Pt[] {
+  const midE = (minE + maxE) / 2;
+  const midN = (minN + maxN) / 2;
+  const halfW = (maxE - minE) / 2;
+  const halfH = (maxN - minN) / 2;
+  if (!(halfW > 0) || !(halfH > 0)) return [];
+  const shifted = openRing(ring).map(([east, north]) => [east - midE, north - midN] as Pt);
+  return clipPolygonRect(shifted, halfW, halfH).map(([east, north]) => [east + midE, north + midN] as Pt);
+}
+
+function underTallerPart(point: Pt, part: ExtrudedFootprint, footprints: ExtrudedFootprint[]): boolean {
+  const top = (part.base ?? 0) + part.height;
+  return footprints.some(
+    (other) => other !== part && (other.base ?? 0) + other.height > top && pointInPolygon(point, other.ring, other.holes),
+  );
+}
+
+function appendClippedRoofCell(
+  roofPositions: number[],
+  roofColors: number[],
+  maxSunHours: number,
+  yWorld: number,
+  hour: number,
+  contour: Pt[],
+  holes: Pt[][],
+): number {
+  if (contour.length < 3) return 0;
+  const contourVec = contour.map(([east, north]) => new THREE.Vector2(east, north));
+  const holeVec = holes
+    .filter((hole) => hole.length >= 3)
+    .map((hole) => hole.map(([east, north]) => new THREE.Vector2(east, north)));
+  const { faces, vertices } = triangulateRoof(contourVec, holeVec);
+  if (faces.length === 0) return 0;
+  let triangles = 0;
+  for (const [ia, ib, ic] of faces) {
+    const a = vertices[ia]!;
+    const b = vertices[ib]!;
+    const c = vertices[ic]!;
+    pushRoofTriangle(
+      roofPositions,
+      roofColors,
+      maxSunHours,
+      yWorld,
+      [a.x, a.y],
+      [b.x, b.y],
+      [c.x, c.y],
+      hour,
+      hour,
+      hour,
+    );
+    triangles += 1;
+  }
+  return triangles;
+}
+
 export function appendBuildingRoofFootprint(
   model: CityModel,
   building: BuildingFeat,
@@ -115,38 +205,34 @@ export function appendBuildingRoofFootprint(
 ): number {
   const footprints = extrudedFootprintsForBuilding(building);
   if (footprints.length === 0) return 0;
+  const spanM =
+    samples.find((sample) => sample.kind === "roof-cell" && sample.buildingId === building.id)?.spanM ??
+    SUN_HOURS_GROUND_CELL_M;
   let triangles = 0;
   for (const part of footprints) {
     const open = openRing(part.ring);
     if (open.length < 3) continue;
-    const contour = open.map(([east, north]) => new THREE.Vector2(east, north));
-    const holeRings = part.holes
-      .map((hole) => openRing(hole))
-      .filter((hole) => hole.length >= 3)
-      .map((hole) => hole.map(([east, north]) => new THREE.Vector2(east, north)));
-    const { faces, vertices } = triangulateRoof(contour, holeRings);
-    if (faces.length === 0) continue;
     const yWorld = roofElevationYM(model, building, part);
-    for (const [ia, ib, ic] of faces) {
-      const a = vertices[ia]!;
-      const b = vertices[ib]!;
-      const c = vertices[ic]!;
-      const ap: Pt = [a.x, a.y];
-      const bp: Pt = [b.x, b.y];
-      const cp: Pt = [c.x, c.y];
-      pushRoofTriangle(
-        roofPositions,
-        roofColors,
-        maxSunHours,
-        yWorld,
-        ap,
-        bp,
-        cp,
-        roofHoursNearPlanPoint(building.id, ap[0], ap[1], samples, hours),
-        roofHoursNearPlanPoint(building.id, bp[0], bp[1], samples, hours),
-        roofHoursNearPlanPoint(building.id, cp[0], cp[1], samples, hours),
-      );
-      triangles += 1;
+    const { minE, maxE, minN, maxN } = ringBounds(part.ring);
+    if (!Number.isFinite(minE) || !(spanM > 0)) continue;
+    const startE = Math.floor(minE / spanM + 1e-9) * spanM;
+    const startN = Math.floor(minN / spanM + 1e-9) * spanM;
+    for (let cellE = startE; cellE < maxE - 1e-9; cellE += spanM) {
+      for (let cellN = startN; cellN < maxN - 1e-9; cellN += spanM) {
+        const x0 = cellE;
+        const x1 = cellE + spanM;
+        const y0 = cellN;
+        const y1 = cellN + spanM;
+        const clipped = clipRingToAxisRect(part.ring, x0, x1, y0, y1);
+        if (clipped.length < 3) continue;
+        const centroid = ringCentroid([...clipped, clipped[0]!]);
+        if (footprints.length > 1 && underTallerPart(centroid, part, footprints)) continue;
+        const holeClips = part.holes
+          .map((hole) => clipRingToAxisRect(hole, x0, x1, y0, y1))
+          .filter((hole) => hole.length >= 3);
+        const hour = hoursForRoofCell(building.id, x0, x1, y0, y1, samples, hours);
+        triangles += appendClippedRoofCell(roofPositions, roofColors, maxSunHours, yWorld, hour, clipped, holeClips);
+      }
     }
   }
   return triangles;
