@@ -8,7 +8,11 @@ import {
   heliodonRadiusM,
   parseHeliodonRadiusFactor,
   resolveHeliodonRadiusFactor,
+  resolveSunDomeRadiusM,
   sunDomeRadiusM,
+  sunDomeRange,
+  sunDomeSizeFromSlider,
+  sunDomeSizeShare,
 } from "./heliodonRadius";
 
 describe("3D sun dome radius", () => {
@@ -44,5 +48,48 @@ describe("heliodon radius mapping", () => {
     expect(heliodonRadiusFromSearch("?lat=1&heliodon=2.5")).toBe(2.5);
     expect(resolveHeliodonRadiusFactor(1.75, "?heliodon=0.8")).toBe(0.8);
     expect(resolveHeliodonRadiusFactor(1.75, "")).toBe(1.75);
+  });
+});
+
+describe("sun dome size slider range", () => {
+  const southbank = sunDomeRange({ sideM: 500 });
+  const rozelle = sunDomeRange({ sideM: 1470, widthM: 1470, heightM: 1040 });
+
+  it("runs from half the auto radius to the cut half-diagonal, with auto as the default", () => {
+    expect(southbank.autoM).toBe(sunDomeRadiusM(500));
+    expect(southbank.minM).toBe(southbank.autoM * 0.5);
+    expect(southbank.maxM).toBe(Math.hypot(250, 250));
+    expect([southbank.minM, southbank.autoM, southbank.maxM].map(Math.round)).toEqual([106, 212, 354]);
+    expect([rozelle.minM, rozelle.autoM, rozelle.maxM].map(Math.round)).toEqual([175, 350, 900]);
+    expect(resolveSunDomeRadiusM(southbank, null)).toBe(southbank.autoM);
+    expect(resolveSunDomeRadiusM(southbank, undefined)).toBe(southbank.autoM);
+    expect(resolveSunDomeRadiusM(southbank, Number.NaN)).toBe(southbank.autoM);
+  });
+
+  it("clamps a chosen size into the range", () => {
+    expect(resolveSunDomeRadiusM(southbank, 10)).toBe(southbank.minM);
+    expect(resolveSunDomeRadiusM(southbank, 5000)).toBe(southbank.maxM);
+    expect(resolveSunDomeRadiusM(southbank, 300)).toBe(300);
+    expect(resolveSunDomeRadiusM(rozelle, 2000)).toBe(rozelle.maxM);
+  });
+
+  it("never lets the top of the range fall under the auto size on a tiny cut", () => {
+    const tiny = sunDomeRange({ sideM: 100 });
+    expect(tiny.autoM).toBe(120);
+    expect(tiny.maxM).toBe(120);
+    expect(tiny.minM).toBe(60);
+  });
+
+  it("snaps back to auto beside the tick and reports the slider position as a share", () => {
+    expect(sunDomeSizeFromSlider(southbank, 213)).toBeNull();
+    expect(sunDomeSizeFromSlider(southbank, 300)).toBe(300);
+    expect(sunDomeSizeFromSlider(southbank, 9999)).toBe(southbank.maxM);
+    expect(sunDomeSizeShare(southbank, southbank.minM)).toBe(0);
+    expect(sunDomeSizeShare(southbank, southbank.maxM)).toBe(1);
+    expect(sunDomeSizeShare(rozelle, rozelle.autoM)).toBeCloseTo(0.24, 2);
+  });
+
+  it("is separate from the old heliodon radius factor", () => {
+    expect(sunDomeRange({ sideM: 500 }).autoM).not.toBe(heliodonRadiusM(500, HELIODON_RADIUS_FACTOR_DEFAULT));
   });
 });

@@ -42,8 +42,8 @@ const viewports = [
 ] as const;
 
 describe("right HUD stack layout", () => {
-  it("pins a 304px column 14px from the right and 68px from the top with a 12px gap, 16px gutters and 12px to the bottom", () => {
-    expect(RIGHT_HUD_WIDTH_PX).toBe(304);
+  it("pins a 328px column 14px from the right and 68px from the top with a 12px gap, 16px gutters and 12px to the bottom", () => {
+    expect(RIGHT_HUD_WIDTH_PX).toBe(328);
     expect(RIGHT_HUD_RIGHT_PX).toBe(14);
     expect(RIGHT_HUD_TOP_PX).toBe(68);
     expect(RIGHT_HUD_GAP_PX).toBe(12);
@@ -76,18 +76,18 @@ describe("right HUD stack layout", () => {
     expect(rightHudMaxHeight(900, stack, [compass])).toBe(900 - 80);
   });
 
-  it("locks the 1280x800 clash: outliner open, 304px stack, bar centred in a 608px lane", () => {
+  it("locks the 1280x800 clash: outliner open, 328px stack, bar centred in a 584px lane", () => {
     const vw = 1280;
     const stack = tallStackAt(vw, 800);
-    expect(stack.left).toBe(962);
+    expect(stack.left).toBe(938);
     const lanes = envConsoleLanes(vw, { left: 0, right: 720, top: 800 - 14 - 76, bottom: 800 - 14 }, [rail, outliner], stack);
-    expect(lanes).toEqual({ left: 322 + 16, right: vw - 962 + 16 });
-    expect(envConsoleMaxWidth(vw, lanes)).toBe(962 - 322 - 32);
-    expect(envConsoleMaxWidth(vw, lanes)).toBe(608);
+    expect(lanes).toEqual({ left: 322 + 16, right: vw - 938 + 16 });
+    expect(envConsoleMaxWidth(vw, lanes)).toBe(938 - 322 - 32);
+    expect(envConsoleMaxWidth(vw, lanes)).toBe(584);
 
     const wide = envConsoleBox(vw, lanes, 980, 800 - 14 - 112, 800 - 14);
-    expect(wide.right - wide.left).toBe(608);
-    expect((wide.left + wide.right) / 2).toBe((322 + 962) / 2);
+    expect(wide.right - wide.left).toBe(584);
+    expect((wide.left + wide.right) / 2).toBe((322 + 938) / 2);
     expect(wide.left - outliner.right).toBe(16);
     expect(gapX(wide, stack)).toBeGreaterThanOrEqual(16);
   });
@@ -103,7 +103,7 @@ describe("right HUD stack layout", () => {
     expect(bar.left - outliner.right).toBeGreaterThanOrEqual(16);
     expect(gapX(bar, stack)).toBeGreaterThanOrEqual(16);
     const narrow = envConsoleBox(vw, lanes, 500, 900 - 14 - 76, 900 - 14);
-    expect(narrow.right - narrow.left).toBe(Math.min(720, lane));
+    expect(narrow.right - narrow.left).toBe(500);
   });
 
   it("uses the rail, or 16px from the edge, when the outliner does not reach the bar", () => {
@@ -144,25 +144,25 @@ describe("right HUD stack layout", () => {
     expect((box.left + box.right) / 2).toBe(720);
   });
 
-  it("reserves the right lane whenever an analysis card is in the stack, however short the stack is", () => {
+  it("stops the column 16px above the bar whenever an analysis card is open, so the bar keeps its whole lane", () => {
     for (const [vw, vh] of viewports) {
-      const bar = barAt(vh);
-      const windOnly = stackAt(vw, 487);
-      const reserved = {
-        left: outliner.right + HUD_GUTTER_PX,
-        right: RIGHT_HUD_RIGHT_PX + RIGHT_HUD_WIDTH_PX + HUD_GUTTER_PX,
-      };
-      if (windOnly.bottom + HUD_GUTTER_PX <= bar.top) {
-        expect(envConsoleLanes(vw, bar, [rail, outliner], windOnly).right).toBe(16);
-      }
-      expect(envConsoleLanes(vw, bar, [rail, outliner], windOnly, true)).toEqual(reserved);
-      expect(envConsoleLanes(vw, bar, [rail, outliner], stackAt(vw, 48), true)).toEqual(reserved);
-      expect(envConsoleLanes(vw, bar, [rail, outliner], tallStackAt(vw, vh), true)).toEqual(reserved);
-      expect(envConsoleLanes(vw, bar, [rail, outliner], null, true).right).toBe(16);
+      const bar = barAt(vh, 54);
+      const tall = tallStackAt(vw, vh);
+      expect(rightHudMaxHeight(vh, tall, [bar])).toBe(vh - 80);
+      const capped = rightHudMaxHeight(vh, tall, [bar], bar);
+      expect(capped).toBe(bar.top - HUD_GUTTER_PX - RIGHT_HUD_TOP_PX);
+      expect(capped).toBe(vh - 14 - 54 - 16 - 68);
+      const stack = stackAt(vw, capped);
+      expect(envConsoleLanes(vw, bar, [rail, outliner], stack)).toEqual({ left: outliner.right + HUD_GUTTER_PX, right: 16 });
+      expect(envConsoleLanes(vw, bar, [rail, outliner], stackAt(vw, 48))).toEqual(envConsoleLanes(vw, bar, [rail, outliner], stack));
     }
+    expect(rightHudMaxHeight(900, tallStackAt(1440, 900), [], null)).toBe(900 - 80);
+    const hook = readFileSync(path.join(process.cwd(), "src/components/model/useRightHudLayout.ts"), "utf8");
+    expect(hook).toContain("analysisCardEl ? consoleBar : null");
+    expect(hook).toContain('const RIGHT_ANALYSIS_CARD = ".analysis-hud-card, .sun-hours-hud-card";');
   });
 
-  it("still insets the bar beside a stack that overlaps it in Y, with no analysis-card flag", () => {
+  it("still insets the bar beside a stack that overlaps it in Y", () => {
     for (const [vw, vh] of viewports) {
       for (const stackBottom of [vh - 84, vh - HUD_GUTTER_PX]) {
         const stack = stackAt(vw, stackBottom - RIGHT_HUD_TOP_PX);
@@ -175,17 +175,18 @@ describe("right HUD stack layout", () => {
       }
     }
     const gutterOnly = stackAt(1280, 800 - 14 - 82 - 8 - RIGHT_HUD_TOP_PX);
-    expect(envConsoleLanes(1280, barAt(800), [rail, outliner], gutterOnly).right).toBe(1280 - 962 + 16);
+    expect(envConsoleLanes(1280, barAt(800), [rail, outliner], gutterOnly).right).toBe(1280 - 938 + 16);
   });
 
-  it("wraps the bar's second row and caps the bar at the lane instead of overflowing", () => {
+  it("keeps the bar on one row and caps it at the lane instead of overflowing", () => {
     const floating = readFileSync(path.join(process.cwd(), "src/floating.css"), "utf8");
     const rule = (selector: string) => {
       const start = floating.indexOf(`${selector} {`);
       expect(start).toBeGreaterThanOrEqual(0);
       return floating.slice(start, floating.indexOf("}", start));
     };
-    expect(rule(".model .bottom-bar.env-console .env-bottom-row")).toMatch(/flex-wrap: wrap !important;/);
+    expect(rule(".model .bottom-bar.env-console .env-top-row")).toMatch(/flex-wrap: nowrap !important;/);
+    expect(floating).not.toContain(".env-bottom-row");
     const bar = rule(".model .bottom-bar.env-console");
     expect(bar).toMatch(/max-width: var\(--env-console-lane\) !important;/);
     expect(bar).toMatch(/height: auto !important;/);

@@ -42,6 +42,9 @@ const TRACK_CLEARANCE = 0.14;
 const ENTRY_LENGTH_SHARE = 0.35;
 const PERIOD_SPEED_PRODUCT = 28;
 const FAN_PHASE_STEP = 0.21;
+const SPREAD_GAP_KEEP = 0.75;
+const SPREAD_WIDEN_STEPS = 6;
+const LENGTH_KEEP_SLACK = 1e-9;
 
 type ArrowPattern = { slot: number; length: number; lag: number; curl: number; sway: number; barb: number };
 type FanPattern = { swoop: number; arrows: readonly ArrowPattern[] };
@@ -106,7 +109,19 @@ export type StreamFan = {
   arrows: StreamArrow[];
 };
 
-export type StreamSite = { halfWidthM: number; halfHeightM: number };
+export type StreamSite = { halfWidthM: number; halfHeightM: number; spreadRadiusM?: number | null };
+
+type StreamSpread = { halfE: number; halfN: number; scale: number; centred: boolean };
+
+function streamSpread(site: StreamSite, unit: number): StreamSpread {
+  const halfE = site.halfWidthM / unit;
+  const halfN = site.halfHeightM / unit;
+  const radius = site.spreadRadiusM;
+  if (radius == null || !(radius > 0)) return { halfE, halfN, scale: 1, centred: false };
+  const spreadE = Math.min(halfE, radius / unit);
+  const spreadN = Math.min(halfN, radius / unit);
+  return { halfE: spreadE, halfN: spreadN, scale: Math.min(spreadE, spreadN), centred: true };
+}
 
 function smooth(t: number): number {
   return t * t * (3 - 2 * t);
@@ -124,12 +139,14 @@ export type StreamFanPlacement = { band: number; mirror: 1 | -1 };
 
 type ArrowCourse = (t: number) => StreamPoint;
 
-function fanCourses(stream: PrevailingStream, placement: StreamFanPlacement, halfE: number, halfN: number): ArrowCourse[] {
-  const { band, mirror } = placement;
+function fanCourses(stream: PrevailingStream, placement: StreamFanPlacement, spread: StreamSpread): ArrowCourse[] {
+  const { mirror } = placement;
+  const band = placement.band * spread.scale;
   const flow = downwindFromSector(stream.sector);
   const side = { east: -flow.north, north: flow.east };
   const fanLength = LEAD_LENGTH * stream.reach;
-  const start = -upwindEdgeDistance(band, flow, side, halfE, halfN) + EDGE_INSET;
+  const fromEdge = -upwindEdgeDistance(band, flow, side, spread.halfE, spread.halfN) + EDGE_INSET * spread.scale;
+  const start = spread.centred ? Math.min(fromEdge, -fanLength / 2) : fromEdge;
   const pattern = FAN_PATTERNS[stream.rank] ?? LEANING_TRIO;
   return pattern.arrows.slice(0, stream.arrows).map((arrow) => {
     const length = fanLength * arrow.length;
@@ -196,15 +213,14 @@ function overshoot(lines: StreamPoint[][], halfE: number, halfN: number): number
   return worst;
 }
 
-export function streamFanPlacements(streams: readonly PrevailingStream[], site: StreamSite): StreamFanPlacement[] {
-  const unit = Math.min(site.halfWidthM, site.halfHeightM);
-  const halfE = site.halfWidthM / unit;
-  const halfN = site.halfHeightM / unit;
+type StreamFanPlan = { spread: StreamSpread; placements: StreamFanPlacement[]; gap: number };
+
+function placeStreamFans(streams: readonly PrevailingStream[], halfE: number, halfN: number, spread: StreamSpread): StreamFanPlan {
   const options = streams.map((stream) =>
     BAND_OFFSETS.flatMap((band) =>
       ([1, -1] as const).map((mirror) => {
         const placement: StreamFanPlacement = { band, mirror };
-        const lines = fanCourses(stream, placement, halfE, halfN).map(restLine);
+        const lines = fanCourses(stream, placement, spread).map(restLine);
         return { placement, lines, outside: overshoot(lines, halfE, halfN) };
       }),
     ),
@@ -220,6 +236,7 @@ export function streamFanPlacements(streams: readonly PrevailingStream[], site: 
     return gap;
   };
   let bestScore = -Infinity;
+  let bestGap = 0;
   let best = streams.map<StreamFanPlacement>(() => ({ band: 0, mirror: 1 }));
   const pick: number[] = [];
   const visit = (depth: number) => {
@@ -235,6 +252,7 @@ export function streamFanPlacements(streams: readonly PrevailingStream[], site: 
       const score = gap - cost;
       if (score > bestScore) {
         bestScore = score;
+        bestGap = gap;
         best = pick.map((choice, i) => options[i]![choice]!.placement);
       }
       return;
@@ -245,7 +263,12 @@ export function streamFanPlacements(streams: readonly PrevailingStream[], site: 
     }
   };
   visit(0);
-  return best;
+  return { spread, placements: best, gap: bestGap };
+}
+
+function widenSpread(from: StreamSpread, to: StreamSpread, share: number): StreamSpread {
+  const mix = (a: number, b: number) => a + (b - a) * share;
+  return { halfE: mix(from.halfE, to.halfE), halfN: mix(from.halfN, to.halfN), scale: mix(from.scale, to.scale), centred: true };
 }
 
 type ClippedCourse = { points: StreamPoint[]; cum: number[]; restTail: number; length: number };
@@ -313,6 +336,47 @@ function clipCourse(course: ArrowCourse, halfE: number, halfN: number): ClippedC
   const total = cum.at(-1)!;
   const length = Math.min(restLength, total);
   return { points, cum, length, restTail: Math.min(cum[restTailIndex]!, total - length) };
+}
+
+type StreamFanCourses = StreamFanPlan & { courses: ClippedCourse[][] };
+
+function clipFans(streams: readonly PrevailingStream[], plan: StreamFanPlan, halfE: number, halfN: number): StreamFanCourses {
+  const courses = streams.map((stream, i) =>
+    fanCourses(stream, plan.placements[i]!, plan.spread).map((course) => clipCourse(course, halfE, halfN)),
+  );
+  return { ...plan, courses };
+}
+
+function keepsArrowLengths(plan: StreamFanCourses, open: StreamFanCourses): boolean {
+  return plan.courses.every((fan, i) => fan.every((course, k) => course.length >= open.courses[i]![k]!.length - LENGTH_KEEP_SLACK));
+}
+
+function planStreamFans(streams: readonly PrevailingStream[], site: StreamSite): StreamFanCourses {
+  const unit = Math.min(site.halfWidthM, site.halfHeightM);
+  const halfE = site.halfWidthM / unit;
+  const halfN = site.halfHeightM / unit;
+  const cut: StreamSpread = { halfE, halfN, scale: 1, centred: false };
+  const open = clipFans(streams, placeStreamFans(streams, halfE, halfN, cut), halfE, halfN);
+  const wanted = streamSpread(site, unit);
+  if (!wanted.centred) return open;
+  const floor = streams.length < 2 ? 0 : open.gap * SPREAD_GAP_KEEP;
+  for (let step = 0; step < SPREAD_WIDEN_STEPS; step++) {
+    const spread = widenSpread(wanted, cut, step / SPREAD_WIDEN_STEPS);
+    const plan = clipFans(streams, placeStreamFans(streams, halfE, halfN, spread), halfE, halfN);
+    if (plan.gap >= floor && keepsArrowLengths(plan, open)) {
+      return {
+        ...plan,
+        courses: plan.courses.map((fan, i) =>
+          fan.map((course, k) => ({ ...course, length: Math.min(course.length, open.courses[i]![k]!.length) })),
+        ),
+      };
+    }
+  }
+  return open;
+}
+
+export function streamFanPlacements(streams: readonly PrevailingStream[], site: StreamSite): StreamFanPlacement[] {
+  return planStreamFans(streams, site).placements;
 }
 
 function pointsWithin(courses: readonly ClippedCourse[], reaches: readonly CourseReach[]): StreamPoint[] {
@@ -459,10 +523,7 @@ export function streamTravelPeriodS(meanSpeedMs: number): number {
 export function layoutStreamFans(streams: readonly PrevailingStream[], site: StreamSite): StreamFan[] {
   if (streams.length === 0) return [];
   const unit = Math.min(site.halfWidthM, site.halfHeightM);
-  const halfE = site.halfWidthM / unit;
-  const halfN = site.halfHeightM / unit;
-  const placements = streamFanPlacements(streams, site);
-  const courses = streams.map((stream, i) => fanCourses(stream, placements[i]!, halfE, halfN).map((course) => clipCourse(course, halfE, halfN)));
+  const { spread, placements, courses } = planStreamFans(streams, site);
   const reaches = fanReaches(courses);
   return streams.map((stream, i) => {
     const pattern = FAN_PATTERNS[stream.rank] ?? LEANING_TRIO;
@@ -496,7 +557,7 @@ export function layoutStreamFans(streams: readonly PrevailingStream[], site: Str
       rank: stream.rank,
       sector: stream.sector,
       token: stream.token,
-      band: placements[i]!.band * unit,
+      band: placements[i]!.band * spread.scale * unit,
       periodS: streamTravelPeriodS(stream.meanSpeedMs),
       arrows,
     };

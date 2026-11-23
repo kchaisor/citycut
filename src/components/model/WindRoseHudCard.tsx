@@ -1,72 +1,153 @@
-import { useEffect, useId, useState } from "react";
-import { ChevronDown } from "lucide-react";
 import { WindRosePanel } from "../WindRosePanel";
 import { WindStreaksSlider } from "../WindStreaksSlider";
 import { PrevailingStreamsLegend } from "../PrevailingStreamsLegend";
+import { DesignWindPresets } from "../DesignWindPresets";
 import { windPlanSeasonLabel } from "../WindPlanCard";
-import { windRoseCardAutoCollapsed, windRoseCardMeta, windRoseCardOn, windStreaksSliderOn } from "./windRoseCard";
+import { analysisCardCollapsed, analysisStackTight } from "../../lib/analysisCards";
+import { withDesignWind, withWindSeason } from "../../lib/windState";
+import { AnalysisHudCard } from "./AnalysisHudCard";
+import { WindPlanSwitch } from "./WindPlanSwitch";
+import { WIND_SEASON_IDS, windPrevailingBadge, windRoseCardMeta, windStreaksSliderOn } from "./windRoseCard";
 import type { ModelPageViewModel } from "./useModelPage";
 
-function useViewportWidth(): number {
-  const [width, setWidth] = useState(() => (typeof window === "undefined" ? 0 : window.innerWidth));
-  useEffect(() => {
-    const onResize = () => setWidth(window.innerWidth);
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
-  }, []);
-  return width;
-}
-
 export function WindRoseHudCard({ vm }: { vm: ModelPageViewModel }) {
-  const { analyses, rightOpen, siteWind, tab, windMotion, windPlan, windSettings, windStreams, windStreaksOn } = vm;
-  const autoCollapsed = windRoseCardAutoCollapsed(rightOpen, useViewportWidth());
-  const [collapsed, setCollapsed] = useState(autoCollapsed);
-  const bodyId = useId();
-  useEffect(() => setCollapsed(autoCollapsed), [autoCollapsed]);
-  if (!windRoseCardOn({ tab, analyses, siteWind }) || !siteWind) return null;
+  const {
+    analyses,
+    analysisCardOpen,
+    commitWind,
+    consoleWindStats,
+    designWind,
+    designWinds,
+    setWindStreaksOn,
+    siteWind,
+    tab,
+    toggleAnalysisCard,
+    windMotion,
+    windPlan,
+    windSettings,
+    windStreams,
+    windStreaksOn,
+  } = vm;
+  const planWind = windPlan.active;
   const flowing = tab === "3d" && windSettings.enabled;
-  const sliderOn = windStreaksSliderOn({ tab, analyses, windEnabled: windSettings.enabled, planActive: windPlan.active });
-  const classes = ["wind-rose-analysis-card", "hud-card"];
-  if (windPlan.active) classes.splice(1, 0, "is-plan");
-  if (collapsed) classes.push("is-collapsed");
+  const sliderOn = windStreaksSliderOn({ tab, analyses, windEnabled: windSettings.enabled, planActive: planWind });
+  const classes = ["wind-rose-analysis-card"];
+  if (planWind) classes.push("is-plan");
+  if (analysisStackTight(tab, analyses)) classes.push("is-tight");
+  const seasonLabel = windPlanSeasonLabel(windSettings.period);
+  const badge = windPrevailingBadge(consoleWindStats, planWind);
   return (
-    <div className={classes.join(" ")} aria-label="Wind rose panel">
-      <button
-        type="button"
-        className="wind-rose-card-head"
-        aria-expanded={!collapsed}
-        aria-controls={bodyId}
-        onClick={() => setCollapsed((c) => !c)}
-      >
-        <span className="card-title">Wind Rose</span>
-        <span className="wind-rose-card-head-end">
-          <span className="card-meta mono">
-            {windRoseCardMeta(windPlanSeasonLabel(windSettings.period), siteWind.station.years)}
-          </span>
-          <ChevronDown className="wind-rose-card-chevron" size={16} strokeWidth={1.75} aria-hidden="true" />
-        </span>
-      </button>
-      <div id={bodyId} className="wind-rose-card-fold" hidden={collapsed}>
-        <div className="wind-rose-card-body">
-          <WindRosePanel selection={siteWind} period={windSettings.period} plan={windPlan} flowHeading={flowing} />
-          {tab === "3d" && !windPlan.active ? (
-            <PrevailingStreamsLegend
-              streams={windStreams}
-              periodLabel={vm.designWind ? `Design ${vm.designWind.label}` : windPlanSeasonLabel(windSettings.period)}
-              muted={!windStreaksOn}
+    <AnalysisHudCard
+      kind="wind"
+      title="Wind Rose"
+      label="Wind rose panel"
+      className={classes.join(" ")}
+      meta={windRoseCardMeta(seasonLabel, siteWind?.station.years)}
+      collapsed={analysisCardCollapsed(analysisCardOpen, "wind")}
+      onToggle={() => toggleAnalysisCard("wind")}
+    >
+      {planWind ? (
+        <div className="ac-plan-switch">
+          <WindPlanSwitch plan={windPlan} />
+        </div>
+      ) : null}
+      {siteWind ? (
+        <WindRosePanel selection={siteWind} period={windSettings.period} plan={windPlan} flowHeading={flowing} />
+      ) : (
+        <p className="ac-note">Wind data is not available for this site yet.</p>
+      )}
+      {siteWind && tab === "3d" && !planWind ? (
+        <PrevailingStreamsLegend
+          streams={windStreams}
+          periodLabel={designWind ? `Design ${designWind.label}` : seasonLabel}
+          muted={!windStreaksOn}
+        />
+      ) : null}
+
+      <div className="ac-section">
+        <span className="ac-kicker">Season</span>
+        <div className="ac-seg ac-seg-5" role="group" aria-label="Wind season presets">
+          {WIND_SEASON_IDS.map((periodId) => {
+            const active = designWind == null && windSettings.period === periodId;
+            return (
+              <button
+                key={periodId}
+                type="button"
+                className={active ? "ac-seg-btn is-ink" : "ac-seg-btn"}
+                aria-pressed={active}
+                onClick={() => commitWind(withWindSeason(windSettings, periodId))}
+              >
+                {windPlanSeasonLabel(periodId)}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="ac-section">
+        {designWinds.length > 0 ? (
+          <>
+            <span className="ac-kicker">Design winds</span>
+            <DesignWindPresets
+              winds={designWinds}
+              selectedId={designWind?.id ?? null}
+              onSelect={(id) => commitWind(withDesignWind(windSettings, id))}
+            />
+          </>
+        ) : null}
+        <span className="ac-kicker">Prevailing</span>
+        <div className="ac-badge-row" aria-label="Live wind telemetry">
+          <span className="ac-badge mono">{badge.prevailing}</span>
+          {badge.calm ? <span className="ac-note">{badge.calm}</span> : null}
+        </div>
+      </div>
+
+      {planWind ? null : (
+        <div className="ac-section">
+          <span className="ac-kicker">Overlays</span>
+          <div className="ac-seg ac-seg-3" role="group" aria-label="Wind overlay toggles">
+            <button
+              type="button"
+              className={windSettings.enabled ? "ac-seg-btn is-on" : "ac-seg-btn"}
+              aria-label="3D Wind Flow"
+              aria-pressed={windSettings.enabled}
+              onClick={() => commitWind({ ...windSettings, enabled: !windSettings.enabled })}
+            >
+              <span className="ac-dot" aria-hidden="true" />
+              <span>Flow</span>
+            </button>
+            <button
+              type="button"
+              className={windStreaksOn ? "ac-seg-btn is-on" : "ac-seg-btn"}
+              aria-label="Wind streaks"
+              aria-pressed={windStreaksOn}
+              onClick={() => setWindStreaksOn(!windStreaksOn)}
+            >
+              <span className="ac-dot" aria-hidden="true" />
+              <span>Streaks</span>
+            </button>
+            <button
+              type="button"
+              className="ac-seg-btn wind-play-pill"
+              aria-label={windMotion.paused ? "Play wind animation" : "Pause wind animation"}
+              data-wind-paused={windMotion.paused ? "true" : "false"}
+              disabled={!windSettings.enabled && !windStreaksOn}
+              onClick={() => windMotion.setPaused(!windMotion.paused)}
+            >
+              {windMotion.paused ? "▶ Play" : "❚❚ Pause"}
+            </button>
+          </div>
+          {sliderOn ? (
+            <WindStreaksSlider
+              reducedMotion={
+                flowing && windMotion.streaksPaused
+                  ? { animateAnyway: windMotion.animateAnyway, onAnimateAnyway: windMotion.setAnimateAnyway }
+                  : null
+              }
             />
           ) : null}
         </div>
-        {sliderOn ? (
-          <WindStreaksSlider
-            reducedMotion={
-              flowing && windMotion.streaksPaused
-                ? { animateAnyway: windMotion.animateAnyway, onAnimateAnyway: windMotion.setAnimateAnyway }
-                : null
-            }
-          />
-        ) : null}
-      </div>
-    </div>
+      )}
+    </AnalysisHudCard>
   );
 }

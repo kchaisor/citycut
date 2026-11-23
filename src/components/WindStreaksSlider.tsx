@@ -93,22 +93,17 @@ export function WindStreaksSlider({ reducedMotion = null }: { reducedMotion?: Wi
   } as CSSProperties;
   return (
     <div className="wind-streaks" role="group" aria-labelledby={titleId}>
-      <div className="wind-streaks-head">
-        <span id={titleId} className="wind-streaks-title">
-          Wind streaks
-        </span>
-        <output className="wind-streaks-value mono" aria-live="polite">
-          {readout}
-        </output>
-      </div>
       <div className="wind-streaks-row">
+        <span id={titleId} className="wind-streaks-title">
+          Density
+        </span>
         <span aria-hidden="true">Fewer</span>
         <span className="wind-streaks-track" style={trackStyle}>
           <span className="wind-streaks-tick" aria-hidden="true" />
           <input
             className="wind-streaks-input"
             type="range"
-            aria-label="Wind streaks"
+            aria-label="Density"
             aria-valuetext={`${readout}${windStreakDensityIsDefault(density) ? ", default" : ""}`}
             min={WIND_STREAK_DENSITY_MIN}
             max={WIND_STREAK_DENSITY_MAX}
@@ -118,6 +113,9 @@ export function WindStreaksSlider({ reducedMotion = null }: { reducedMotion?: Wi
           />
         </span>
         <span aria-hidden="true">More</span>
+        <output className="wind-streaks-value mono" aria-live="polite">
+          {readout}
+        </output>
         {reducedMotion ? <ReducedMotionInfo {...reducedMotion} /> : null}
       </div>
     </div>

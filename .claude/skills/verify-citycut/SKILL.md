@@ -44,7 +44,7 @@ The harness exits non-zero if any invariant fails:
      - Center-outward 24-bucket building extrusion wave (`beat3a`) followed by 16-bucket bouncy tree pop-up with 16% spring overshoot (`beat3b`), settling to `scale.y = 1.000` at `100%` (`beat4`).
 
 3. **Site Analysis Direction A & Drawing Shadow Isolation Invariants**
-   - Clicking `Analysis` on the left rail hides `.left-outliner` completely (`0` visible left drawers), expands `.bottom-bar.env-console` into the 2-row Contextual Environmental Console without horizontal overflow, places `Reset view` in `.top-bar-center`, and shows `3D Sun Dome` in 3D view (`9–3pm Plan Fan` in Drawing).
+   - Turning `Solar Study` on keeps `.bottom-bar.env-console` as one row (Solar Study / Wind Rose / Viewshed Walk plus High / Fast) without horizontal overflow, places `Reset view` in `.top-bar-center`, and opens the Solar Study card in `.right-hud-stack` with the time slider and `Sun dome` in 3D view (`9–3pm Plan Fan` joins the card's overlays in Drawing).
    - Selecting buildings in `Drawing -> Site plan` isolates 9–3pm sun-study shadows strictly to the selected yellow buildings.
 
 ## 4. Evidence Artifacts

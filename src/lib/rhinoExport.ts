@@ -772,9 +772,13 @@ function addWindRose(
 
 export type WindStreakStillArrow = { layer: string; name: string; vertices: [number, number, number][]; faces: [number, number, number][] };
 
-export function windStreakStillArrows(model: CityModel, streams: readonly PrevailingStream[]): WindStreakStillArrow[] {
+export function windStreakStillArrows(
+  model: CityModel,
+  streams: readonly PrevailingStream[],
+  spreadRadiusM: number | null = null,
+): WindStreakStillArrow[] {
   const z = streamPlaneY(model);
-  return layoutStreamFans(streams, streamSite(model)).flatMap((fan) =>
+  return layoutStreamFans(streams, { ...streamSite(model), spreadRadiusM }).flatMap((fan) =>
     fan.arrows.map((arrow) => {
       const vertices: [number, number, number][] = [];
       for (let i = 0; i < arrow.positions.length; i += 2) vertices.push([arrow.positions[i]!, arrow.positions[i + 1]!, z]);
@@ -793,9 +797,10 @@ function addWindStreaks(
   model: CityModel,
   zone: number,
   streams: readonly PrevailingStream[],
+  spreadRadiusM: number | null,
 ) {
   const palette = layerColors();
-  for (const arrow of windStreakStillArrows(model, streams)) {
+  for (const arrow of windStreakStillArrows(model, streams, spreadRadiusM)) {
     const mesh = new rhino.Mesh();
     const vertices = mesh.vertices();
     vertices.useDoublePrecisionVertices = true;
@@ -925,6 +930,7 @@ export type CityModelTo3dmOptions = {
   colourBySource?: boolean;
   wind?: { selection: SiteWindSelection; period: WindPeriodId } | null;
   windStreaks?: readonly PrevailingStream[] | null;
+  windStreaksSpreadRadiusM?: number | null;
   hideTrees?: boolean;
   importedMassing?: ImportedMassingExport[] | null;
   /**
@@ -1059,6 +1065,7 @@ export async function cityModelTo3dm(
     colourBySource,
     wind,
     windStreaks,
+    windStreaksSpreadRadiusM = null,
     hideTrees,
     importedMassing,
     buildingsAsMesh,
@@ -1094,7 +1101,7 @@ export async function cityModelTo3dm(
     if (heliodon) addHeliodonPlan(rhino, doc, layers, materials, model, crsZone, heliodon);
     if (shadows) addPlanShadows(rhino, doc, layers, materials, model, crsZone, shadows, Boolean(castShadows));
     if (wind?.selection) addWindRose(rhino, doc, layers, materials, model, crsZone, wind.selection, wind.period);
-    if (windStreaks?.length) addWindStreaks(rhino, doc, layers, materials, model, crsZone, windStreaks);
+    if (windStreaks?.length) addWindStreaks(rhino, doc, layers, materials, model, crsZone, windStreaks, windStreaksSpreadRadiusM);
     if (importedMassing?.length) addImportedMassing(rhino, doc, layers, materials, importedMassing);
 
     return doc.toByteArray();

@@ -18,6 +18,7 @@ export function ModelPageView({ vm }: { vm: ModelPageViewModel }) {
     sidebarCollapsed,
     siteIntelOpen,
     siteIntelFolded,
+    analysisCardOpen,
     leftOpen,
     siteWind,
     tab,
@@ -36,6 +37,7 @@ export function ModelPageView({ vm }: { vm: ModelPageViewModel }) {
     windPlan.active,
     windSettings.enabled,
     siteIntelFolded,
+    analysisCardOpen,
   ]);
 
   return (

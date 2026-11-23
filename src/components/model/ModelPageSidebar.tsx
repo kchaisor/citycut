@@ -16,6 +16,8 @@ import { SIDEBAR_SECTION_LABELS } from "../../lib/sidebarSections";
 import { ModelPageSidebarLeftA } from "./ModelPageSidebarLeftA";
 import { ModelPageSidebarLeftB } from "./ModelPageSidebarLeftB";
 import { ModelPageSidebarRight } from "./ModelPageSidebarRight";
+import { SolarStudyHudCard } from "./SolarStudyHudCard";
+import { ViewshedHudCard } from "./ViewshedHudCard";
 import { WindRoseHudCard } from "./WindRoseHudCard";
 import { SunHoursLegendDock } from "./SunHoursLegendDock";
 import { sunHoursLegendCardOn } from "./sunHoursLegendCard";
@@ -68,7 +70,7 @@ export function ModelPageSidebar({ vm }: { vm: import("./useModelPage").ModelPag
     topbarExportTriggerRef,
     view,
   } = vm;
-  const { windRoseOn, siteIntelFolded, setSiteIntelFolded } = vm;
+  const { analysisCards, analysisCardOn, siteIntelFolded, setSiteIntelFolded } = vm;
   const sunHoursLegendOn = sunHoursLegendCardOn({
     tab,
     drawing,
@@ -76,6 +78,7 @@ export function ModelPageSidebar({ vm }: { vm: import("./useModelPage").ModelPag
     hasResult: vm.sunHoursGround.grid != null,
     pending: vm.sunHoursGround.pending || vm.sunHoursGround.pendingSurfaces,
   });
+  const sunHoursLegendAlone = sunHoursLegendOn && !analysisCards.solar;
 
   return (
         <div className="sidebar-host">
@@ -98,7 +101,7 @@ export function ModelPageSidebar({ vm }: { vm: import("./useModelPage").ModelPag
               open: siteIntelOpen,
               onToggle: () => setSiteIntelOpen(!siteIntelOpen),
               icon: <PanelRight size={16} strokeWidth={1.75} aria-hidden="true" />,
-              fold: windRoseOn
+              fold: analysisCardOn
                 ? {
                     folded: siteIntelFolded,
                     onToggle: () => setSiteIntelFolded(!siteIntelFolded),
@@ -108,10 +111,12 @@ export function ModelPageSidebar({ vm }: { vm: import("./useModelPage").ModelPag
             }}
             rightMeta={`MGA${mgaCrs(model.center.lon).zone}`}
             rightBelow={
-              windRoseOn || sunHoursLegendOn ? (
+              analysisCardOn || sunHoursLegendAlone ? (
                 <>
-                  {windRoseOn ? <WindRoseHudCard vm={vm} /> : null}
-                  {sunHoursLegendOn ? <SunHoursLegendDock sunHoursGround={vm.sunHoursGround} /> : null}
+                  {analysisCards.solar ? <SolarStudyHudCard vm={vm} /> : null}
+                  {analysisCards.wind ? <WindRoseHudCard vm={vm} /> : null}
+                  {analysisCards.view ? <ViewshedHudCard vm={vm} /> : null}
+                  {sunHoursLegendAlone ? <SunHoursLegendDock sunHoursGround={vm.sunHoursGround} /> : null}
                 </>
               ) : undefined
             }

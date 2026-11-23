@@ -2221,6 +2221,8 @@ export function Scene3D({
   windSector = null,
   windAnimateStreaks,
   windDiagramStreams = null,
+  windSpreadRadiusM = null,
+  sunDomeRadiusM,
   windPlan = null,
   onExportReady,
   onSceneInspectPick,
@@ -2271,6 +2273,8 @@ export function Scene3D({
   windSector?: number | null;
   windAnimateStreaks: boolean;
   windDiagramStreams?: readonly PrevailingStream[] | null;
+  windSpreadRadiusM?: number | null;
+  sunDomeRadiusM?: number;
   windPlan?: WindPlanState | null;
   onExportReady: (exporter: SceneExporter | null) => void;
   onSceneInspectPick: (selection: SceneSelection) => void;
@@ -2500,6 +2504,7 @@ export function Scene3D({
         groundY={groundY}
         terrain={model.terrain ?? undefined}
         settings={solar}
+        radiusM={sunDomeRadiusM}
       />
       <InspectHudProjector
         world={inspectAnchor}
@@ -2528,7 +2533,7 @@ export function Scene3D({
         animateStreaks={windAnimateStreaks}
       />
       {windDiagramOn && !windPlanOn ? (
-        <WindDiagramStreams model={windModel ?? model} streams={windDiagramStreams ?? []} animate={active && windAnimateStreaks} />
+        <WindDiagramStreams model={windModel ?? model} streams={windDiagramStreams ?? []} spreadRadiusM={windSpreadRadiusM} animate={active && windAnimateStreaks} />
       ) : null}
       {windPlanOn ? <WindPlanProjector store={windPlanStore} /> : null}
       <Cameras

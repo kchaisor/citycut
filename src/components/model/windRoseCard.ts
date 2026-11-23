@@ -1,18 +1,8 @@
 import { windFlowActive } from "../../lib/solarStudyView";
 import type { ActiveAnalyses } from "../../lib/sidebarSections";
-import type { SiteWindSelection } from "../../lib/windRoseData";
+import type { WindPeriodId } from "../../lib/windRose";
 
-export function windRoseCardOn({
-  tab,
-  analyses,
-  siteWind,
-}: {
-  tab: string;
-  analyses: ActiveAnalyses;
-  siteWind: SiteWindSelection | null;
-}): boolean {
-  return tab !== "satellite" && analyses.wind && siteWind != null;
-}
+export const WIND_SEASON_IDS: readonly WindPeriodId[] = ["annual", "summer", "autumn", "winter", "spring"];
 
 export function windStreaksSliderOn({
   tab,
@@ -28,16 +18,28 @@ export function windStreaksSliderOn({
   return tab === "3d" && windFlowActive(windEnabled, analyses) && !planActive;
 }
 
-export function siteIntelAutoFolded(windRoseOn: boolean): boolean {
-  return windRoseOn;
-}
-
-export const WIND_ROSE_CARD_ROOMY_WIDTH_PX = 1440;
-
-export function windRoseCardAutoCollapsed(rightOpen: string, viewportWidth: number): boolean {
-  return (rightOpen === "buildings" || rightOpen === "trees") && viewportWidth < WIND_ROSE_CARD_ROOMY_WIDTH_PX;
+export function siteIntelAutoFolded(analysisCardOn: boolean): boolean {
+  return analysisCardOn;
 }
 
 export function windRoseCardMeta(periodLabel: string, years: number | null | undefined): string {
   return years != null ? `${periodLabel} · ${years} yrs` : periodLabel;
+}
+
+export type WindPrevailingStats = {
+  prevailingLabel: string;
+  prevailingMedianKmh: number;
+  prevailingMeanSpeedMs?: number | null;
+  calmPercent: number;
+};
+
+export function windPrevailingBadge(
+  stats: WindPrevailingStats | null,
+  planWind: boolean,
+): { prevailing: string; calm: string | null } {
+  if (!stats) return { prevailing: "—", calm: null };
+  const speed = planWind
+    ? `${(stats.prevailingMeanSpeedMs ?? stats.prevailingMedianKmh / 3.6).toFixed(1)} m/s`
+    : `${Math.round(stats.prevailingMedianKmh)} km/h`;
+  return { prevailing: `${stats.prevailingLabel} · ${speed}`, calm: `Calm ${stats.calmPercent.toFixed(1)}%` };
 }
