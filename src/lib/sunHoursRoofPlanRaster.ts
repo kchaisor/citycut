@@ -1,3 +1,4 @@
+import { modelFrameBounds } from "./modelFrame";
 import { SUN_HOURS_GROUND_CELL_M, sunHoursGroundRgba } from "./sunHoursGround";
 import type { SunHoursGroundRaster } from "./sunHoursGroundRaster";
 import type { DirectSunHoursSample } from "./sunHoursDirectSample";
@@ -67,11 +68,11 @@ export function rasterizeSunHoursRoofPlan(
 ): SunHoursGroundRaster | null {
   if (scaleMaxHours <= 0 || typeof document === "undefined") return null;
   const cellM = samples.find((sample) => sample.kind === "roof-cell")?.spanM ?? SUN_HOURS_GROUND_CELL_M;
-  const half = model.sideM / 2;
-  const cols = Math.max(1, Math.ceil(model.sideM / cellM));
-  const rows = cols;
-  const originEast = -half;
-  const originNorth = -half;
+  const bounds = modelFrameBounds(model);
+  const cols = Math.max(1, Math.ceil((bounds.maxE - bounds.minE) / cellM));
+  const rows = Math.max(1, Math.ceil((bounds.maxN - bounds.minN) / cellM));
+  const originEast = bounds.minE;
+  const originNorth = bounds.minN;
   const widthM = cols * cellM;
   const heightM = rows * cellM;
   const ppm = Math.max(2, Math.min(8, Math.round(4 / cellM)));

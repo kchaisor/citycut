@@ -10,6 +10,7 @@ import {
   type SunHoursQualityParams,
   type SunHoursResolution,
 } from "../lib/sunHoursQuality";
+import { modelFrameSize } from "../lib/modelFrame";
 import type { RenderQuality } from "../lib/renderQuality";
 import { sunStudyModelKey } from "../lib/sunStudyPlan";
 import { combineSunHoursProgress } from "../lib/sunHoursProgress";
@@ -111,11 +112,13 @@ export function useSunHoursGround(
       return;
     }
     const currentModel = modelRef.current;
-    const params: SunHoursQualityParams = sunHoursQualityParams(quality, currentModel.sideM);
+    const params: SunHoursQualityParams = sunHoursQualityParams(quality, currentModel.sideM, modelFrameSize(currentModel));
     const jobResolution = sunHoursResolution(params);
     const workerModel = {
       center: currentModel.center,
       sideM: currentModel.sideM,
+      widthM: currentModel.widthM,
+      heightM: currentModel.heightM,
       terrain: currentModel.terrain,
       frameShape: currentModel.frameShape,
       buildings: currentModel.buildings,

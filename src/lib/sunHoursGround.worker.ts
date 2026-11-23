@@ -4,7 +4,7 @@ import type { CityModel } from "../types";
 
 export type SunHoursGroundWorkerRequest = {
   id: number;
-  model: Pick<CityModel, "center" | "sideM" | "terrain" | "frameShape" | "buildings" | "trees">;
+  model: Pick<CityModel, "center" | "sideM" | "widthM" | "heightM" | "terrain" | "frameShape" | "buildings" | "trees">;
   year: number;
   month: number;
   day: number;

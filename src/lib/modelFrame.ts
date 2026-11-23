@@ -1,7 +1,9 @@
 import type { CityModel } from "../types";
+import type { AxisRect } from "./clip";
 import {
   DEFAULT_SITE_FRAME_SHAPE,
   frameGroundSize,
+  frameHalfExtents,
   makeSiteFrame,
   type FrameGroundSize,
   type SiteFrame,
@@ -40,4 +42,12 @@ export function siteFrameFromModel(
   model: Pick<CityModel, "sideM" | "widthM" | "heightM" | "frameShape">,
 ): SiteFrame {
   return makeSiteFrame(model.sideM, model.frameShape ?? DEFAULT_SITE_FRAME_SHAPE, modelFrameSize(model));
+}
+
+export function modelFrameBounds(
+  model: Pick<CityModel, "sideM" | "widthM" | "heightM" | "frameShape">,
+): AxisRect {
+  const frame = siteFrameFromModel(model);
+  const { halfW, halfH } = frameHalfExtents(frame.sideM, frame.shape, frame);
+  return { minE: -halfW, maxE: halfW, minN: -halfH, maxN: halfH };
 }
