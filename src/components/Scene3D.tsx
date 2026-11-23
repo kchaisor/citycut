@@ -39,6 +39,7 @@ import {
   usableCameraMemory,
   type CameraMemory,
   type CameraMemoryRef,
+  type CameraRestoreRequest,
 } from "../lib/cameraMemory";
 import {
   applyBuildingSolarNeutral,
@@ -1977,6 +1978,57 @@ function CameraMemoryBridge({
   return null;
 }
 
+function CameraRestoreBridge({
+  restore,
+  onRestored,
+  snapId,
+  projection,
+  persp,
+  ortho,
+  perspControls,
+  orthoControls,
+  fittedKeys,
+  touchedRef,
+}: {
+  restore: CameraRestoreRequest | null | undefined;
+  onRestored: ((id: number) => void) | undefined;
+  snapId: number;
+  projection: ProjectionMode;
+  persp: THREE.PerspectiveCamera;
+  ortho: THREE.OrthographicCamera;
+  perspControls: RefObject<OrbitControlsImpl | null>;
+  orthoControls: RefObject<OrbitControlsImpl | null>;
+  fittedKeys: {
+    persp: MutableRefObject<string | null>;
+    iso: MutableRefObject<string | null>;
+    plan: MutableRefObject<string | null>;
+  };
+  touchedRef: MutableRefObject<boolean>;
+}) {
+  const invalidate = useThree((state) => state.invalidate);
+  const handledId = useRef(0);
+  useFrame(() => {
+    if (!restore || !onRestored || handledId.current === restore.id) return;
+    if (restore.projection !== projection) {
+      handledId.current = restore.id;
+      onRestored(restore.id);
+      return;
+    }
+    const fitKey = projection === "perspective" ? fittedKeys.persp : projection === "iso" ? fittedKeys.iso : fittedKeys.plan;
+    if (!fitKey.current?.startsWith(`${snapId}:`)) return;
+    const controls = projection === "perspective" ? perspControls.current : orthoControls.current;
+    if (!controls) return;
+    flushControlInertia(controls);
+    applyPose(projection === "perspective" ? persp : ortho, controls, restore.pose);
+    holdControlPose(controls as HeldControl<THREE.Vector3>);
+    touchedRef.current = true;
+    handledId.current = restore.id;
+    invalidate();
+    onRestored(restore.id);
+  });
+  return null;
+}
+
 export function Cameras({
   side,
   lift,
@@ -1994,6 +2046,8 @@ export function Cameras({
   lat,
   lon,
   cameraMemory,
+  cameraRestore,
+  onCameraRestored,
   introEnabled = false,
   gizmoOrbitLock = false,
   frameWidthM,
@@ -2016,6 +2070,8 @@ export function Cameras({
   lat: number;
   lon: number;
   cameraMemory?: CameraMemoryRef;
+  cameraRestore?: CameraRestoreRequest | null;
+  onCameraRestored?: (id: number) => void;
   introEnabled?: boolean;
   gizmoOrbitLock?: boolean;
   frameWidthM: number;
@@ -2209,6 +2265,18 @@ export function Cameras({
             fittedKeys={fittedKeys}
             touchedRef={touchedRef}
           />
+          <CameraRestoreBridge
+            restore={cameraRestore}
+            onRestored={onCameraRestored}
+            snapId={snapId}
+            projection={projection}
+            persp={persp}
+            ortho={ortho}
+            perspControls={perspControls}
+            orthoControls={orthoControls}
+            fittedKeys={fittedKeys}
+            touchedRef={touchedRef}
+          />
           <CameraReadout
             projection={projection}
             persp={persp}
@@ -2284,6 +2352,8 @@ export function Scene3D({
   heightEditBuildingId,
   selectedBuildingIds,
   cameraMemory,
+  cameraRestore,
+  onCameraRestored,
   display,
   importedMassing = null,
   walkLayer = null,
@@ -2335,6 +2405,8 @@ export function Scene3D({
   heightEditBuildingId: number | null;
   selectedBuildingIds?: readonly number[];
   cameraMemory?: CameraMemoryRef;
+  cameraRestore?: CameraRestoreRequest | null;
+  onCameraRestored?: (id: number) => void;
   display: View3dDisplaySettings;
   importedMassing?: THREE.Object3D | null;
   walkLayer?: THREE.Object3D | null;
@@ -2610,6 +2682,8 @@ export function Scene3D({
         lat={model.center.lat}
         lon={model.center.lon}
         cameraMemory={cameraMemory}
+        cameraRestore={cameraRestore}
+        onCameraRestored={onCameraRestored}
         introEnabled={!introSkip}
         gizmoOrbitLock={sectionKnifeGizmoInteraction.orbitLock}
         landmarkLabelsRef={landmarkExportRef}

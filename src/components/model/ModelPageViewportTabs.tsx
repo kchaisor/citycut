@@ -25,6 +25,8 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
     analyses,
     axoSettings,
     cameraMemory,
+    cameraRestore,
+    onCameraRestored,
     introPlayed,
     colourByUse,
     displayModel,
@@ -192,6 +194,8 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
                       : []
                 }
                 cameraMemory={cameraMemory}
+                cameraRestore={cameraRestore}
+                onCameraRestored={onCameraRestored}
                 introPlayed={introPlayed}
                 active={tab === "3d"}
                 display={view3dDisplay}

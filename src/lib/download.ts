@@ -48,7 +48,7 @@ export function downloadBlob(filename: string, blob: Blob) {
   URL.revokeObjectURL(url);
 }
 
-function downloadBytes(filename: string, bytes: Uint8Array, type: string) {
+export function downloadBytes(filename: string, bytes: Uint8Array, type: string) {
   const copy = new Uint8Array(bytes.byteLength);
   copy.set(bytes);
   downloadBlob(filename, new Blob([copy], { type }));

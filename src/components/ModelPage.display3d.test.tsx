@@ -199,6 +199,7 @@ describe("Display panel controls by view tab", () => {
     expect(leftRail.querySelector('[data-section="analysis"]')).toBeNull();
     expect(document.querySelector(".site-analysis-tabs")).toBeNull();
     expect(within(leftRail).getByRole("button", { name: "Import" })).toBeTruthy();
+    expect(within(leftRail).getByRole("button", { name: "Views" }).getAttribute("aria-pressed")).toBe("false");
     expect(within(leftRail).queryByRole("button", { name: "Export" })).toBeNull();
     expect(within(rightRail).getByRole("button", { name: "Model details" }).getAttribute("aria-pressed")).toBe("true");
     expect(within(rightRail).getByRole("button", { name: "Buildings" }).getAttribute("aria-pressed")).toBe("false");
