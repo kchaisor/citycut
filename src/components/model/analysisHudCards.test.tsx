@@ -199,6 +199,54 @@ describe("Solar Study card", () => {
     const sidebar = readFileSync(path.join(process.cwd(), "src/components/model/ModelPageSidebar.tsx"), "utf8");
     expect(sidebar).toContain("const sunHoursLegendAlone = sunHoursLegendOn && !analysisCards.solar;");
   });
+
+  it("titles the legend with the study date, the window and hours, and switches Whole day / 9am–3pm", () => {
+    const calls: SolarViewSettings[] = [];
+    render(<Hud initialKinds={["solar"]} sunHoursReady onSolar={(next) => calls.push(next)} />);
+    expect(screen.queryByRole("group", { name: "Sun hours window" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Sun hours" }));
+    const title = () => card("solar")!.querySelector(".sun-hours-direct-legend-title")!.textContent;
+    const windows = screen.getByRole("group", { name: "Sun hours window" });
+    expect(windows.className).toBe("ac-seg ac-seg-2");
+    expect(labels(windows)).toEqual(["Whole day", "9am–3pm"]);
+    const wholeDay = within(windows).getByRole("button", { name: "Whole day" });
+    const nineToThree = within(windows).getByRole("button", { name: "9am–3pm" });
+    expect(wholeDay.className).toBe("ac-seg-btn is-ink");
+    expect(nineToThree.className).toBe("ac-seg-btn");
+    expect(title()).toBe("Direct Sun Hours · 22 Sep · full daylight");
+    expect(card("solar")!.querySelector(".sun-hours-direct-legend-unit")!.textContent).toBe("hours");
+    fireEvent.click(nineToThree);
+    expect(calls.at(-1)).toMatchObject({ sunHoursWindow: "9to3", month: 9, day: 22, sunHours: true });
+    expect(nineToThree.className).toBe("ac-seg-btn is-ink");
+    expect(nineToThree.getAttribute("aria-pressed")).toBe("true");
+    expect(wholeDay.className).toBe("ac-seg-btn");
+    expect(title()).toBe("Direct Sun Hours · 22 Sep · 9am–3pm");
+    fireEvent.click(screen.getByRole("button", { name: "21 Jun · Winter solstice" }));
+    expect(calls.at(-1)).toMatchObject({ sunHoursWindow: "9to3", month: 6, day: 21 });
+    expect(title()).toBe("Direct Sun Hours · 21 Jun · 9am–3pm");
+  });
+
+  it("offers Colour only selected, off by default, with a hint until a building is picked", () => {
+    const calls: SolarViewSettings[] = [];
+    const { rerender } = render(<Hud initialKinds={["solar"]} sunHoursReady onSolar={(next) => calls.push(next)} />);
+    expect(screen.queryByRole("button", { name: "Colour only selected" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Sun hours" }));
+    const only = screen.getByRole("button", { name: "Colour only selected" });
+    expect(only.getAttribute("aria-pressed")).toBe("false");
+    expect(document.querySelector("[data-sun-hours-pick-hint]")).toBeNull();
+    fireEvent.click(only);
+    expect(calls.at(-1)?.sunHoursPickedOnly).toBe(true);
+    expect(only.className).toBe("ac-seg-btn is-on");
+    expect(document.querySelector("[data-sun-hours-pick-hint]")!.textContent).toBe(
+      "Click a building to colour it. Shift-click adds.",
+    );
+    rerender(<Hud initialKinds={["solar"]} sunHoursReady onSolar={(next) => calls.push(next)} pickedBuildingIds={[7]} />);
+    expect(document.querySelector("[data-sun-hours-pick-hint]")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Colour only selected" }));
+    expect(calls.at(-1)?.sunHoursPickedOnly).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: "Sun hours" }));
+    expect(screen.queryByRole("button", { name: "Colour only selected" })).toBeNull();
+  });
 });
 
 describe("Sun dome size slider", () => {

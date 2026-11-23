@@ -1,5 +1,5 @@
 import { planShadowOffset, planShadowRings } from "./buildingShadows";
-import { daylightWindowMinutes, sunAtMelbourneLocal } from "./solar";
+import { sunAtMelbourneLocal } from "./solar";
 import { castsSunHoursShadow } from "./sunHoursBuildings";
 import { pointInPolygon } from "./useCascade";
 import {
@@ -11,6 +11,7 @@ import { sunHoursGroundFromLitSteps, SUN_HOURS_GROUND_CELL_M, SUN_HOURS_GROUND_S
 import { modelFrameBounds, siteFrameFromModel } from "./modelFrame";
 import { containsPoint } from "./siteFrame";
 import { reportSunHoursStep, type SunHoursProgressCallback } from "./sunHoursProgress";
+import { DEFAULT_SUN_HOURS_WINDOW, sunHoursStudyMinutes, type SunHoursWindow } from "./sunHoursWindow";
 import type { CityModel, Pt, Ring } from "../types";
 
 export type SunHoursGroundGrid = {
@@ -96,13 +97,12 @@ function canvasLitStepCount(
   originEast: number,
   originNorth: number,
   cellM: number,
-  stepMinutes: number,
+  studyMinutes: readonly number[],
   footprintMask: readonly ExtrudedFootprintMaskPart[],
   ctx: RasterContext,
   onProgress?: SunHoursProgressCallback,
 ): { litSteps: Uint16Array; masked: Uint8Array; steps: number } | null {
-  const window = daylightWindowMinutes(model.center.lat, model.center.lon, year, month, day);
-  if (!window) return null;
+  if (studyMinutes.length === 0) return null;
   const fillRing = (points: Pt[]) => {
     if (points.length < 3) return;
     ctx.beginPath();
@@ -118,8 +118,8 @@ function canvasLitStepCount(
   const masked = groundCellMask(model, footprintMask, cols, rows, originEast, originNorth, cellM);
   const litSteps = new Uint16Array(cols * rows);
   let steps = 0;
-  const totalSteps = Math.floor((window.sunset - window.sunrise) / stepMinutes) + 1;
-  for (let minuteOfDay = window.sunrise; minuteOfDay <= window.sunset; minuteOfDay += stepMinutes) {
+  const totalSteps = studyMinutes.length;
+  for (const minuteOfDay of studyMinutes) {
     const hour = Math.floor(minuteOfDay / 60);
     const minute = minuteOfDay % 60;
     const sample = sunAtMelbourneLocal(model.center.lat, model.center.lon, year, month, day, hour, minute);
@@ -159,16 +159,14 @@ function daylightGroundStepShadows(
   year: number,
   month: number,
   day: number,
-  stepMinutes: number,
+  studyMinutes: readonly number[],
   onProgress?: SunHoursProgressCallback,
 ): Ring[][][] {
   const { lat, lon } = model.center;
-  const window = daylightWindowMinutes(lat, lon, year, month, day);
-  if (!window) return [];
   const out: Ring[][][] = [];
-  const totalSteps = Math.floor((window.sunset - window.sunrise) / stepMinutes) + 1;
+  const totalSteps = studyMinutes.length;
   let steps = 0;
-  for (let minuteOfDay = window.sunrise; minuteOfDay <= window.sunset; minuteOfDay += stepMinutes) {
+  for (const minuteOfDay of studyMinutes) {
     const hour = Math.floor(minuteOfDay / 60);
     const minute = minuteOfDay % 60;
     steps++;
@@ -193,6 +191,7 @@ function computeSunHoursGroundGridMulti(
   day: number,
   cellM: number,
   stepMinutes: number,
+  studyMinutes: readonly number[],
   cols: number,
   rows: number,
   originEast: number,
@@ -200,7 +199,7 @@ function computeSunHoursGroundGridMulti(
   footprintMask: readonly ExtrudedFootprintMaskPart[],
   onProgress?: SunHoursProgressCallback,
 ): SunHoursGroundGrid | null {
-  const stepShadows = daylightGroundStepShadows(model, year, month, day, stepMinutes, onProgress);
+  const stepShadows = daylightGroundStepShadows(model, year, month, day, studyMinutes, onProgress);
   if (stepShadows.length === 0) return null;
   const litSteps = new Uint16Array(cols * rows);
   const masked = groundCellMask(model, footprintMask, cols, rows, originEast, originNorth, cellM);
@@ -252,7 +251,9 @@ export function computeSunHoursGroundGrid(
   cellM = SUN_HOURS_GROUND_CELL_M,
   stepMinutes = SUN_HOURS_GROUND_STEP_MINUTES,
   onProgress?: SunHoursProgressCallback,
+  window: SunHoursWindow = DEFAULT_SUN_HOURS_WINDOW,
 ): SunHoursGroundGrid | null {
+  const studyMinutes = sunHoursStudyMinutes(window, model.center.lat, model.center.lon, year, month, day, stepMinutes);
   const bounds = modelFrameBounds(model);
   const cols = Math.max(1, Math.ceil((bounds.maxE - bounds.minE) / cellM));
   const rows = Math.max(1, Math.ceil((bounds.maxN - bounds.minN) / cellM));
@@ -268,6 +269,7 @@ export function computeSunHoursGroundGrid(
       day,
       cellM,
       stepMinutes,
+      studyMinutes,
       cols,
       rows,
       originEast,
@@ -286,7 +288,7 @@ export function computeSunHoursGroundGrid(
     originEast,
     originNorth,
     cellM,
-    stepMinutes,
+    studyMinutes,
     footprintMask,
     ctx,
     onProgress,

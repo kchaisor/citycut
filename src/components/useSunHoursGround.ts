@@ -14,6 +14,12 @@ import { modelFrameSize } from "../lib/modelFrame";
 import type { RenderQuality } from "../lib/renderQuality";
 import { sunStudyModelKey } from "../lib/sunStudyPlan";
 import { combineSunHoursProgress } from "../lib/sunHoursProgress";
+import {
+  DEFAULT_SUN_HOURS_WINDOW,
+  sunHoursScaleMaxHours,
+  type SunHoursStudy,
+  type SunHoursWindow,
+} from "../lib/sunHoursWindow";
 import type { CityModel } from "../types";
 
 let nextId = 1;
@@ -43,6 +49,7 @@ export function useSunHoursGround(
   day: number,
   enabled: boolean,
   quality: RenderQuality,
+  studyWindow: SunHoursWindow = DEFAULT_SUN_HOURS_WINDOW,
 ): {
   grid: SunHoursGroundGrid | null;
   overlay: SunHoursDirectOverlay | null;
@@ -52,6 +59,7 @@ export function useSunHoursGround(
   resolution: SunHoursResolution | null;
   targetResolution: SunHoursResolution | null;
   progress: number | null;
+  study: SunHoursStudy;
 } {
   const modelKey = useMemo(() => sunStudyModelKey(model), [model]);
   const [grid, setGrid] = useState<SunHoursGroundGrid | null>(null);
@@ -62,6 +70,7 @@ export function useSunHoursGround(
   const [resolution, setResolution] = useState<SunHoursResolution | null>(null);
   const [targetResolution, setTargetResolution] = useState<SunHoursResolution | null>(null);
   const [progress, setProgress] = useState<number | null>(null);
+  const [resultStudy, setResultStudy] = useState<SunHoursStudy | null>(null);
   const groundFractionRef = useRef<number | null>(null);
   const surfaceFractionRef = useRef<number | null>(null);
   const modelRef = useRef(model);
@@ -71,7 +80,7 @@ export function useSunHoursGround(
     if (typeof document === "undefined") return;
     const groundMax = nextGrid?.maxSunHours ?? 0;
     const surfaceMax = nextOverlay?.maxSunHours ?? 0;
-    const scale = Math.max(groundMax, surfaceMax);
+    const scale = sunHoursScaleMaxHours(studyWindow, Math.max(groundMax, surfaceMax));
     setScaleMaxHours(scale);
     if (nextGrid && scale > 0) {
       document.documentElement.dataset.sunHoursGroundReady = "1";
@@ -106,6 +115,7 @@ export function useSunHoursGround(
       setResolution(null);
       setTargetResolution(null);
       setProgress(null);
+      setResultStudy(null);
       groundFractionRef.current = null;
       surfaceFractionRef.current = null;
       publishReady(null, null);
@@ -131,6 +141,7 @@ export function useSunHoursGround(
       if (cancelled) return;
       setGrid(nextGrid);
       setResolution(nextGrid ? jobResolution : null);
+      setResultStudy(nextGrid ? { month, day, window: studyWindow } : null);
       setPending(false);
       if (!nextGrid) {
         setOverlay(null);
@@ -146,7 +157,7 @@ export function useSunHoursGround(
       setProgress(combineSunHoursProgress(1, 0, "surfaces"));
       publishReady(nextGrid, null);
       setPendingSurfaces(true);
-      const scaleHint = nextGrid.maxSunHours;
+      const scaleHint = sunHoursScaleMaxHours(studyWindow, nextGrid.maxSunHours);
       const settleSurfaces = (nextOverlay: SunHoursDirectOverlay | null) => {
         if (cancelled) return;
         let overlay = nextOverlay;
@@ -172,11 +183,20 @@ export function useSunHoursGround(
         import("../lib/sunHoursDirectAssess").then(({ assessDirectSunHoursOverlay }) => {
           if (cancelled) return;
           settleSurfaces(
-            assessDirectSunHoursOverlay(currentModel, year, month, day, scaleHint, params, (fraction) => {
-              if (cancelled) return;
-              surfaceFractionRef.current = fraction;
-              setProgress(combineSunHoursProgress(groundFractionRef.current ?? 1, fraction, "surfaces"));
-            }),
+            assessDirectSunHoursOverlay(
+              currentModel,
+              year,
+              month,
+              day,
+              scaleHint,
+              params,
+              (fraction) => {
+                if (cancelled) return;
+                surfaceFractionRef.current = fraction;
+                setProgress(combineSunHoursProgress(groundFractionRef.current ?? 1, fraction, "surfaces"));
+              },
+              studyWindow,
+            ),
           );
         });
         return;
@@ -208,6 +228,7 @@ export function useSunHoursGround(
         day,
         scaleMaxHours: scaleHint,
         params,
+        window: studyWindow,
       };
       directWorker.postMessage(directRequest);
     };
@@ -217,11 +238,20 @@ export function useSunHoursGround(
         import("../lib/sunHoursGroundPlan").then(({ computeSunHoursGroundGrid }) => {
           if (cancelled) return;
           finishGround(
-            computeSunHoursGroundGrid(currentModel, year, month, day, params.cellM, params.stepMinutes, (fraction) => {
-              if (cancelled) return;
-              groundFractionRef.current = fraction;
-              setProgress(combineSunHoursProgress(fraction, null, "ground"));
-            }),
+            computeSunHoursGroundGrid(
+              currentModel,
+              year,
+              month,
+              day,
+              params.cellM,
+              params.stepMinutes,
+              (fraction) => {
+                if (cancelled) return;
+                groundFractionRef.current = fraction;
+                setProgress(combineSunHoursProgress(fraction, null, "ground"));
+              },
+              studyWindow,
+            ),
           );
         });
       };
@@ -270,6 +300,7 @@ export function useSunHoursGround(
         day,
         cellM: params.cellM,
         stepMinutes: params.stepMinutes,
+        window: studyWindow,
       };
       groundWorker.postMessage(request);
     }
@@ -278,7 +309,17 @@ export function useSunHoursGround(
       for (const worker of workers) worker.terminate();
       for (const cancel of cancelMainThread) cancel();
     };
-  }, [enabled, modelKey, year, month, day, quality]);
+  }, [enabled, modelKey, year, month, day, quality, studyWindow]);
 
-  return { grid, overlay, scaleMaxHours, pending, pendingSurfaces, resolution, targetResolution, progress };
+  return {
+    grid,
+    overlay,
+    scaleMaxHours,
+    pending,
+    pendingSurfaces,
+    resolution,
+    targetResolution,
+    progress,
+    study: grid && resultStudy ? resultStudy : { month, day, window: studyWindow },
+  };
 }

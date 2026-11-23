@@ -22,6 +22,13 @@ describe("initialSolarSettings", () => {
     expect(settings.castShadows).toBe(false);
   });
 
+  it("opens on 22 Sep with the whole-day sun hours window and Colour only selected off", () => {
+    const settings = initialSolarSettings("", emptyStorage);
+    expect([settings.day, settings.month]).toEqual([22, 9]);
+    expect(settings.sunHoursWindow).toBe("day");
+    expect(settings.sunHoursPickedOnly).toBe(false);
+  });
+
   it("opens with the 3D sun dome and the 9–3pm plan fan off", () => {
     const settings = initialSolarSettings("", emptyStorage);
     expect(settings.showPath).toBe(false);

@@ -9,6 +9,7 @@ import {
 import { openRing } from "./geo";
 import { SUN_HOURS_GROUND_CELL_M, sunHoursDirectRgb } from "./sunHoursGround";
 import { receivesSunHours, sunHoursReceivers } from "./sunHoursBuildings";
+import type { SunHoursFaceRange } from "./sunHoursPicked";
 import { SURFACE } from "./surfaceLayers";
 import { footprintBase } from "./terrain";
 import { pointInPolygon } from "./useCascade";
@@ -243,9 +244,15 @@ export function buildRoofFootprintMeshesForModel(
   samples: DirectSunHoursSample[],
   hours: Float32Array,
   maxSunHours: number,
-): { roofPositions: Float32Array; roofColors: Float32Array; buildingTriangles: Map<number, number> } {
+): {
+  roofPositions: Float32Array;
+  roofColors: Float32Array;
+  roofRanges: SunHoursFaceRange[];
+  buildingTriangles: Map<number, number>;
+} {
   const roofPositions: number[] = [];
   const roofColors: number[] = [];
+  const roofRanges: SunHoursFaceRange[] = [];
   const buildingTriangles = new Map<number, number>();
   const roofSamplesByBuilding = new Map<number, number[]>();
   for (let index = 0; index < samples.length; index++) {
@@ -257,6 +264,7 @@ export function buildRoofFootprintMeshesForModel(
   }
   for (const building of extrudedBuildingsForModel(sunHoursReceivers(model))) {
     const indices = roofSamplesByBuilding.get(building.id) ?? [];
+    const start = roofPositions.length / 3;
     const count = appendBuildingRoofFootprint(
       model,
       building,
@@ -267,10 +275,12 @@ export function buildRoofFootprintMeshesForModel(
       roofColors,
     );
     buildingTriangles.set(building.id, count);
+    roofRanges.push({ buildingId: building.id, start, count: roofPositions.length / 3 - start });
   }
   return {
     roofPositions: new Float32Array(roofPositions),
     roofColors: new Float32Array(roofColors),
+    roofRanges,
     buildingTriangles,
   };
 }

@@ -237,7 +237,7 @@ describe("Sun hours layers follow the toggle", () => {
     expect(tabs).not.toContain("ViewLegend");
     const card = readFileSync(resolve(__dirname, "SolarStudyHudCard.tsx"), "utf8");
     expect(card).toContain("sunHours: Boolean(solar.sunHours)");
-    expect(card).toContain("<SunHoursLegendDock sunHoursGround={sunHoursGround} embedded />");
+    expect(card).toContain("<SunHoursLegendDock sunHoursGround={sunHoursGround} embedded pickedOnly={sunHoursPickedOnly} />");
     expect(tabs).toContain("solarAnalysisActive={solarStudyViewActive(analyses)}");
     expect(tabs).not.toContain("analysisKind");
   });

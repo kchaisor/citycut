@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { daylightWindowMinutes, sunAtMelbourneLocal } from "./solar";
+import { sunAtMelbourneLocal } from "./solar";
 import { buildFacadeOcclusionMesh } from "./facadeOcclusionMesh";
 import { planToWorld, worldOutward3 } from "./sunHoursWorld";
 import { sunHoursDirectRgb, sunHoursGroundFromLitSteps } from "./sunHoursGround";
@@ -15,6 +15,8 @@ import { openRing } from "./geo";
 import { footprintBase } from "./terrain";
 import { SURFACE } from "./surfaceLayers";
 import { sunHoursReceivers } from "./sunHoursBuildings";
+import type { SunHoursFaceRange } from "./sunHoursPicked";
+import { DEFAULT_SUN_HOURS_WINDOW, sunHoursStudyMinutes, type SunHoursWindow } from "./sunHoursWindow";
 
 const FACING_DOT_MIN = 0.04;
 const RAY_MAX_M = 4000;
@@ -27,6 +29,8 @@ export type SunHoursDirectOverlay = {
   roofColors: Float32Array;
   wallPositions: Float32Array;
   wallColors: Float32Array;
+  roofRanges: SunHoursFaceRange[];
+  wallRanges: SunHoursFaceRange[];
   cellCount: number;
   maxSunHours: number;
   cellM: number;
@@ -65,11 +69,10 @@ export function daylightSteps(
   month: number,
   day: number,
   stepMinutes: number,
+  window: SunHoursWindow = DEFAULT_SUN_HOURS_WINDOW,
 ): { dir: THREE.Vector3; above: boolean }[] {
-  const window = daylightWindowMinutes(lat, lon, year, month, day);
-  if (!window) return [];
   const steps: { dir: THREE.Vector3; above: boolean }[] = [];
-  for (let minuteOfDay = window.sunrise; minuteOfDay <= window.sunset; minuteOfDay += stepMinutes) {
+  for (const minuteOfDay of sunHoursStudyMinutes(window, lat, lon, year, month, day, stepMinutes)) {
     const hour = Math.floor(minuteOfDay / 60);
     const minute = minuteOfDay % 60;
     const sample = sunAtMelbourneLocal(lat, lon, year, month, day, hour, minute);
@@ -121,6 +124,7 @@ function appendWallFacesForModel(
   maxSunHours: number,
   wallPositions: number[],
   wallColors: number[],
+  wallRanges: SunHoursFaceRange[],
 ) {
   const hoursById = new Map<string, number>();
   for (let index = 0; index < samples.length; index++) {
@@ -132,6 +136,7 @@ function appendWallFacesForModel(
     const footprints = extrudedFootprintsForBuilding(building);
     if (footprints.length === 0) continue;
     const baseYM = visibleWallBaseYM(model, building.ring);
+    const start = wallPositions.length / 3;
     for (const [partIndex, part] of footprints.entries()) {
       const open = openRing(part.ring);
       if (open.length < 3) continue;
@@ -171,6 +176,7 @@ function appendWallFacesForModel(
         }
       }
     }
+    wallRanges.push({ buildingId: building.id, start, count: wallPositions.length / 3 - start });
   }
 }
 
@@ -183,8 +189,9 @@ export function buildSunHoursFaceMeshes(
 ): SunHoursDirectOverlay {
   const wallPositions: number[] = [];
   const wallColors: number[] = [];
-  appendWallFacesForModel(model, samples, hours, maxSunHours, wallPositions, wallColors);
-  const { roofPositions, roofColors } = buildRoofFootprintMeshesForModel(model, samples, hours, maxSunHours);
+  const wallRanges: SunHoursFaceRange[] = [];
+  appendWallFacesForModel(model, samples, hours, maxSunHours, wallPositions, wallColors, wallRanges);
+  const { roofPositions, roofColors, roofRanges } = buildRoofFootprintMeshesForModel(model, samples, hours, maxSunHours);
   const wallPos = new Float32Array(wallPositions);
   const wallCol = new Float32Array(wallColors);
   return {
@@ -194,6 +201,8 @@ export function buildSunHoursFaceMeshes(
     roofColors,
     wallPositions: wallPos,
     wallColors: wallCol,
+    roofRanges,
+    wallRanges,
     cellCount: samples.length,
     maxSunHours,
     ...resolution,
@@ -210,11 +219,12 @@ export function directSunHoursAtSamples(
   day: number,
   stepMinutes: number,
   onProgress?: SunHoursProgressCallback,
+  window: SunHoursWindow = DEFAULT_SUN_HOURS_WINDOW,
 ): Float32Array | null {
   if (samples.length === 0) return null;
   const occlusionMesh = buildFacadeOcclusionMesh(model);
   if (!occlusionMesh) return null;
-  const sunDirs = daylightSteps(model.center.lat, model.center.lon, year, month, day, stepMinutes);
+  const sunDirs = daylightSteps(model.center.lat, model.center.lon, year, month, day, stepMinutes, window);
   const litCounts = new Uint16Array(samples.length);
   const ray = new THREE.Ray();
   const dirTotal = sunDirs.length;
@@ -241,10 +251,11 @@ export function assessDirectSunHoursOverlay(
   scaleMaxHours?: number,
   params: SunHoursSampleParams = FAST_SUN_HOURS_PARAMS,
   onProgress?: SunHoursProgressCallback,
+  window: SunHoursWindow = DEFAULT_SUN_HOURS_WINDOW,
 ): SunHoursDirectOverlay | null {
   const { samples, wallCellM, roofCellM } = directSunHoursSampleSet(model, params);
   const { stepMinutes } = params;
-  const hours = directSunHoursAtSamples(model, samples, year, month, day, stepMinutes, onProgress);
+  const hours = directSunHoursAtSamples(model, samples, year, month, day, stepMinutes, onProgress, window);
   if (!hours) return null;
   let maxSunHours = 0;
   for (const value of hours) maxSunHours = Math.max(maxSunHours, value);

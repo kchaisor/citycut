@@ -102,6 +102,11 @@ import { studioSceneLighting } from "../lib/sunStudyViewport";
 import { applySolarGreyscale, restoreFlatWater } from "../lib/solarGreyscale";
 import { SunHoursLayer } from "./SunHoursLayer";
 import { setSunHoursMassingFillVisible } from "../lib/sunHoursFaceTint";
+import {
+  sunHoursFacesReplaceMassing,
+  sunHoursGroundShown,
+  sunHoursOverlayForBuildings,
+} from "../lib/sunHoursPicked";
 import type { SunHoursDirectOverlay } from "../lib/sunHoursDirectAssess";
 import type { SunHoursGroundGrid } from "../lib/sunHoursGroundPlan";
 import { SectionKnifeScene } from "./SectionKnifeScene";
@@ -552,6 +557,7 @@ function City({
   highlightManual,
   solarDiagramOn,
   directSunHoursOn,
+  sunHoursPickedOnly,
   solarNeutralFill,
   solarGreyscale,
   solarShadowsActive,
@@ -580,6 +586,7 @@ function City({
   highlightManual: boolean;
   solarDiagramOn: boolean;
   directSunHoursOn: boolean;
+  sunHoursPickedOnly: boolean;
   solarNeutralFill: string;
   solarGreyscale: boolean;
   solarShadowsActive: boolean;
@@ -993,7 +1000,13 @@ function City({
   const contoursVisible = isLayer3dVisible(display, "contours");
   const treesVisible = treesVisibleIn3d(model.layers, display);
   useLayoutEffect(() => {
-    setSunHoursMassingFillVisible(group, importedMassing, buildingsVisible, display.showOutlines, directSunHoursOn);
+    setSunHoursMassingFillVisible(
+      group,
+      importedMassing,
+      buildingsVisible,
+      display.showOutlines,
+      sunHoursFacesReplaceMassing(directSunHoursOn, sunHoursPickedOnly),
+    );
     group.traverse((object) => {
       const name = object.name;
       if (
@@ -1031,6 +1044,7 @@ function City({
     group,
     importedMassing,
     directSunHoursOn,
+    sunHoursPickedOnly,
     display.showOutlines,
     buildingsVisible,
     roadsVisible,
@@ -2364,6 +2378,13 @@ export function Scene3D({
   );
   const solarNeutralFill = useMemo(() => getColour("--building-solar-neutral"), [colourTick]);
   const sunSample = useMelbourneSunSample(model.center.lat, model.center.lon, solar);
+  const sunHoursPickedOnly = Boolean(solar.sunHours && solar.sunHoursPickedOnly);
+  const sunHoursPickedKey = (selectedBuildingIds ?? []).join(",");
+  const sunHoursFaces = useMemo(() => {
+    if (!sunHoursDirectOverlay || !sunHoursPickedOnly) return sunHoursDirectOverlay;
+    const pickedIds = sunHoursPickedKey === "" ? [] : sunHoursPickedKey.split(",").map(Number);
+    return sunHoursOverlayForBuildings(sunHoursDirectOverlay, pickedIds);
+  }, [sunHoursDirectOverlay, sunHoursPickedOnly, sunHoursPickedKey]);
   const [glEpoch, setGlEpoch] = useState(0);
   const [glContextLost, setGlContextLost] = useState(false);
   const onGlContextLost = useCallback(() => setGlContextLost(true), []);
@@ -2461,7 +2482,7 @@ export function Scene3D({
         targetY={shadowTargetY}
         topY={siteTopY}
       />
-      {solar.sunHours && sunHoursGroundGrid ? (
+      {sunHoursGroundShown(Boolean(solar.sunHours), sunHoursPickedOnly) && sunHoursGroundGrid ? (
         <SunHoursLayer
           grid={sunHoursGroundGrid}
           overlay={null}
@@ -2478,6 +2499,7 @@ export function Scene3D({
         highlightManual={showManualEdits && model.manualHeightEditCount !== undefined && model.manualHeightEditCount > 0}
         solarDiagramOn={solar.showPath}
         directSunHoursOn={Boolean(solar.sunHours && sunHoursDirectOverlay)}
+        sunHoursPickedOnly={sunHoursPickedOnly}
         solarNeutralFill={solarNeutralFill}
         solarGreyscale={monoViewActive(display)}
         solarShadowsActive={solarShadowsActive}
@@ -2500,14 +2522,15 @@ export function Scene3D({
         introPlayed={introPlayed}
         importedMassing={importedMassing}
       />
-      {solar.sunHours && sunHoursGroundGrid && sunHoursDirectOverlay ? (
+      {solar.sunHours && sunHoursGroundGrid && sunHoursFaces ? (
         <SunHoursLayer
           grid={sunHoursGroundGrid}
-          overlay={sunHoursDirectOverlay}
+          overlay={sunHoursFaces}
           scaleMaxHours={sunHoursScaleMax || sunHoursGroundGrid.maxSunHours}
           model={model}
           planView={projection === "plan"}
           surfacesOnly
+          facesOverMassing={sunHoursPickedOnly}
         />
       ) : null}
       {importedMassing ? <primitive object={importedMassing} /> : null}
