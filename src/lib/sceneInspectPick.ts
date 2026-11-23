@@ -200,7 +200,6 @@ export function attachSceneInspectPick(
   const pointer = new THREE.Vector2();
   let downX = 0;
   let downY = 0;
-  let downAt = 0;
   let downAdditive = false;
 
   function setPointer(event: PointerEvent) {
@@ -213,7 +212,6 @@ export function attachSceneInspectPick(
     if (event.button !== 0) return;
     downX = event.clientX;
     downY = event.clientY;
-    downAt = event.timeStamp;
     downAdditive = event.shiftKey;
     if (downAdditive) event.stopImmediatePropagation();
   }
@@ -222,7 +220,6 @@ export function attachSceneInspectPick(
     if (event.button !== 0) return;
     const moved = Math.hypot(event.clientX - downX, event.clientY - downY);
     if (!isInspectClick(moved, downAdditive && event.shiftKey)) return;
-    if (event.timeStamp - downAt > 800) return;
     setPointer(event);
     raycaster.setFromCamera(pointer, camera);
     const hits = raycaster.intersectObjects([root, ...(context.extraRoots ?? [])], true);

@@ -723,12 +723,10 @@ input[type="range"]::-moz-range-thumb {
   border-radius: 10px;
 }
 html.is-shift-pick .building-detail-panel.is-floating,
-html.is-shift-pick .building-detail-panel.inspect-hud {
-  pointer-events: none;
-}
-html.is-shift-pick .building-detail-panel.is-floating :is(button, input, select, a),
-html.is-shift-pick .building-detail-panel.inspect-hud :is(button, input, select, a) {
-  pointer-events: auto;
+html.is-shift-pick .building-detail-panel.inspect-hud,
+html.is-shift-pick .building-detail-panel.is-floating *,
+html.is-shift-pick .building-detail-panel.inspect-hud * {
+  pointer-events: none !important;
 }
 .building-detail-panel.is-minimised {
   max-height: none;

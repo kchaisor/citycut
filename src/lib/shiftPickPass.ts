@@ -1,7 +1,5 @@
 export const SHIFT_PICK_CLASS = "is-shift-pick";
 export const SHIFT_PICK_CARD_SELECTOR = ".building-detail-panel.is-floating, .building-detail-panel.inspect-hud";
-export const SHIFT_PICK_CONTROL_SELECTOR = "button, input, select, a";
-
 export function setShiftPickClass(on: boolean): void {
   if (typeof document === "undefined") return;
   document.documentElement.classList.toggle(SHIFT_PICK_CLASS, on);
@@ -11,9 +9,7 @@ function cardSurfaceUnder(event: MouseEvent): Element | null {
   if (!event.shiftKey || event.button !== 0) return null;
   const target = event.target;
   if (!(target instanceof Element)) return null;
-  const card = target.closest(SHIFT_PICK_CARD_SELECTOR);
-  if (!card || target.closest(SHIFT_PICK_CONTROL_SELECTOR)) return null;
-  return card;
+  return target.closest(SHIFT_PICK_CARD_SELECTOR);
 }
 
 export function canvasUnderCard(card: Element, clientX: number, clientY: number): HTMLCanvasElement | null {

@@ -145,22 +145,24 @@ describe("Shift-click with the floating building card in the way", () => {
     expect(document.documentElement.classList.contains(SHIFT_PICK_CLASS)).toBe(true);
   });
 
-  it("leaves Shift presses on Hide selected and the height field to the control", () => {
+  it("adds the building even when the press lands on Hide selected or the height field", () => {
     const ctx = setup();
     detach = ctx.detach;
-    const onButton = vi.fn();
-    const onInput = vi.fn();
-    ctx.hideButton.addEventListener("pointerdown", onButton);
-    ctx.input.addEventListener("pointerdown", onInput);
-
     press(ctx.hideButton, AT_B, true);
-    press(ctx.input, AT_B, true);
-    expect(onButton).toHaveBeenCalledTimes(1);
-    expect(onInput).toHaveBeenCalledTimes(1);
-    expect(ctx.selection()).toEqual([A]);
+    expect(ctx.selection()).toEqual([A, B]);
 
+    press(ctx.canvas, AT_A, false);
+    expect(ctx.selection()).toEqual([A]);
+    press(ctx.input, AT_B, true);
+    expect(ctx.selection()).toEqual([A, B]);
+  });
+
+  it("still lets Hide selected work once Shift is released", () => {
+    const ctx = setup();
+    detach = ctx.detach;
     ctx.hideButton.click();
     expect(ctx.onHideSelected).toHaveBeenCalledTimes(1);
+    expect(ctx.selection()).toEqual([A]);
   });
 
   it("keeps a press without Shift on the card", () => {

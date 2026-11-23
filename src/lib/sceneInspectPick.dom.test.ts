@@ -64,6 +64,18 @@ describe("attachSceneInspectPick pointer handling", () => {
     expect(controlsOnHost).toHaveBeenCalledTimes(2);
   });
 
+  it("still picks when the pointer is held longer than 800ms", () => {
+    const { canvas, onPick } = setup();
+    const down = new MouseEvent("pointerdown", { bubbles: true, cancelable: true, button: 0, clientX: 100, clientY: 100, shiftKey: true });
+    const up = new MouseEvent("pointerup", { bubbles: true, cancelable: true, button: 0, clientX: 106, clientY: 108, shiftKey: true });
+    Object.defineProperty(down, "timeStamp", { value: 1_000 });
+    Object.defineProperty(up, "timeStamp", { value: 3_200 });
+    canvas.dispatchEvent(down);
+    canvas.dispatchEvent(up);
+    expect(onPick).toHaveBeenCalledTimes(1);
+    expect(onPick.mock.calls[0][0]).toMatchObject({ kind: "building", buildingId: 7, additive: true });
+  });
+
   it("ignores a Shift drag well past the jitter cap", () => {
     const { canvas, onPick, onClear } = setup();
     fire(canvas, "pointerdown", { clientX: 100, clientY: 100, shiftKey: true });
