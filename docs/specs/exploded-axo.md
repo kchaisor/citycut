@@ -24,13 +24,15 @@ Sketch or screenshot: Paper mock skipped (Paper weekly MCP limit, 24 Nov 2026). 
 
 ### As built (24 Nov 2026)
 
-- **Gap slider.** Opens at 0.15 × the cut side, rounded to 5 m (75 m on a 0.5 km cut, 150 m on a 1 km cut). It runs from 10 m to 0.6 × the cut side (300 m / 600 m) in 5 m steps. The gap choice is not saved either.
-- **Labels.** Each label sits just left of its layer, at the bottom corner nearest the left of the screen, and follows the layer as you pan or zoom. Labels fade in over the last third of the explode and are hidden the moment a collapse starts.
+- **Gap slider.** Opens at 0.3 × the cut side, rounded to 5 m (150 m on a 0.5 km cut, 300 m on a 1 km cut), so the layers read as separate. It runs from 10 m to 0.8 × the cut side (400 m / 800 m) in 5 m steps. The gap choice is not saved either.
+- **Labels.** Each label sits just left of its layer, at the bottom corner nearest the left of the screen, and follows the layer as you pan or zoom. A label never sits under the left panel or rail, the top bar, the right-hand cards or the bottom Analysis bar: it is held inside the free area between them. Labels fade in over the last third of the explode and are hidden the moment a collapse starts.
 - **Empty layers.** A layer with nothing showing (for example Trees switched off) is skipped: no label and no extra gap.
-- **Camera.** Exploding always uses the fixed isometric corner, so it turns Free rotate off. Changing corner while exploded keeps the model exploded and re-fits. You can still pan and zoom by hand once the animation has finished; moving the gap slider re-fits again. The fit leaves room at the sides for the labels.
+- **Camera.** Exploding always uses the fixed isometric corner, so it turns Free rotate off. Changing corner while exploded keeps the model exploded and re-fits. You can still pan and zoom by hand once the animation has finished; moving the gap slider re-fits again. The fit places the stack in the part of the view not covered by the on-screen panels (the same free area the sun dome uses), with room on the left for the labels.
 - **Landmark name labels** are hidden while the model is exploded and come back when it is assembled.
 - **Picked tree and imported-building cards** stay pinned to the thing they describe as it lifts.
-- **Known limits.** Where the site has terrain, roads are cut out of the ground surface, so the Ground layer shows road-shaped openings once the roads lift. The section knife is not adjusted for the exploded arrangement.
+- **Ground under the roads.** Where the site has terrain, roads are cut out of the ground surface. While the model is exploded, the openings are filled in the ground colour on the Ground layer, so the ground reads as whole once the roads lift. The fill is removed when the model is assembled.
+- **Timing.** The animation follows real elapsed time, so it takes about 0.9 s even at a low frame rate.
+- **Known limits.** The section knife is not adjusted for the exploded arrangement.
 
 ## How we'll know it works
 

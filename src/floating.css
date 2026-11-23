@@ -5173,7 +5173,7 @@ body,
   font-weight: 500;
   color: var(--ink);
   white-space: nowrap;
-  transform: translate(calc(-100% - var(--space-3)), -50%);
+  transform: translate(-100%, -50%);
   opacity: 0;
   pointer-events: none;
 }

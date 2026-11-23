@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cameraBasis, cornersOf, dot, frameCentre, isoOffset, sub, ISO_CORNERS, type Aabb } from "./isoCamera";
+import { cameraBasis, cornersOf, dot, fitOrthoZoom, frameCentre, isoOffset, sub, ISO_CORNERS, type Aabb } from "./isoCamera";
 import {
   EXPLODE_DURATION_MS,
   EXPLODE_LABEL_ROOM_PX,
@@ -7,7 +7,10 @@ import {
   EXPLODE_LAYER_LABELS,
   easeInOutCubic,
   explodedBounds,
-  explodeFitZoom,
+  clampExplodeLabel,
+  explodeClockAt,
+  explodeFit,
+  explodeFreeArea,
   explodeGapRange,
   explodeGapShare,
   explodeLabelOpacity,
@@ -19,7 +22,6 @@ import {
   liftedBox,
   noExplodeBoxes,
   resolveExplodeGapM,
-  stepExplodeClock,
   type ExplodeLayerBoxes,
 } from "./modelExplode";
 
@@ -116,12 +118,12 @@ describe("explodeOffsets", () => {
 });
 
 describe("explode gap slider", () => {
-  it("defaults to 75 m on a 0.5 km cut, with a 10 to 300 m range in 5 m steps", () => {
-    expect(explodeGapRange(500)).toEqual({ minM: 10, maxM: 300, stepM: 5, defaultM: 75 });
+  it("defaults to 150 m on a 0.5 km cut, with a 10 to 400 m range in 5 m steps", () => {
+    expect(explodeGapRange(500)).toEqual({ minM: 10, maxM: 400, stepM: 5, defaultM: 150 });
   });
 
-  it("defaults to 150 m on a 1 km cut, with a 10 to 600 m range in 5 m steps", () => {
-    expect(explodeGapRange(1000)).toEqual({ minM: 10, maxM: 600, stepM: 5, defaultM: 150 });
+  it("defaults to 300 m on a 1 km cut, with a 10 to 800 m range in 5 m steps", () => {
+    expect(explodeGapRange(1000)).toEqual({ minM: 10, maxM: 800, stepM: 5, defaultM: 300 });
   });
 
   it("keeps a usable range on a tiny cut", () => {
@@ -133,12 +135,12 @@ describe("explode gap slider", () => {
 
   it("uses the default until a gap is chosen, then snaps and clamps the choice", () => {
     const range = explodeGapRange(500);
-    expect(resolveExplodeGapM(range, null)).toBe(75);
+    expect(resolveExplodeGapM(range, null)).toBe(150);
     expect(resolveExplodeGapM(range, 123)).toBe(125);
     expect(resolveExplodeGapM(range, 2)).toBe(10);
-    expect(resolveExplodeGapM(range, 9999)).toBe(300);
+    expect(resolveExplodeGapM(range, 9999)).toBe(400);
     expect(explodeGapShare(range, 10)).toBe(0);
-    expect(explodeGapShare(range, 300)).toBe(1);
+    expect(explodeGapShare(range, 400)).toBe(1);
   });
 });
 
@@ -153,16 +155,25 @@ describe("explode animation clock", () => {
 
   it("takes about 0.9 s each way", () => {
     expect(EXPLODE_DURATION_MS).toBe(900);
-    expect(stepExplodeClock(0, 1, 450, false)).toBeCloseTo(0.5, 9);
-    expect(stepExplodeClock(0.5, 1, 450, false)).toBe(1);
-    expect(stepExplodeClock(1, 0, 450, false)).toBeCloseTo(0.5, 9);
-    expect(stepExplodeClock(0.2, 0, 900, false)).toBe(0);
+    expect(explodeClockAt(0, 1, 450, false)).toBeCloseTo(0.5, 9);
+    expect(explodeClockAt(0.5, 1, 450, false)).toBe(1);
+    expect(explodeClockAt(1, 0, 450, false)).toBeCloseTo(0.5, 9);
+    expect(explodeClockAt(0.2, 0, 900, false)).toBe(0);
+  });
+
+  it("follows elapsed time, so slow frames still land on time", () => {
+    let clock = 0;
+    for (const elapsedMs of [0, 400, 800, 1200]) clock = explodeClockAt(0, 1, elapsedMs, false);
+    expect(clock).toBe(1);
+    expect(explodeClockAt(0, 1, 800, false)).toBeCloseTo(8 / 9, 9);
+    expect(explodeClockAt(0.5, 0, 225, false)).toBeCloseTo(0.25, 9);
+    expect(explodeClockAt(0, 1, -50, false)).toBe(0);
   });
 
   it("jumps straight to the end with reduced motion", () => {
-    expect(stepExplodeClock(0, 1, 16, true)).toBe(1);
-    expect(stepExplodeClock(1, 0, 16, true)).toBe(0);
-    expect(stepExplodeClock(0.3, 1, 0, true)).toBe(1);
+    expect(explodeClockAt(0, 1, 16, true)).toBe(1);
+    expect(explodeClockAt(1, 0, 16, true)).toBe(0);
+    expect(explodeClockAt(0.3, 1, 0, true)).toBe(1);
   });
 
   it("shows labels only near the end of the explode and never while collapsing", () => {
@@ -190,29 +201,55 @@ describe("exploded bounds and camera fit", () => {
     expect(explodedBounds(null, noExplodeBoxes(), explodeOffsets(noExplodeBoxes(), 75, 1))).toBeNull();
   });
 
-  it("fits every layer inside the viewport at each corner and each stage, leaving label room when exploded", () => {
-    const width = 1100;
-    const height = 780;
+  it("fits every layer inside the free area between the panels at each corner and stage, with label room on the left", () => {
+    const view = { left: 0, top: 0, right: 1440, bottom: 900 };
+    const safe = { left: 338, top: 72, right: 1082, bottom: 816 };
     for (const corner of ISO_CORNERS) {
       const direction = isoOffset(corner);
       const { right, up } = cameraBasis(direction);
       for (const progress of [0, 0.25, 0.5, 1]) {
-        for (const gap of [10, 75, 300]) {
+        for (const gap of [10, 150, 400]) {
           const offsets = explodeOffsets(BOXES, gap, progress);
           const bounds = explodedBounds(base, BOXES, offsets)!;
-          const zoom = explodeFitZoom(bounds, direction, width, height, progress);
+          const fit = explodeFit(bounds, direction, view, safe, progress);
+          const area = explodeFreeArea(view, safe, progress);
           const centre = frameCentre(bounds);
-          const room = EXPLODE_LABEL_ROOM_PX * progress;
           for (const layer of EXPLODE_LAYERS) {
             for (const point of cornersOf(liftedBox(BOXES[layer]!, offsets[layer]))) {
               const rel = sub(point, centre);
-              expect(Math.abs(dot(rel, right)) * zoom).toBeLessThanOrEqual(width / 2 - room + 1e-6);
-              expect(Math.abs(dot(rel, up)) * zoom).toBeLessThanOrEqual(height / 2 + 1e-6);
+              const x = (view.left + view.right) / 2 + fit.shiftXPx + dot(rel, right) * fit.zoom;
+              const y = (view.top + view.bottom) / 2 + fit.shiftYPx - dot(rel, up) * fit.zoom;
+              expect(x).toBeGreaterThanOrEqual(area.left - 1e-6);
+              expect(x).toBeLessThanOrEqual(area.right + 1e-6);
+              expect(y).toBeGreaterThanOrEqual(area.top - 1e-6);
+              expect(y).toBeLessThanOrEqual(area.bottom + 1e-6);
             }
           }
         }
       }
     }
+  });
+
+  it("is the plain centred fit when assembled and the panel-free area with label room when exploded", () => {
+    const view = { left: 0, top: 0, right: 1440, bottom: 900 };
+    const safe = { left: 338, top: 72, right: 1082, bottom: 816 };
+    const direction = isoOffset("sw");
+    expect(explodeFit(base, direction, view, safe, 0)).toEqual({
+      zoom: fitOrthoZoom(base, direction, 1440, 900),
+      shiftXPx: 0,
+      shiftYPx: 0,
+    });
+    expect(explodeFreeArea(view, safe, 1)).toEqual({ ...safe, left: safe.left + EXPLODE_LABEL_ROOM_PX });
+    const narrow = { left: 600, top: 0, right: 800, bottom: 900 };
+    expect(explodeFreeArea(view, narrow, 1).left).toBe(700);
+  });
+
+  it("keeps a label left of its anchor and inside the free area", () => {
+    const safe = { left: 338, top: 72, right: 1082, bottom: 816 };
+    expect(clampExplodeLabel(700, 400, 110, 20, safe)).toEqual({ x: 688, y: 400 });
+    expect(clampExplodeLabel(380, 400, 110, 20, safe)).toEqual({ x: 448, y: 400 });
+    expect(clampExplodeLabel(1300, 20, 110, 20, safe)).toEqual({ x: 1082, y: 82 });
+    expect(clampExplodeLabel(700, 890, 110, 20, safe)).toEqual({ x: 688, y: 806 });
   });
 
   it("anchors a label at the screen-left bottom corner of its lifted layer", () => {

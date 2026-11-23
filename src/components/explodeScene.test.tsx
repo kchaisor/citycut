@@ -6,6 +6,7 @@ import { cornersOf, type Aabb } from "../lib/isoCamera";
 import { EXPLODE_LAYERS, explodeOffsets, liftedBox } from "../lib/modelExplode";
 import type { ProjectionMode } from "../lib/viewMemory";
 import type { SolarViewSettings } from "./SolarHeliodon";
+import { GROUND_ROADS_LAYER } from "../lib/groundRoads";
 import { Cameras, ExplodeLayers, createExplodeRuntime, type ExplodeRuntime } from "./Scene3D";
 
 extend(THREE as unknown as Parameters<typeof extend>[0]);
@@ -64,14 +65,14 @@ function stubRenderer(canvas: HTMLCanvasElement): THREE.WebGLRenderer {
 }
 
 let clock = 0;
-async function frames(n: number) {
+async function frames(n: number, stepSec = 0.05) {
   for (let i = 0; i < n; i++) {
-    clock += 16;
+    clock += stepSec;
     await act(async () => advance(clock, true));
   }
 }
 
-type Opts = { exploded: boolean; gapM: number; projection?: ProjectionMode };
+type Opts = { exploded: boolean; gapM: number; projection?: ProjectionMode; terrain?: { min: number; max: number } };
 
 const cleanups: Array<() => Promise<void>> = [];
 afterEach(async () => {
@@ -103,6 +104,7 @@ async function mountExplode(initial: Opts) {
         exploded={o.exploded}
         gapM={o.gapM}
         measureKey="all"
+        terrain={o.terrain}
         onCollapsed={collapsed}
         onTopLift={topLift}
       />
@@ -213,6 +215,44 @@ describe("exploded axo in the 3D scene", () => {
     expect(rig.overlay.current!.position.y).toBe(151);
     expect(rig.camera().zoom).toBeLessThan(assembledZoom);
     expect(rig.topLift).toHaveBeenLastCalledWith(286 + 15 - 60);
+  });
+
+  it("lands on time at a low frame rate", async () => {
+    const rig = await mountExplode({ exploded: false, gapM: 75 });
+    await rig.rerender({ exploded: true, gapM: 75 });
+    await frames(1);
+    await frames(2, 0.4);
+    expect(rig.runtime.current.progress).toBeGreaterThan(0.5);
+    expect(rig.runtime.current.progress).toBeLessThan(1);
+    await frames(1, 0.4);
+    expect(rig.runtime.current.progress).toBe(1);
+    expect(layerY(rig.city, "Trees")).toBe(286);
+  });
+
+  it("fills the road openings in ground colour on the Ground layer only while exploded", async () => {
+    const terrain = { min: 0, max: 10 };
+    const rig = await mountExplode({ exploded: false, gapM: 75, terrain });
+    const roads = rig.city.getObjectByName("Roads")!;
+    roads.userData.exportLayer = GROUND_ROADS_LAYER;
+    expect(rig.city.getObjectByName("ExplodeGroundFill")).toBeUndefined();
+    await rig.rerender({ exploded: true, gapM: 75, terrain });
+    await frames(30);
+    const fill = rig.city.getObjectByName("ExplodeGroundFill")!;
+    expect(fill.children).toHaveLength(1);
+    expect(fill.position.y).toBe(0);
+    expect(layerY(rig.city, "Roads")).toBe(75);
+    const mesh = fill.children[0] as THREE.Mesh;
+    expect(mesh.geometry.getAttribute("position")).toBe((roads as THREE.Mesh).geometry.getAttribute("position"));
+    expect(mesh.geometry.getAttribute("color").count).toBe(mesh.geometry.getAttribute("position").count);
+    expect(mesh.userData.noScenePick).toBe(true);
+    roads.visible = false;
+    await rig.rerender({ exploded: true, gapM: 80, terrain });
+    await frames(2);
+    expect(mesh.visible).toBe(false);
+    await rig.rerender({ exploded: false, gapM: 80, terrain });
+    await frames(30);
+    expect(rig.city.getObjectByName("ExplodeGroundFill")).toBeUndefined();
+    for (const child of rig.city.children) expect(child.position.y).toBe(0);
   });
 
   it("still picks a building where it now sits", async () => {

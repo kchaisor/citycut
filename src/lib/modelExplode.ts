@@ -1,3 +1,4 @@
+import type { ScreenRect } from "./heliodonSunDome";
 import { fitOrthoZoom, type Aabb, type Vec3 } from "./isoCamera";
 
 export const EXPLODE_LAYERS = ["ground", "transport", "buildings", "trees"] as const;
@@ -18,9 +19,10 @@ export type ExplodeLayerOffsets = Record<ExplodeLayerId, number>;
 export const EXPLODE_DURATION_MS = 900;
 export const EXPLODE_GAP_STEP_M = 5;
 export const EXPLODE_GAP_MIN_M = 10;
-export const EXPLODE_GAP_DEFAULT_RATIO = 0.15;
-export const EXPLODE_GAP_MAX_RATIO = 0.6;
+export const EXPLODE_GAP_DEFAULT_RATIO = 0.3;
+export const EXPLODE_GAP_MAX_RATIO = 0.8;
 export const EXPLODE_LABEL_ROOM_PX = 136;
+export const EXPLODE_LABEL_GAP_PX = 12;
 export const EXPLODE_LABEL_FADE_START = 0.7;
 
 const TRANSPORT_NAMES = new Set(["Roads", "RailLines", "TramLines"]);
@@ -52,10 +54,10 @@ export function easeInOutCubic(x: number): number {
   return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 }
 
-export function stepExplodeClock(clock: number, target: 0 | 1, deltaMs: number, reducedMotion: boolean): number {
+export function explodeClockAt(from: number, target: 0 | 1, elapsedMs: number, reducedMotion: boolean): number {
   if (reducedMotion) return target;
-  const step = Math.max(0, deltaMs) / EXPLODE_DURATION_MS;
-  return target === 1 ? Math.min(1, clock + step) : Math.max(0, clock - step);
+  const travelled = Math.max(0, elapsedMs) / EXPLODE_DURATION_MS;
+  return target === 1 ? Math.min(1, from + travelled) : Math.max(0, from - travelled);
 }
 
 export function layerOffsets(thicknesses: readonly number[], gapM: number, progress: number): number[] {
@@ -109,16 +111,47 @@ export function explodedBounds(base: Aabb | null, boxes: ExplodeLayerBoxes, offs
   return bounds;
 }
 
-export function explodeFitZoom(
+export type ExplodeFit = { zoom: number; shiftXPx: number; shiftYPx: number };
+
+export function explodeFreeArea(view: ScreenRect, safe: ScreenRect, progress: number): ScreenRect {
+  const p = Math.min(1, Math.max(0, progress));
+  const labelled = Math.min(safe.left + EXPLODE_LABEL_ROOM_PX, (safe.left + safe.right) / 2);
+  return {
+    left: view.left + (labelled - view.left) * p,
+    top: view.top + (safe.top - view.top) * p,
+    right: view.right + (safe.right - view.right) * p,
+    bottom: view.bottom + (safe.bottom - view.bottom) * p,
+  };
+}
+
+export function explodeFit(
   bounds: Aabb,
   offsetFromCentre: Vec3,
-  viewWidth: number,
-  viewHeight: number,
+  view: ScreenRect,
+  safe: ScreenRect,
   progress: number,
-): number {
-  const room = EXPLODE_LABEL_ROOM_PX * Math.min(1, Math.max(0, progress));
-  const width = Math.max(viewWidth * 0.5, viewWidth - 2 * room);
-  return fitOrthoZoom(bounds, offsetFromCentre, width, viewHeight);
+): ExplodeFit {
+  const area = explodeFreeArea(view, safe, progress);
+  return {
+    zoom: fitOrthoZoom(bounds, offsetFromCentre, area.right - area.left, area.bottom - area.top),
+    shiftXPx: (area.left + area.right - view.left - view.right) / 2,
+    shiftYPx: (area.top + area.bottom - view.top - view.bottom) / 2,
+  };
+}
+
+export function clampExplodeLabel(
+  x: number,
+  y: number,
+  labelWidth: number,
+  labelHeight: number,
+  safe: ScreenRect,
+): { x: number; y: number } {
+  const minX = safe.left + labelWidth;
+  const minY = safe.top + labelHeight / 2;
+  return {
+    x: Math.max(minX, Math.min(safe.right, x - EXPLODE_LABEL_GAP_PX)),
+    y: Math.max(minY, Math.min(safe.bottom - labelHeight / 2, y)),
+  };
 }
 
 export function layerLabelAnchor(box: Aabb, offsetY: number, screenRight: Vec3): Vec3 {

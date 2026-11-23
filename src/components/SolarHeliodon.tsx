@@ -470,13 +470,13 @@ function useSunDomeFrame(root: DomeRoot | null, sun: DomeSprite | null, centre: 
 
 type FitPose = { position: THREE.Vector3; target: THREE.Vector3; zoom: number };
 
-function canvasScreenRect(canvas: HTMLCanvasElement): ScreenRect {
+export function canvasScreenRect(canvas: HTMLCanvasElement): ScreenRect {
   const rect = canvas.getBoundingClientRect();
   const host = canvas.parentElement?.getBoundingClientRect() ?? rect;
   return { left: Math.max(rect.left, host.left), top: rect.top, right: Math.min(rect.right, host.right), bottom: rect.bottom };
 }
 
-function liveHudRects(viewport: ScreenRect): ScreenRect[] {
+export function liveHudRects(viewport: ScreenRect): ScreenRect[] {
   const rects: ScreenRect[] = [];
   for (const element of Array.from(document.querySelectorAll<HTMLElement>(".model .hud-card"))) {
     const style = getComputedStyle(element);

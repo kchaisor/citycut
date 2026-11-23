@@ -117,11 +117,11 @@ describe("Exploded axo in the 3D model view", () => {
     expect(document.querySelector(".bottom-bar [data-analysis-card]")).toBeNull();
     expect(within(card).getByText("Layer gap")).toBeTruthy();
     expect(gapSlider().min).toBe("10");
-    expect(gapSlider().max).toBe("300");
+    expect(gapSlider().max).toBe("400");
     expect(gapSlider().step).toBe("5");
-    expect(gapSlider().value).toBe("75");
-    expect(card.querySelector("output")!.textContent).toBe("75 m");
-    expect(scene().dataset.gap).toBe("75");
+    expect(gapSlider().value).toBe("150");
+    expect(card.querySelector("output")!.textContent).toBe("150 m");
+    expect(scene().dataset.gap).toBe("150");
     fireEvent.change(gapSlider(), { target: { value: "140" } });
     expect(scene().dataset.gap).toBe("140");
     expect(card.querySelector("output")!.textContent).toBe("140 m");
@@ -162,7 +162,7 @@ describe("Exploded axo in the 3D model view", () => {
     expect(scene().dataset.exploded).toBe("false");
     expect(gapCard()).toBeNull();
     await user.click(pill("Exploded axo"));
-    expect(gapSlider().value).toBe("150");
-    expect(gapSlider().max).toBe("600");
+    expect(gapSlider().value).toBe("300");
+    expect(gapSlider().max).toBe("800");
   });
 });

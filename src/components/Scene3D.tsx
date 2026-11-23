@@ -17,7 +17,9 @@ import { addBuildingEdges } from "../lib/buildingEdges";
 import { attachScenePointPick } from "../lib/buildingPick";
 import { attachSceneInspectPick, type SceneInspectWorld, type SceneSelection } from "../lib/sceneInspectPick";
 import { buildCityGroup, disposeObject } from "../lib/buildCity";
-import { basePlinthBottomY } from "../lib/terrain";
+import { basePlinthBottomY, terrainTint } from "../lib/terrain";
+import { GROUND_ROADS_LAYER } from "../lib/groundRoads";
+import { hudSafeArea, type ScreenRect } from "../lib/heliodonSunDome";
 import { siteFrameFromModel } from "../lib/modelFrame";
 import { auditBuildingSelection, mountSelectedBuildingsVisual } from "../lib/buildingSelectionVisual";
 import { CAMERA_FIT_INCLUDES_HELIODON } from "../lib/sceneCameraFit";
@@ -117,7 +119,14 @@ import {
   type SectionKnifeGizmoInteraction,
 } from "../lib/sectionKnife/gizmoHit";
 import type { WalkRippleBuildingTint } from "../lib/walkRippleBuildingTint";
-import { SolarHeliodon, SolarLight, useMelbourneSunSample, type SolarViewSettings } from "./SolarHeliodon";
+import {
+  SolarHeliodon,
+  SolarLight,
+  canvasScreenRect,
+  liveHudRects,
+  useMelbourneSunSample,
+  type SolarViewSettings,
+} from "./SolarHeliodon";
 import { GroundWindFlow } from "./GroundWindFlow";
 import { WindDiagramStreams } from "./WindDiagramStreams";
 import type { PrevailingStream } from "../lib/windPrevailingStreams";
@@ -130,14 +139,16 @@ import type { WindPeriodId } from "../lib/windRose";
 import type { SiteWindSelection } from "../lib/windRoseData";
 import { analyzeSiteWind } from "../lib/windRoseStats";
 import { headingPeriodStats, type DesignWind } from "../lib/windDesignWinds";
-import type { CityModel } from "../types";
+import type { CityModel, TerrainField } from "../types";
 import { introAlreadyPlayedForCut, markIntroPlayedForCut, modelCutSiteId } from "../lib/introPlayed";
 import {
   EXPLODE_LAYERS,
   EXPLODE_LAYER_LABELS,
   easeInOutCubic as explodeEase,
+  clampExplodeLabel,
+  explodeClockAt,
   explodedBounds,
-  explodeFitZoom,
+  explodeFit,
   explodeLabelOpacity,
   explodeLayerOfObjectName,
   explodeLayerOfSelectionKind,
@@ -146,7 +157,7 @@ import {
   noExplodeBoxes,
   noExplodeOffsets,
   prefersReducedMotion,
-  stepExplodeClock,
+  type ExplodeFit,
   type ExplodeLayerBoxes,
   type ExplodeLayerId,
   type ExplodeLayerOffsets,
@@ -275,7 +286,70 @@ export function createExplodeRuntime(): ExplodeRuntime {
   return { clock: 0, progress: 0, offsets: noExplodeOffsets(), boxes: noExplodeBoxes(), bounds: null, fitToken: 0 };
 }
 
-const EXPLODE_MAX_FRAME_SEC = 0.05;
+const EXPLODE_GROUND_FILL_NAME = "ExplodeGroundFill";
+
+type ExplodeRun = { target: 0 | 1; from: number; startedAtMs: number };
+
+function explodeViewRect(canvas: HTMLCanvasElement, size: { width: number; height: number }): ScreenRect {
+  const shown = canvasScreenRect(canvas);
+  return { left: shown.right - size.width, top: shown.top, right: shown.right, bottom: shown.top + size.height };
+}
+
+function explodeSafeRect(view: ScreenRect): ScreenRect {
+  return hudSafeArea(view, liveHudRects(view));
+}
+
+function explodeFitIn(
+  canvas: HTMLCanvasElement,
+  size: { width: number; height: number },
+  bounds: Aabb,
+  corner: IsoCorner,
+  progress: number,
+): ExplodeFit {
+  const view = explodeViewRect(canvas, size);
+  return explodeFit(bounds, isoOffset(corner), view, progress > 0 ? explodeSafeRect(view) : view, progress);
+}
+
+export function buildExplodeGroundFill(
+  city: THREE.Object3D,
+  terrain: Pick<TerrainField, "min" | "max">,
+): THREE.Group | null {
+  const fill = new THREE.Group();
+  fill.name = EXPLODE_GROUND_FILL_NAME;
+  fill.userData.skipRhinoExport = true;
+  fill.userData.noScenePick = true;
+  const ground = city.children.find((child) => child.name === "Terrain");
+  for (const road of city.children) {
+    if (road.name !== "Roads" || road.userData.exportLayer !== GROUND_ROADS_LAYER || !(road instanceof THREE.Mesh)) continue;
+    const position = (road.geometry as THREE.BufferGeometry).getAttribute("position");
+    const colours = new Float32Array(position.count * 3);
+    for (let index = 0; index < position.count; index++) colours.set(terrainTint(terrain, position.getY(index)), index * 3);
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute("position", position);
+    geometry.setAttribute("color", new THREE.BufferAttribute(colours, 3));
+    const normal = (road.geometry as THREE.BufferGeometry).getAttribute("normal");
+    if (normal) geometry.setAttribute("normal", normal);
+    geometry.setIndex((road.geometry as THREE.BufferGeometry).getIndex());
+    const material = new THREE.MeshStandardMaterial({ vertexColors: true, side: THREE.DoubleSide, roughness: 1, metalness: 0 });
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.userData.source = road;
+    mesh.userData.skipRhinoExport = true;
+    mesh.userData.noScenePick = true;
+    mesh.receiveShadow = true;
+    mesh.renderOrder = ground?.renderOrder ?? 0;
+    fill.add(mesh);
+  }
+  return fill.children.length ? fill : null;
+}
+
+function disposeExplodeGroundFill(fill: THREE.Group) {
+  fill.removeFromParent();
+  for (const child of fill.children) {
+    const mesh = child as THREE.Mesh;
+    mesh.geometry.dispose();
+    (mesh.material as THREE.Material).dispose();
+  }
+}
 
 type ExplodeLift = { restY: number; offset: number };
 
@@ -334,9 +408,11 @@ export function ExplodeLayers({
   exploded,
   gapM,
   measureKey,
+  terrain,
   onCollapsed,
   onTopLift,
 }: {
+  terrain?: Pick<TerrainField, "min" | "max"> | null;
   city: THREE.Group;
   overlayRef: RefObject<THREE.Group | null>;
   importedMassing: THREE.Object3D | null;
@@ -352,16 +428,26 @@ export function ExplodeLayers({
   const applied = useRef(new WeakMap<THREE.Object3D, ExplodeLift>());
   const measured = useRef<{ city: THREE.Group; key: string } | null>(null);
   const fittedGap = useRef(gapM);
+  const run = useRef<ExplodeRun | null>(null);
+  const groundFill = useRef<{ city: THREE.Group; fill: THREE.Group | null } | null>(null);
+  const dropGroundFill = useCallback(() => {
+    if (groundFill.current?.fill) disposeExplodeGroundFill(groundFill.current.fill);
+    groundFill.current = null;
+  }, []);
+  useEffect(() => dropGroundFill, [city, terrain, dropGroundFill]);
   useEffect(() => {
     invalidate();
   }, [city, exploded, gapM, measureKey, invalidate]);
-  useFrame((state, delta) => {
+  useFrame((state) => {
     const rt = runtime.current;
     const dataset = state.gl.domElement.dataset;
     const introActive = state.scene.userData[INTRO_ACTIVE_KEY] === true;
     const target = exploded && !introActive ? 1 : 0;
+    const nowMs = state.clock.elapsedTime * 1000;
     if (introActive) rt.clock = 0;
+    if (introActive || run.current?.target !== target) run.current = { target, from: rt.clock, startedAtMs: nowMs };
     if (target === 0 && rt.clock === 0 && rt.progress === 0) {
+      dropGroundFill();
       dataset.exploded = "0";
       dataset.explodeProgress = "0.000";
       if (!exploded) onCollapsed();
@@ -373,8 +459,15 @@ export function ExplodeLayers({
       measured.current = { city, key: measureKey };
     }
     const before = rt.progress;
-    rt.clock = stepExplodeClock(rt.clock, target, Math.min(delta, EXPLODE_MAX_FRAME_SEC) * 1000, prefersReducedMotion());
+    rt.clock = explodeClockAt(run.current.from, target, nowMs - run.current.startedAtMs, prefersReducedMotion());
     rt.progress = explodeEase(rt.clock);
+    if (terrain && rt.progress > 0 && groundFill.current?.city !== city) {
+      const fill = buildExplodeGroundFill(city, terrain);
+      if (fill) city.add(fill);
+      groundFill.current = { city, fill };
+    }
+    if (rt.progress === 0) dropGroundFill();
+    for (const mesh of groundFill.current?.fill?.children ?? []) mesh.visible = (mesh.userData.source as THREE.Object3D).visible;
     rt.offsets = explodeOffsets(rt.boxes, gapM, rt.progress);
     applyExplodeOffsets(city, overlayRef.current, rt.offsets, applied.current);
     if (stale || before !== rt.progress || fittedGap.current !== gapM) {
@@ -409,6 +502,7 @@ function ExplodeLabelProjector({
   labelsRef: RefObject<Partial<Record<ExplodeLayerId, HTMLElement | null>>>;
 }) {
   const gl = useThree((state) => state.gl);
+  const size = useThree((state) => state.size);
   const invalidate = useThree((state) => state.invalidate);
   const point = useMemo(() => new THREE.Vector3(), []);
   useEffect(() => {
@@ -418,20 +512,28 @@ function ExplodeLabelProjector({
     const rt = runtime.current;
     const opacity = explodeLabelOpacity(rt.progress, exploding);
     const rect = opacity > 0 ? gl.domElement.getBoundingClientRect() : null;
+    const safe = rect ? explodeSafeRect(explodeViewRect(gl.domElement, size)) : null;
     camera.updateMatrixWorld();
     const right = camera.matrixWorld.elements;
     for (const layer of EXPLODE_LAYERS) {
       const element = labelsRef.current[layer];
       if (!element) continue;
       const box = rt.boxes[layer];
-      if (!rect || !box) {
+      if (!rect || !safe || !box) {
         element.style.opacity = "0";
         continue;
       }
       const anchor = layerLabelAnchor(box, rt.offsets[layer], [right[0], right[1], right[2]]);
       point.set(anchor[0], anchor[1], anchor[2]).project(camera);
-      element.style.left = `${rect.left + (point.x * 0.5 + 0.5) * rect.width}px`;
-      element.style.top = `${rect.top + (-point.y * 0.5 + 0.5) * rect.height}px`;
+      const at = clampExplodeLabel(
+        rect.left + (point.x * 0.5 + 0.5) * rect.width,
+        rect.top + (-point.y * 0.5 + 0.5) * rect.height,
+        element.offsetWidth,
+        element.offsetHeight,
+        safe,
+      );
+      element.style.left = `${at.x}px`;
+      element.style.top = `${at.y}px`;
       element.style.opacity = opacity.toFixed(3);
     }
   });
@@ -1338,6 +1440,7 @@ function City({
         exploded={exploded}
         gapM={explodeGapM}
         measureKey={explodeMeasureKey}
+        terrain={model.terrain ?? null}
         onCollapsed={onExplodeCollapsed}
         onTopLift={onExplodeTopLift}
       />
@@ -1719,7 +1822,7 @@ function placeIsoCamera(
   fitBounds: Aabb,
   clipBounds: Aabb,
   corner: IsoCorner,
-  zoom: number,
+  fit: ExplodeFit,
 ) {
   const centre = frameCentre(fitBounds);
   const eye = isoEye(centre, corner, eyeDistance(fitBounds));
@@ -1729,11 +1832,20 @@ function placeIsoCamera(
   camera.position.set(eye[0], eye[1], eye[2]);
   camera.near = planes.near;
   camera.far = planes.far;
-  camera.zoom = zoom;
+  camera.zoom = fit.zoom;
   camera.updateProjectionMatrix();
   controls.target.set(centre[0], centre[1], centre[2]);
   camera.lookAt(controls.target);
   camera.up.set(ISO_CAMERA_UP[0], ISO_CAMERA_UP[1], ISO_CAMERA_UP[2]);
+  if (fit.shiftXPx !== 0 || fit.shiftYPx !== 0) {
+    camera.updateMatrixWorld();
+    const shift = new THREE.Vector3()
+      .setFromMatrixColumn(camera.matrixWorld, 0)
+      .multiplyScalar(-fit.shiftXPx / fit.zoom)
+      .addScaledVector(new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 1), fit.shiftYPx / fit.zoom);
+    camera.position.add(shift);
+    controls.target.add(shift);
+  }
   holdControlPose(controls as HeldControl<THREE.Vector3>);
 }
 
@@ -1761,6 +1873,7 @@ function ExplodeFit({
   extraBounds?: Aabb | null;
 }) {
   const size = useThree((state) => state.size);
+  const gl = useThree((state) => state.gl);
   const fitted = useRef(0);
   useFrame(() => {
     const rt = runtime.current;
@@ -1774,7 +1887,7 @@ function ExplodeFit({
       rt.bounds,
       extraBounds ? unionAabb(rt.bounds, extraBounds) : rt.bounds,
       corner,
-      explodeFitZoom(rt.bounds, isoOffset(corner), size.width, size.height, rt.progress),
+      explodeFitIn(gl.domElement, size, rt.bounds, corner, rt.progress),
     );
     fittedKey.current = `${snapId}:${size.width}x${size.height}`;
     otherOrthoFittedKey.current = null;
@@ -1823,6 +1936,7 @@ function IsoSnap({
   explode?: RefObject<ExplodeRuntime>;
 }) {
   const size = useThree((state) => state.size);
+  const gl = useThree((state) => state.gl);
   const place = useCallback(() => {
     if (!active) return;
     const controls = controlsRef.current;
@@ -1858,7 +1972,7 @@ function IsoSnap({
       fitBounds,
       extraBounds ? unionAabb(fitBounds, extraBounds) : fitBounds,
       corner,
-      explodeFitZoom(fitBounds, isoOffset(corner), size.width, size.height, explode?.current.progress ?? 0),
+      explodeFitIn(gl.domElement, size, fitBounds, corner, explode?.current.progress ?? 0),
     );
     fittedKey.current = key;
     if (otherOrthoFittedKey) otherOrthoFittedKey.current = null;
@@ -1883,6 +1997,7 @@ function IsoSnap({
     touchedRef,
     extraBounds,
     explode,
+    gl,
   ]);
   useLayoutEffect(() => {
     place();
