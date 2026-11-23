@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { MapStage, type FlyRequest } from "./components/MapStage";
 import { SelectChrome } from "./components/SelectChrome";
+import { LoadingHudPill } from "./components/LoadingHudPill";
 import { CommandBar } from "./components/CommandBar";
 import { useSidebarCollapsed } from "./lib/sidebarCollapse";
 import { viewportIsNarrow } from "./lib/panelCollapse";
@@ -1216,21 +1217,15 @@ export default function App() {
             onHome={onHome}
           />
           {selectProcessingPhaseA && (
-            <div
-              className="loading-hud-pill is-processing hud-card"
+            <LoadingHudPill
+              className="is-processing"
+              label="Processing site data & 3D geometry…"
+              stage="PREP"
               role="status"
               aria-live="polite"
               data-phase="processing"
-            >
-              <div className="loading-hud-row">
-                <span className="loading-pulse-dot is-processing" aria-hidden="true" />
-                <strong>Processing site data &amp; 3D geometry…</strong>
-                <div className="loading-prog-track is-indeterminate" aria-hidden="true">
-                  <div className="loading-prog-shimmer" />
-                </div>
-                <span className="loading-prog-pct mono">PREP</span>
-              </div>
-            </div>
+              dotClassName="is-processing"
+            />
           )}
         </div>
       ) : null}

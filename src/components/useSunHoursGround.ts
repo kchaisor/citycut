@@ -13,6 +13,7 @@ import {
 import { modelFrameSize } from "../lib/modelFrame";
 import type { RenderQuality } from "../lib/renderQuality";
 import { sunStudyModelKey } from "../lib/sunStudyPlan";
+import { combineSunHoursProgress } from "../lib/sunHoursProgress";
 import type { CityModel } from "../types";
 
 let nextId = 1;
@@ -50,6 +51,7 @@ export function useSunHoursGround(
   pendingSurfaces: boolean;
   resolution: SunHoursResolution | null;
   targetResolution: SunHoursResolution | null;
+  progress: number | null;
 } {
   const modelKey = useMemo(() => sunStudyModelKey(model), [model]);
   const [grid, setGrid] = useState<SunHoursGroundGrid | null>(null);
@@ -59,6 +61,9 @@ export function useSunHoursGround(
   const [pendingSurfaces, setPendingSurfaces] = useState(false);
   const [resolution, setResolution] = useState<SunHoursResolution | null>(null);
   const [targetResolution, setTargetResolution] = useState<SunHoursResolution | null>(null);
+  const [progress, setProgress] = useState<number | null>(null);
+  const groundFractionRef = useRef<number | null>(null);
+  const surfaceFractionRef = useRef<number | null>(null);
   const modelRef = useRef(model);
   modelRef.current = model;
 
@@ -100,6 +105,9 @@ export function useSunHoursGround(
       setPendingSurfaces(false);
       setResolution(null);
       setTargetResolution(null);
+      setProgress(null);
+      groundFractionRef.current = null;
+      surfaceFractionRef.current = null;
       publishReady(null, null);
       return;
     }
@@ -127,9 +135,15 @@ export function useSunHoursGround(
       if (!nextGrid) {
         setOverlay(null);
         setPendingSurfaces(false);
+        setProgress(null);
+        groundFractionRef.current = null;
+        surfaceFractionRef.current = null;
         publishReady(null, null);
         return;
       }
+      groundFractionRef.current = 1;
+      surfaceFractionRef.current = 0;
+      setProgress(combineSunHoursProgress(1, 0, "surfaces"));
       publishReady(nextGrid, null);
       setPendingSurfaces(true);
       const scaleHint = nextGrid.maxSunHours;
@@ -149,12 +163,21 @@ export function useSunHoursGround(
         setOverlay(overlay);
         publishReady(nextGrid, overlay);
         setPendingSurfaces(false);
+        setProgress(null);
+        groundFractionRef.current = null;
+        surfaceFractionRef.current = null;
       };
       const directWorker = startDirectWorker();
       if (!directWorker) {
         import("../lib/sunHoursDirectAssess").then(({ assessDirectSunHoursOverlay }) => {
           if (cancelled) return;
-          settleSurfaces(assessDirectSunHoursOverlay(currentModel, year, month, day, scaleHint, params));
+          settleSurfaces(
+            assessDirectSunHoursOverlay(currentModel, year, month, day, scaleHint, params, (fraction) => {
+              if (cancelled) return;
+              surfaceFractionRef.current = fraction;
+              setProgress(combineSunHoursProgress(groundFractionRef.current ?? 1, fraction, "surfaces"));
+            }),
+          );
         });
         return;
       }
@@ -163,6 +186,12 @@ export function useSunHoursGround(
       directWorker.onmessage = (event: MessageEvent<SunHoursDirectWorkerMessage>) => {
         const message = event.data;
         if (message.id !== directId) return;
+        if (message.type === "progress") {
+          if (cancelled) return;
+          surfaceFractionRef.current = message.fraction;
+          setProgress(combineSunHoursProgress(groundFractionRef.current ?? 1, message.fraction, "surfaces"));
+          return;
+        }
         if (message.type === "done") settleSurfaces(message.overlay);
         if (message.type === "empty") settleSurfaces(null);
         directWorker.terminate();
@@ -187,7 +216,13 @@ export function useSunHoursGround(
         if (cancelled) return;
         import("../lib/sunHoursGroundPlan").then(({ computeSunHoursGroundGrid }) => {
           if (cancelled) return;
-          finishGround(computeSunHoursGroundGrid(currentModel, year, month, day, params.cellM, params.stepMinutes));
+          finishGround(
+            computeSunHoursGroundGrid(currentModel, year, month, day, params.cellM, params.stepMinutes, (fraction) => {
+              if (cancelled) return;
+              groundFractionRef.current = fraction;
+              setProgress(combineSunHoursProgress(fraction, null, "ground"));
+            }),
+          );
         });
       };
       if (typeof window !== "undefined" && typeof window.requestIdleCallback === "function") {
@@ -199,7 +234,11 @@ export function useSunHoursGround(
       cancelMainThread.push(() => clearTimeout(timeoutId));
     };
     setPending(true);
+    setPendingSurfaces(false);
     setTargetResolution(jobResolution);
+    groundFractionRef.current = null;
+    surfaceFractionRef.current = null;
+    setProgress(null);
     const groundWorker = startWorker();
     if (!groundWorker) {
       runGroundOnMainThread();
@@ -209,6 +248,12 @@ export function useSunHoursGround(
       groundWorker.onmessage = (event: MessageEvent<SunHoursGroundWorkerMessage>) => {
         const message = event.data;
         if (message.id !== id) return;
+        if (message.type === "progress") {
+          if (cancelled) return;
+          groundFractionRef.current = message.fraction;
+          setProgress(combineSunHoursProgress(message.fraction, null, "ground"));
+          return;
+        }
         if (message.type === "done") finishGround(message.grid);
         if (message.type === "empty") finishGround(null);
         groundWorker.terminate();
@@ -235,5 +280,5 @@ export function useSunHoursGround(
     };
   }, [enabled, modelKey, year, month, day, quality]);
 
-  return { grid, overlay, scaleMaxHours, pending, pendingSurfaces, resolution, targetResolution };
+  return { grid, overlay, scaleMaxHours, pending, pendingSurfaces, resolution, targetResolution, progress };
 }

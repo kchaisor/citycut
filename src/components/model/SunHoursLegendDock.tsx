@@ -1,4 +1,5 @@
 import { SunHoursGroundLegendList } from "../SunHoursGroundLegendList";
+import { sunHoursProgressStage } from "../../lib/sunHoursProgress";
 import type { useSunHoursGround } from "../useSunHoursGround";
 
 export function SunHoursLegendDock({
@@ -23,6 +24,8 @@ export function SunHoursLegendDock({
         resolution={grid ? resolution : null}
         pending={pending}
         pendingResolution={targetResolution}
+        progress={sunHoursGround.progress}
+        stage={sunHoursProgressStage(sunHoursGround.pendingSurfaces)}
       />
     </div>
   );

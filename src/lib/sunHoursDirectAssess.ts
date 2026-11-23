@@ -9,6 +9,7 @@ import { buildRoofFootprintMeshesForModel } from "./sunHoursRoofFootprint";
 import type { SunHoursGroundRaster } from "./sunHoursGroundRaster";
 import { packSunHoursRoofRasterSource, type SunHoursRoofRasterSource } from "./sunHoursRoofPlanRaster";
 import type { CityModel } from "../types";
+import { reportSunHoursStep, type SunHoursProgressCallback } from "./sunHoursProgress";
 
 const FACING_DOT_MIN = 0.04;
 const RAY_MAX_M = 4000;
@@ -161,6 +162,7 @@ export function directSunHoursAtSamples(
   month: number,
   day: number,
   stepMinutes: number,
+  onProgress?: SunHoursProgressCallback,
 ): Float32Array | null {
   if (samples.length === 0) return null;
   const occlusionMesh = buildFacadeOcclusionMesh(model);
@@ -168,7 +170,11 @@ export function directSunHoursAtSamples(
   const sunDirs = daylightSteps(model.center.lat, model.center.lon, year, month, day, stepMinutes);
   const litCounts = new Uint16Array(samples.length);
   const ray = new THREE.Ray();
+  const dirTotal = sunDirs.length;
+  let dirDone = 0;
   for (const { dir, above } of sunDirs) {
+    dirDone++;
+    reportSunHoursStep(onProgress, dirDone, dirTotal);
     if (!above) continue;
     for (let index = 0; index < samples.length; index++) {
       if (isLitAtStep(occlusionMesh, samples[index]!, dir, above, ray)) litCounts[index]! += 1;
@@ -187,10 +193,11 @@ export function assessDirectSunHoursOverlay(
   day: number,
   scaleMaxHours?: number,
   params: SunHoursSampleParams = FAST_SUN_HOURS_PARAMS,
+  onProgress?: SunHoursProgressCallback,
 ): SunHoursDirectOverlay | null {
   const { samples, wallCellM, roofCellM } = directSunHoursSampleSet(model, params);
   const { stepMinutes } = params;
-  const hours = directSunHoursAtSamples(model, samples, year, month, day, stepMinutes);
+  const hours = directSunHoursAtSamples(model, samples, year, month, day, stepMinutes, onProgress);
   if (!hours) return null;
   let maxSunHours = 0;
   for (const value of hours) maxSunHours = Math.max(maxSunHours, value);

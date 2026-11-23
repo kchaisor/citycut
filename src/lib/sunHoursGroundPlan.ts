@@ -10,6 +10,7 @@ import {
 import { sunHoursGroundFromLitSteps, SUN_HOURS_GROUND_CELL_M, SUN_HOURS_GROUND_STEP_MINUTES } from "./sunHoursGround";
 import { modelFrameBounds, siteFrameFromModel } from "./modelFrame";
 import { containsPoint } from "./siteFrame";
+import { reportSunHoursStep, type SunHoursProgressCallback } from "./sunHoursProgress";
 import type { CityModel, Pt, Ring } from "../types";
 
 export type SunHoursGroundGrid = {
@@ -98,6 +99,7 @@ function canvasLitStepCount(
   stepMinutes: number,
   footprintMask: readonly ExtrudedFootprintMaskPart[],
   ctx: RasterContext,
+  onProgress?: SunHoursProgressCallback,
 ): { litSteps: Uint16Array; masked: Uint8Array; steps: number } | null {
   const window = daylightWindowMinutes(model.center.lat, model.center.lon, year, month, day);
   if (!window) return null;
@@ -116,11 +118,13 @@ function canvasLitStepCount(
   const masked = groundCellMask(model, footprintMask, cols, rows, originEast, originNorth, cellM);
   const litSteps = new Uint16Array(cols * rows);
   let steps = 0;
+  const totalSteps = Math.floor((window.sunset - window.sunrise) / stepMinutes) + 1;
   for (let minuteOfDay = window.sunrise; minuteOfDay <= window.sunset; minuteOfDay += stepMinutes) {
     const hour = Math.floor(minuteOfDay / 60);
     const minute = minuteOfDay % 60;
     const sample = sunAtMelbourneLocal(model.center.lat, model.center.lon, year, month, day, hour, minute);
     steps++;
+    reportSunHoursStep(onProgress, steps, totalSteps);
     if (!sample.aboveHorizon) continue;
     ctx.clearRect(0, 0, cols, rows);
     ctx.fillStyle = "black";
@@ -156,14 +160,19 @@ function daylightGroundStepShadows(
   month: number,
   day: number,
   stepMinutes: number,
+  onProgress?: SunHoursProgressCallback,
 ): Ring[][][] {
   const { lat, lon } = model.center;
   const window = daylightWindowMinutes(lat, lon, year, month, day);
   if (!window) return [];
   const out: Ring[][][] = [];
+  const totalSteps = Math.floor((window.sunset - window.sunrise) / stepMinutes) + 1;
+  let steps = 0;
   for (let minuteOfDay = window.sunrise; minuteOfDay <= window.sunset; minuteOfDay += stepMinutes) {
     const hour = Math.floor(minuteOfDay / 60);
     const minute = minuteOfDay % 60;
+    steps++;
+    reportSunHoursStep(onProgress, steps, totalSteps, 0, 0.55);
     if (!sunAtMelbourneLocal(lat, lon, year, month, day, hour, minute).aboveHorizon) continue;
     out.push(planShadowRings(model, { lat, lon, year, month, day, hour, minute }, true));
   }
@@ -189,12 +198,17 @@ function computeSunHoursGroundGridMulti(
   originEast: number,
   originNorth: number,
   footprintMask: readonly ExtrudedFootprintMaskPart[],
+  onProgress?: SunHoursProgressCallback,
 ): SunHoursGroundGrid | null {
-  const stepShadows = daylightGroundStepShadows(model, year, month, day, stepMinutes);
+  const stepShadows = daylightGroundStepShadows(model, year, month, day, stepMinutes, onProgress);
   if (stepShadows.length === 0) return null;
   const litSteps = new Uint16Array(cols * rows);
   const masked = groundCellMask(model, footprintMask, cols, rows, originEast, originNorth, cellM);
+  const shadowTotal = stepShadows.length;
+  let shadowDone = 0;
   for (const stepShadow of stepShadows) {
+    shadowDone++;
+    reportSunHoursStep(onProgress, shadowDone, shadowTotal, 0.55, 1);
     for (let row = 0; row < rows; row++) {
       for (let col = 0; col < cols; col++) {
         const index = row * cols + col;
@@ -237,6 +251,7 @@ export function computeSunHoursGroundGrid(
   day: number,
   cellM = SUN_HOURS_GROUND_CELL_M,
   stepMinutes = SUN_HOURS_GROUND_STEP_MINUTES,
+  onProgress?: SunHoursProgressCallback,
 ): SunHoursGroundGrid | null {
   const bounds = modelFrameBounds(model);
   const cols = Math.max(1, Math.ceil((bounds.maxE - bounds.minE) / cellM));
@@ -258,6 +273,7 @@ export function computeSunHoursGroundGrid(
       originEast,
       originNorth,
       footprintMask,
+      onProgress,
     );
   }
   const raster = canvasLitStepCount(
@@ -273,6 +289,7 @@ export function computeSunHoursGroundGrid(
     stepMinutes,
     footprintMask,
     ctx,
+    onProgress,
   );
   if (!raster || raster.steps === 0) return null;
   const { litSteps, masked, steps } = raster;

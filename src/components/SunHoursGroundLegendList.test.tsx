@@ -5,6 +5,7 @@ import {
   SunHoursGroundLegendList,
   dockCompactTickLabels,
 } from "./SunHoursGroundLegendList";
+import { LoadingHudPill } from "./LoadingHudPill";
 import { sunHoursQualityParams, sunHoursResolution } from "../lib/sunHoursQuality";
 
 const fast = sunHoursResolution(sunHoursQualityParams("fast", 1000));
@@ -45,8 +46,12 @@ describe("SunHoursGroundLegendList", () => {
       <SunHoursGroundLegendList maxHours={9.5} resolution={fast} compact pending pendingResolution={high} />,
     );
     expect(html).toContain('role="status"');
-    expect(html).toContain("Calculating 0.25 m grid · 5 min steps…");
+    expect(html).toContain("Calculating sun hours…");
+    expect(html).toContain("0.25 m grid · 5 min steps");
     expect(html).toContain("3 m grid · 15 min steps");
+    expect(html).toContain("loading-hud-pill");
+    expect(html).toContain("GROUND");
+    expect(html).toContain('data-sun-hours-progress="indeterminate"');
   });
 
   it("shows only the title and calculating status before the first result", () => {
@@ -54,7 +59,10 @@ describe("SunHoursGroundLegendList", () => {
       <SunHoursGroundLegendList maxHours={0} resolution={null} compact pending pendingResolution={high} />,
     );
     expect(html).toContain("Direct Sun Hours");
-    expect(html).toContain("Calculating 0.25 m grid · 5 min steps…");
+    expect(html).toContain("Calculating sun hours…");
+    expect(html).toContain("0.25 m grid · 5 min steps");
+    expect(html).toContain("loading-hud-pill");
+    expect(html).toContain("is-inline");
     expect(html).not.toContain("sun-hours-direct-legend-scale");
     expect(html).not.toContain("full daylight");
   });
@@ -66,6 +74,54 @@ describe("SunHoursGroundLegendList", () => {
     expect(html).toContain("Eased from 0.25 m grid for this cut size");
   });
 
+
+  it("shows a determinate bar and percent while calculating, and hides both when done", () => {
+    const calculating = renderToStaticMarkup(
+      <SunHoursGroundLegendList
+        maxHours={9.5}
+        resolution={fast}
+        compact
+        pending
+        pendingResolution={high}
+        progress={0.42}
+        stage="ROOFS"
+      />,
+    );
+    expect(calculating).toContain("loading-hud-pill");
+    expect(calculating).toContain('role="progressbar"');
+    expect(calculating).toContain("42%");
+    expect(calculating).toContain('data-sun-hours-progress="42%"');
+    expect(calculating).toContain('aria-valuenow="42"');
+    expect(calculating).toContain("is-determinate");
+    expect(calculating).toContain("Calculating sun hours…");
+    expect(calculating).not.toContain("ROOFS");
+    const done = renderToStaticMarkup(
+      <SunHoursGroundLegendList maxHours={9.5} resolution={fast} compact pending={false} progress={1} />,
+    );
+    expect(done).not.toContain("Calculating");
+    expect(done).not.toContain("loading-hud-pill");
+    expect(done).not.toContain('role="progressbar"');
+    expect(done).not.toContain("100%");
+    expect(done).not.toContain("data-sun-hours-calculating");
+  });
+
+  it("falls back to the landing indeterminate bar, and a static fill when motion is reduced", () => {
+    const html = renderToStaticMarkup(
+      <LoadingHudPill label="Calculating sun hours…" placement="inline" stage="GROUND" />,
+    );
+    expect(html).toContain("loading-hud-pill");
+    expect(html).toContain("is-inline");
+    expect(html).toContain("is-indeterminate");
+    expect(html).toContain("loading-prog-shimmer");
+    expect(html).toContain("GROUND");
+    expect(html).toContain('data-loading-progress="indeterminate"');
+    const reduced = renderToStaticMarkup(
+      <LoadingHudPill label="Calculating sun hours…" placement="inline" stage="GROUND" reducedMotion />,
+    );
+    expect(reduced).toContain("is-reduced");
+    expect(reduced).toContain("is-indeterminate");
+    expect(reduced).toContain("loading-prog-shimmer");
+  });
   it("formats dock ticks at quarter stops without units on mids", () => {
     expect(dockCompactTickLabels(9.5)).toEqual(["0 h", "2.4", "4.8", "7.1", "9.5 h"]);
   });

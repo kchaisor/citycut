@@ -1,6 +1,11 @@
 import { useMemo } from "react";
 import { getColour } from "../lib/colours";
 import { useColourRevision } from "../lib/useColourRevision";
+import { LoadingHudPill } from "./LoadingHudPill";
+import {
+  SUN_HOURS_CALCULATING_PILL_LABEL,
+  type SunHoursProgressStage,
+} from "../lib/sunHoursProgress";
 import type { SunHoursResolution } from "../lib/sunHoursQuality";
 
 export const SUN_HOURS_DIRECT_LEGEND_DOCK_TICKS = 5;
@@ -54,18 +59,25 @@ export function sunHoursCalculatingLabel(target: SunHoursResolution | null): str
   return target ? `Calculating ${sunHoursResolutionLabel(target)}…` : "Calculating…";
 }
 
+
 export function SunHoursGroundLegendList({
   maxHours,
   resolution,
   compact = false,
   pending = false,
   pendingResolution = null,
+  progress = null,
+  stage = "GROUND",
+  reducedMotion,
 }: {
   maxHours: number;
   resolution: SunHoursResolution | null;
   compact?: boolean;
   pending?: boolean;
   pendingResolution?: SunHoursResolution | null;
+  progress?: number | null;
+  stage?: SunHoursProgressStage;
+  reducedMotion?: boolean;
 }) {
   useColourRevision();
   const tickCount = compact ? SUN_HOURS_DIRECT_LEGEND_DOCK_TICKS : 11;
@@ -124,9 +136,24 @@ export function SunHoursGroundLegendList({
             </p>
           )}
       {pending ? (
-        <p className="sun-hours-direct-legend-status" role="status" data-sun-hours-calculating>
-          {sunHoursCalculatingLabel(pendingResolution)}
-        </p>
+        <div
+          className="sun-hours-direct-legend-status"
+          role="status"
+          data-sun-hours-calculating
+          data-sun-hours-progress={progress == null ? "indeterminate" : `${Math.round(progress * 100)}%`}
+        >
+          <LoadingHudPill
+            placement="inline"
+            label={SUN_HOURS_CALCULATING_PILL_LABEL}
+            progress={progress}
+            stage={stage}
+            reducedMotion={reducedMotion}
+            aria-label="Sun hours calculation"
+          />
+          {pendingResolution ? (
+            <p className="sun-hours-direct-legend-footnote">{sunHoursResolutionLabel(pendingResolution)}</p>
+          ) : null}
+        </div>
       ) : null}
     </div>
   );
