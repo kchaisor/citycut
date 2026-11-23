@@ -1,3 +1,5 @@
+import { siteFrameFromModel } from "./modelFrame";
+import { containsPoint } from "./siteFrame";
 import type { BuildingFeat, CityModel } from "../types";
 
 export function castsSunHoursShadow(building: BuildingFeat): boolean {
@@ -6,6 +8,15 @@ export function castsSunHoursShadow(building: BuildingFeat): boolean {
 
 export function receivesSunHours(building: BuildingFeat): boolean {
   return !building.importedMassingShadowCaster;
+}
+
+export function sunHoursReceivers(
+  model: Pick<CityModel, "sideM" | "widthM" | "heightM" | "frameShape" | "buildings">,
+): BuildingFeat[] {
+  const frame = siteFrameFromModel(model);
+  return model.buildings.filter(
+    (building) => receivesSunHours(building) && building.ring.some((point) => containsPoint(frame, point)),
+  );
 }
 
 export function sunHoursModel(

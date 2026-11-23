@@ -1,7 +1,9 @@
 import { openRing } from "./geo";
 import { extrudedFootprintsForBuilding, type ExtrudedFootprint } from "./extrudedBuildingFootprint";
 import { ringCentroid } from "./sunHoursRoofFootprint";
-import { receivesSunHours } from "./sunHoursBuildings";
+import { siteFrameFromModel } from "./modelFrame";
+import { sunHoursReceivers } from "./sunHoursBuildings";
+import { containsPoint } from "./siteFrame";
 import {
   FAST_SUN_HOURS_PARAMS,
   SUN_HOURS_MAX_WALL_CELL_M,
@@ -14,6 +16,7 @@ import type { BuildingFeat, CityModel, Pt, Ring } from "../types";
 
 const BUILDING_SURFACE_LIFT_M = 0.05;
 const WALL_OFFSET_M = 0.08;
+const FRAME_EDGE_WALL_MARGIN_M = WALL_OFFSET_M * 2;
 
 export function gridPointsInRing(ring: Ring, stepM: number): [number, number][] {
   if (ring.length < 3 || !(stepM > 0)) return [];
@@ -171,11 +174,17 @@ function wallSamplesForBuilding(model: CityModel, building: BuildingFeat, cellM:
 }
 
 function wallSamplesAll(model: CityModel, wallCellM: number): DirectSunHoursSample[] {
-  return model.buildings.filter(receivesSunHours).flatMap((building) => wallSamplesForBuilding(model, building, wallCellM));
+  const frame = siteFrameFromModel(model);
+  return sunHoursReceivers(model)
+    .flatMap((building) => wallSamplesForBuilding(model, building, wallCellM))
+    .filter((sample) => containsPoint(frame, [sample.east, sample.north], FRAME_EDGE_WALL_MARGIN_M));
 }
 
 function roofSamplesAll(model: CityModel, cellM: number): DirectSunHoursSample[] {
-  return model.buildings.filter(receivesSunHours).flatMap((building) => roofSamplesForBuilding(model, building, cellM));
+  const frame = siteFrameFromModel(model);
+  return sunHoursReceivers(model)
+    .flatMap((building) => roofSamplesForBuilding(model, building, cellM))
+    .filter((sample) => containsPoint(frame, [sample.east, sample.north]));
 }
 
 export type DirectSunHoursSampleSet = {
