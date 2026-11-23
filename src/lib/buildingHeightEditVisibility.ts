@@ -9,7 +9,11 @@ function matchesBuildingId(stored: unknown, targetIds: ReadonlySet<number>): boo
   return targetIds.has(Number(stored));
 }
 
-export function hideBuildingsForHeightEdit(root: THREE.Object3D, buildingIds: readonly number[]): () => void {
+export function hideBuildingsForHeightEdit(
+  root: THREE.Object3D,
+  buildingIds: readonly number[],
+  options: { keepEdges?: boolean } = {},
+): () => void {
   const targetIds = new Set(buildingIds.map((id) => Number(id)));
   if (targetIds.size === 0) return () => {};
   const groupRestores: GroupRestore[] = [];
@@ -17,12 +21,14 @@ export function hideBuildingsForHeightEdit(root: THREE.Object3D, buildingIds: re
   const edgeRestores: EdgeRestore[] = [];
   const shadowRestores: { mesh: THREE.Mesh; castShadow: boolean }[] = [];
 
-  root.traverse((object) => {
-    if (object.name === "BuildingEdges") {
-      edgeRestores.push({ object, visible: object.visible });
-      object.visible = false;
-    }
-  });
+  if (!options.keepEdges) {
+    root.traverse((object) => {
+      if (object.name === "BuildingEdges") {
+        edgeRestores.push({ object, visible: object.visible });
+        object.visible = false;
+      }
+    });
+  }
 
   root.traverse((object) => {
     const mesh = object as THREE.Mesh;

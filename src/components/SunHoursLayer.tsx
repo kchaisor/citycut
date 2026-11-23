@@ -4,14 +4,9 @@ import { buildSunHoursGroundDrapeGeometry, SUN_HOURS_GROUND_TEXTURE_FLIP_Y } fro
 import { rasterizeSunHoursGroundGridFor3d } from "../lib/sunHoursGroundRaster";
 import type { SunHoursDirectOverlay } from "../lib/sunHoursDirectAssess";
 import type { SunHoursGroundGrid } from "../lib/sunHoursGroundPlan";
-import { SURFACE } from "../lib/surfaceLayers";
 import type { CityModel } from "../types";
 
 const SUN_HOURS_ROOF_RENDER_ORDER = 1600;
-const SUN_HOURS_OVER_MASSING_OFFSET = {
-  factor: SURFACE.building.polygonOffsetFactor * 2,
-  units: SURFACE.building.polygonOffsetUnits * 2,
-};
 
 function meshFromBuffers(positions: Float32Array, colors: Float32Array) {
   if (positions.length === 0) return null;
@@ -30,7 +25,6 @@ export function SunHoursLayer({
   planView,
   groundOnly = false,
   surfacesOnly = false,
-  facesOverMassing = false,
 }: {
   grid: SunHoursGroundGrid;
   overlay: SunHoursDirectOverlay | null;
@@ -39,7 +33,6 @@ export function SunHoursLayer({
   planView: boolean;
   groundOnly?: boolean;
   surfacesOnly?: boolean;
-  facesOverMassing?: boolean;
 }) {
   const showGround = !surfacesOnly;
   const showSurfaces = !groundOnly;
@@ -127,9 +120,6 @@ export function SunHoursLayer({
             depthTest
             depthWrite
             side={THREE.FrontSide}
-            polygonOffset={facesOverMassing}
-            polygonOffsetFactor={SUN_HOURS_OVER_MASSING_OFFSET.factor}
-            polygonOffsetUnits={SUN_HOURS_OVER_MASSING_OFFSET.units}
           />
         </mesh>
       ) : null}
@@ -148,9 +138,6 @@ export function SunHoursLayer({
             depthTest
             depthWrite
             side={THREE.DoubleSide}
-            polygonOffset={facesOverMassing}
-            polygonOffsetFactor={SUN_HOURS_OVER_MASSING_OFFSET.factor}
-            polygonOffsetUnits={SUN_HOURS_OVER_MASSING_OFFSET.units}
           />
         </mesh>
       ) : null}

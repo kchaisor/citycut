@@ -2,12 +2,15 @@ import { describe, expect, it } from "vitest";
 import * as THREE from "three";
 import { buildFacadeOcclusionMesh } from "./facadeOcclusionMesh";
 import { assessDirectSunHoursOverlay, type SunHoursDirectOverlay } from "./sunHoursDirectAssess";
-import { setSunHoursMassingFillVisible } from "./sunHoursFaceTint";
+import { buildCityGroup } from "./buildCity";
+import { mountSelectedBuildingsVisual } from "./buildingSelectionVisual";
+import { hidePickedMassingForSunHours, setSunHoursMassingFillVisible } from "./sunHoursFaceTint";
 import { sunHoursDirectRgb } from "./sunHoursGround";
 import {
   sunHoursFacesReplaceMassing,
   sunHoursGroundShown,
   sunHoursOverlayForBuildings,
+  sunHoursSelectionVisualIds,
   sunHoursRoofRasterSourceForBuildings,
   type SunHoursFaceRange,
 } from "./sunHoursPicked";
@@ -54,6 +57,7 @@ function model(buildings: BuildingFeat[]): CityModel {
   };
 }
 
+const pickedColourMode = { colourByUse: false, uniformBuildings: true, colourBySource: false };
 const low = box(LOW, -9, -20, 18, 6);
 const tower = box(TOWER, -15, 2, 30, 90);
 
@@ -158,6 +162,52 @@ describe("Colour only selected buildings", () => {
     expect(fill.visible).toBe(true);
     setSunHoursMassingFillVisible(city, null, true, true, sunHoursFacesReplaceMassing(true, false));
     expect(fill.visible).toBe(false);
+  });
+
+  it("drops selection chrome and hides only the picked fill when Colour only selected is on", () => {
+    const city = model([low, tower]);
+    const group = buildCityGroup(city);
+    const visibleFill = () => {
+      const ids = new Set<number>();
+      group.traverse((object) => {
+        const mesh = object as THREE.Mesh;
+        if (!mesh.isMesh || !mesh.name.startsWith("Buildings")) return;
+        const byGroup = mesh.userData.buildingIdByGroup as number[] | undefined;
+        const groups = mesh.geometry.groups;
+        if (mesh.userData.buildingId != null) {
+          if (mesh.visible) ids.add(Number(mesh.userData.buildingId));
+          return;
+        }
+        byGroup?.forEach((id, index) => {
+          if (mesh.visible && groups[index]!.count > 0) ids.add(Number(id));
+        });
+      });
+      return ids;
+    };
+    expect(visibleFill()).toEqual(new Set([LOW, TOWER]));
+    let edgesVisible = false;
+    group.traverse((object) => {
+      if (object.name === "BuildingEdges") edgesVisible = object.visible;
+    });
+
+    expect(sunHoursSelectionVisualIds(true, [TOWER])).toEqual([]);
+    expect(mountSelectedBuildingsVisual(group, city, sunHoursSelectionVisualIds(true, [TOWER]), pickedColourMode)).toBeNull();
+    expect(visibleFill()).toEqual(new Set([LOW, TOWER]));
+
+    const restore = hidePickedMassingForSunHours([group, null], [TOWER]);
+    expect(visibleFill()).toEqual(new Set([LOW]));
+    group.traverse((object) => {
+      if (object.name === "BuildingEdges") expect(object.visible).toBe(edgesVisible);
+    });
+    restore();
+    expect(visibleFill()).toEqual(new Set([LOW, TOWER]));
+
+    expect(sunHoursSelectionVisualIds(false, [TOWER])).toEqual([TOWER]);
+    const selection = mountSelectedBuildingsVisual(group, city, sunHoursSelectionVisualIds(false, [TOWER]), pickedColourMode);
+    expect(selection).not.toBeNull();
+    expect(selection!.overlayOpacity).toBeLessThan(1);
+    expect(visibleFill()).toEqual(new Set([LOW]));
+    selection!.restore();
   });
 
   it("hides the plan ground raster and keeps only picked roofs on the site plan", () => {

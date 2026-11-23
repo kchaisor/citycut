@@ -101,9 +101,10 @@ import { heliodonRadiusM } from "../lib/heliodonRadius";
 import { studioSceneLighting } from "../lib/sunStudyViewport";
 import { applySolarGreyscale, restoreFlatWater } from "../lib/solarGreyscale";
 import { SunHoursLayer } from "./SunHoursLayer";
-import { setSunHoursMassingFillVisible } from "../lib/sunHoursFaceTint";
+import { hidePickedMassingForSunHours, setSunHoursMassingFillVisible } from "../lib/sunHoursFaceTint";
 import {
   sunHoursFacesReplaceMassing,
+  sunHoursSelectionVisualIds,
   sunHoursGroundShown,
   sunHoursOverlayForBuildings,
 } from "../lib/sunHoursPicked";
@@ -1053,6 +1054,24 @@ function City({
     waterVisible,
     railVisible,
   ]);
+  const pickedMassingKey = (selectedBuildingIds ?? []).join(",");
+  useLayoutEffect(() => {
+    if (!directSunHoursOn || !sunHoursPickedOnly || !buildingsVisible || pickedMassingKey === "") return;
+    const restore = hidePickedMassingForSunHours([group, importedMassing], pickedMassingKey.split(",").map(Number));
+    return () => {
+      restore();
+      invalidate();
+    };
+  }, [
+    group,
+    importedMassing,
+    directSunHoursOn,
+    sunHoursPickedOnly,
+    buildingsVisible,
+    pickedMassingKey,
+    display.showOutlines,
+    invalidate,
+  ]);
   useLayoutEffect(() => {
     const trees = group.getObjectByName("Trees");
     if (trees) trees.visible = treesVisibleIn3d(model.layers, display);
@@ -1097,7 +1116,7 @@ function City({
         buildingIds={
           buildingsVisible
             ? selectedBuildingIds && selectedBuildingIds.length > 0
-              ? selectedBuildingIds
+              ? sunHoursSelectionVisualIds(sunHoursPickedOnly, selectedBuildingIds)
               : heightEditBuildingId != null
                 ? [heightEditBuildingId]
                 : []
@@ -2530,7 +2549,6 @@ export function Scene3D({
           model={model}
           planView={projection === "plan"}
           surfacesOnly
-          facesOverMassing={sunHoursPickedOnly}
         />
       ) : null}
       {importedMassing ? <primitive object={importedMassing} /> : null}

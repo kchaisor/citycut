@@ -10,6 +10,10 @@ export function sunHoursFacesReplaceMassing(facesOn: boolean, pickedOnly: boolea
   return facesOn && !pickedOnly;
 }
 
+export function sunHoursSelectionVisualIds(pickedOnly: boolean, buildingIds: readonly number[]): readonly number[] {
+  return pickedOnly ? [] : buildingIds;
+}
+
 export function sunHoursGroundShown(sunHoursOn: boolean, pickedOnly: boolean): boolean {
   return sunHoursOn && !pickedOnly;
 }
