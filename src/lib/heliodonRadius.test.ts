@@ -55,12 +55,12 @@ describe("sun dome size slider range", () => {
   const southbank = sunDomeRange({ sideM: 500 });
   const rozelle = sunDomeRange({ sideM: 1470, widthM: 1470, heightM: 1040 });
 
-  it("runs from half the auto radius to the cut half-diagonal, with auto as the default", () => {
+  it("runs from half the auto radius to twice the cut half-diagonal, with auto as the default", () => {
     expect(southbank.autoM).toBe(sunDomeRadiusM(500));
     expect(southbank.minM).toBe(southbank.autoM * 0.5);
-    expect(southbank.maxM).toBe(Math.hypot(250, 250));
-    expect([southbank.minM, southbank.autoM, southbank.maxM].map(Math.round)).toEqual([106, 212, 354]);
-    expect([rozelle.minM, rozelle.autoM, rozelle.maxM].map(Math.round)).toEqual([175, 350, 900]);
+    expect(southbank.maxM).toBe(Math.hypot(250, 250) * 2);
+    expect([southbank.minM, southbank.autoM, southbank.maxM].map(Math.round)).toEqual([106, 212, 707]);
+    expect([rozelle.minM, rozelle.autoM, rozelle.maxM].map(Math.round)).toEqual([175, 350, 1801]);
     expect(resolveSunDomeRadiusM(southbank, null)).toBe(southbank.autoM);
     expect(resolveSunDomeRadiusM(southbank, undefined)).toBe(southbank.autoM);
     expect(resolveSunDomeRadiusM(southbank, Number.NaN)).toBe(southbank.autoM);
@@ -76,8 +76,12 @@ describe("sun dome size slider range", () => {
   it("never lets the top of the range fall under the auto size on a tiny cut", () => {
     const tiny = sunDomeRange({ sideM: 100 });
     expect(tiny.autoM).toBe(120);
-    expect(tiny.maxM).toBe(120);
+    expect(tiny.maxM).toBe(Math.hypot(50, 50) * 2);
+    expect(tiny.maxM).toBeGreaterThan(tiny.autoM);
     expect(tiny.minM).toBe(60);
+    const smaller = sunDomeRange({ sideM: 80 });
+    expect(smaller.autoM).toBe(120);
+    expect(smaller.maxM).toBe(120);
   });
 
   it("snaps back to auto beside the tick and reports the slider position as a share", () => {
@@ -86,7 +90,7 @@ describe("sun dome size slider range", () => {
     expect(sunDomeSizeFromSlider(southbank, 9999)).toBe(southbank.maxM);
     expect(sunDomeSizeShare(southbank, southbank.minM)).toBe(0);
     expect(sunDomeSizeShare(southbank, southbank.maxM)).toBe(1);
-    expect(sunDomeSizeShare(rozelle, rozelle.autoM)).toBeCloseTo(0.24, 2);
+    expect(sunDomeSizeShare(rozelle, rozelle.autoM)).toBeCloseTo(0.108, 3);
   });
 
   it("is separate from the old heliodon radius factor", () => {

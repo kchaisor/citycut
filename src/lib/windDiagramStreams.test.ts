@@ -551,7 +551,7 @@ describe("wind streak fans follow the sun dome radius", () => {
     return tails.reduce((sum, tail) => sum + tail, 0) / tails.length;
   };
 
-  it("keeps every arrow the same length, shaft width and head size at 0.5× auto, auto and the cut edge", () => {
+  it("keeps every arrow the same length, shaft width and head size at 0.5× auto, auto and 2× the cut edge", () => {
     for (const cut of CUTS) {
       for (const triple of TRIPLES) {
         const streams = streamsFrom(triple);

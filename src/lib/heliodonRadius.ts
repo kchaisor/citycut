@@ -23,6 +23,7 @@ export function sunDomeRadiusM(sideM: number): number {
 }
 
 export const SUN_DOME_SIZE_MIN_FACTOR = 0.5;
+export const SUN_DOME_SIZE_MAX_FACTOR = 2;
 export const SUN_DOME_SIZE_SNAP_SHARE = 0.015;
 
 export type SunDomeCut = { sideM: number; widthM?: number; heightM?: number };
@@ -31,7 +32,7 @@ export type SunDomeRange = { minM: number; autoM: number; maxM: number };
 export function sunDomeRange(cut: SunDomeCut): SunDomeRange {
   const autoM = sunDomeRadiusM(cut.sideM);
   const cutEdgeM = Math.hypot((cut.widthM ?? cut.sideM) / 2, (cut.heightM ?? cut.sideM) / 2);
-  return { minM: autoM * SUN_DOME_SIZE_MIN_FACTOR, autoM, maxM: Math.max(autoM, cutEdgeM) };
+  return { minM: autoM * SUN_DOME_SIZE_MIN_FACTOR, autoM, maxM: Math.max(autoM, cutEdgeM * SUN_DOME_SIZE_MAX_FACTOR) };
 }
 
 export function resolveSunDomeRadiusM(range: SunDomeRange, chosenM: number | null | undefined): number {

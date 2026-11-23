@@ -233,7 +233,7 @@ export function SolarStudyHudCard({ vm }: { vm: ModelPageViewModel }) {
                 onChange={(event) => setSunDomeSizeM(sunDomeSizeFromSlider(sunDome.range, Number(event.target.value)))}
               />
             </span>
-            <span aria-hidden="true">Cut</span>
+            <span aria-hidden="true">2× cut</span>
           </div>
           <p className="ac-note">{sunDomeSizeNote(sunDome.range, domeOn)}</p>
         </div>

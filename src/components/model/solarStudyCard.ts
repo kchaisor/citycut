@@ -29,5 +29,5 @@ export function solarDaylightLabel(sunriseMin: number, sunsetMin: number): strin
 
 export function sunDomeSizeNote(range: { autoM: number; maxM: number }, domeOn: boolean): string {
   if (!domeOn) return "Turn Sun dome on to resize it";
-  return `Auto ${Math.round(range.autoM)} m for this cut · up to the cut edge, ${Math.round(range.maxM)} m`;
+  return `Auto ${Math.round(range.autoM)} m for this cut · up to 2× the cut edge, ${Math.round(range.maxM)} m`;
 }

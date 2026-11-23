@@ -202,19 +202,20 @@ describe("Solar Study card", () => {
 });
 
 describe("Sun dome size slider", () => {
-  it("runs from half the auto radius to the cut edge, starts on auto and reads out metres", () => {
+  it("runs from half the auto radius to twice the cut edge, starts on auto and reads out metres", () => {
     render(<Hud initialKinds={["solar"]} sideM={500} />);
     fireEvent.click(screen.getByRole("button", { name: "Sun dome" }));
     const slider = screen.getByRole("slider", { name: "Sun dome size" }) as HTMLInputElement;
-    expect([slider.min, slider.max, slider.value]).toEqual(["106", "354", "212"]);
+    expect([slider.min, slider.max, slider.value]).toEqual(["106", "707", "212"]);
     expect(slider.disabled).toBe(false);
     const group = screen.getByRole("group", { name: "Sun dome size" });
     expect(group.querySelector("output")!.textContent).toBe("212 m");
-    expect(group.textContent).toContain("Auto 212 m for this cut · up to the cut edge, 354 m");
+    expect(group.textContent).toContain("Auto 212 m for this cut · up to 2× the cut edge, 707 m");
+    expect(group.textContent).toContain("2× cut");
     fireEvent.change(slider, { target: { value: "300" } });
     expect(group.querySelector("output")!.textContent).toBe("300 m");
     fireEvent.change(slider, { target: { value: "9999" } });
-    expect(group.querySelector("output")!.textContent).toBe("354 m");
+    expect(group.querySelector("output")!.textContent).toBe("707 m");
     fireEvent.change(slider, { target: { value: "1" } });
     expect(group.querySelector("output")!.textContent).toBe("106 m");
     fireEvent.change(slider, { target: { value: "213" } });
@@ -222,10 +223,10 @@ describe("Sun dome size slider", () => {
     expect(slider.getAttribute("aria-valuetext")).toBe("212 m, auto");
   });
 
-  it("covers the Rozelle A3 sheet from 175 m to 900 m with 350 m as the default", () => {
+  it("covers the Rozelle A3 sheet from 175 m to 1801 m (2× the cut edge) with 350 m as the default", () => {
     render(<Hud initialKinds={["solar"]} sideM={1470} cut={{ widthM: 1470, heightM: 1040 }} />);
     const slider = screen.getByRole("slider", { name: "Sun dome size" }) as HTMLInputElement;
-    expect([slider.min, slider.max, slider.value]).toEqual(["175", "900", "350"]);
+    expect([slider.min, slider.max, slider.value]).toEqual(["175", "1801", "350"]);
   });
 
   it("is muted with a short note while the sun dome is off", () => {
