@@ -1,5 +1,3 @@
-import { readFileSync } from "node:fs";
-import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   dataDrivenDesignSectors,
@@ -11,16 +9,12 @@ import {
   isDesignWindId,
 } from "./windDesignWinds";
 import { PEDESTRIAN_HEIGHT_FACTOR } from "./windPlanField";
-import type { SiteWindSelection, WindRoseAsset, WindRoseSeasonRecord } from "./windRoseData";
+import type { SiteWindSelection, WindRoseSeasonRecord } from "./windRoseData";
+import { siteWindFromPublishedAsset } from "./windAssetDisk";
 import { analyzeSiteWind } from "./windRoseStats";
-import { siteWindSelection } from "./windStation";
 
 const PYRMONT = { lat: -33.86627, lon: 151.18389 };
 const MONT_ALBERT_NORTH = { lat: -37.80458, lon: 145.1065 };
-
-function readAsset(): WindRoseAsset {
-  return JSON.parse(readFileSync(path.join(process.cwd(), "public/wind/australia-tmyx.json"), "utf8")) as WindRoseAsset;
-}
 
 function recordOf(freqs: Record<number, number>, means: Record<number, number>): WindRoseSeasonRecord {
   const sectors = Array.from({ length: 16 }, (_, s) => [freqs[s] ?? 0, 0, 0, 0, 0]);
@@ -65,10 +59,8 @@ describe("dataDrivenDesignSectors", () => {
 });
 
 describe("designWindsFor with the bundled TMYx asset", () => {
-  const asset = readAsset();
-
   it("gives Pyrmont (Sydney Airport) the consultants' NE, S and W at 45, 180 and 270 degrees", () => {
-    const selection = siteWindSelection(asset, PYRMONT.lat, PYRMONT.lon)!;
+    const selection = siteWindFromPublishedAsset(PYRMONT.lat, PYRMONT.lon)!;
     expect(selection.station.id).toBe("947670");
     const winds = designWindsFor(selection);
     expect(winds.map((w) => w.label)).toEqual(["NE", "S", "W"]);
@@ -84,7 +76,7 @@ describe("designWindsFor with the bundled TMYx asset", () => {
   });
 
   it("gives Mont Albert North (Viewbank) three data-driven headings at least 67.5 degrees apart", () => {
-    const selection = siteWindSelection(asset, MONT_ALBERT_NORTH.lat, MONT_ALBERT_NORTH.lon)!;
+    const selection = siteWindFromPublishedAsset(MONT_ALBERT_NORTH.lat, MONT_ALBERT_NORTH.lon)!;
     expect(selection.station.name).toMatch(/Viewbank/i);
     const winds = designWindsFor(selection);
     expect(winds).toHaveLength(3);
@@ -97,7 +89,7 @@ describe("designWindsFor with the bundled TMYx asset", () => {
   });
 
   it("points the 3D ground wind along the design heading at the design speed", () => {
-    const selection = siteWindSelection(asset, PYRMONT.lat, PYRMONT.lon) as SiteWindSelection;
+    const selection = siteWindFromPublishedAsset(PYRMONT.lat, PYRMONT.lon) as SiteWindSelection;
     const south = findDesignWind(designWindsFor(selection), "design-s")!;
     const stats = designWindPeriodStats(analyzeSiteWind(selection, "annual")!, south);
     expect(stats.prevailingSector).toBe(8);

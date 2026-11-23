@@ -13,20 +13,17 @@ import {
   windRoseSectorSharePct,
   windRoseSectorTip,
 } from "../lib/windRoseChart";
-import type { SiteWindSelection, WindRoseAsset } from "../lib/windRoseData";
+import type { SiteWindSelection } from "../lib/windRoseData";
+import { siteWindFromPublishedAsset } from "../lib/windAssetDisk";
 import { analyzeSiteWind } from "../lib/windRoseStats";
 import { DEFAULT_WIND_SETTINGS, withDesignWind } from "../lib/windState";
-import { siteWindSelection } from "../lib/windStation";
 import { DesignWindPresets } from "./DesignWindPresets";
 import { useWindPlan } from "./useWindPlan";
 import { WindPlanOverlay, createWindPlanTransformStore } from "./WindPlanOverlay";
 import { WindRosePanel } from "./WindRosePanel";
 import { WindRoseSvgChart } from "./WindRoseSvgChart";
 
-const asset = JSON.parse(
-  readFileSync(path.join(process.cwd(), "public/wind/australia-tmyx.json"), "utf8"),
-) as WindRoseAsset;
-const pyrmont = siteWindSelection(asset, -33.86627, 151.18389)!;
+const pyrmont = siteWindFromPublishedAsset(-33.86627, 151.18389)!;
 
 const openModel: CityModel = {
   placeLabel: "Test",

@@ -11,7 +11,7 @@ Makes the wind rose, the plan wind maps and the 3D wind closer to what wind cons
 
 Kelvin's call on 19 Nov 2026, after comparing the Pyrmont Comfort map with his White Bay CFD reference: ignore water on the plan maps, and give buildings better wakes, windward-corner speed-ups and gap and street channelling.
 
-All of this stays indicative, not a CFD study. The wind-streak arrows added on 23 Nov 2026 use the same station data and are specified in `docs/specs/wind-streaks.md`.
+All of this stays indicative, not a CFD study. The wind-streak arrows added on 23 Nov 2026 use the same station data and are specified in `docs/specs/wind-streaks.md`. From 23 Nov 2026 the station table also stores Morning and Afternoon bins for each season (see wind-streaks preference 16), and the app loads only the chosen station's file.
 
 ## What it looks like
 

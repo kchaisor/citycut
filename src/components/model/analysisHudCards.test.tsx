@@ -271,6 +271,20 @@ describe("Wind Rose card", () => {
     expect(labels(wind.getByRole("group", { name: "Wind overlay toggles" }))).toEqual(["Flow", "Streaks", "❚❚ Pause"]);
   });
 
+  it("keeps All day selected until Morning or Afternoon is picked, and shows the hour windows", () => {
+    const winds: WindViewSettings[] = [];
+    render(<Hud onWind={(next) => winds.push(next)} />);
+    fireEvent.click(mode("Wind Rose"));
+    const wind = within(card("wind")!);
+    const times = wind.getByRole("group", { name: "Wind time of day" });
+    expect(labels(times)).toEqual(["All day", "Morning", "Afternoon"]);
+    expect(times.className).toBe("ac-seg ac-seg-3");
+    expect(within(times).getByRole("button", { name: "All day" }).className).toBe("ac-seg-btn is-ink");
+    expect(wind.getByText("6am–12pm · 12pm–6pm · local standard time")).toBeTruthy();
+    fireEvent.click(within(times).getByRole("button", { name: "Morning" }));
+    expect(winds.at(-1)?.daypart).toBe("morning");
+  });
+
   it("names the prevailing badge from the station data and never invents it", () => {
     const stats = { prevailingLabel: "S, SSW", prevailingMedianKmh: 21.2, prevailingMeanSpeedMs: 5.9, calmPercent: 12.6 };
     expect(windPrevailingBadge(stats, false)).toEqual({ prevailing: "S, SSW · 21 km/h", calm: "Calm 12.6%" });
@@ -340,14 +354,15 @@ describe("Wind Rose card", () => {
     expect(wind.getByRole("group", { name: "Wind season presets" })).toBeTruthy();
   });
 
-  it("caps the rose at 124px while another analysis shares the stack", () => {
+  it("keeps the rose full card width while another analysis shares the stack", () => {
     render(<Hud initialKinds={["wind"]} />);
     expect(card("wind")!.className).not.toContain("is-tight");
     fireEvent.click(mode("Solar Study"));
     expect(card("wind")!.className).toContain("is-tight");
     const tight = block(".analysis-hud-card.is-tight .wind-rose-chart");
-    expect(tight).toMatch(/width: var\(--wind-rose-size-tight\);/);
-    expect(readFileSync(path.join(process.cwd(), "src/theme.css"), "utf8")).toMatch(/--wind-rose-size-tight: 124px;/);
+    expect(tight).toMatch(/width: 100%;/);
+    const cardChart = block(".wind-rose-analysis-card .wind-rose-chart");
+    expect(cardChart).toMatch(/width: 100%;/);
   });
 });
 
