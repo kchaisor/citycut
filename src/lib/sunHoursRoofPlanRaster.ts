@@ -8,6 +8,7 @@ export type SunHoursRoofRasterSource = {
   east: Float32Array;
   north: Float32Array;
   hours: Float32Array;
+  buildingIds: Int32Array;
   spanM: number;
 };
 
@@ -18,6 +19,7 @@ export function packSunHoursRoofRasterSource(
   const east: number[] = [];
   const north: number[] = [];
   const packedHours: number[] = [];
+  const buildingIds: number[] = [];
   let spanM = SUN_HOURS_GROUND_CELL_M;
   for (let index = 0; index < samples.length; index++) {
     const sample = samples[index]!;
@@ -25,6 +27,7 @@ export function packSunHoursRoofRasterSource(
     east.push(sample.east);
     north.push(sample.north);
     packedHours.push(hours[index]!);
+    buildingIds.push(sample.buildingId);
     spanM = sample.spanM;
   }
   if (east.length === 0) return null;
@@ -32,6 +35,7 @@ export function packSunHoursRoofRasterSource(
     east: new Float32Array(east),
     north: new Float32Array(north),
     hours: new Float32Array(packedHours),
+    buildingIds: new Int32Array(buildingIds),
     spanM,
   };
 }
@@ -48,7 +52,7 @@ export function rasterizeSunHoursRoofFromPacked(
     samples.push({
       id: `roof-pack-${index}`,
       kind: "roof-cell",
-      buildingId: 0,
+      buildingId: source.buildingIds[index] ?? 0,
       east: source.east[index]!,
       north: source.north[index]!,
       yM: 0,

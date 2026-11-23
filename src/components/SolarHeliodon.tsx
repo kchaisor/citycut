@@ -53,6 +53,7 @@ import {
   type SolarSample,
   type Vec3,
 } from "../lib/solar";
+import type { SunHoursWindow } from "../lib/sunHoursWindow";
 
 export type SolarViewSettings = {
   showPath: boolean;
@@ -67,6 +68,8 @@ export type SolarViewSettings = {
   sunStudyMuted?: boolean;
   sunStudyCasters?: "all" | "selected";
   sunHours?: boolean;
+  sunHoursWindow?: SunHoursWindow;
+  sunHoursPickedOnly?: boolean;
 };
 
 const OVERLAY_ORDER = 1000;

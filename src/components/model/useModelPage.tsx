@@ -183,6 +183,7 @@ import { loadView } from "./loadModelView";
 import { initialAnalyses, initialSolarSettings } from "./initialSolarSettings";
 import { useSunHoursGround } from "../useSunHoursGround";
 import { sunHoursModel } from "../../lib/sunHoursBuildings";
+import { sunHoursPlanLayers } from "../../lib/sunHoursPlanLayers";
 import { SOLAR_SLIDER_END_MIN, SOLAR_SLIDER_START_MIN, clampSolarSliderMinutes } from "../../lib/solarSlider";
 import {
   SECTION_ICONS,
@@ -1058,6 +1059,35 @@ export function useModelPage({
     solar.day,
     Boolean(solar.sunHours),
     renderQuality,
+    solar.sunHoursWindow,
+  );
+  const sunHoursPickedIds = useMemo(() => {
+    if (hideSelection.length > 0) return hideSelection;
+    const inspected = sceneSelectionBuildingId(sceneSelection);
+    return inspected != null ? [inspected] : [];
+  }, [hideSelection, sceneSelection]);
+  const {
+    grid: sunHoursResultGrid,
+    overlay: sunHoursResultOverlay,
+    scaleMaxHours: sunHoursResultScaleMax,
+  } = sunHoursGround;
+  const sunHoursPlanPickedOnly = Boolean(solar.sunHoursPickedOnly) && tab === "drawing";
+  const sunHoursPlan = useMemo(
+    () =>
+      sunHoursPlanLayers(
+        sunHoursAssessModel,
+        { grid: sunHoursResultGrid, overlay: sunHoursResultOverlay, scaleMaxHours: sunHoursResultScaleMax },
+        sunHoursPlanPickedOnly,
+        sunHoursPickedIds,
+      ),
+    [
+      sunHoursAssessModel,
+      sunHoursResultGrid,
+      sunHoursResultOverlay,
+      sunHoursResultScaleMax,
+      sunHoursPlanPickedOnly,
+      sunHoursPickedIds,
+    ],
   );
 
   useEffect(() => {
@@ -2390,6 +2420,8 @@ export function useModelPage({
     sourceCounts,
     sourcesLoaded,
     sunHoursGround,
+    sunHoursPickedIds,
+    sunHoursPlan,
     sunStudyDate,
     sunStudyExportLayers,
     sunStudyProgress,

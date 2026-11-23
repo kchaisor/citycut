@@ -5,9 +5,11 @@ import type { useSunHoursGround } from "../useSunHoursGround";
 export function SunHoursLegendDock({
   sunHoursGround,
   embedded = false,
+  pickedOnly = false,
 }: {
   sunHoursGround: ReturnType<typeof useSunHoursGround>;
   embedded?: boolean;
+  pickedOnly?: boolean;
 }) {
   const { grid, resolution, targetResolution } = sunHoursGround;
   const pending = sunHoursGround.pending || sunHoursGround.pendingSurfaces;
@@ -26,6 +28,8 @@ export function SunHoursLegendDock({
         pendingResolution={targetResolution}
         progress={sunHoursGround.progress}
         stage={sunHoursProgressStage(sunHoursGround.pendingSurfaces)}
+        study={sunHoursGround.study}
+        pickedOnly={pickedOnly}
       />
     </div>
   );

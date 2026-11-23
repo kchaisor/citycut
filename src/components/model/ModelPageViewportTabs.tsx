@@ -85,6 +85,7 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
     snapId,
     solar,
     sunHoursGround,
+    sunHoursPlan,
     sunStudyDate,
     sunStudySelected,
     tab,
@@ -328,9 +329,9 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
                 viewport={planViewport}
                 onViewportChange={setPlanViewport}
                 fitCounter={fitCounter}
-                sunHoursGroundGrid={sunHoursOnPlan ? sunHoursGround.grid : null}
-                sunHoursGroundScaleMax={sunHoursOnPlan ? sunHoursGround.scaleMaxHours : 0}
-                sunHoursRoofPlanRaster={sunHoursOnPlan ? (sunHoursGround.overlay?.roofPlanRaster ?? null) : null}
+                sunHoursGroundGrid={sunHoursOnPlan ? sunHoursPlan.grid : null}
+                sunHoursGroundScaleMax={sunHoursOnPlan ? sunHoursPlan.scaleMaxHours : 0}
+                sunHoursRoofPlanRaster={sunHoursOnPlan ? sunHoursPlan.roofPlanRaster : null}
                 landmarkLabels={drawing === "site" || drawing === "figure-ground" ? drawingLandmarkSources : []}
                 onImportedPick={(ref, clientX, clientY) =>
                   selectImportedBuilding(ref.fileId, ref.buildingId, clientX, clientY)

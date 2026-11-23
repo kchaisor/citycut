@@ -43,6 +43,7 @@ function sunHoursState(sideM: number, pending = false): ReturnType<typeof useSun
     targetResolution: resolution,
     pending,
     pendingSurfaces: false,
+    study: { month: 9, day: 22, window: "day" },
   } as unknown as ReturnType<typeof useSunHoursGround>;
 }
 
@@ -144,7 +145,9 @@ describe("right HUD stack", () => {
     ]);
     const card = stack.querySelector(".sun-hours-hud-card")!;
     expect(card.getAttribute("aria-label")).toBe("Direct Sun Hours panel");
-    expect(card.querySelector(".sun-hours-direct-legend-title")?.textContent).toBe("Direct Sun Hours");
+    expect(card.querySelector(".sun-hours-direct-legend-title")?.textContent).toBe(
+      "Direct Sun Hours · 22 Sep · full daylight",
+    );
     expect(card.querySelector(".sun-hours-direct-legend-scale")).toBeTruthy();
     expect(card.textContent).toContain("2 m grid · 5 min steps");
     expect(card.textContent).toContain("Eased from 0.25 m grid for this cut size");

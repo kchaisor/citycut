@@ -13,6 +13,7 @@ import { findDesignWind } from "../../lib/windDesignWinds";
 import { windMotionPaused } from "../../lib/windStreakMotion";
 import type { SolarViewSettings } from "../SolarHeliodon";
 import type { WalkViewshed } from "../useWalkViewshed";
+import { DEFAULT_SUN_HOURS_WINDOW, sunHoursScaleMaxHours } from "../../lib/sunHoursWindow";
 import { initialSolarSettings } from "./initialSolarSettings";
 import { ModelPageViewportFooter } from "./ModelPageViewportFooter";
 import { SolarStudyHudCard } from "./SolarStudyHudCard";
@@ -35,6 +36,7 @@ export type AnalysisHudHarnessProps = {
   designWinds?: readonly DesignWind[];
   walk?: Partial<WalkViewshed>;
   sunHoursReady?: boolean;
+  pickedBuildingIds?: readonly number[];
 };
 
 export function AnalysisHudHarness({
@@ -50,6 +52,7 @@ export function AnalysisHudHarness({
   designWinds = [],
   walk: walkOverrides = {},
   sunHoursReady = false,
+  pickedBuildingIds = [],
 }: AnalysisHudHarnessProps) {
   const [solar, setSolar] = useState(() => initialSolarSettings("", emptyStorage));
   const [analyses, setAnalyses] = useState<ActiveAnalyses>(
@@ -71,6 +74,11 @@ export function AnalysisHudHarness({
   const [drawingPath, setDrawingPath] = useState(false);
   const range = sunDomeRange({ sideM, widthM: cut?.widthM, heightM: cut?.heightM });
   const cards = analysisCardsOn(tab, analyses);
+  const sunHoursStudy = {
+    month: solar.month,
+    day: solar.day,
+    window: solar.sunHoursWindow ?? DEFAULT_SUN_HOURS_WINDOW,
+  };
   const vm = {
     analyses,
     analysisCards: cards,
@@ -106,8 +114,18 @@ export function AnalysisHudHarness({
     solar,
     sunDome: { range, chosenM: sunDomeSizeM, radiusM: resolveSunDomeRadiusM(range, sunDomeSizeM) },
     sunHoursGround: sunHoursReady
-      ? { grid: { maxSunHours: 9 }, scaleMaxHours: 9, resolution: null, targetResolution: null, pending: true, pendingSurfaces: false, progress: null }
-      : { grid: null, pending: false, pendingSurfaces: false, progress: null },
+      ? {
+          grid: { maxSunHours: 9 },
+          scaleMaxHours: sunHoursScaleMaxHours(sunHoursStudy.window, 9),
+          resolution: null,
+          targetResolution: null,
+          pending: true,
+          pendingSurfaces: false,
+          progress: null,
+          study: sunHoursStudy,
+        }
+      : { grid: null, pending: false, pendingSurfaces: false, progress: null, study: sunHoursStudy },
+    sunHoursPickedIds: pickedBuildingIds,
     sunStudySelected: [],
     tab,
     walk: {

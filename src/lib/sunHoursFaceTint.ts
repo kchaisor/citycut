@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { hideBuildingsForHeightEdit } from "./buildingHeightEditVisibility";
 
 export function isCityBuildingFillName(name: string): boolean {
   return (
@@ -34,4 +35,16 @@ export function setSunHoursMassingFillVisible(
     }
     if (object.name.endsWith(" outline")) object.visible = showOutlines && buildingsVisible;
   });
+}
+
+export function hidePickedMassingForSunHours(
+  roots: readonly (THREE.Object3D | null | undefined)[],
+  buildingIds: readonly number[],
+): () => void {
+  const restores = roots.flatMap((root) =>
+    root ? [hideBuildingsForHeightEdit(root, buildingIds, { keepEdges: true })] : [],
+  );
+  return () => {
+    for (const restore of restores) restore();
+  };
 }

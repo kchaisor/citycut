@@ -7,6 +7,14 @@ import {
   type SunHoursProgressStage,
 } from "../lib/sunHoursProgress";
 import type { SunHoursResolution } from "../lib/sunHoursQuality";
+import {
+  DEFAULT_SUN_HOURS_WINDOW,
+  SUN_HOURS_LEGEND_UNITS,
+  SUN_HOURS_WINDOWS,
+  sunHoursLegendSurfacesNote,
+  sunHoursLegendTitle,
+  type SunHoursStudy,
+} from "../lib/sunHoursWindow";
 
 export const SUN_HOURS_DIRECT_LEGEND_DOCK_TICKS = 5;
 
@@ -69,6 +77,8 @@ export function SunHoursGroundLegendList({
   progress = null,
   stage = "GROUND",
   reducedMotion,
+  study = null,
+  pickedOnly = false,
 }: {
   maxHours: number;
   resolution: SunHoursResolution | null;
@@ -78,6 +88,8 @@ export function SunHoursGroundLegendList({
   progress?: number | null;
   stage?: SunHoursProgressStage;
   reducedMotion?: boolean;
+  study?: SunHoursStudy | null;
+  pickedOnly?: boolean;
 }) {
   useColourRevision();
   const tickCount = compact ? SUN_HOURS_DIRECT_LEGEND_DOCK_TICKS : 11;
@@ -89,11 +101,15 @@ export function SunHoursGroundLegendList({
     ? `linear-gradient(to right, ${gradientStops})`
     : `linear-gradient(to top, ${gradientStops})`;
   const eased = resolution ? sunHoursEasedLabel(resolution) : null;
+  const studyWindow = study?.window ?? DEFAULT_SUN_HOURS_WINDOW;
+  const windowLegend = SUN_HOURS_WINDOWS[studyWindow].legend;
   const dockFootnotes = resolution
-    ? [sunHoursResolutionLabel(resolution), ...(eased ? [eased] : []), "ground, roofs, walls · full daylight"]
+    ? [sunHoursResolutionLabel(resolution), ...(eased ? [eased] : []), sunHoursLegendSurfacesNote(studyWindow, pickedOnly)]
     : [];
   const sidebarFootnote = resolution
-    ? `Full daylight · ${sunHoursResolutionLabel(resolution)} on ground, roofs, and walls.${eased ? ` ${eased}.` : ""}`
+    ? `${windowLegend.charAt(0).toUpperCase()}${windowLegend.slice(1)} · ${sunHoursResolutionLabel(resolution)} on ${
+        pickedOnly ? "selected roofs and walls" : "ground, roofs, and walls"
+      }.${eased ? ` ${eased}.` : ""}`
     : null;
   return (
     <div
@@ -102,7 +118,8 @@ export function SunHoursGroundLegendList({
       data-sun-hours-ground-legend
       data-sun-hours-direct-legend
     >
-      <p className="sun-hours-direct-legend-title">Direct Sun Hours</p>
+      <p className="sun-hours-direct-legend-title">{study ? sunHoursLegendTitle(study) : "Direct Sun Hours"}</p>
+      {study && compact ? <span className="sun-hours-direct-legend-unit">{SUN_HOURS_LEGEND_UNITS}</span> : null}
       {resolution && compact ? (
         <div className="sun-hours-direct-legend-scale">
           <div className="sun-hours-direct-legend-bar" style={{ background: gradient }} aria-hidden />

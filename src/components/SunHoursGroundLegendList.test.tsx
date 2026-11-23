@@ -7,6 +7,7 @@ import {
 } from "./SunHoursGroundLegendList";
 import { LoadingHudPill } from "./LoadingHudPill";
 import { sunHoursQualityParams, sunHoursResolution } from "../lib/sunHoursQuality";
+import { sunHoursScaleMaxHours } from "../lib/sunHoursWindow";
 
 const fast = sunHoursResolution(sunHoursQualityParams("fast", 1000));
 const high = sunHoursResolution(sunHoursQualityParams("high", 120));
@@ -65,6 +66,35 @@ describe("SunHoursGroundLegendList", () => {
     expect(html).toContain("is-inline");
     expect(html).not.toContain("sun-hours-direct-legend-scale");
     expect(html).not.toContain("full daylight");
+  });
+
+  it("titles the legend with the study date and window, in hours, and fixes the 9am–3pm scale at 6 h", () => {
+    const windowed = renderToStaticMarkup(
+      <SunHoursGroundLegendList
+        maxHours={sunHoursScaleMaxHours("9to3", 3.25)}
+        resolution={fast}
+        compact
+        study={{ month: 9, day: 22, window: "9to3" }}
+      />,
+    );
+    expect(windowed).toContain("Direct Sun Hours · 22 Sep · 9am–3pm");
+    expect(windowed).toContain(">hours<");
+    expect(windowed).toContain("<li>6 h</li>");
+    expect(windowed).toContain("ground, roofs, walls · 9am–3pm");
+    expect(windowed).not.toContain("full daylight");
+    const wholeDay = renderToStaticMarkup(
+      <SunHoursGroundLegendList
+        maxHours={sunHoursScaleMaxHours("day", 11.5)}
+        resolution={fast}
+        compact
+        study={{ month: 12, day: 22, window: "day" }}
+        pickedOnly
+      />,
+    );
+    expect(wholeDay).toContain("Direct Sun Hours · 22 Dec · full daylight");
+    expect(wholeDay).toContain(">hours<");
+    expect(wholeDay).toContain("<li>11.5 h</li>");
+    expect(wholeDay).toContain("selected roofs, walls · full daylight");
   });
 
   it("says a 0.5 km High cut eased to 1 m", () => {
