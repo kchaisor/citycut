@@ -8,6 +8,7 @@ import {
   HUD_GUTTER_PX,
   RIGHT_HUD_GAP_PX,
   RIGHT_HUD_RIGHT_PX,
+  RIGHT_HUD_BOTTOM_PX,
   RIGHT_HUD_TOP_PX,
   RIGHT_HUD_WIDTH_PX,
   rightHudMaxHeight,
@@ -41,15 +42,17 @@ const viewports = [
 ] as const;
 
 describe("right HUD stack layout", () => {
-  it("pins a 304px column 14px from the right and 68px from the top with a 12px gap and 16px gutters", () => {
+  it("pins a 304px column 14px from the right and 68px from the top with a 12px gap, 16px gutters and 12px to the bottom", () => {
     expect(RIGHT_HUD_WIDTH_PX).toBe(304);
     expect(RIGHT_HUD_RIGHT_PX).toBe(14);
     expect(RIGHT_HUD_TOP_PX).toBe(68);
     expect(RIGHT_HUD_GAP_PX).toBe(12);
     expect(HUD_GUTTER_PX).toBe(16);
+    expect(RIGHT_HUD_BOTTOM_PX).toBe(12);
+    expect(RIGHT_HUD_TOP_PX + RIGHT_HUD_BOTTOM_PX).toBe(80);
   });
 
-  it("runs the column to 16px above the bottom when the Analysis bar sits beside it in the lane", () => {
+  it("caps the column at the viewport minus 80 when the Analysis bar sits beside it in the lane", () => {
     for (const [vw, vh] of [
       [1280, 800],
       [1440, 900],
@@ -57,7 +60,7 @@ describe("right HUD stack layout", () => {
       const stack = tallStackAt(vw, vh);
       const lanes = envConsoleLanes(vw, { left: 0, right: 720, top: vh - 100, bottom: vh - 14 }, [rail, outliner], stack);
       const consoleBar = envConsoleBox(vw, lanes, 900, vh - 14 - 112, vh - 14);
-      expect(rightHudMaxHeight(vh, stack, [consoleBar])).toBe(vh - 68 - 16);
+      expect(rightHudMaxHeight(vh, stack, [consoleBar])).toBe(vh - 80);
     }
   });
 
@@ -70,7 +73,7 @@ describe("right HUD stack layout", () => {
   it("ignores HUD above the column top, such as the top-bar compass", () => {
     const stack = stackAt(1440);
     const compass: HudBox = { left: 1300, right: 1342, top: 20, bottom: 62 };
-    expect(rightHudMaxHeight(900, stack, [compass])).toBe(900 - 68 - 16);
+    expect(rightHudMaxHeight(900, stack, [compass])).toBe(900 - 80);
   });
 
   it("locks the 1280x800 clash: outliner open, 304px stack, bar centred in a 608px lane", () => {
@@ -186,6 +189,6 @@ describe("right HUD stack layout", () => {
     const bar = rule(".model .bottom-bar.env-console");
     expect(bar).toMatch(/max-width: var\(--env-console-lane\) !important;/);
     expect(bar).toMatch(/height: auto !important;/);
-    expect(rule(".model .right-hud-stack")).toMatch(/calc\(100vh - 68px - var\(--space-4\)\)/);
+    expect(rule(".model .right-hud-stack")).toMatch(/calc\(100vh - 68px - var\(--space-3\)\)/);
   });
 });

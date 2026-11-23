@@ -3,6 +3,7 @@ import { getColour } from "./colours";
 import { withScreenOnlyHidden } from "./screenOnly";
 import { cameraForExportFrame, type ExportFrame } from "./exportFrame";
 import { drawLandmarkLabels, type CanvasLandmarkLabel } from "./landmarkLabelText";
+import { withStreamStillFrame } from "./windDiagramStreams";
 
 export type PngLandmarkLabels = (camera: THREE.Camera, width: number, height: number) => CanvasLandmarkLabel[];
 
@@ -37,9 +38,11 @@ export async function captureViewPng(
   try {
     gl.autoClear = true;
     gl.setRenderTarget(target);
-    withScreenOnlyHidden(scene, () => {
-      gl.render(scene, renderCamera);
-    });
+    withStreamStillFrame(scene, () =>
+      withScreenOnlyHidden(scene, () => {
+        gl.render(scene, renderCamera);
+      }),
+    );
     gl.readRenderTargetPixels(target, 0, 0, width, height, pixels);
   } finally {
     scene.background = previousBackground;

@@ -8,10 +8,14 @@ import {
   RIGHT_HUD_RIGHT_PX,
   RIGHT_HUD_TOP_PX,
   RIGHT_HUD_WIDTH_PX,
+  leftOutlinerMaxHeight,
   type HudBox,
 } from "./rightHudLayout";
 import {
+  ENV_CONSOLE_COMBINED_TOP_ROW_PX,
   ENV_CONSOLE_INSET_PX,
+  ENV_CONSOLE_WIND_ROW_PX,
+  envConsoleRowFits,
   ENV_CONSOLE_SOLAR_CONTENT_PX,
   SOLAR_SCRUBBER_FLOOR_PX,
   solarBottomLeadWidth,
@@ -141,5 +145,58 @@ describe("Analysis bar time readout", () => {
     expect(readout).not.toMatch(/overflow: hidden|text-overflow/);
     expect(rule(BAR)).not.toMatch(/overflow(-x)?: (hidden|clip)/);
     expect(rule(`${BAR} .env-solar-bottom`)).not.toMatch(/overflow(-x)?: (hidden|clip)/);
+  });
+});
+
+describe("Analysis bar with Solar Study and Wind Rose both on", () => {
+  const rail: HudBox = { left: 14, right: 66, top: 68, bottom: 260 };
+  const combinedBarWidthAt = (vw: number) => {
+    const threeRows: HudBox = { left: 0, right: 0, top: VIEWPORT_HEIGHT - 132, bottom: VIEWPORT_HEIGHT - 14 };
+    const lanes = envConsoleLanes(vw, threeRows, [rail, null], stackAt(vw, ANALYSIS_STACK_HEIGHT), true);
+    return envConsoleMaxWidth(vw, lanes);
+  };
+
+  it("gets the lane from the left edge to the right column once the outliner clears the bar", () => {
+    expect(combinedBarWidthAt(1280)).toBe(930);
+    expect(combinedBarWidthAt(1440)).toBe(1090);
+    const bar: HudBox = { left: 57, right: 905, top: 668, bottom: 786 };
+    expect(leftOutlinerMaxHeight(bar, { left: 74, right: 322, top: 68, bottom: 734 })).toBe(668 - 16 - 68);
+  });
+
+  it("fits the top row, the solar row and the wind row on one line each at 1280 and 1440", () => {
+    for (const vw of [1280, 1440]) {
+      const width = combinedBarWidthAt(vw);
+      expect(envConsoleRowFits(width, ENV_CONSOLE_COMBINED_TOP_ROW_PX), `${vw} top`).toBe(true);
+      expect(envConsoleRowFits(width, ENV_CONSOLE_WIND_ROW_PX), `${vw} wind`).toBe(true);
+      const solar = solarBottomRow(width, scrubberBasisFromCss);
+      expect(solar.wrapped, `${vw} solar`).toBe(false);
+      expect(solar.readoutClipPx, `${vw} readout`).toBe(0);
+      expect(solar.readoutPastBarPx, `${vw} readout`).toBe(0);
+    }
+    expect(envConsoleRowFits(608, ENV_CONSOLE_COMBINED_TOP_ROW_PX)).toBe(false);
+  });
+
+  it("pins High / Fast on the first line, outside the part of the top row that wraps", () => {
+    expect(rule(`${BAR} .env-top-row`)).toMatch(/flex-wrap: nowrap !important;/);
+    expect(rule(`${BAR} .env-top-row`)).toMatch(/align-items: flex-start !important;/);
+    expect(rule(`${BAR} .env-top-main`)).toMatch(/flex-wrap: wrap !important;/);
+    expect(rule(`${BAR} .env-top-main`)).toMatch(/min-width: 0 !important;/);
+    expect(rule(`${BAR} .env-quality`)).toMatch(/margin-left: auto !important;/);
+    expect(rule(`${BAR} .env-quality`)).toMatch(/flex-shrink: 0 !important;/);
+  });
+
+  it("drops the solar readout text below 1600 wide and keeps the wind chips and Pause at the end of the wind row", () => {
+    const combined = floating.slice(floating.indexOf("@media (max-width: 1599px)"));
+    expect(combined.slice(0, combined.indexOf("}"))).toContain(`${BAR}.is-combined .env-solar-chrome .solar-telemetry`);
+    expect(combined.slice(0, combined.indexOf("}"))).toContain("display: none !important;");
+    expect(rule(`${BAR} .env-wind-end`)).toMatch(/margin-left: auto !important;/);
+    expect(rule(`${BAR} .env-wind-end`)).toMatch(/flex-shrink: 0 !important;/);
+  });
+
+  it("lets the outliner stop above a combined bar instead of squeezing it", () => {
+    expect(floating).toContain("max-height: min(calc(100vh - 134px), var(--left-outliner-max-height, 100vh));");
+    const hook = readFileSync(path.resolve(process.cwd(), "src/components/model/useRightHudLayout.ts"), "utf8");
+    expect(hook).toContain('classList.contains("is-combined")');
+    expect(hook).toContain("outlinerYields ? null : outliner");
   });
 });

@@ -10,7 +10,11 @@ import { sunHoursLegendCardOn } from "./sunHoursLegendCard";
 import { sunHoursQualityParams, sunHoursResolution } from "../../lib/sunHoursQuality";
 import type { useSunHoursGround } from "../useSunHoursGround";
 import { WindStreaksSlider } from "../WindStreaksSlider";
-import { windRoseCardAutoCollapsed, windRoseCardMeta, windStreaksSliderOn } from "./windRoseCard";
+import { siteIntelAutoFolded, windRoseCardAutoCollapsed, windRoseCardMeta, windStreaksSliderOn } from "./windRoseCard";
+import { analysesOf } from "../../lib/sidebarSections";
+import { PrevailingStreamsLegend } from "../PrevailingStreamsLegend";
+import { prevailingStreams } from "../../lib/windPrevailingStreams";
+import { RIGHT_HUD_GAP_PX, RIGHT_HUD_TOP_PX, rightHudMaxHeight } from "../../lib/rightHudLayout";
 import { getWindStreakDensity, resetWindStreakDensityCache } from "../../lib/windStreakDensity";
 import { groundWindStreakCount } from "../../lib/groundWindStreaks";
 
@@ -42,7 +46,9 @@ function sunHoursState(sideM: number, pending = false): ReturnType<typeof useSun
   } as unknown as ReturnType<typeof useSunHoursGround>;
 }
 
-function renderSidebar(siteIntelOpen: boolean, rightBelow: ReactNode = windCard) {
+type Fold = { folded: boolean; onToggle: () => void };
+
+function renderSidebar(siteIntelOpen: boolean, rightBelow: ReactNode = windCard, fold?: Fold) {
   return render(
     <Sidebar
       id="panel"
@@ -56,7 +62,12 @@ function renderSidebar(siteIntelOpen: boolean, rightBelow: ReactNode = windCard)
       onSelect={() => undefined}
       onToggleCollapse={() => undefined}
       onHome={() => undefined}
-      siteIntel={{ open: siteIntelOpen, onToggle: () => undefined, icon: <span>s</span> }}
+      siteIntel={{
+        open: siteIntelOpen,
+        onToggle: () => undefined,
+        icon: <span>s</span>,
+        fold: fold ? { ...fold, chevron: <span className="insp-head-chevron" /> } : undefined,
+      }}
       rightChildren={<p>overview</p>}
       rightBelow={rightBelow}
     >
@@ -188,12 +199,13 @@ describe("right HUD stack", () => {
 });
 
 describe("Wind streaks slider", () => {
-  it("shows only in 3D with Wind Rose streaks running", () => {
-    const on = { tab: "3d", analysisKind: "wind" as const, windEnabled: true, planActive: false };
+  it("shows only in 3D with Wind Rose on and 3D Wind Flow running, with or without Solar Study", () => {
+    const on = { tab: "3d", analyses: analysesOf("wind"), windEnabled: true, planActive: false };
     expect(windStreaksSliderOn(on)).toBe(true);
+    expect(windStreaksSliderOn({ ...on, analyses: analysesOf("wind", "solar") })).toBe(true);
     expect(windStreaksSliderOn({ ...on, tab: "drawing" })).toBe(false);
     expect(windStreaksSliderOn({ ...on, windEnabled: false })).toBe(false);
-    expect(windStreaksSliderOn({ ...on, analysisKind: "solar" })).toBe(false);
+    expect(windStreaksSliderOn({ ...on, analyses: analysesOf("solar") })).toBe(false);
     expect(windStreaksSliderOn({ ...on, planActive: true })).toBe(false);
   });
 
@@ -304,5 +316,130 @@ describe("Site Intelligence chrome", () => {
 
   it("leaves the terrain error to the toast, not the inspector", () => {
     expect(css("src/components/model/ModelPageSidebarRight.tsx")).not.toContain("model.terrainError");
+  });
+});
+
+describe("Site Intelligence beside the Wind Rose card", () => {
+  it("folds to its 48px header when the Wind Rose card opens and unfolds when it closes", () => {
+    expect(siteIntelAutoFolded(true)).toBe(true);
+    expect(siteIntelAutoFolded(false)).toBe(false);
+    const hook = css("src/components/model/useModelPage.tsx");
+    expect(hook).toContain("useEffect(() => setSiteIntelFolded(siteIntelAutoFolded(windRoseOn)), [windRoseOn]);");
+    const folded = block(css("src/floating.css"), ".model .right-inspector.is-folded");
+    expect(folded).toMatch(/height: var\(--hud-card-head\);/);
+    expect(folded).toMatch(/flex: none;/);
+    expect(css("src/theme.css")).toMatch(/--hud-card-head: 48px;/);
+  });
+
+  it("shows only the header row while folded, and the row is the toggle", () => {
+    let toggles = 0;
+    const { container } = renderSidebar(true, windCard, { folded: true, onToggle: () => (toggles += 1) });
+    const stack = container.querySelector(".right-hud-stack")!;
+    expect([...stack.children].map((el) => el.className)).toEqual([
+      "right-inspector hud-card is-folded",
+      "wind-rose-analysis-card hud-card",
+    ]);
+    const inspector = stack.querySelector(".right-inspector")!;
+    expect(inspector.children).toHaveLength(1);
+    const head = screen.getByRole("button", { name: /Site Intelligence/ });
+    expect(head.getAttribute("aria-expanded")).toBe("false");
+    expect(inspector.querySelector(".sidebar-panel.is-right")).toBeNull();
+    fireEvent.click(head);
+    expect(toggles).toBe(1);
+  });
+
+  it("opens again by hand with the Wind Rose card still under it", () => {
+    const { container } = renderSidebar(true, windCard, { folded: false, onToggle: () => undefined });
+    expect(screen.getByRole("button", { name: /Site Intelligence/ }).getAttribute("aria-expanded")).toBe("true");
+    expect(container.querySelector(".right-inspector")!.className).toBe("right-inspector hud-card");
+    expect(container.querySelector(".right-inspector .sidebar-panel.is-right")).toBeTruthy();
+  });
+
+  it("stacks folded Site Intelligence, the Wind Rose card and Direct Sun Hours in one column", () => {
+    const { container } = renderSidebar(
+      true,
+      <>
+        {windCard}
+        <SunHoursLegendDock sunHoursGround={sunHoursState(500)} />
+      </>,
+      { folded: true, onToggle: () => undefined },
+    );
+    expect([...container.querySelector(".right-hud-stack")!.children].map((el) => el.className)).toEqual([
+      "right-inspector hud-card is-folded",
+      "wind-rose-analysis-card hud-card",
+      "sun-hours-hud-card hud-card",
+    ]);
+  });
+});
+
+describe("Wind Rose card size", () => {
+  const HEAD = 48;
+  const ROSE = 176;
+
+  it("caps the stack at the viewport minus 80", () => {
+    for (const vh of [800, 900]) {
+      const stack = { left: 962, right: 1266, top: RIGHT_HUD_TOP_PX, bottom: vh };
+      expect(rightHudMaxHeight(vh, stack, [])).toBe(vh - 80);
+    }
+    expect(block(css("src/floating.css"), ".model .right-hud-stack")).toMatch(
+      /max-height: var\(--right-hud-max-height, calc\(100vh - 68px - var\(--space-3\)\)\);/,
+    );
+    expect(css("src/theme.css")).toMatch(/--space-3: 12px;/);
+  });
+
+  it("never draws the rose under 176px and scrolls the card body instead of cutting it off", () => {
+    const index = css("src/index.css");
+    expect(css("src/theme.css")).toMatch(/--wind-rose-size: 176px;/);
+    const chart = block(index, ".wind-rose-chart");
+    expect(chart).toMatch(/min-width: var\(--wind-rose-size\);/);
+    expect(chart).toMatch(/flex: none;/);
+    expect(block(index, ".wind-rose-card-body")).toMatch(/overflow-y: auto;/);
+    expect(block(index, ".wind-rose-card-body")).toMatch(/min-height: 0;/);
+  });
+
+  it("leaves room for the whole rose at 1440x900 and 1280x800 with Site Intelligence folded", () => {
+    for (const vh of [900, 800]) {
+      const body = vh - 80 - HEAD - RIGHT_HUD_GAP_PX - HEAD;
+      expect(body, String(vh)).toBeGreaterThanOrEqual(ROSE);
+      expect(body - ROSE, String(vh)).toBeGreaterThan(300);
+    }
+  });
+});
+
+describe("Prevailing streams legend", () => {
+  const stats = {
+    period: "annual" as const,
+    totalHours: 1,
+    calmHours: 0,
+    calmPercent: 0,
+    sectorFrequency: [0.5, 0.3, 0, 0, 0, 0, 0, 0, 0.2, 0, 0, 0, 0, 0, 0, 0],
+    prevailingSector: 0,
+    prevailingLabel: "N",
+    prevailingMedianKmh: 12,
+    sectorSpeedBins: Array.from({ length: 16 }, (_, sector) =>
+      sector === 0 ? [0, 0.2, 0.3, 0, 0] : sector === 1 ? [0, 0.3, 0, 0, 0] : sector === 8 ? [0.1, 0.1, 0, 0, 0] : [0, 0, 0, 0, 0],
+    ),
+    speedBinEdgesMs: [0.4, 2, 4, 6, 8, 100],
+  };
+
+  it("lists each stream as From N · 3.6 m/s with a flat arrow swatch in its fill and no ink edge", () => {
+    const { container } = render(<PrevailingStreamsLegend streams={prevailingStreams(stats)} periodLabel="Annual" />);
+    const rows = [...container.querySelectorAll(".wind-streams-legend-row")];
+    expect(rows.map((row) => row.textContent)).toEqual(["From N · 4.2 m/s", "From NNE · 3.0 m/s", "From S · 2.1 m/s"]);
+    expect(screen.getByText("Prevailing streams")).toBeTruthy();
+    expect(screen.getByText("Annual")).toBeTruthy();
+    const paths = [...container.querySelectorAll(".wind-streams-legend-swatch path")];
+    expect(paths.map((p) => p.getAttribute("fill"))).toEqual([
+      "var(--wind-stream-1)",
+      "var(--wind-stream-2)",
+      "var(--wind-stream-3)",
+    ]);
+    for (const p of paths) expect(p.hasAttribute("stroke")).toBe(false);
+    expect(css("src/index.css")).not.toMatch(/wind-streams-legend-swatch[^}]*stroke/);
+  });
+
+  it("renders nothing when there are no streams", () => {
+    const { container } = render(<PrevailingStreamsLegend streams={[]} periodLabel="Annual" />);
+    expect(container.firstChild).toBeNull();
   });
 });

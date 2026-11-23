@@ -20,6 +20,8 @@ import type { SiteWindSelection } from "./windRoseData";
 import { analyzeSiteWind, stackedSectorArmLength } from "./windRoseStats";
 import { plainDataCredit } from "./dataCredits";
 import { windFlowArrowPolylines } from "./windArrowGeometry";
+import { layoutStreamFans, streamPlaneY, streamSite } from "./windDiagramStreams";
+import type { PrevailingStream } from "./windPrevailingStreams";
 import { dashSegments } from "./drawingStyle";
 import { stableExportModel } from "./exportStableOrder";
 import { modelFrameSize } from "./modelFrame";
@@ -54,6 +56,8 @@ const BUILDING_LAYER_KEYS: Record<string, ColourKey> = {
   Unclassified: "--use-unclassified",
 };
 
+export const WIND_STREAKS_LAYER = "Wind streaks";
+
 export function rhinoLayerColourKeys(): Record<string, ColourKey | "contour"> {
   const keys: Record<string, ColourKey | "contour"> = {
     Buildings: "--building-uniform",
@@ -74,6 +78,10 @@ export function rhinoLayerColourKeys(): Record<string, ColourKey | "contour"> {
     "Sun path": "--sun-compass-label",
     Shadows: "--shadow-fill",
     Wind: "--wind-rose",
+    [WIND_STREAKS_LAYER]: "--wind-stream-1",
+    [`${WIND_STREAKS_LAYER}::Stream 1`]: "--wind-stream-1",
+    [`${WIND_STREAKS_LAYER}::Stream 2`]: "--wind-stream-2",
+    [`${WIND_STREAKS_LAYER}::Stream 3`]: "--wind-stream-3",
   };
   for (const use of BUILDING_USES) {
     const layer = BUILDING_USE_META[use].layer;
@@ -762,6 +770,52 @@ function addWindRose(
   }
 }
 
+export type WindStreakStillArrow = { layer: string; name: string; vertices: [number, number, number][]; faces: [number, number, number][] };
+
+export function windStreakStillArrows(model: CityModel, streams: readonly PrevailingStream[]): WindStreakStillArrow[] {
+  const z = streamPlaneY(model);
+  return layoutStreamFans(streams, streamSite(model)).flatMap((fan) =>
+    fan.arrows.map((arrow) => {
+      const vertices: [number, number, number][] = [];
+      for (let i = 0; i < arrow.positions.length; i += 2) vertices.push([arrow.positions[i]!, arrow.positions[i + 1]!, z]);
+      const faces: [number, number, number][] = [];
+      for (let i = 0; i < arrow.indices.length; i += 3) faces.push([arrow.indices[i]!, arrow.indices[i + 1]!, arrow.indices[i + 2]!]);
+      return { layer: `${WIND_STREAKS_LAYER}::Stream ${fan.rank + 1}`, name: "Wind streak", vertices, faces };
+    }),
+  );
+}
+
+function addWindStreaks(
+  rhino: Rhino,
+  doc: InstanceType<Rhino["File3dm"]>,
+  layers: Map<string, number>,
+  materials: Map<string, number>,
+  model: CityModel,
+  zone: number,
+  streams: readonly PrevailingStream[],
+) {
+  const palette = layerColors();
+  for (const arrow of windStreakStillArrows(model, streams)) {
+    const mesh = new rhino.Mesh();
+    const vertices = mesh.vertices();
+    vertices.useDoublePrecisionVertices = true;
+    for (const [east, north, z] of arrow.vertices) {
+      const [easting, northing] = projectLocal([east, north], model.center, zone);
+      (vertices as unknown as { addPoint3d(x: number, y: number, z: number): number }).addPoint3d(easting, northing, z);
+    }
+    const faces = mesh.faces();
+    for (const [a, b, c] of arrow.faces) faces.addTriFace(a, b, c);
+    mesh.normals().computeNormals();
+    const attributes = new rhino.ObjectAttributes();
+    attributes.name = arrow.name;
+    attributes.layerIndex = ensureLayer(rhino, doc, layers, materials, arrow.layer, palette[arrow.layer] ?? palette[WIND_STREAKS_LAYER]!);
+    applyByLayerAttributes(rhino, attributes);
+    doc.objects().addMesh(mesh, attributes);
+    release(mesh);
+    release(attributes);
+  }
+}
+
 function addContours(
   rhino: Rhino,
   doc: InstanceType<Rhino["File3dm"]>,
@@ -870,6 +924,7 @@ export type CityModelTo3dmOptions = {
   uniformBuildings?: boolean;
   colourBySource?: boolean;
   wind?: { selection: SiteWindSelection; period: WindPeriodId } | null;
+  windStreaks?: readonly PrevailingStream[] | null;
   hideTrees?: boolean;
   importedMassing?: ImportedMassingExport[] | null;
   /**
@@ -936,6 +991,7 @@ function normalize3dmOptions(
     "shadows" in options ||
     "uniformBuildings" in options ||
     "wind" in options ||
+    "windStreaks" in options ||
     "hideTrees" in options ||
     "importedMassing" in options ||
     "buildingsAsMesh" in options ||
@@ -1002,6 +1058,7 @@ export async function cityModelTo3dm(
     uniformBuildings,
     colourBySource,
     wind,
+    windStreaks,
     hideTrees,
     importedMassing,
     buildingsAsMesh,
@@ -1037,6 +1094,7 @@ export async function cityModelTo3dm(
     if (heliodon) addHeliodonPlan(rhino, doc, layers, materials, model, crsZone, heliodon);
     if (shadows) addPlanShadows(rhino, doc, layers, materials, model, crsZone, shadows, Boolean(castShadows));
     if (wind?.selection) addWindRose(rhino, doc, layers, materials, model, crsZone, wind.selection, wind.period);
+    if (windStreaks?.length) addWindStreaks(rhino, doc, layers, materials, model, crsZone, windStreaks);
     if (importedMassing?.length) addImportedMassing(rhino, doc, layers, materials, importedMassing);
 
     return doc.toByteArray();

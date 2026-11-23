@@ -84,7 +84,12 @@ export function Sidebar({
   headerCenter?: ReactNode;
   headerRight?: ReactNode;
   rightMeta?: ReactNode;
-  siteIntel?: { open: boolean; onToggle: () => void; icon: ReactNode };
+  siteIntel?: {
+    open: boolean;
+    onToggle: () => void;
+    icon: ReactNode;
+    fold?: { folded: boolean; onToggle: () => void; chevron: ReactNode };
+  };
   children: ReactNode;
   rightChildren?: ReactNode;
   rightBelow?: ReactNode;
@@ -93,6 +98,7 @@ export function Sidebar({
   const titleId = useId();
   const rightTitleId = useId();
   const resolvedRightId = rightId ?? `${id}-right`;
+  const inspectorFolded = siteIntel?.fold?.folded === true;
   const inspectorOn =
     (siteIntel?.open ?? true) && ((!narrow && rightItems && rightItems.length > 0) || rightChildren !== undefined);
 
@@ -298,12 +304,27 @@ export function Sidebar({
         {inspectorOn || rightBelow ? (
           <div className="right-hud-stack">
             {inspectorOn ? (
-              <div className="right-inspector hud-card">
-                <div className="insp-head">
-                  <span className="card-title">Site Intelligence</span>
-                  <span className="card-meta mono">{rightMeta}</span>
-                </div>
-                {!narrow && rightItems && rightItems.length > 0 ? (
+              <div className={inspectorFolded ? "right-inspector hud-card is-folded" : "right-inspector hud-card"}>
+                {siteIntel?.fold ? (
+                  <button
+                    type="button"
+                    className="insp-head insp-head-toggle"
+                    aria-expanded={!inspectorFolded}
+                    onClick={siteIntel.fold.onToggle}
+                  >
+                    <span className="card-title">Site Intelligence</span>
+                    <span className="insp-head-end">
+                      <span className="card-meta mono">{rightMeta}</span>
+                      {siteIntel.fold.chevron}
+                    </span>
+                  </button>
+                ) : (
+                  <div className="insp-head">
+                    <span className="card-title">Site Intelligence</span>
+                    <span className="card-meta mono">{rightMeta}</span>
+                  </div>
+                )}
+                {!inspectorFolded && !narrow && rightItems && rightItems.length > 0 ? (
                   <nav
                     className="sidebar-rail icon-rail is-right-rail insp-tabs"
                     role="toolbar"
@@ -314,7 +335,7 @@ export function Sidebar({
                     {rightItems.map((item) => renderRailButton(item, true))}
                   </nav>
                 ) : null}
-                {rightChildren !== undefined ? (
+                {!inspectorFolded && rightChildren !== undefined ? (
                   <section
                     id={resolvedRightId}
                     className="sidebar-panel is-right"

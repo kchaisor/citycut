@@ -956,6 +956,54 @@ input[type="range"]::-moz-range-thumb {
 .wind-rose-card-body:last-child {
   padding-bottom: var(--space-4);
 }
+.wind-streams-legend {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-4) 0 0;
+}
+.wind-streams-legend-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+.wind-streams-legend-title {
+  font-family: var(--sans);
+  font-size: var(--fs-micro);
+  line-height: var(--lh-micro);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.wind-streams-legend-meta {
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+  color: var(--ink-3);
+}
+.wind-streams-legend-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.wind-streams-legend-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+.wind-streams-legend-swatch {
+  flex: none;
+}
+.wind-streams-legend.is-muted .wind-streams-legend-swatch {
+  opacity: 0.4;
+}
 .wind-streaks {
   flex: none;
   margin: 0 var(--space-4);
@@ -1136,7 +1184,9 @@ input[type="range"]::-moz-range-thumb {
 }
 .wind-rose-chart {
   position: relative;
+  flex: none;
   width: min(var(--wind-rose-view-w), 100%);
+  min-width: var(--wind-rose-size);
   margin: var(--space-3) auto 0;
 }
 .wind-rose-panel-svg {

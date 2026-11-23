@@ -14,7 +14,7 @@ import { sceneSelectionBuildingId } from "../../lib/sceneInspectPick";
 import { qaHideHeightPopoverFromSearch } from "../../lib/qaCameraBridge";
 import { sunStudyMutedOn, toggleSelection } from "../../lib/sunStudyPlan";
 import { SceneBoundary } from "../SceneBoundary";
-import { solarSettingsForActiveAnalysis, solarStudyViewActive, windFlowActive } from "../../lib/solarStudyView";
+import { solarSettingsForActiveAnalysis, solarStudyViewActive, windDiagramActive, windFlowActive } from "../../lib/solarStudyView";
 import { ViewLegend } from "../ViewPanel";
 
 
@@ -23,7 +23,7 @@ import { shouldShowIntroBridgePill } from "./shouldShowIntroBridgePill";
 
 export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").ModelPageViewModel }) {
   const {
-    analysisKind,
+    analyses,
     axoSettings,
     cameraMemory,
     introPlayed,
@@ -95,6 +95,8 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
     walk,
     walkDrawing,
     windMotion,
+    windStreams,
+    windStreaksOn,
     windSettings,
     designWind,
     windPlan,
@@ -154,13 +156,14 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
                 corner={view.corner}
                 freeRotate={view.freeRotate}
                 snapId={snapId}
-                solar={solarSettingsForActiveAnalysis(solar, analysisKind)}
-                windEnabled={windFlowActive(windSettings.enabled, analysisKind)}
+                solar={solarSettingsForActiveAnalysis(solar, analyses)}
+                windEnabled={windFlowActive(windSettings.enabled, analyses)}
                 siteWind={siteWind}
                 windPeriod={windSettings.period}
                 windDesignWind={designWind}
                 windSector={windPlan.sector}
                 windAnimateStreaks={windMotion.animateStreaks}
+                windDiagramStreams={windDiagramActive(windStreaksOn, analyses) ? windStreams : null}
                 windPlan={windPlan.active ? windPlan : null}
                 onExportReady={onExportReady}
                 onSceneInspectPick={(selection) => {
@@ -199,7 +202,7 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
                 sunHoursGroundGrid={solar.sunHours ? sunHoursGround.grid : null}
                 sunHoursDirectOverlay={solar.sunHours ? sunHoursGround.overlay : null}
                 sunHoursScaleMax={solar.sunHours ? sunHoursGround.scaleMaxHours : 0}
-                solarAnalysisActive={solarStudyViewActive(analysisKind)}
+                solarAnalysisActive={solarStudyViewActive(analyses)}
                 landmarkSources={landmarkSources}
                 landmarkLabelsOn={landmarkLabelsOn}
                 onLandmarkScreens={setLandmarkScreens}

@@ -1,4 +1,4 @@
-import { Download, PanelRight, RotateCcw } from "lucide-react";
+import { ChevronDown, Download, PanelRight, RotateCcw } from "lucide-react";
 import { StudioCompass } from "../StudioCompass";
 import { studioCompassVisible } from "../../lib/studioCompass";
 import { Sidebar } from "../Sidebar";
@@ -17,7 +17,6 @@ import { ModelPageSidebarLeftA } from "./ModelPageSidebarLeftA";
 import { ModelPageSidebarLeftB } from "./ModelPageSidebarLeftB";
 import { ModelPageSidebarRight } from "./ModelPageSidebarRight";
 import { WindRoseHudCard } from "./WindRoseHudCard";
-import { windRoseCardOn } from "./windRoseCard";
 import { SunHoursLegendDock } from "./SunHoursLegendDock";
 import { sunHoursLegendCardOn } from "./sunHoursLegendCard";
 
@@ -69,7 +68,7 @@ export function ModelPageSidebar({ vm }: { vm: import("./useModelPage").ModelPag
     topbarExportTriggerRef,
     view,
   } = vm;
-  const windRoseOn = windRoseCardOn({ tab, analysisKind: vm.analysisKind, siteWind: vm.siteWind });
+  const { windRoseOn, siteIntelFolded, setSiteIntelFolded } = vm;
   const sunHoursLegendOn = sunHoursLegendCardOn({
     tab,
     drawing,
@@ -99,6 +98,13 @@ export function ModelPageSidebar({ vm }: { vm: import("./useModelPage").ModelPag
               open: siteIntelOpen,
               onToggle: () => setSiteIntelOpen(!siteIntelOpen),
               icon: <PanelRight size={16} strokeWidth={1.75} aria-hidden="true" />,
+              fold: windRoseOn
+                ? {
+                    folded: siteIntelFolded,
+                    onToggle: () => setSiteIntelFolded(!siteIntelFolded),
+                    chevron: <ChevronDown className="insp-head-chevron" size={16} strokeWidth={1.75} aria-hidden="true" />,
+                  }
+                : undefined,
             }}
             rightMeta={`MGA${mgaCrs(model.center.lon).zone}`}
             rightBelow={

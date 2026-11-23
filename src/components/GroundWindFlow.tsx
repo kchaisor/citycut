@@ -104,11 +104,6 @@ void main() {
 }
 `;
 
-function reducedMotionPreferred(): boolean {
-  if (typeof window === "undefined" || typeof window.matchMedia !== "function") return false;
-  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-}
-
 function createStreakGeometry(count: number) {
   const geometry = new THREE.BufferGeometry();
   const vertices = new Float32Array(count * GROUND_WIND_VERTS_PER_STREAK * GROUND_WIND_VERTEX_STRIDE);
@@ -169,7 +164,7 @@ export function GroundWindFlow({
     stats?.prevailingMeanSpeedMs ? stats.prevailingMeanSpeedMs * 3.6 : stats?.prevailingMedianKmh,
   );
   const heightAt = useCallback((east: number, north: number) => groundWindHeightAt(model, east, north), [model]);
-  const frozen = !animate || reducedMotionPreferred();
+  const frozen = !animate;
   const density = useWindStreakDensity();
   const count = useMemo(() => groundWindStreakCount(model, density), [model, density]);
   const { geometry, data, vertices } = useMemo(() => createStreakGeometry(count), [count]);

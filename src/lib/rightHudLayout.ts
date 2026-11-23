@@ -2,6 +2,7 @@ export const RIGHT_HUD_TOP_PX = 68;
 export const RIGHT_HUD_RIGHT_PX = 14;
 export const RIGHT_HUD_WIDTH_PX = 304;
 export const RIGHT_HUD_GAP_PX = 12;
+export const RIGHT_HUD_BOTTOM_PX = 12;
 export const HUD_GUTTER_PX = 16;
 export const HUD_ISLAND_GAP_PX = 8;
 export const ENV_CONSOLE_EDGE_PX = 16;
@@ -23,12 +24,16 @@ function sized(box: HudBox | null): box is HudBox {
 }
 
 export function rightHudMaxHeight(viewportHeight: number, stack: HudBox, below: readonly (HudBox | null)[]): number {
-  let floor = viewportHeight - HUD_GUTTER_PX;
+  let floor = viewportHeight - RIGHT_HUD_BOTTOM_PX;
   for (const box of below) {
     if (!sized(box) || box.top <= stack.top || !overlapsX(box, stack, 0)) continue;
     floor = Math.min(floor, box.top - HUD_GUTTER_PX);
   }
   return Math.max(0, Math.floor(floor - stack.top));
+}
+
+export function leftOutlinerMaxHeight(consoleBox: HudBox, outliner: HudBox): number {
+  return Math.max(0, Math.floor(consoleBox.top - HUD_GUTTER_PX - outliner.top));
 }
 
 export function envConsoleLanes(

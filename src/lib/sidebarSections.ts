@@ -4,14 +4,28 @@ export type SidebarSectionId = (typeof SIDEBAR_SECTION_IDS)[number];
 
 export const SITE_ANALYSIS_KINDS = ["solar", "wind", "view"] as const;
 export type SiteAnalysisKind = (typeof SITE_ANALYSIS_KINDS)[number];
-export type ActiveAnalysis = SiteAnalysisKind | null;
+export type ActiveAnalyses = Readonly<Record<SiteAnalysisKind, boolean>>;
+
+export const NO_ANALYSES: ActiveAnalyses = { solar: false, wind: false, view: false };
 
 export function isSiteAnalysisKind(id: string | null | undefined): id is SiteAnalysisKind {
   return Boolean(id && (SITE_ANALYSIS_KINDS as readonly string[]).includes(id));
 }
 
-export function toggleAnalysis(current: ActiveAnalysis, clicked: SiteAnalysisKind): ActiveAnalysis {
-  return current === clicked ? null : clicked;
+export function analysesOf(...kinds: SiteAnalysisKind[]): ActiveAnalyses {
+  return kinds.reduce<ActiveAnalyses>((set, kind) => ({ ...set, [kind]: true }), NO_ANALYSES);
+}
+
+export function toggleAnalysis(current: ActiveAnalyses, clicked: SiteAnalysisKind): ActiveAnalyses {
+  return { ...current, [clicked]: !current[clicked] };
+}
+
+export function withAnalysisOn(current: ActiveAnalyses, kind: SiteAnalysisKind): ActiveAnalyses {
+  return current[kind] ? current : { ...current, [kind]: true };
+}
+
+export function activeAnalysisKinds(current: ActiveAnalyses): SiteAnalysisKind[] {
+  return SITE_ANALYSIS_KINDS.filter((kind) => current[kind]);
 }
 
 export const LEFT_SIDEBAR_SECTION_IDS = ["drawing", "import", "exports"] as const;

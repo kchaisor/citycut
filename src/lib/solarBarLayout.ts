@@ -9,6 +9,13 @@ export const SOLAR_PLAY_PX = 43;
 export const SOLAR_SUN_BOUND_PX = 42;
 export const SOLAR_READOUT_PX = 96;
 export const SOLAR_SCRUBBER_FLOOR_PX = 192;
+export const ENV_CONSOLE_COMBINED_TOP_ROW_PX = 821;
+export const ENV_CONSOLE_WIND_ROW_PX = 759;
+export const ENV_CONSOLE_ROW_PX = 28;
+
+export function envConsoleRowFits(barWidth: number, rowContentPx: number): boolean {
+  return rowContentPx <= barWidth - ENV_CONSOLE_INSET_PX * 2;
+}
 
 export type SolarBottomRow = {
   wrapped: boolean;

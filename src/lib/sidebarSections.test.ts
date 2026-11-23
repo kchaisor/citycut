@@ -16,6 +16,10 @@ import {
   resolveRightSidebarSection,
   resolveSidebarSection,
   toggleAnalysis,
+  NO_ANALYSES,
+  activeAnalysisKinds,
+  analysesOf,
+  withAnalysisOn,
 } from "./sidebarSections";
 
 describe("sidebar sections", () => {
@@ -111,12 +115,22 @@ describe("left vs right sidebar panels", () => {
 });
 
 describe("analysis toggles", () => {
-  it("turns the active analysis off when clicked again and switches when another is clicked", () => {
-    expect(toggleAnalysis(null, "solar")).toBe("solar");
-    expect(toggleAnalysis("solar", "solar")).toBeNull();
-    expect(toggleAnalysis("solar", "wind")).toBe("wind");
-    expect(toggleAnalysis("wind", "wind")).toBeNull();
-    expect(toggleAnalysis("wind", "view")).toBe("view");
-    expect(toggleAnalysis("view", "view")).toBeNull();
+  it("turns each analysis on and off on its own, without touching the others", () => {
+    const solar = toggleAnalysis(NO_ANALYSES, "solar");
+    expect(solar).toEqual({ solar: true, wind: false, view: false });
+    const solarWind = toggleAnalysis(solar, "wind");
+    expect(solarWind).toEqual({ solar: true, wind: true, view: false });
+    expect(toggleAnalysis(solarWind, "view")).toEqual({ solar: true, wind: true, view: true });
+    expect(toggleAnalysis(solarWind, "solar")).toEqual({ solar: false, wind: true, view: false });
+    expect(toggleAnalysis(toggleAnalysis(solarWind, "solar"), "wind")).toEqual(NO_ANALYSES);
+    expect(NO_ANALYSES).toEqual({ solar: false, wind: false, view: false });
+  });
+
+  it("lists what is on in bar order and turns one on without turning it off again", () => {
+    expect(activeAnalysisKinds(NO_ANALYSES)).toEqual([]);
+    expect(activeAnalysisKinds(analysesOf("view", "solar"))).toEqual(["solar", "view"]);
+    const wind = analysesOf("wind");
+    expect(withAnalysisOn(wind, "wind")).toBe(wind);
+    expect(withAnalysisOn(wind, "solar")).toEqual({ solar: true, wind: true, view: false });
   });
 });

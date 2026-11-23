@@ -15,16 +15,16 @@ import {
   solarSliderSpan,
 } from "../../lib/solarSlider";
 import { SUN_STUDY_DATES } from "../../lib/solar";
-import { toggleAnalysis, type SiteAnalysisKind } from "../../lib/sidebarSections";
+import { activeAnalysisKinds, toggleAnalysis, type SiteAnalysisKind } from "../../lib/sidebarSections";
 import { solarSettingsOnStudyStart } from "../../lib/solarStudyView";
-import { WIND_PERIOD_LABELS, WindPeriodId } from "../../lib/windRose";
+import type { WindPeriodId } from "../../lib/windRose";
 import { withDesignWind, withWindSeason } from "../../lib/windState";
 import { DesignWindPresets } from "../DesignWindPresets";
 import { WindPlanSwitch } from "./WindPlanSwitch";
 
 export function ModelPageViewportFooter({ vm }: { vm: import("./useModelPage").ModelPageViewModel }) {
   const {
-    analysisKind,
+    analyses,
     commitRenderQuality,
     commitSolar,
     commitWind,
@@ -35,7 +35,8 @@ export function ModelPageViewportFooter({ vm }: { vm: import("./useModelPage").M
     drawing,
     model,
     renderQuality,
-    setAnalysisKind,
+    setAnalyses,
+    setWindStreaksOn,
     setConsolePlaying,
     setSunStudySelected,
     solar,
@@ -44,19 +45,24 @@ export function ModelPageViewportFooter({ vm }: { vm: import("./useModelPage").M
     walk,
     walkAt,
     windSettings,
+    windStreaksOn,
+    windMotion,
     windPlan,
     designWinds,
     designWind,
   } = vm;
-  const planWind = windPlan.active && analysisKind === "wind";
-  const solarChrome = analysisKind !== "wind" && analysisKind !== "view";
-  const solarLive = analysisKind === "solar";
+  const planWind = windPlan.active && analyses.wind;
+  const solarChrome = analyses.solar || (!analyses.wind && !analyses.view);
+  const solarLive = analyses.solar;
+  const combined = activeAnalysisKinds(analyses).length > 1;
   const toggleMode = (kind: SiteAnalysisKind) => {
-    const next = toggleAnalysis(analysisKind, kind);
-    setAnalysisKind(next);
-    if (next === "wind" && !windSettings.enabled) commitWind({ ...windSettings, enabled: true });
-    if (next !== "wind" && windSettings.enabled) commitWind({ ...windSettings, enabled: false });
-    if (next === "solar") commitSolar(solarSettingsOnStudyStart(solar));
+    const next = toggleAnalysis(analyses, kind);
+    setAnalyses(next);
+    if (kind === "wind") {
+      if (next.wind) setWindStreaksOn(true);
+      if (next.wind !== windSettings.enabled) commitWind({ ...windSettings, enabled: next.wind });
+    }
+    if (kind === "solar" && next.solar) commitSolar(solarSettingsOnStudyStart(solar));
   };
   const seasonActive = (periodId: WindPeriodId) => designWind == null && windSettings.period === periodId;
   const windTelemetry = (
@@ -86,16 +92,74 @@ export function ModelPageViewportFooter({ vm }: { vm: import("./useModelPage").M
     </div>
   );
 
+  const viewChips = (
+    <div className="overlay-chips" role="group" aria-label="Viewshed overlay toggles">
+      <button
+        type="button"
+        className={walk.drawing ? "ov-chip on" : "ov-chip"}
+        aria-pressed={walk.drawing}
+        onClick={() => walk.setDrawing(!walk.drawing)}
+      >
+        <span className="ov-dot" aria-hidden="true" />
+        <span>{walk.drawing ? "Drawing Path…" : "Draw Path"}</span>
+      </button>
+      <button
+        type="button"
+        className={walk.status === "ready" ? "ov-chip on" : "ov-chip"}
+        disabled={walk.sampleCount < 2 || walk.status === "computing"}
+        onClick={() => walk.compute()}
+      >
+        <span className="ov-dot" aria-hidden="true" />
+        <span>{walk.status === "ready" ? "Viewshed Ready" : "Compute View"}</span>
+      </button>
+    </div>
+  );
+  const windChips = (
+    <div className="env-wind-end">
+      <div className="overlay-chips" role="group" aria-label="Wind overlay toggles">
+        <button
+          type="button"
+          className={windSettings.enabled ? "ov-chip on" : "ov-chip"}
+          aria-pressed={windSettings.enabled}
+          onClick={() => commitWind({ ...windSettings, enabled: !windSettings.enabled })}
+        >
+          <span className="ov-dot" aria-hidden="true" />
+          <span>3D Wind Flow</span>
+        </button>
+        <button
+          type="button"
+          className={windStreaksOn ? "ov-chip on" : "ov-chip"}
+          aria-pressed={windStreaksOn}
+          onClick={() => setWindStreaksOn(!windStreaksOn)}
+        >
+          <span className="ov-dot" aria-hidden="true" />
+          <span>Wind streaks</span>
+        </button>
+      </div>
+      <button
+        type="button"
+        className="play-pill mono wind-play-pill"
+        aria-label={windMotion.paused ? "Play wind animation" : "Pause wind animation"}
+        data-wind-paused={windMotion.paused ? "true" : "false"}
+        disabled={!windSettings.enabled && !windStreaksOn}
+        onClick={() => windMotion.setPaused(!windMotion.paused)}
+      >
+        {windMotion.paused ? "▶ Play" : "❚❚ Pause"}
+      </button>
+    </div>
+  );
+
   return (
     <>
         {tab !== "satellite" ? (
           <div
-            className="bottom-bar env-console hud-card"
+            className={combined ? "bottom-bar env-console hud-card is-combined" : "bottom-bar env-console hud-card"}
             role="region"
             aria-label="Environmental analysis console"
-            data-analysis={analysisKind ?? "none"}
+            data-analysis={activeAnalysisKinds(analyses).join(" ") || "none"}
           >
             <div className="env-top-row">
+              <div className="env-top-main">
               <span className="env-console-title">Analysis</span>
               <span className="v-sep hud-sep" aria-hidden="true" />
               <div className="env-mode-seg" role="group" aria-label="Analysis modes">
@@ -110,8 +174,8 @@ export function ModelPageViewportFooter({ vm }: { vm: import("./useModelPage").M
                     key={kind}
                     type="button"
                     data-analysis={kind}
-                    aria-pressed={analysisKind === kind}
-                    className={analysisKind === kind ? "env-mode-btn active" : "env-mode-btn"}
+                    aria-pressed={analyses[kind]}
+                    className={analyses[kind] ? "env-mode-btn active" : "env-mode-btn"}
                     onClick={() => toggleMode(kind)}
                   >
                     <Icon size={12} strokeWidth={2.2} aria-hidden="true" />
@@ -218,9 +282,9 @@ export function ModelPageViewportFooter({ vm }: { vm: import("./useModelPage").M
               </div>
               )}
 
-              {analysisKind === "wind" && !planWind && windTelemetry}
+              {analyses.wind && !solarChrome && !planWind && windTelemetry}
 
-              {analysisKind === "view" && (
+              {analyses.view && !solarChrome && !analyses.wind && (
                 <div className="solar-telemetry mono" aria-label="Live viewshed telemetry">
                   <div className="st-item">
                     <span className="st-k">EYE</span>
@@ -239,51 +303,9 @@ export function ModelPageViewportFooter({ vm }: { vm: import("./useModelPage").M
                 </div>
               )}
 
-              {analysisKind && !planWind && !solarChrome && <span className="v-sep hud-sep" aria-hidden="true" />}
-
-              {planWind ? (
-                <WindPlanSwitch plan={windPlan} />
-              ) : analysisKind === "wind" || analysisKind === "view" ? (
-                <div className="overlay-chips" role="group" aria-label="Scene overlay toggles">
-                  {analysisKind === "wind" && (
-                    <>
-                      <button
-                        type="button"
-                        className={windSettings.enabled ? "ov-chip on" : "ov-chip"}
-                        aria-pressed={windSettings.enabled}
-                        onClick={() => commitWind({ ...windSettings, enabled: !windSettings.enabled })}
-                      >
-                        <span className="ov-dot" aria-hidden="true" />
-                        <span>3D Wind Flow</span>
-                      </button>
-                    </>
-                  )}
-
-                  {analysisKind === "view" && (
-                    <>
-                      <button
-                        type="button"
-                        className={walk.drawing ? "ov-chip on" : "ov-chip"}
-                        aria-pressed={walk.drawing}
-                        onClick={() => walk.setDrawing(!walk.drawing)}
-                      >
-                        <span className="ov-dot" aria-hidden="true" />
-                        <span>{walk.drawing ? "Drawing Path…" : "Draw Path"}</span>
-                      </button>
-                      <button
-                        type="button"
-                        className={walk.status === "ready" ? "ov-chip on" : "ov-chip"}
-                        disabled={walk.sampleCount < 2 || walk.status === "computing"}
-                        onClick={() => walk.compute()}
-                      >
-                        <span className="ov-dot" aria-hidden="true" />
-                        <span>{walk.status === "ready" ? "Viewshed Ready" : "Compute View"}</span>
-                      </button>
-                    </>
-                  )}
-
-                </div>
-              ) : null}
+              {planWind && !solarChrome ? <WindPlanSwitch plan={windPlan} /> : null}
+              {analyses.view && !solarChrome ? viewChips : null}
+              </div>
 
               <div className="env-quality" role="group" aria-label="Render quality">
                 {(
@@ -306,8 +328,8 @@ export function ModelPageViewportFooter({ vm }: { vm: import("./useModelPage").M
               </div>
             </div>
 
-            <div className="env-bottom-row">
-              {solarChrome && (
+            {solarChrome && (
+            <div className="env-bottom-row env-solar-row">
               <div
                 className={solarLive ? "env-solar-chrome env-solar-bottom" : "env-solar-chrome env-solar-bottom env-solar-idle"}
                 {...(!solarLive ? { inert: true } : {})}
@@ -430,10 +452,11 @@ export function ModelPageViewportFooter({ vm }: { vm: import("./useModelPage").M
                 );
               })()}
               </div>
-              )}
+            </div>
+            )}
 
-              {analysisKind === "wind" && (
-                <>
+              {analyses.wind && (
+                <div className="env-bottom-row env-wind-row">
                   <div className="date-presets" role="group" aria-label="Wind season presets">
                     {(["annual", "summer", "autumn", "winter", "spring"] as const).map((periodId) => (
                       <button
@@ -460,30 +483,13 @@ export function ModelPageViewportFooter({ vm }: { vm: import("./useModelPage").M
                     selectedId={designWind?.id ?? null}
                     onSelect={(id) => commitWind(withDesignWind(windSettings, id))}
                   />
-                  {planWind ? (
-                    windTelemetry
-                  ) : (
-                    <div className="daylight-scrubber wind-console-bar mono">
-                      <span className="sun-bound">
-                        {designWind
-                          ? `Design wind ${designWind.label}`
-                          : (WIND_PERIOD_LABELS[windSettings.period as keyof typeof WIND_PERIOD_LABELS] ?? "Annual")}
-                      </span>
-                      <span className="time-readout-pill">
-                        🌬{" "}
-                        {designWind
-                          ? `${designWind.headingDeg}° · ${Math.round(designWind.stationMs * 3.6)} km/h`
-                          : consoleWindStats
-                            ? `${consoleWindStats.prevailingLabel} · ${Math.round(consoleWindStats.prevailingMedianKmh)} km/h`
-                            : "TMYx station wind"}
-                      </span>
-                    </div>
-                  )}
-                </>
+                  {planWind ? (solarChrome ? <WindPlanSwitch plan={windPlan} /> : windTelemetry) : windChips}
+                </div>
               )}
 
-              {analysisKind === "view" && (
-                <>
+              {analyses.view && (
+                <div className="env-bottom-row env-view-row">
+                  {solarChrome ? viewChips : null}
                   <button
                     type="button"
                     className="play-pill mono"
@@ -570,10 +576,8 @@ export function ModelPageViewportFooter({ vm }: { vm: import("./useModelPage").M
                       👁 {walk.sampleCount > 1 ? `${Math.round(walkAt.distanceM)}/${Math.round(walk.lengthM)}m · ` : ""}{walk.eyeM.toFixed(1)}m · {walk.radiusM}m
                     </span>
                   </div>
-                </>
+                </div>
               )}
-
-            </div>
           </div>
         ) : (
           <div className="bottom-bar studio-solar-bar hud-card" role="region" aria-label="Solar and camera controls">

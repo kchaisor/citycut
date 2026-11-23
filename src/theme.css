@@ -41,7 +41,7 @@
 
   --font-size-title: 28px;
 
-  --wind-rose-size: 168px;
+  --wind-rose-size: 176px;
 
   --shape-toggle-on-bg: #1A1916;
   --shape-toggle-on-text: #FFFCF8;
@@ -49,6 +49,8 @@
   --accent: #FFF500;
 
   --accent-ink: #1A1916;
+
+  --on-ink: #FFFFFF;
 
   --accent-edge: #1A1916;
 
