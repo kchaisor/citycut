@@ -66,7 +66,7 @@ function mount(live: { current: NamedViewSnapshot }, waitUntilReady?: (snapshot:
         applied.push(next);
         live.current = next;
       },
-      getExporter: () => ({ png: vi.fn(), viewportPng: png, shot: vi.fn() }),
+      getExporter: () => ({ png: vi.fn(), viewportPng: png, sheetFrame: vi.fn(() => null), shot: vi.fn() }),
       waitUntilReady,
       getWindSheetSource: () => ({ selection: WIND_SHEET_SELECTION, scaleMaxMs: 8, comfortShares: null }),
     }),
@@ -130,6 +130,9 @@ describe("useNamedViews", () => {
       ]),
     );
     expect(sheets.composeWindSheet.mock.calls[0]![1].siteName).toBe("Melbourne");
+    const sheetCalls = (png.mock.calls as unknown as Array<[{ crop?: unknown } | undefined]>).filter(([options]) => options?.crop);
+    expect(sheetCalls).toHaveLength(2);
+    expect(sheetCalls[0]![0]).toMatchObject({ transparent: true, crop: { aspect: expect.any(Number), minWidthPx: expect.any(Number) } });
     const entries = downloads.downloadBytes.mock.calls[0]![1] as Uint8Array;
     expect(entries.length).toBeGreaterThan(0);
     expect(applied.at(-1)).toEqual(snapshot("3d", "sw"));
@@ -137,12 +140,13 @@ describe("useNamedViews", () => {
 
   it("exports a non-wind view through the plain PNG path", async () => {
     const live = { current: snapshot("3d") };
-    const { hook } = mount(live);
+    const { hook, png } = mount(live);
     act(() => void hook.result.current.save("Axo"));
     act(() => hook.result.current.exportAll());
     await waitFor(() => expect(downloads.downloadBytes).toHaveBeenCalledTimes(1));
     expect(sheets.composeWindSheet).not.toHaveBeenCalled();
     expect(Array.from(downloads.downloadBytes.mock.calls[0]![1] as Uint8Array)).toEqual([1, 2, 3]);
+    expect(png).toHaveBeenCalledWith(undefined);
   });
 
   it("zips every view on Export all and skips non-3D views with a reason", async () => {
@@ -246,7 +250,7 @@ describe("useNamedViews with the exploded axo", () => {
           log.push(`apply:${next.exploded ? "exploded" : "assembled"}`);
           live.current = next;
         },
-        getExporter: () => ({ png: vi.fn(), viewportPng: png, shot: vi.fn() }),
+        getExporter: () => ({ png: vi.fn(), viewportPng: png, sheetFrame: vi.fn(() => null), shot: vi.fn() }),
       }),
     );
     live.current = exploded(120);

@@ -13,11 +13,11 @@ import {
   DEFAULT_WIND_ROSE_LAYOUT,
   WIND_ROSE_FREQUENCY_GUIDES,
   windRoseCardinalPositions,
-  windRoseGuideLabelPositions,
   windRoseStackedWedges,
 } from "./windRoseChart";
 import type { SiteWindSelection } from "./windRoseData";
 import { analyzeSiteWind } from "./windRoseStats";
+import { scaleBarLengthM, type SheetFrame } from "./sheetScale";
 import { windPrevailingBadge } from "../components/model/windRoseCard";
 
 export type SheetRect = { x: number; y: number; width: number; height: number };
@@ -46,14 +46,16 @@ const GRID_PX = 8;
 const MARGIN_UNITS = 9;
 const GUTTER_UNITS = 8;
 const COLUMN_SHARE = 0.25;
-const TITLE_UNITS = 14;
+const TITLE_UNITS = 20;
+const ROSE_SHARE = 0.8;
 const TYPE_RATIO = 1.25;
-const BASE_FONT_PX = 20;
+const BASE_FONT_PX = 22.5;
 const ROSE_EXTENT = 216;
 const ROSE_FONT_CARDINAL = 11;
-const ROSE_FONT_GUIDE = 8;
+const ROSE_FONT_CALM = 8;
 const WIND_BAND_COUNT = WIND_BAND_COLOUR_VARS.length;
 const CFD_NOTE = "Indicative only, not a CFD study";
+const ROSE_RINGS_KEY = `Rings ${WIND_ROSE_FREQUENCY_GUIDES.map((frac) => `${Math.round(frac * 100)}%`).join(" / ")}`;
 const REGIONAL_NOTE = "Regional station, not site wind";
 const COMFORT_LIMITS_MS = COMFORT_THRESHOLDS_MS.slice(0, COMFORT_CLASSES.length - 1);
 
@@ -86,7 +88,15 @@ export type WindSheetStyle = {
   mono: string;
 };
 
-export type WindSheetCapture = { source: CanvasImageSource; width: number; height: number };
+export type WindSheetCapture = { source: CanvasImageSource; width: number; height: number; frame: SheetFrame | null };
+
+export type WindSheetMetrics = { planLegendEnd: number; furniture: { top: number; bottom: number } | null; notesRule: number };
+
+export function windSheetCropOption(highQuality: boolean): { aspect: number; minWidthPx: number } {
+  const size = WIND_SHEET_SIZES[highQuality ? "highQuality" : "normal"];
+  const { main } = windSheetLayout(size.width, size.height);
+  return { aspect: main.width / main.height, minWidthPx: main.width };
+}
 
 export function isWindSheetView(snapshot: Pick<NamedViewSnapshot, "tab" | "view" | "analyses">): boolean {
   return snapshot.tab === "3d" && snapshot.view.projection === "plan" && snapshot.analyses.wind;
@@ -112,7 +122,8 @@ export function windSheetLayout(width: number, height: number): WindSheetLayout 
     height: contentHeight,
   };
   const titleHeight = Math.round(TITLE_UNITS * unit);
-  const rose: SheetRect = { x: column.x, y: column.y + titleHeight, width: column.width, height: column.width };
+  const roseSide = Math.round(column.width * ROSE_SHARE);
+  const rose: SheetRect = { x: Math.round(column.x + (column.width - roseSide) / 2), y: column.y + titleHeight, width: roseSide, height: roseSide };
   return { width, height, unit, margin, gutter, main, column, titleHeight, rose };
 }
 
@@ -273,17 +284,14 @@ function drawRose(pen: Pen, stats: WindPeriodStats): void {
   ctx.beginPath();
   ctx.arc(rose.cx, rose.cy, rose.hubR, 0, Math.PI * 2);
   ctx.fill();
-  const mono = `500 ${ROSE_FONT_GUIDE}px ${style.mono}`;
-  for (const guide of windRoseGuideLabelPositions(stats, rose)) {
-    text(pen, `${guide.pct}%`, guide.x, guide.y, mono, getColour("--wind-rose-h-label"), "center", "middle");
-  }
+  const mono = `500 ${ROSE_FONT_CALM}px ${style.mono}`;
   const marks = windRoseCardinalPositions(rose);
   const markFont = `600 ${ROSE_FONT_CARDINAL}px ${style.sans}`;
   text(pen, "N", marks.n.x, marks.n.y, markFont, getColour("--wind-rose-n-label"), "center", "middle");
   text(pen, "E", marks.e.x, marks.e.y, markFont, getColour("--wind-rose-h-label"), "center", "middle");
   text(pen, "S", marks.s.x, marks.s.y, markFont, getColour("--wind-rose-h-label"), "center", "middle");
   text(pen, "W", marks.w.x, marks.w.y, markFont, getColour("--wind-rose-h-label"), "center", "middle");
-  text(pen, "Calm", rose.cx, rose.cy - 4, `500 ${ROSE_FONT_GUIDE}px ${style.sans}`, getColour("--wind-calm-caption"), "center", "middle");
+  text(pen, "Calm", rose.cx, rose.cy - 4, `500 ${ROSE_FONT_CALM}px ${style.sans}`, getColour("--wind-calm-caption"), "center", "middle");
   text(pen, formatCalmPercent(stats.calmPercent), rose.cx, rose.cy + 6, mono, getColour("--wind-calm-caption"), "center", "middle");
   ctx.restore();
 }
@@ -352,6 +360,73 @@ function drawPlanLegend(pen: Pen, input: WindSheetInput, y: number): number {
   return cursor;
 }
 
+function drawNorthArrow(pen: Pen, cx: number, cy: number, northRad: number): void {
+  const { ctx, layout, style } = pen;
+  const half = layout.unit * 4;
+  const head = layout.unit * 2.5;
+  const wing = layout.unit * 1.25;
+  const labelGap = layout.unit + fontSizePx(layout, 0) / 2;
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.rotate(northRad);
+  ctx.strokeStyle = style.ink;
+  ctx.lineWidth = hairlinePx(layout) * 2;
+  ctx.beginPath();
+  ctx.moveTo(0, half);
+  ctx.lineTo(0, -half + head);
+  ctx.stroke();
+  ctx.fillStyle = style.ink;
+  ctx.beginPath();
+  ctx.moveTo(0, -half);
+  ctx.lineTo(wing, -half + head);
+  ctx.lineTo(-wing, -half + head);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+  const reach = half + labelGap;
+  text(pen, "N", cx + Math.sin(northRad) * reach, cy - Math.cos(northRad) * reach, pen.fonts.sans(0, 700), style.ink, "center", "middle");
+}
+
+function drawScaleBar(pen: Pen, x: number, centreY: number, lengthPx: number, lengthM: number): void {
+  const { ctx, layout, style, fonts } = pen;
+  const thickness = Math.round(layout.unit);
+  const top = Math.round(centreY - thickness);
+  const segments = 4;
+  const segment = lengthPx / segments;
+  ctx.lineWidth = hairlinePx(layout);
+  ctx.strokeStyle = style.ink;
+  for (let k = 0; k < segments; k++) {
+    ctx.fillStyle = k % 2 === 0 ? style.ink : style.page;
+    ctx.fillRect(x + k * segment, top, segment, thickness);
+  }
+  ctx.strokeRect(x, top, lengthPx, thickness);
+  const labelY = top + thickness + Math.round(layout.unit * 0.75) + fontSizePx(layout, -1);
+  text(pen, "0", x, labelY, fonts.mono(-1), style.ink, "center");
+  text(pen, `${lengthM} m`, x + lengthPx, labelY, fonts.mono(-1), style.ink, "center");
+}
+
+function furnitureHeight(layout: WindSheetLayout): number {
+  return 2 * (layout.unit * 4 + layout.unit + fontSizePx(layout, 0) / 2);
+}
+
+function drawFurniture(pen: Pen, image: SheetRect, frame: SheetFrame | null, top: number): void {
+  if (!frame) return;
+  const { layout } = pen;
+  const column = layout.column;
+  const height = furnitureHeight(layout);
+  const centreY = top + height / 2;
+  let x = column.x;
+  if (frame.northRad != null) {
+    drawNorthArrow(pen, column.x + height / 2, centreY, frame.northRad);
+    x += height + Math.round(layout.unit * 3);
+  }
+  const lengthM = scaleBarLengthM(frame.metresAcross);
+  const lengthPx = (lengthM / frame.metresAcross) * image.width;
+  pen.ctx.font = pen.fonts.mono(-1);
+  const reserve = pen.ctx.measureText(`${lengthM} m`).width / 2;
+  if (lengthM > 0 && x + lengthPx + reserve <= column.x + column.width) drawScaleBar(pen, x, centreY, lengthPx, lengthM);
+}
+
 export function drawWindSheet(
   ctx: CanvasRenderingContext2D,
   layout: WindSheetLayout,
@@ -359,7 +434,7 @@ export function drawWindSheet(
   input: WindSheetInput,
   style: WindSheetStyle,
   options: { transparent: boolean },
-): void {
+): WindSheetMetrics {
   const pen: Pen = { ctx, layout, style, fonts: fontsFor(layout, style) };
   const { column, main, unit } = layout;
   const { fonts } = pen;
@@ -373,13 +448,18 @@ export function drawWindSheet(
   ctx.lineWidth = hairlinePx(layout);
   ctx.strokeRect(image.x - 0.5, image.y - 0.5, image.width + 1, image.height + 1);
 
-  const titleSize = fontSizePx(layout, 3);
-  text(pen, input.siteName, column.x, column.y + titleSize, fonts.sans(3, 600), style.ink);
-  paragraph(pen, input.viewName, column.x, column.y + Math.round(titleSize * 1.35), column.width, fonts.sans(1), style.inkMuted, 1);
+  let titleSize = fontSizePx(layout, 4);
+  ctx.font = fonts.sans(4, 700);
+  const titleWidth = ctx.measureText(input.siteName).width;
+  if (titleWidth > column.width) titleSize = Math.floor((titleSize * column.width) / titleWidth);
+  text(pen, input.siteName, column.x, column.y + titleSize, `700 ${titleSize}px ${style.sans}`, style.ink);
+  paragraph(pen, input.viewName, column.x, column.y + Math.round(titleSize * 1.3), column.width, fonts.sans(1), style.inkMuted, 1);
 
   drawRose(pen, input.stats);
 
-  let cursor = layout.rose.y + layout.rose.height + Math.round(unit);
+  let cursor = layout.rose.y + layout.rose.height;
+  text(pen, ROSE_RINGS_KEY, column.x + column.width, cursor + fontSizePx(layout, -1), fonts.mono(-1), style.inkMuted, "right");
+  cursor += Math.round(unit);
   text(pen, input.seasonTimeLabel, column.x, cursor + fontSizePx(layout, 1), fonts.sans(1, 600), style.ink);
   cursor += Math.round(fontSizePx(layout, 1) * 1.6);
   text(pen, input.prevailing, column.x, cursor + fontSizePx(layout, 0), fonts.mono(0, 600), style.ink);
@@ -395,18 +475,28 @@ export function drawWindSheet(
 
   cursor += Math.round(unit * 2);
   rule(pen, cursor);
-  drawPlanLegend(pen, input, cursor + Math.round(unit * 2));
+  const planLegendEnd = drawPlanLegend(pen, input, cursor + Math.round(unit * 2));
 
   const noteLine = Math.round(fontSizePx(layout, -1) * 1.5);
   ctx.font = fonts.sans(-1);
   const stationLines = wrapText(ctx, input.stationLine, column.width);
   const notes = [...stationLines, input.sourceLine, REGIONAL_NOTE, CFD_NOTE];
   const notesTop = column.y + column.height - notes.length * noteLine;
-  rule(pen, notesTop - Math.round(unit * 2));
+  const notesRule = notesTop - Math.round(unit * 2);
+  rule(pen, notesRule);
   notes.forEach((line, index) => {
     const colour = line === CFD_NOTE ? style.ink : style.inkMuted;
     text(pen, line, column.x, notesTop + index * noteLine + fontSizePx(layout, -1), fonts.sans(-1), colour);
   });
+
+  const height = furnitureHeight(layout);
+  const furnitureTop = notesRule - Math.round(unit * 2) - height;
+  const fits = capture.frame != null && furnitureTop - Math.round(unit * 2) >= planLegendEnd + Math.round(unit);
+  if (fits) {
+    rule(pen, furnitureTop - Math.round(unit * 2));
+    drawFurniture(pen, image, capture.frame, furnitureTop);
+  }
+  return { planLegendEnd, furniture: fits ? { top: furnitureTop, bottom: furnitureTop + height } : null, notesRule };
 }
 
 async function loadSheetFonts(style: WindSheetStyle, layout: WindSheetLayout): Promise<void> {
@@ -419,7 +509,7 @@ async function loadSheetFonts(style: WindSheetStyle, layout: WindSheetLayout): P
 export async function composeWindSheet(
   capture: Blob,
   input: WindSheetInput,
-  options: { highQuality: boolean },
+  options: { highQuality: boolean; frame: SheetFrame | null },
 ): Promise<Uint8Array> {
   const size = WIND_SHEET_SIZES[options.highQuality ? "highQuality" : "normal"];
   const layout = windSheetLayout(size.width, size.height);
@@ -432,7 +522,7 @@ export async function composeWindSheet(
     canvas.height = size.height;
     const ctx = canvas.getContext("2d");
     if (!ctx) throw new Error("Could not prepare the wind sheet.");
-    drawWindSheet(ctx, layout, { source: bitmap, width: bitmap.width, height: bitmap.height }, input, style, {
+    drawWindSheet(ctx, layout, { source: bitmap, width: bitmap.width, height: bitmap.height, frame: options.frame }, input, style, {
       transparent: options.highQuality,
     });
     const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));

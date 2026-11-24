@@ -19,7 +19,7 @@ import {
   type NamedViewsStore,
 } from "../../lib/namedViews";
 import { HQ_DEFAULT_SCALE as HQ_EXPORT_SCALE } from "../../lib/captureViewportPng";
-import { composeWindSheet, isWindSheetView, windSheetInput, type WindSheetSource } from "../../lib/windSheet";
+import { composeWindSheet, isWindSheetView, windSheetCropOption, windSheetInput, type WindSheetSource } from "../../lib/windSheet";
 import { zipStore, type ZipEntry } from "../../lib/zip";
 import type { CityModel } from "../../types";
 import type { SceneExporter } from "../Scene3D";
@@ -111,14 +111,17 @@ export function useNamedViews({ model, getSnapshot, applySnapshot, getExporter, 
           await settle(snapshot, waitUntilReady);
           const exporter = getExporter();
           if (!exporter) throw new Error("The 3D view is not ready.");
-          const blob = await exporter.viewportPng(highQuality ? { transparent: true, scale: HQ_EXPORT_SCALE } : undefined);
           const sheet =
             getWindSheetSource && isWindSheetView(snapshot)
               ? windSheetInput(getWindSheetSource(), snapshot, model.placeLabel, view.name)
               : null;
-          const bytes = sheet
-            ? await composeWindSheet(blob, sheet, { highQuality })
-            : new Uint8Array(await blob.arrayBuffer());
+          const crop = sheet ? windSheetCropOption(highQuality) : null;
+          const base = highQuality ? { transparent: true, scale: HQ_EXPORT_SCALE } : undefined;
+          const blob = await exporter.viewportPng(crop ? { ...base, crop } : base);
+          const bytes =
+            sheet && crop
+              ? await composeWindSheet(blob, sheet, { highQuality, frame: exporter.sheetFrame(crop) })
+              : new Uint8Array(await blob.arrayBuffer());
           entries.push({ name: names[index]!, bytes });
         }
         if (entries.length === 1) downloadBytes(entries[0]!.name, entries[0]!.bytes, "image/png");

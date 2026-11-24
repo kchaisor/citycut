@@ -7,6 +7,7 @@ import {
   drawWindSheet,
   isWindSheetView,
   windSheetInput,
+  windSheetCropOption,
   windSheetLayout,
   type WindSheetStyle,
 } from "./windSheet";
@@ -92,6 +93,18 @@ describe("windSheetLayout", () => {
   });
 });
 
+describe("windSheetCropOption", () => {
+  it("asks for the main area's aspect and pixel width, bigger for high quality", () => {
+    const normal = windSheetCropOption(false);
+    const hq = windSheetCropOption(true);
+    const main = windSheetLayout(2480, 1754).main;
+    expect(normal.aspect).toBeCloseTo(main.width / main.height, 6);
+    expect(normal.minWidthPx).toBe(main.width);
+    expect(hq.minWidthPx).toBeGreaterThan(normal.minWidthPx * 1.9);
+    expect(hq.aspect).toBeCloseTo(normal.aspect, 2);
+  });
+});
+
 describe("drawWindSheet", () => {
   it("draws the site, view, season and time, prevailing, calm, station, source and CFD lines", () => {
     vi.stubGlobal("Path2D", class {});
@@ -99,7 +112,7 @@ describe("drawWindSheet", () => {
     expect(input).not.toBeNull();
     const { ctx, texts } = stubContext();
     const layout = windSheetLayout(2480, 1754);
-    drawWindSheet(ctx, layout, { source: {} as CanvasImageSource, width: 1200, height: 800 }, input!, STYLE, { transparent: false });
+    drawWindSheet(ctx, layout, { source: {} as CanvasImageSource, width: 1200, height: 800, frame: null }, input!, STYLE, { transparent: false });
     expect(texts).toContain("Rozelle NSW");
     expect(texts).toContain("WS - Spring");
     expect(texts).toContain("Spring · Morning");
@@ -110,6 +123,61 @@ describe("drawWindSheet", () => {
     expect(texts).toContain("climate.onebuilding.org TMYx");
     expect(texts).toContain("Indicative only, not a CFD study");
     expect(texts).toEqual(expect.arrayContaining(["N", "E", "S", "W"]));
+  });
+
+  it("puts the ring percentages in a key under the rose, never as labels on the rose", () => {
+    vi.stubGlobal("Path2D", class {});
+    const input = windSheetInput({ selection: WIND_SHEET_SELECTION, scaleMaxMs: 8, comfortShares: null }, snapshot("spring", "morning"), "Rozelle NSW", "WS - Spring");
+    const { ctx, texts } = stubContext();
+    drawWindSheet(ctx, windSheetLayout(2480, 1754), { source: {} as CanvasImageSource, width: 1200, height: 800, frame: null }, input!, STYLE, { transparent: false });
+    expect(texts).toContain("Rings 33% / 66%");
+    expect(texts).not.toContain("33%");
+    expect(texts).not.toContain("66%");
+  });
+
+  it.each([
+    ["speed", 2480, 1754],
+    ["comfort", 2480, 1754],
+    ["speed", 4961, 3508],
+    ["comfort", 4961, 3508],
+  ] as const)("keeps the %s legend, scale bar and north arrow clear of the pinned notes at %i", (mode, width, height) => {
+    vi.stubGlobal("Path2D", class {});
+    const base = windSheetInput({ selection: WIND_SHEET_SELECTION, scaleMaxMs: 8, comfortShares: null }, snapshot("spring", "morning"), "Rozelle NSW", "WS - Spring - Morning");
+    const { ctx, texts } = stubContext();
+    const frame = { metresAcross: 1470, northRad: 0 };
+    const metrics = drawWindSheet(ctx, windSheetLayout(width, height), { source: {} as CanvasImageSource, width: 1600, height: 1100, frame }, { ...base!, mode }, STYLE, { transparent: false });
+    expect(metrics.furniture).not.toBeNull();
+    expect(metrics.furniture!.top).toBeGreaterThan(metrics.planLegendEnd);
+    expect(metrics.furniture!.bottom).toBeLessThan(metrics.notesRule);
+    expect(texts).toContain("250 m");
+    expect(texts).toContain("0");
+  });
+
+  it("skips the scale bar and north arrow when the camera gives no frame", () => {
+    vi.stubGlobal("Path2D", class {});
+    const input = windSheetInput({ selection: WIND_SHEET_SELECTION, scaleMaxMs: 8, comfortShares: null }, snapshot("spring", "morning"), "Rozelle NSW", "WS");
+    const { ctx, texts } = stubContext();
+    const metrics = drawWindSheet(ctx, windSheetLayout(2480, 1754), { source: {} as CanvasImageSource, width: 1600, height: 1100, frame: null }, input!, STYLE, { transparent: false });
+    expect(metrics.furniture).toBeNull();
+    expect(texts.some((value) => / m$/.test(value))).toBe(false);
+  });
+
+  it("sets the minimum text at 18 px on a 2480 px sheet and scales it with the sheet", () => {
+    vi.stubGlobal("Path2D", class {});
+    const fonts: string[] = [];
+    const input = windSheetInput({ selection: WIND_SHEET_SELECTION, scaleMaxMs: 8, comfortShares: null }, snapshot("spring", "morning"), "Rozelle NSW", "WS");
+    const { ctx } = stubContext();
+    const tracked = new Proxy(ctx, {
+      set: (target, key, value) => {
+        if (key === "font") fonts.push(String(value));
+        (target as unknown as Record<string | symbol, unknown>)[key] = value;
+        return true;
+      },
+    });
+    drawWindSheet(tracked, windSheetLayout(2480, 1754), { source: {} as CanvasImageSource, width: 1600, height: 1100, frame: { metresAcross: 1470, northRad: 0 } }, input!, STYLE, { transparent: false });
+    const sizes = fonts.map((font) => Number(/(\d+)px/.exec(font)?.[1])).filter((n) => n > 0);
+    expect(Math.min(...sizes.filter((n) => n > 12))).toBe(18);
+    expect(Math.max(...sizes)).toBeGreaterThanOrEqual(55);
   });
 
   it("uses each view's own period and daypart and returns null without wind data", () => {

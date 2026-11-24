@@ -135,7 +135,8 @@ import type { PrevailingStream } from "../lib/windPrevailingStreams";
 import { createWindPlanTransformStore, WindPlanOverlay, WindPlanProjector } from "./WindPlanOverlay";
 import type { WindPlanState } from "./useWindPlan";
 import { InspectHudProjector, type InspectHudScreen } from "./InspectHudProjector";
-import { captureViewportPng, readViewportCapture, type ViewportPngOptions } from "../lib/captureViewportPng";
+import { captureViewportPng, readViewportCapture, sheetCropRect, type ViewportPngOptions } from "../lib/captureViewportPng";
+import { planSheetFrame, type SheetFrame } from "../lib/sheetScale";
 import { LandmarkLabelProjector, type LandmarkExportLabels, type LandmarkScreenState } from "./LandmarkLabelProjector";
 import type { LandmarkLabelSource } from "../lib/landmarkLabels";
 import type { WindPeriodId } from "../lib/windRose";
@@ -178,6 +179,7 @@ const NO_LANDMARKS: readonly LandmarkLabelSource[] = [];
 export type SceneExporter = {
   png: () => Promise<Blob>;
   viewportPng: (options?: ViewportPngOptions) => Promise<Blob>;
+  sheetFrame: (crop: { aspect: number; minWidthPx: number }) => SheetFrame | null;
   shot: () => CameraShot;
 };
 
@@ -2575,6 +2577,14 @@ function ExportBridge({
         return render();
       },
       viewportPng: (options) => captureViewportPng(gl, scene, get().camera, readViewportCapture(gl.domElement), options),
+      sheetFrame: (crop) => {
+        const canvas = gl.domElement;
+        const cssWidth = canvas.clientWidth || canvas.width;
+        const cssHeight = canvas.clientHeight || canvas.height;
+        const free = readViewportCapture(canvas).crop ?? { x: 0, y: 0, width: cssWidth, height: cssHeight };
+        const rect = sheetCropRect({ width: cssWidth, height: cssHeight }, free, crop.aspect);
+        return planSheetFrame(get().camera, cssHeight, rect.width);
+      },
       shot: () => {
         const frame = exportFrameSize(gl.domElement);
         return shotFromCamera(cameraForExportFrame(get().camera, frame.width, frame.height), frame.width, frame.height);
