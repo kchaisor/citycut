@@ -1,5 +1,6 @@
 import { sunStudyDateText } from "../../lib/sunStudyExport";
 import { ImportMassingPanel } from "../ImportMassingPanel";
+import { NamedViewsPanel } from "../NamedViewsPanel";
 import { ExportTiles } from "../ExportTiles";
 import { CRS_NOTE } from "../../lib/crsZone";
 import { exportTiles } from "../../lib/exportTiles";
@@ -16,6 +17,7 @@ export function ModelPageSidebarLeftB({ vm }: { vm: import("./useModelPage").Mod
     layerBits,
     leftOpen,
     massing,
+    namedViews,
     sceneSelection,
     selectImportedBuilding,
     planScaleOptions,
@@ -62,6 +64,20 @@ export function ModelPageSidebarLeftB({ vm }: { vm: import("./useModelPage").Mod
                 onSelectBuilding={selectImportedBuilding}
                 onColour={massing.setColour}
                 onRemove={massing.remove}
+              />
+            </div>
+
+            <div className="drawer-section" hidden={leftOpen !== "views"}>
+              <NamedViewsPanel
+                views={namedViews.views}
+                busy={namedViews.busy}
+                warning={namedViews.warning}
+                onSave={namedViews.save}
+                onRestore={namedViews.restore}
+                onRename={namedViews.rename}
+                onDelete={namedViews.remove}
+                onExportSelected={namedViews.exportSelected}
+                onExportAll={namedViews.exportAll}
               />
             </div>
 

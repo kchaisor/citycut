@@ -91,6 +91,7 @@ describe("WindPlanRows water note", () => {
     dirLabel: "W",
     selectSector: () => {},
     stepSector: () => {},
+    restoreSector: () => {},
     sectorReferenceMs: () => null,
     referenceMs: 3.4,
     hasData: true,

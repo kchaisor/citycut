@@ -37,6 +37,7 @@ describe("sidebar sections", () => {
       "trees",
       "drawing",
       "import",
+      "views",
       "exports",
     ]);
     expect(availableSidebarSections({ buildings: false, trees: false })).toEqual([
@@ -45,6 +46,7 @@ describe("sidebar sections", () => {
       "trees",
       "drawing",
       "import",
+      "views",
       "exports",
     ]);
     expect(availableSidebarSections({ buildings: false, trees: true })).toContain("trees");
@@ -98,7 +100,7 @@ describe("Display section label", () => {
 
 describe("left vs right sidebar panels", () => {
   it("splits left-hand tools (Display, Import, Export) from right-hand panels (Model details, Buildings, Trees)", () => {
-    expect(LEFT_SIDEBAR_SECTION_IDS).toEqual(["drawing", "import", "exports"]);
+    expect(LEFT_SIDEBAR_SECTION_IDS).toEqual(["drawing", "import", "views", "exports"]);
     expect(RIGHT_SIDEBAR_SECTION_IDS).toEqual(["summary", "buildings", "trees"]);
     expect(isRightSidebarSection("summary")).toBe(true);
     expect(isRightSidebarSection("buildings")).toBe(true);
@@ -109,6 +111,9 @@ describe("left vs right sidebar panels", () => {
     expect(isLeftSidebarSection("drawing")).toBe(true);
     expect(isLeftSidebarSection("analysis")).toBe(false);
     expect(isLeftSidebarSection("import")).toBe(true);
+    expect(isLeftSidebarSection("views")).toBe(true);
+    expect(isRightSidebarSection("views")).toBe(false);
+    expect(SIDEBAR_SECTION_LABELS.views).toBe("Views");
     expect(isLeftSidebarSection("exports")).toBe(true);
     expect(isLeftSidebarSection("summary")).toBe(false);
   });

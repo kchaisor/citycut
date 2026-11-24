@@ -53,6 +53,7 @@ export type WindPlanState = {
   designWind: DesignWind | null;
   dirLabel: string;
   selectSector: (sector: number) => void;
+  restoreSector: (period: WindPeriodId, sector: number | null) => void;
   stepSector: (delta: number) => void;
   sectorReferenceMs: (sector: number) => number | null;
   referenceMs: number | null;
@@ -171,6 +172,10 @@ export function useWindPlan({
     [period, designWind, clearDesignWind],
   );
 
+  const restoreSector = useCallback((at: WindPeriodId, next: number | null) => {
+    setOverride(next == null ? null : { period: at, sector: ((next % WIND_SECTOR_COUNT) + WIND_SECTOR_COUNT) % WIND_SECTOR_COUNT });
+  }, []);
+
   const stepSector = useCallback(
     (delta: number) => {
       if (sector != null) selectSector(sector + delta);
@@ -241,6 +246,7 @@ export function useWindPlan({
     designWind,
     dirLabel: mode === "comfort" ? "All" : sector != null ? sectorLabel(sector) : "—",
     selectSector,
+    restoreSector,
     stepSector,
     sectorReferenceMs,
     referenceMs,

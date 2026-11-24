@@ -1,4 +1,4 @@
-export const SIDEBAR_SECTION_IDS = ["summary", "buildings", "trees", "drawing", "import", "exports"] as const;
+export const SIDEBAR_SECTION_IDS = ["summary", "buildings", "trees", "drawing", "import", "views", "exports"] as const;
 
 export type SidebarSectionId = (typeof SIDEBAR_SECTION_IDS)[number];
 
@@ -28,7 +28,7 @@ export function activeAnalysisKinds(current: ActiveAnalyses): SiteAnalysisKind[]
   return SITE_ANALYSIS_KINDS.filter((kind) => current[kind]);
 }
 
-export const LEFT_SIDEBAR_SECTION_IDS = ["drawing", "import", "exports"] as const;
+export const LEFT_SIDEBAR_SECTION_IDS = ["drawing", "import", "views", "exports"] as const;
 
 export type LeftSidebarSectionId = (typeof LEFT_SIDEBAR_SECTION_IDS)[number];
 
@@ -54,6 +54,7 @@ export const SIDEBAR_SECTION_LABELS: Record<SidebarSectionId, string> = {
   trees: "Trees",
   drawing: "Display",
   import: "Import",
+  views: "Views",
   exports: "Export",
 };
 
