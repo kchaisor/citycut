@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { POST_OVERLAY_LAYER, createDepthRestore, postOverlayUsers, renderPostOverlay } from "./postOverlay";
+import { staticPlanArrowsSnapshot } from "./diagramArrowsPlanDraw";
 
 export type ViewportOverlayLabel = {
   text: string;
@@ -124,7 +125,7 @@ function readOverlayCanvases(canvas: HTMLCanvasElement): ViewportOverlayCanvas[]
   for (const overlay of viewport.querySelectorAll<HTMLCanvasElement>(".wind-plan-overlay canvas")) {
     if (overlay === canvas || overlay.width < 2 || overlay.height < 2) continue;
     const box = overlay.getBoundingClientRect();
-    overlays.push({ canvas: overlay, x: box.left - rect.left, y: box.top - rect.top, width: box.width, height: box.height });
+    overlays.push({ canvas: staticPlanArrowsSnapshot(overlay) ?? overlay, x: box.left - rect.left, y: box.top - rect.top, width: box.width, height: box.height });
   }
   return overlays;
 }

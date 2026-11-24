@@ -46,3 +46,20 @@ export function drawPlanArrows(
   }
   ctx.restore();
 }
+
+const staticPainters = new WeakMap<HTMLCanvasElement, (target: HTMLCanvasElement) => void>();
+
+export function registerStaticPlanArrows(canvas: HTMLCanvasElement, paint: (target: HTMLCanvasElement) => void): () => void {
+  staticPainters.set(canvas, paint);
+  return () => {
+    if (staticPainters.get(canvas) === paint) staticPainters.delete(canvas);
+  };
+}
+
+export function staticPlanArrowsSnapshot(canvas: HTMLCanvasElement): HTMLCanvasElement | null {
+  const paint = staticPainters.get(canvas);
+  if (!paint) return null;
+  const snapshot = canvas.ownerDocument.createElement("canvas");
+  paint(snapshot);
+  return snapshot;
+}
