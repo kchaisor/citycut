@@ -128,6 +128,7 @@ export function DiagramArrows3D({
   state,
   dispatch,
   active,
+  flatLabels,
   labelsRef,
   onLabels,
 }: {
@@ -135,6 +136,7 @@ export function DiagramArrows3D({
   state: ArrowToolState;
   dispatch: Dispatch<ArrowToolAction>;
   active: boolean;
+  flatLabels: boolean;
   labelsRef: MutableRefObject<ArrowExportLabels | null>;
   onLabels: (labels: ArrowScreenLabel[]) => void;
 }) {
@@ -327,7 +329,7 @@ export function DiagramArrows3D({
   const labelled = useMemo(() => arrows.filter((arrow) => arrow.label.trim() !== ""), [arrows]);
 
   const projectLabels = (cam: THREE.Camera, width: number, height: number, offsetX: number, offsetY: number): ArrowScreenLabel[] =>
-    projectArrowLabels(cam, labelled, groundRef.current, width, height, offsetX, offsetY);
+    projectArrowLabels(cam, labelled, groundRef.current, width, height, offsetX, offsetY, flatLabels);
 
   useEffect(() => {
     if (labelled.length === 0) {
@@ -341,7 +343,7 @@ export function DiagramArrows3D({
     return () => {
       labelsRef.current = null;
     };
-  }, [labelled]);
+  }, [labelled, flatLabels]);
 
   useFrame(() => {
     const live = liveRef.current;
@@ -354,7 +356,7 @@ export function DiagramArrows3D({
       invalidate();
     }
     if (labelled.length === 0) return;
-    const signature = `${camera.matrixWorld.elements.join(",")}|${camera.projectionMatrix.elements.join(",")}|${size.width}x${size.height}|${labelled.map((a) => a.id + a.label + a.heightM + a.points.join(";")).join("|")}`;
+    const signature = `${flatLabels}|${camera.matrixWorld.elements.join(",")}|${camera.projectionMatrix.elements.join(",")}|${size.width}x${size.height}|${labelled.map((a) => a.id + a.label + a.heightM + a.points.join(";")).join("|")}`;
     if (signature === labelSignature.current) return;
     labelSignature.current = signature;
     const rect = gl.domElement.getBoundingClientRect();

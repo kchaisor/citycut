@@ -88,6 +88,13 @@ export function projectGroundPoint(camera: THREE.Camera, world: THREE.Vector3, r
   return [(ndc.x * 0.5 + 0.5) * rect.width, (-ndc.y * 0.5 + 0.5) * rect.height];
 }
 
+const GROUND_LEVEL: GroundAt = () => 0;
+
+export function arrowLabelWorldPoint(arrow: Pick<DiagramArrow, "points" | "heightM">, groundAt: GroundAt, flat: boolean): THREE.Vector3 {
+  const anchor = arrowLabelAnchor(arrow.points);
+  return flat ? arrowWorldPoint(anchor, GROUND_LEVEL, 0) : arrowWorldPoint(anchor, groundAt, arrow.heightM);
+}
+
 export function projectArrowLabels(
   camera: THREE.Camera,
   arrows: readonly Pick<DiagramArrow, "id" | "label" | "points" | "heightM">[],
@@ -96,12 +103,13 @@ export function projectArrowLabels(
   height: number,
   offsetX = 0,
   offsetY = 0,
+  flat = false,
 ): ArrowScreenLabel[] {
   camera.updateMatrixWorld();
   const out: ArrowScreenLabel[] = [];
   for (const arrow of arrows) {
     if (arrow.label.trim() === "") continue;
-    const at = projectGroundPoint(camera, arrowWorldPoint(arrowLabelAnchor(arrow.points), groundAt, arrow.heightM), { width, height });
+    const at = projectGroundPoint(camera, arrowLabelWorldPoint(arrow, groundAt, flat), { width, height });
     if (!at || at[0] < 0 || at[0] > width || at[1] < 0 || at[1] > height) continue;
     out.push({ id: arrow.id, text: arrow.label.trim(), x: offsetX + at[0], y: offsetY + at[1] - ARROW_LABEL_LIFT_PX });
   }

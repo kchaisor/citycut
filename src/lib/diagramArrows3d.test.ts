@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { describe, expect, it } from "vitest";
 import { buildArrowShape } from "./diagramArrows";
-import { arrowShapeGeometry, arrowWorldPoint, groundAtFor, intersectArrowPlane } from "./diagramArrows3d";
+import { arrowLabelWorldPoint, arrowShapeGeometry, arrowWorldPoint, groundAtFor, intersectArrowPlane, projectArrowLabels } from "./diagramArrows3d";
 
 describe("arrow 3D geometry", () => {
   const flat = () => 0;
@@ -37,5 +37,28 @@ describe("arrow 3D geometry", () => {
     expect(hit[0]).toBeCloseTo(40);
     expect(hit[1]).toBeCloseTo(30);
     expect(intersectArrowPlane(new THREE.Ray(new THREE.Vector3(0, 30, 0), new THREE.Vector3(0, 1, 0)), flat, 20)).toBeNull();
+  });
+
+  describe("label anchor", () => {
+    const arrow = { id: "a", label: "Flow", points: [[0, 0], [100, 0]] as [number, number][], heightM: 40 };
+
+    it("floats at the arrow height in perspective and iso", () => {
+      expect(arrowLabelWorldPoint(arrow, flat, false).y).toBeCloseTo(40.05);
+    });
+
+    it("sits on the flat plane in Plan, whatever the height or terrain", () => {
+      const point = arrowLabelWorldPoint(arrow, (east) => east * 0.1, true);
+      expect(point.y).toBeCloseTo(0.05);
+      expect(point.x).toBeCloseTo(50, 0);
+    });
+
+    it("projects Plan labels to the flat arrow position under a tilted camera", () => {
+      const camera = new THREE.PerspectiveCamera(50, 1, 1, 2000);
+      camera.position.set(50, 300, 200);
+      camera.lookAt(50, 0, 0);
+      const floating = projectArrowLabels(camera, [arrow], flat, 800, 800)[0]!;
+      const onFlat = projectArrowLabels(camera, [arrow], flat, 800, 800, 0, 0, true)[0]!;
+      expect(onFlat.y).not.toBeCloseTo(floating.y, 0);
+    });
   });
 });

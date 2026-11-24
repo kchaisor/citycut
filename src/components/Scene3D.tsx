@@ -3488,6 +3488,7 @@ export function Scene3D({
           state={diagramArrows.state}
           dispatch={diagramArrows.dispatch}
           active={active}
+          flatLabels={projection === "plan" || windLayers.planOverlay}
           labelsRef={arrowExportRef}
           onLabels={diagramArrows.onLabels}
         />
