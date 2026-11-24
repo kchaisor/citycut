@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { attachShiftPickPass } from "../../lib/shiftPickPass";
 import { BuildingHeightPopover, ImportedBuildingPopover } from "../BuildingHeightPopover";
 import { LoadingHudPill } from "../LoadingHudPill";
+import { DiagramArrowLabelLayer } from "../DiagramArrowLabelLayer";
 import { LandmarkLabelLayer } from "../LandmarkLabelLayer";
 
 import { TreeInspectHud, TerrainInspectHud } from "../SceneInspectHud";import { DrawingPlan } from "../DrawingPlan";
@@ -51,6 +52,7 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
     landmarkLabelsOn,
     landmarkScreens,
     landmarkSources,
+    diagramArrows,
     lineStyles,
     massing,
     model,
@@ -214,7 +216,9 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
                 exploded={vm.exploded}
                 explodeGapM={vm.explodeGap.gapM}
                 inspectAnchorLayer={explodeLayerOfSelectionKind(sceneSelection?.kind)}
+                diagramArrows={{ state: diagramArrows.state, dispatch: diagramArrows.dispatch, onLabels: diagramArrows.setLabels }}
               />
+              {tab === "3d" && diagramArrows.state.visible && <DiagramArrowLabelLayer labels={diagramArrows.labels} />}
               {tab === "3d" && landmarkLabelsOn && (
                 <LandmarkLabelLayer
                   state={landmarkScreens}
@@ -339,6 +343,7 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
                 sunHoursGroundGrid={sunHoursOnPlan ? sunHoursPlan.grid : null}
                 sunHoursGroundScaleMax={sunHoursOnPlan ? sunHoursPlan.scaleMaxHours : 0}
                 sunHoursRoofPlanRaster={sunHoursOnPlan ? sunHoursPlan.roofPlanRaster : null}
+                diagramArrows={drawing === "site" ? diagramArrows : null}
                 landmarkLabels={drawing === "site" || drawing === "figure-ground" ? drawingLandmarkSources : []}
                 onImportedPick={(ref, clientX, clientY) =>
                   selectImportedBuilding(ref.fileId, ref.buildingId, clientX, clientY)

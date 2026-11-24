@@ -19,6 +19,7 @@ import { ModelPageSidebarRight } from "./ModelPageSidebarRight";
 import { ExplodedAxoHudCard } from "./ExplodedAxoHudCard";
 import { SolarStudyHudCard } from "./SolarStudyHudCard";
 import { ViewshedHudCard } from "./ViewshedHudCard";
+import { ArrowsHudCard } from "./ArrowsHudCard";
 import { WindRoseHudCard } from "./WindRoseHudCard";
 import { SunHoursLegendDock } from "./SunHoursLegendDock";
 import { solarSettingsForActiveAnalysis } from "../../lib/solarStudyView";
@@ -74,6 +75,7 @@ export function ModelPageSidebar({ vm }: { vm: import("./useModelPage").ModelPag
   } = vm;
   const { analysisCards, analysisCardOn, siteIntelFolded, setSiteIntelFolded, exploded, explodeModel, showIsometric } = vm;
   const explodeCardOn = tab === "3d" && exploded;
+  const arrowsCardOn = vm.diagramArrows.state.active;
   const sunHoursLegendOn = sunHoursLegendCardOn({
     tab,
     drawing,
@@ -114,9 +116,10 @@ export function ModelPageSidebar({ vm }: { vm: import("./useModelPage").ModelPag
             }}
             rightMeta={`MGA${mgaCrs(model.center.lon).zone}`}
             rightBelow={
-              analysisCardOn || sunHoursLegendAlone || explodeCardOn ? (
+              analysisCardOn || sunHoursLegendAlone || explodeCardOn || arrowsCardOn ? (
                 <>
                   {explodeCardOn ? <ExplodedAxoHudCard vm={vm} /> : null}
+                  {arrowsCardOn ? <ArrowsHudCard arrows={vm.diagramArrows} /> : null}
                   {analysisCards.solar ? <SolarStudyHudCard vm={vm} /> : null}
                   {analysisCards.wind ? <WindRoseHudCard vm={vm} /> : null}
                   {analysisCards.view ? <ViewshedHudCard vm={vm} /> : null}
