@@ -45,6 +45,8 @@ Kelvin's hand-drawn arrow reference (9:17 AM AEDT, 23 Nov 2026) and the 1440 moc
 
 17. **The rose diagram is larger.** Kelvin, 7:29 PM AEDT, 23 Nov 2026, on draft #280: "I think wind rose diagram can be bigger it's a bit small." The diagram fills the Wind Rose card width, with comfortable padding and legible labels. Time of day, Flow, Streaks and Density stay reachable (the card may scroll or reflow). Checked at 1440×900 and 1440×1080 desktop.
 
+18. **Flow can be seen in Plan.** Kelvin, 3:24 PM AEDT, 24 Nov 2026: "with the wind flow animation, i'd like to be able to see this on plan view. however at the moment when i select plan view it changes to the windmap diagram". In Plan with Wind Rose on, the Wind Rose card has a **Plan view** choice, **Wind map | Flow**. Wind map is the default and is exactly the Plan wind diagram as before. Flow turns the wind map off and shows the animated ground-flow and Streaks seen from above, with the same Flow / Streaks / Pause row and Density slider as in 3D; the Wind map-only parts of the card (Wind speed / Comfort switch, Arrows, plan legend) hide. The camera stays in Plan and does not move. The choice is remembered between visits. A saved view stores it, and a Plan Flow view exports what is on screen; the A3 wind sheet swaps the plan heat legend for the Flow speed legend.
+
 ## How we'll know it works
 
 Open Southbank (`?lat=-37.8216&lon=144.9645&km=0.5`) in 3D.
@@ -65,6 +67,7 @@ Open Southbank (`?lat=-37.8216&lon=144.9645&km=0.5`) in 3D.
 - [ ] With Solar Study, Wind Rose and Viewshed Walk all on, three headers show and only the last one turned on is open; clicking another header swaps which one is open.
 - [ ] With Solar Study and Wind Rose on, drag Sun dome size from 0.5× to 2× cut: the fans move in and out with the dome, fade at the dome (and may sit outside the cut, well past the crop at 2×), and no arrow gets longer, thicker or a bigger head. Turn the Sun dome off: the fans fill the cut as they do with Wind Rose alone, with no 7% inset.
 - [ ] Opening Site Intelligence does not move the bar.
+- [ ] In Plan with Wind Rose on, Wind map is selected by default and shows the heat diagram. Choosing Flow shows the animated ground-flow and arrows from above, the Overlays row and the Density slider appear, and the camera does not move. Choosing Wind map brings the diagram back.
 - [ ] A named-view PNG or A3 sheet shows wind Flow and Streaks in the same colours as the screen (Flow is tone mapped and sRGB encoded in the export, as the screen composer does).
 
 - [ ] Flow streaks over water are drawn at 30% of their strength (set by the water areas, not by depth) and are never hidden by the water surface. A normal PNG and a "High quality, transparent" PNG show the same faint streaks over the harbour as the screen.

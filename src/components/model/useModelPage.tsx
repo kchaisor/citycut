@@ -152,8 +152,12 @@ import { analyzeSiteWind, seasonRecord } from "../../lib/windRoseStats";
 
 import { daylightWindowMinutes, sunAtMelbourneLocal } from "../../lib/solar";
 import {
+  readStoredWindPlanView,
+  windPlanMapShown,
   windSettingsForModelOpen,
+  writeStoredWindPlanView,
   writeStoredWindSettings,
+  type WindPlanViewId,
   type WindViewSettings,
 } from "../../lib/windState";
 import { useWindStreakMotion } from "../../lib/windStreakMotion";
@@ -383,6 +387,11 @@ export function useModelPage({
     writeStoredWindSettings(window.localStorage, next);
     return next;
   });
+  const [windPlanView, setWindPlanViewState] = useState<WindPlanViewId>(() => readStoredWindPlanView(window.localStorage));
+  const setWindPlanView = useCallback((next: WindPlanViewId) => {
+    writeStoredWindPlanView(window.localStorage, next);
+    setWindPlanViewState(next);
+  }, []);
   const [siteWind, setSiteWind] = useState<SiteWindSelection | null>(null);
   const [windNote, setWindNote] = useState<string | null>(null);
   const windMotion = useWindStreakMotion();
@@ -1404,7 +1413,15 @@ export function useModelPage({
     designWind,
     designWinds,
     clearDesignWind: () => commitWind({ ...windSettings, designWind: null }),
-    active: tab === "3d" && view.projection === "plan" && analyses.wind && siteWind != null,
+    active: windPlanMapShown({
+      tab,
+      projection: view.projection,
+      windOn: analyses.wind,
+      hasSiteWind: siteWind != null,
+      planView: windPlanView,
+    }),
+    view: windPlanView,
+    setView: setWindPlanView,
     scaleWanted: tab === "3d" && windSettings.enabled && analyses.wind,
   });
 
@@ -1970,6 +1987,7 @@ export function useModelPage({
         mode: windPlan.mode,
         vectorsOn: windPlan.vectorsOn,
         sector: designWind ? null : windPlan.sector,
+        view: windPlanView,
       },
       renderQuality,
       sunDomeSizeM,
@@ -2002,6 +2020,7 @@ export function useModelPage({
     commitWind({ ...windSettings, ...snapshot.wind });
     setWindStreaksOn(snapshot.windStreaksOn);
     windPlan.setMode(snapshot.windPlan.mode);
+    setWindPlanView(snapshot.windPlan.view);
     windPlan.setVectorsOn(snapshot.windPlan.vectorsOn);
     windPlan.restoreSector(snapshot.wind.period, snapshot.windPlan.sector);
     commitRenderQuality(snapshot.renderQuality);

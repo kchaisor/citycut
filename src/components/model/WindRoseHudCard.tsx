@@ -11,6 +11,11 @@ import { WindPlanSwitch } from "./WindPlanSwitch";
 import { WIND_SEASON_IDS, windPrevailingBadge, windRoseCardMeta, windStreaksSliderOn } from "./windRoseCard";
 import type { ModelPageViewModel } from "./useModelPage";
 
+const PLAN_VIEWS = [
+  ["map", "Wind map"],
+  ["flow", "Flow"],
+] as const;
+
 export function WindRoseHudCard({ vm }: { vm: ModelPageViewModel }) {
   const {
     analyses,
@@ -23,6 +28,7 @@ export function WindRoseHudCard({ vm }: { vm: ModelPageViewModel }) {
     siteWind,
     tab,
     toggleAnalysisCard,
+    view,
     windMotion,
     windPlan,
     windSettings,
@@ -30,6 +36,7 @@ export function WindRoseHudCard({ vm }: { vm: ModelPageViewModel }) {
     windStreaksOn,
   } = vm;
   const planWind = windPlan.active;
+  const inPlan = tab === "3d" && view.projection === "plan";
   const flowing = tab === "3d" && windSettings.enabled;
   const sliderOn = windStreaksSliderOn({ tab, analyses, windEnabled: windSettings.enabled, planActive: planWind });
   const classes = ["wind-rose-analysis-card"];
@@ -131,6 +138,25 @@ export function WindRoseHudCard({ vm }: { vm: ModelPageViewModel }) {
           {badge.calm ? <span className="ac-note">{badge.calm}</span> : null}
         </div>
       </div>
+
+      {inPlan ? (
+        <div className="ac-section">
+          <span className="ac-kicker">Plan view</span>
+          <div className="ac-seg ac-seg-2" role="group" aria-label="Plan wind view">
+            {PLAN_VIEWS.map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                className={windPlan.view === id ? "ac-seg-btn is-ink" : "ac-seg-btn"}
+                aria-pressed={windPlan.view === id}
+                onClick={() => windPlan.setView(id)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
 
       {planWind ? null : (
         <div className="ac-section">

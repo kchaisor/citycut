@@ -39,7 +39,7 @@ const SNAPSHOT: NamedViewSnapshot = {
   solar: { showPath: true, castShadows: true, radiusFactor: 1, year: 2026, month: 6, day: 21, hour: 9, minute: 30, sunHours: true },
   wind: { enabled: true, period: "annual", designWind: null, daypart: "all" },
   windStreaksOn: true,
-  windPlan: { mode: "comfort", vectorsOn: false, sector: 5 },
+  windPlan: { mode: "comfort", vectorsOn: false, sector: 5, view: "map" },
   renderQuality: "fast",
   sunDomeSizeM: 300,
   viewshed: { eyeM: 1.6, radiusM: 250 },
@@ -94,14 +94,24 @@ describe("named views capture and apply", () => {
       renderQuality: "high",
       wind: { enabled: true, period: "summer", designWind: null, daypart: "afternoon" },
       windStreaksOn: true,
-      windPlan: { mode: "comfort", vectorsOn: true, sector: 3 },
+      windPlan: { mode: "comfort", vectorsOn: true, sector: 3, view: "flow" },
     };
     const view = captureNamedView("Plan comfort", study, { id: "p" })!;
     const reloaded = parseNamedViewsStore(JSON.stringify(saveView(emptyNamedViewsStore(), "cut", view)));
     const restored = applyNamedView(viewsForCut(reloaded, "cut")[0]!)!;
     expect(restored).toEqual(study);
-    expect(restored.windPlan).toEqual({ mode: "comfort", vectorsOn: true, sector: 3 });
+    expect(restored.windPlan).toEqual({ mode: "comfort", vectorsOn: true, sector: 3, view: "flow" });
     expect(restored.solar.sunHoursWindow).toBe("9to3");
+  });
+
+  it("loads a view saved before the Plan wind view existed, or with an invalid one, on the Wind map", () => {
+    for (const windPlan of [{ mode: "speed", vectorsOn: true, sector: null }, { mode: "speed", vectorsOn: true, sector: null, view: "streams" }]) {
+      const legacy = JSON.parse(JSON.stringify(SNAPSHOT)) as Record<string, unknown>;
+      legacy.windPlan = windPlan;
+      const raw = JSON.stringify({ version: 1, byCut: { cut: [{ id: "o", name: "Old", savedAt: 1, snapshot: legacy }] } });
+      const restored = applyNamedView(viewsForCut(parseNamedViewsStore(raw), "cut")[0]!)!;
+      expect(restored.windPlan.view).toBe("map");
+    }
   });
 
   it("round-trips the exploded axo with its gap", () => {
@@ -139,7 +149,7 @@ describe("named views capture and apply", () => {
     delete legacy.windPlan;
     const raw = JSON.stringify({ version: 1, byCut: { cut: [{ id: "o", name: "Old", savedAt: 1, snapshot: legacy }] } });
     const restored = applyNamedView(viewsForCut(parseNamedViewsStore(raw), "cut")[0]!)!;
-    expect(restored.windPlan).toEqual({ mode: "speed", vectorsOn: true, sector: null });
+    expect(restored.windPlan).toEqual({ mode: "speed", vectorsOn: true, sector: null, view: "map" });
   });
 
   it("rejects empty or whitespace names", () => {

@@ -2,6 +2,12 @@ import type { ColourKey } from "./colours";
 
 export type GroundWindRampStop = { token: ColourKey; speed: number; legendAt: number };
 
+export type GroundWindLegendStop = { token: ColourKey; speed: number; pct: number };
+
+export function groundWindLegendStops(): GroundWindLegendStop[] {
+  return GROUND_WIND_RAMP.map((stop) => ({ token: stop.token, speed: stop.speed, pct: stop.legendAt * 100 }));
+}
+
 export const GROUND_WIND_RAMP: readonly GroundWindRampStop[] = [
   { token: "--ground-wind-sheltered", speed: 0.15, legendAt: 0 },
   { token: "--ground-wind-calm", speed: 0.45, legendAt: 0.2 },

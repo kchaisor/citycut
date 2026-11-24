@@ -10,12 +10,13 @@ const READY: StudyReadySignals = {
   explodeSettled: true,
 };
 
-function study(over: { sunHours?: boolean; plan?: boolean }): NamedViewSnapshot {
+function study(over: { sunHours?: boolean; plan?: boolean; planView?: "map" | "flow" }): NamedViewSnapshot {
   return {
     tab: "3d",
     view: { projection: over.plan ? "plan" : "iso", corner: "ne", freeRotate: false },
     analyses: { solar: true, wind: Boolean(over.plan), view: false },
     solar: { sunHours: Boolean(over.sunHours) },
+    windPlan: { view: over.planView ?? "map" },
   } as unknown as NamedViewSnapshot;
 }
 
@@ -33,6 +34,12 @@ describe("studiesReady", () => {
     expect(studiesReady(study({ plan: true }), { ...READY, windPlanReady: false })).toBe(false);
     expect(studiesReady(study({ plan: true }), { ...READY, windPlanReady: false, windPlanApplicable: false })).toBe(true);
     expect(studiesReady(study({}), { ...READY, windPlanReady: false })).toBe(true);
+  });
+
+  it("does not wait on the wind plan field when the Plan view is showing Flow", () => {
+    const flow = study({ plan: true, planView: "flow" });
+    expect(studiesReady(flow, { ...READY, windPlanReady: false })).toBe(true);
+    expect(studiesReady(study({ plan: true, planView: "map" }), { ...READY, windPlanReady: false })).toBe(false);
   });
 
   it("holds a 3D view until the exploded stack has settled", () => {

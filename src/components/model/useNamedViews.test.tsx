@@ -30,7 +30,7 @@ function snapshot(tab: NamedViewSnapshot["tab"], corner: NamedViewSnapshot["view
     solar: { showPath: false, castShadows: false, radiusFactor: 1, year: 2026, month: 6, day: 21, hour: 12, minute: 0 },
     wind: { enabled: false, period: "annual", designWind: null, daypart: "all" },
     windStreaksOn: false,
-    windPlan: { mode: "speed", vectorsOn: true, sector: null },
+    windPlan: { mode: "speed", vectorsOn: true, sector: null, view: "map" },
     renderQuality: "high",
     sunDomeSizeM: null,
     viewshed: { eyeM: 1.6, radiusM: 250 },

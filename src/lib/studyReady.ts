@@ -25,7 +25,7 @@ export function studiesReady(snapshot: NamedViewSnapshot, signals: StudyReadySig
   if (snapshot.tab === "3d" && snapshot.solar.sunHours && (signals.sunHoursPending || signals.sunHoursSurfacesPending)) {
     return false;
   }
-  const windPlanShown = snapshot.tab === "3d" && snapshot.view.projection === "plan" && snapshot.analyses.wind;
+  const windPlanShown = snapshot.tab === "3d" && snapshot.view.projection === "plan" && snapshot.analyses.wind && snapshot.windPlan.view === "map";
   if (windPlanShown && signals.windPlanApplicable && !signals.windPlanReady) return false;
   return true;
 }
