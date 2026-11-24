@@ -9,7 +9,8 @@ import type { SolarViewSettings } from "./SolarHeliodon";
 import { makeSiteFrame, type SiteFrame } from "../lib/siteFrame";
 import { GROUND_ROADS_LAYER } from "../lib/groundRoads";
 import { SolarHeliodon } from "./SolarHeliodon";
-import { Cameras, ExplodeLayers, createExplodeRuntime, type ExplodeRuntime } from "./Scene3D";
+import { Cameras, ExplodeLayers, createExplodeRuntime, useExplodeLive, type ExplodeRuntime } from "./Scene3D";
+import { capturePose, type CameraPose, type CameraRestoreRequest } from "../lib/cameraMemory";
 
 extend(THREE as unknown as Parameters<typeof extend>[0]);
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -75,7 +76,7 @@ async function frames(n: number, stepSec = 0.05) {
   }
 }
 
-type Opts = { exploded: boolean; gapM: number; projection?: ProjectionMode; terrain?: { min: number; max: number }; frame?: SiteFrame; wet?: boolean; solar?: SolarViewSettings; wind?: boolean; explodeLive?: boolean; snapKey?: number };
+type Opts = { exploded: boolean; gapM: number; projection?: ProjectionMode; terrain?: { min: number; max: number }; frame?: SiteFrame; wet?: boolean; solar?: SolarViewSettings; wind?: boolean; explodeLive?: boolean; snapKey?: number; engage?: boolean; snapId?: number; restore?: CameraRestoreRequest | null };
 
 const cleanups: Array<() => Promise<void>> = [];
 afterEach(async () => {
@@ -96,12 +97,17 @@ async function mountExplode(initial: Opts) {
   const overlay: { current: THREE.Group | null } = { current: null };
   const bounds: { current: Aabb | null } = { current: { min: [-HALF, -10, -HALF], max: [HALF, 60, HALF] } };
   const collapsed = vi.fn();
+  const onRestored = vi.fn();
   const topLift = vi.fn();
   let store: { getState: () => { camera: THREE.OrthographicCamera; controls: unknown } } | null = null;
   const windFlow = new THREE.Group();
   windFlow.name = "WindFlow";
   windFlow.add(slab("WindStreaks", 0, 90, 140));
-  const element = (o: Opts) => (
+  const Stage = ({ o }: { o: Opts }) => {
+    const live = useExplodeLive(o.exploded, o.restore?.id ?? 0);
+    const explodeLive = o.engage ? live.explodeLive : (o.explodeLive ?? o.exploded);
+    const projection = o.engage && explodeLive ? "iso" : (o.projection ?? "iso");
+    return (
     <>
       <primitive object={city} />
       <group ref={overlay} />
@@ -124,8 +130,11 @@ async function mountExplode(initial: Opts) {
         measureKey="all"
         terrain={o.terrain}
         frame={o.frame}
-        snapKey={o.snapKey}
-        onCollapsed={collapsed}
+        snapKey={o.engage ? (o.restore?.id ?? 0) : o.snapKey}
+        onCollapsed={() => {
+          live.onExplodeCollapsed();
+          collapsed();
+        }}
         onTopLift={topLift}
       />
       <Cameras
@@ -135,10 +144,10 @@ async function mountExplode(initial: Opts) {
         lift={0}
         groundY={0}
         siteTopY={60}
-        projection={o.projection ?? "iso"}
+        projection={projection}
         corner="sw"
         freeRotate={false}
-        snapId={0}
+        snapId={o.snapId ?? 0}
         boundsRef={bounds}
         onExportReady={() => {}}
         solarDiagramOn={o.solar?.showPath ?? false}
@@ -147,10 +156,14 @@ async function mountExplode(initial: Opts) {
         lat={-37.8127}
         lon={144.98061}
         explode={runtime}
-        explodeLive={o.explodeLive ?? o.exploded}
+        explodeLive={explodeLive}
+        cameraRestore={o.restore}
+        onCameraRestored={onRestored}
       />
     </>
-  );
+    );
+  };
+  const element = (o: Opts) => <Stage o={o} />;
   await act(async () => {
     await root.configure({
       gl: stubRenderer(canvas),
@@ -171,6 +184,7 @@ async function mountExplode(initial: Opts) {
     runtime,
     overlay,
     collapsed,
+    onRestored,
     topLift,
     camera: () => store!.getState().camera,
     controls: () => (store!.getState().controls as { target: THREE.Vector3 }).target,
@@ -579,5 +593,83 @@ describe("leaving the exploded axo", () => {
     const settled = rig.pose();
     await frames(60);
     rig.pose().forEach((v, k) => expect(v).toBeCloseTo(settled[k], 6));
+  });
+});
+
+describe("snapshot restores around the exploded axo", () => {
+  type Rig = Awaited<ReturnType<typeof mountExplode>>;
+  const GAP = 180;
+
+  function poseAt(position: [number, number, number], target: [number, number, number], zoom: number): CameraPose {
+    const look = new THREE.Object3D();
+    look.position.set(...position);
+    look.lookAt(new THREE.Vector3(...target));
+    const q = look.quaternion;
+    return { position, quaternion: [q.x, q.y, q.z, q.w], up: [0, 1, 0], target, zoom, near: 1, far: 20000 };
+  }
+
+  function currentPose(rig: Rig): CameraPose {
+    const camera = rig.camera();
+    return { ...poseAt([0, 0, 0], [0, 0, 0], 1), ...capturePose(camera, { target: rig.controls() }) };
+  }
+
+  function expectPose(rig: Rig, pose: CameraPose) {
+    const [px, py, pz, tx, ty, tz, zoom] = rig.pose();
+    [px, py, pz].forEach((v, k) => expect(Math.abs(v - pose.position[k])).toBeLessThan(1e-3));
+    [tx, ty, tz].forEach((v, k) => expect(Math.abs(v - pose.target[k])).toBeLessThan(1e-3));
+    expect(Math.abs(zoom - pose.zoom)).toBeLessThan(1e-3);
+  }
+
+  async function restoreTo(rig: Rig, base: Opts, id: number, projection: ProjectionMode, exploded: boolean, pose: CameraPose) {
+    const request: CameraRestoreRequest = { id, projection, pose };
+    rig.onRestored.mockClear();
+    await rig.rerender({ ...base, exploded, projection, snapId: id, restore: request });
+    for (let i = 0; i < 90 && !rig.onRestored.mock.calls.some(([done]) => done === id); i++) await frames(1);
+    await frames(40);
+    return { ...base, exploded, projection, snapId: id, restore: request } satisfies Opts;
+  }
+
+  const SEED: Opts = { exploded: false, gapM: GAP, engage: true, projection: "perspective" };
+
+  it("puts a perspective camera back exactly after exporting an exploded iso view", async () => {
+    const rig = await mountExplode(SEED);
+    await frames(40);
+    const original = currentPose(rig);
+    const isoView = poseAt([-700, 700, 700], [0, 150, 0], 1.4);
+    const exploded = await restoreTo(rig, SEED, 1, "iso", true, isoView);
+    expect(rig.canvas.dataset.explodeProgress).toBe("1.000");
+    expectPose(rig, isoView);
+    await restoreTo(rig, exploded, 2, "perspective", false, original);
+    expect(rig.canvas.dataset.explodeProgress).toBe("0.000");
+    expect(rig.camera().type).toBe("PerspectiveCamera");
+    expectPose(rig, original);
+    await frames(60);
+    expectPose(rig, original);
+  });
+
+  it("puts an exploded iso camera and its gap back exactly after exporting a perspective view", async () => {
+    const rig = await mountExplode({ ...SEED, exploded: true, projection: "iso" });
+    await frames(40);
+    const original = currentPose(rig);
+    const trees = layerY(rig.city, "Trees");
+    const perspectiveView = poseAt([-900, 800, 900], [0, 100, 0], 1);
+    const away = await restoreTo(rig, { ...SEED, exploded: true, projection: "iso" }, 1, "perspective", false, perspectiveView);
+    expect(rig.camera().type).toBe("PerspectiveCamera");
+    expectPose(rig, perspectiveView);
+    await restoreTo(rig, away, 2, "iso", true, original);
+    expect(rig.canvas.dataset.explodeProgress).toBe("1.000");
+    expect(layerY(rig.city, "Trees")).toBe(trees);
+    expect(rig.camera().type).toBe("OrthographicCamera");
+    expectPose(rig, original);
+  });
+
+  it("lands a click-restore from an exploded view on the saved perspective pose", async () => {
+    const rig = await mountExplode({ ...SEED, exploded: true, projection: "iso" });
+    await frames(40);
+    const saved = poseAt([-500, 500, 500], [10, 120, -20], 1);
+    await restoreTo(rig, { ...SEED, exploded: true, projection: "iso" }, 1, "perspective", false, saved);
+    expectPose(rig, saved);
+    await frames(60);
+    expectPose(rig, saved);
   });
 });

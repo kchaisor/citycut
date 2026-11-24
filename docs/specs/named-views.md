@@ -26,6 +26,7 @@ Sketch or screenshot: no Paper mock (Paper weekly limit still in force, 24 Nov 2
 
 9. **Named views save and restore the exploded axo.** On or off, the layer gap, the corner and the layer labels come back with the camera, landing directly in the finished exploded arrangement with no animation. A view saved assembled collapses at once when clicked while exploded. Views saved before this load as not exploded.
 10. **Export selected and Export all capture exploded views as shown and never collapse them.** An exploded view exports exploded (labels, outlines, corner lines and layer gap), an assembled view exports assembled, whatever the current state. Export waits for the stack to be fully in place, nothing animates, and the view you were on, exploded or not, is put back afterwards.
+11. **Export restores your exact view, with no animation.** After any export the tab, projection, exploded state and gap, and the camera position, target and zoom are back exactly as before, and the restore never plays a collapse or re-fits the camera.
 
 ### Out of scope
 
