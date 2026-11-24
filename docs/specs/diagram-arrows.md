@@ -34,6 +34,9 @@ Each arrow's `animation` renders live in the 3D view (every projection, floating
 - One shared wall-clock drives every arrow. 3D requests frames only while a visible arrow animates; Drawing runs one shared `requestAnimationFrame` loop only while a visible arrow animates. Hidden arrows (layer off, per-view toggles) cost nothing.
 - `prefers-reduced-motion: reduce` renders every arrow static.
 - Exports stay static: PNG, A3 sheets and named-view captures show the full arrow as `none`. The animated 3D meshes are screen-only and the full mesh is export-only, switched by the same screen-only mechanism the capture already uses. Drawing SVG, AI and 3dm downloads are built from model data, never from the live SVG, so they never see an animation frame.
+- Pause and play: a toggle named "Pause arrow animation" / "Play arrow animation" (`aria-pressed`) sits under the animation picker in the Arrows panel, with a compact icon twin beside "Arrows" in the bottom-bar Diagram group while any arrow animates. Paused renders every arrow static like reduced motion, in 3D, Plan overlay and Drawing, and stops the frame loops. Kept for the session; exports are unaffected. `window.__citycutDiagramArrowsPaused` mirrors it.
+- Drawing downloads (.svg, .ai, .3dm) carry arrows with Show in Drawing on, as static filled shapes on a "Diagram arrows" layer, per-arrow colour, dashes as separate dash shapes. Labels are SVG and AI text; .3dm has no text, so it has shapes only.
+- Plan labels: in Plan projection and with the wind map on, labels sit at the flat arrow's ground position instead of floating at its height.
 - Debug hook: `window.__citycutDiagramArrowsAnim = { animated, t }` (count of animating arrows, shared clock seconds), present only while something animates.
 
 ## Data model

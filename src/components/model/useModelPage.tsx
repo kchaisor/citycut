@@ -464,6 +464,7 @@ export function useModelPage({
           ? { selection: siteWind, period: windSettings.period }
           : null,
       landmarkLabels: drawingLandmarkSources,
+      arrows: diagramArrows.state.visible ? diagramArrows.state.arrows : null,
     };
   }
 
