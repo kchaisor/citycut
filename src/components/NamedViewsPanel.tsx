@@ -179,9 +179,9 @@ export function NamedViewsPanel(props: NamedViewsPanelProps) {
         <span>High quality, transparent</span>
       </label>
       {hasWindSheet && (
-        <div className="named-views-quality">
-          <span>A3 map</span>
-          <div className="ac-seg ac-seg-compact" role="group" aria-label="A3 map framing">
+        <>
+          <p className="massing-micro">A3 map framing</p>
+          <div className="ac-seg ac-seg-2" role="group" aria-label="A3 map framing">
             {FRAMING_OPTIONS.map((option) => (
               <button
                 key={option.id}
@@ -195,7 +195,7 @@ export function NamedViewsPanel(props: NamedViewsPanelProps) {
               </button>
             ))}
           </div>
-        </div>
+        </>
       )}
       <div className="named-views-export">
         <button
@@ -215,7 +215,7 @@ export function NamedViewsPanel(props: NamedViewsPanelProps) {
           {busy === "all" ? "Exporting…" : "Export all"}
         </button>
       </div>
-      <p className="massing-helper">One view downloads as a PNG; several download as a zip. Only 3D views export. High quality renders at 3x on a transparent background.</p>
+      <p className="massing-helper">One view downloads as a PNG; several download as a zip. Only 3D views export. High quality renders at 3x on a transparent background. Plan wind sheets can frame the whole site or keep the saved zoom.</p>
       {warning && <p className="massing-warning is-error" role="alert">{warning}</p>}
     </div>
   );
