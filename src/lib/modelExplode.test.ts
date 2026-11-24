@@ -7,7 +7,7 @@ import {
   EXPLODE_LAYER_LABELS,
   easeInOutCubic,
   explodedBounds,
-  clampExplodeLabel,
+  boundaryLabelAnchor,
   explodeClockAt,
   explodeFit,
   explodeFreeArea,
@@ -20,7 +20,8 @@ import {
   explodeCornerPoints,
   explodeCornerSpan,
   explodeOutlineSpecs,
-  layerLabelAnchor,
+  layoutExplodeLabels,
+  separateExplodeLabels,
   layerOffsets,
   liftedBox,
   noExplodeBoxes,
@@ -307,22 +308,54 @@ describe("exploded bounds and camera fit", () => {
     expect(explodeFreeArea(view, narrow, 1).left).toBe(700);
   });
 
-  it("keeps a label left of its anchor and inside the free area", () => {
-    const safe = { left: 338, top: 72, right: 1082, bottom: 816 };
-    expect(clampExplodeLabel(700, 400, 110, 20, safe)).toEqual({ x: 688, y: 400 });
-    expect(clampExplodeLabel(380, 400, 110, 20, safe)).toEqual({ x: 448, y: 400 });
-    expect(clampExplodeLabel(1300, 20, 110, 20, safe)).toEqual({ x: 1082, y: 82 });
-    expect(clampExplodeLabel(700, 890, 110, 20, safe)).toEqual({ x: 688, y: 806 });
-  });
-
-  it("anchors a label at the screen-left bottom corner of its lifted layer", () => {
+  it("anchors a label at the boundary's left-most screen point at the layer height, whatever the layer geometry", () => {
+    const ring: [number, number][] = [[-HALF, -HALF], [HALF, -HALF], [HALF, HALF], [-HALF, HALF], [-HALF, -HALF]];
+    const parksInMiddle: Aabb = { min: [-20, 0, -20], max: [20, 1, 20] };
     for (const corner of ISO_CORNERS) {
       const { right } = cameraBasis(isoOffset(corner));
-      const lifted = liftedBox(BOXES.buildings!, 200);
-      const anchor = layerLabelAnchor(BOXES.buildings!, 200, right);
-      expect(anchor[1]).toBe(lifted.min[1]);
-      const leftmost = Math.min(...cornersOf(lifted).map((point) => dot(point, right)));
+      const offset = 200;
+      const anchor = boundaryLabelAnchor(ring, parksInMiddle.min[1] + offset, right)!;
+      expect(anchor[1]).toBe(offset);
+      const leftmost = Math.min(...ring.map(([east, north]) => dot([east, offset, -north], right)));
       expect(dot(anchor, right)).toBeCloseTo(leftmost, 9);
+      expect(Math.abs(anchor[0])).toBe(HALF);
+      expect(Math.abs(anchor[2])).toBe(HALF);
+      expect(dot(anchor, right)).toBeLessThan(dot(liftedBox(parksInMiddle, offset).min, right));
     }
+    expect(boundaryLabelAnchor([], 0, [1, 0, 0])).toBeNull();
+  });
+
+  it("pushes overlapping labels apart bottom-up, keeping order and leaving a single label alone", () => {
+    expect(separateExplodeLabels([400], 24)).toEqual([400]);
+    expect(separateExplodeLabels([500, 300, 100], 24)).toEqual([500, 300, 100]);
+    const pushed = separateExplodeLabels([500, 490, 488, 300], 24);
+    expect(pushed).toEqual([500, 476, 452, 300]);
+    for (let i = 1; i < pushed.length; i++) expect(pushed[i - 1] - pushed[i]).toBeGreaterThanOrEqual(24);
+    expect(separateExplodeLabels([100, 100, 100], 24, 90)).toEqual([138, 114, 90]);
+  });
+
+  it("lays every label in one right-aligned column left of the left-most anchor, without overlaps", () => {
+    const safe = { left: 338, top: 72, right: 1082, bottom: 816 };
+    const anchors = [
+      { x: 620, y: 700 },
+      { x: 640, y: 690 },
+      { x: 700, y: 688 },
+      { x: 610, y: 560 },
+      { x: 655, y: 300 },
+      { x: 630, y: 120 },
+    ];
+    const layout = layoutExplodeLabels(anchors, 110, 20, safe);
+    expect(layout.rightX).toBe(598);
+    expect(layout.ys).toHaveLength(6);
+    for (let i = 1; i < layout.ys.length; i++) expect(layout.ys[i - 1] - layout.ys[i]).toBeGreaterThanOrEqual(24);
+    const rects = layout.ys.map((y) => ({ left: layout.rightX - 110, right: layout.rightX, top: y - 10, bottom: y + 10 }));
+    for (let i = 0; i < rects.length; i++) {
+      for (let j = i + 1; j < rects.length; j++) {
+        const apart = rects[i].bottom <= rects[j].top || rects[j].bottom <= rects[i].top;
+        expect(apart).toBe(true);
+      }
+    }
+    expect(layoutExplodeLabels([{ x: 360, y: 400 }], 110, 20, safe).rightX).toBe(448);
+    expect(layoutExplodeLabels([{ x: 1300, y: 400 }], 110, 20, safe).rightX).toBe(1082);
   });
 });

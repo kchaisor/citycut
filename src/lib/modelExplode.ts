@@ -189,25 +189,54 @@ export function explodeFit(
   };
 }
 
-export function clampExplodeLabel(
-  x: number,
-  y: number,
+export const EXPLODE_LABEL_SPACING_PX = 4;
+
+export type ScreenPoint = { x: number; y: number };
+
+export function boundaryLabelAnchor(
+  ring: readonly (readonly [number, number])[],
+  baseY: number,
+  screenRight: Vec3,
+): Vec3 | null {
+  let best: Vec3 | null = null;
+  let bestDot = Infinity;
+  for (const [east, north] of ring) {
+    const along = screenRight[0] * east - screenRight[2] * north;
+    if (along < bestDot) {
+      bestDot = along;
+      best = [east, baseY, -north];
+    }
+  }
+  return best;
+}
+
+export function separateExplodeLabels(ys: readonly number[], spacing: number, minY = -Infinity, maxY = Infinity): number[] {
+  const out: number[] = [];
+  for (let i = 0; i < ys.length; i++) {
+    const wanted = i === 0 ? Math.min(ys[i], maxY) : Math.min(ys[i], out[i - 1] - spacing);
+    out.push(wanted);
+  }
+  const lift = out.length ? minY - out[out.length - 1] : 0;
+  return lift > 0 ? out.map((y) => y + lift) : out;
+}
+
+export type ExplodeLabelLayout = { rightX: number; ys: number[] };
+
+export function layoutExplodeLabels(
+  anchors: readonly ScreenPoint[],
   labelWidth: number,
   labelHeight: number,
   safe: ScreenRect,
-): { x: number; y: number } {
-  const minX = safe.left + labelWidth;
-  const minY = safe.top + labelHeight / 2;
-  return {
-    x: Math.max(minX, Math.min(safe.right, x - EXPLODE_LABEL_GAP_PX)),
-    y: Math.max(minY, Math.min(safe.bottom - labelHeight / 2, y)),
-  };
-}
-
-export function layerLabelAnchor(box: Aabb, offsetY: number, screenRight: Vec3): Vec3 {
-  const x = screenRight[0] > 0 ? box.min[0] : box.max[0];
-  const z = screenRight[2] > 0 ? box.min[2] : box.max[2];
-  return [x, box.min[1] + offsetY, z];
+): ExplodeLabelLayout {
+  const leftmost = anchors.length ? Math.min(...anchors.map((anchor) => anchor.x)) : safe.right;
+  const rightX = Math.max(safe.left + labelWidth, Math.min(safe.right, leftmost - EXPLODE_LABEL_GAP_PX));
+  const ys = separateExplodeLabels(
+    anchors.map((anchor) => anchor.y),
+    labelHeight + EXPLODE_LABEL_SPACING_PX,
+    safe.top + labelHeight / 2,
+    safe.bottom - labelHeight / 2,
+  );
+  return { rightX, ys };
 }
 
 export function explodeLabelOpacity(progress: number, exploding: boolean): number {

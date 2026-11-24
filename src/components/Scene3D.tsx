@@ -148,7 +148,7 @@ import {
   EXPLODE_LAYERS,
   EXPLODE_LAYER_LABELS,
   easeInOutCubic as explodeEase,
-  clampExplodeLabel,
+  boundaryLabelAnchor,
   explodeClockAt,
   explodedBounds,
   explodeFit,
@@ -162,7 +162,7 @@ import {
   EXPLODE_CORNER_DASH_PX,
   EXPLODE_CORNER_GAP_PX,
   type ExplodeCornerSpan,
-  layerLabelAnchor,
+  layoutExplodeLabels,
   noExplodeBoxes,
   noExplodeOffsets,
   prefersReducedMotion,
@@ -619,17 +619,22 @@ function ExplodeLabelProjector({
   runtime,
   exploding,
   shown,
+  frame,
   labelsRef,
+  leadersRef,
 }: {
   runtime: RefObject<ExplodeRuntime>;
   exploding: boolean;
   shown: boolean;
+  frame: SiteFrame;
   labelsRef: RefObject<Partial<Record<ExplodeLayerId, HTMLElement | null>>>;
+  leadersRef: RefObject<Partial<Record<ExplodeLayerId, SVGLineElement | null>>>;
 }) {
   const gl = useThree((state) => state.gl);
   const size = useThree((state) => state.size);
   const invalidate = useThree((state) => state.invalidate);
   const point = useMemo(() => new THREE.Vector3(), []);
+  const ring = useMemo(() => outline(frame)[0] ?? [], [frame]);
   useEffect(() => {
     invalidate();
   }, [shown, exploding, invalidate]);
@@ -640,27 +645,54 @@ function ExplodeLabelProjector({
     const safe = rect ? explodeSafeRect(explodeViewRect(gl.domElement, size)) : null;
     camera.updateMatrixWorld();
     const right = camera.matrixWorld.elements;
+    const shownLayers: ExplodeLayerId[] = [];
+    const anchors: { x: number; y: number }[] = [];
     for (const layer of EXPLODE_LAYERS) {
-      const element = labelsRef.current[layer];
-      if (!element) continue;
       const box = rt.boxes[layer];
-      if (!rect || !safe || !box) {
-        element.style.opacity = "0";
+      const world =
+        rect && safe && box
+          ? boundaryLabelAnchor(ring, box.min[1] + rt.offsets[layer], [right[0], right[1], right[2]])
+          : null;
+      if (!rect || !world) {
+        const element = labelsRef.current[layer];
+        if (element) element.style.opacity = "0";
+        const leader = leadersRef.current[layer];
+        if (leader) leader.style.opacity = "0";
         continue;
       }
-      const anchor = layerLabelAnchor(box, rt.offsets[layer], [right[0], right[1], right[2]]);
-      point.set(anchor[0], anchor[1], anchor[2]).project(camera);
-      const at = clampExplodeLabel(
-        rect.left + (point.x * 0.5 + 0.5) * rect.width,
-        rect.top + (-point.y * 0.5 + 0.5) * rect.height,
-        element.offsetWidth,
-        element.offsetHeight,
-        safe,
-      );
-      element.style.left = `${at.x}px`;
-      element.style.top = `${at.y}px`;
-      element.style.opacity = opacity.toFixed(3);
+      point.set(world[0], world[1], world[2]).project(camera);
+      shownLayers.push(layer);
+      anchors.push({
+        x: rect.left + (point.x * 0.5 + 0.5) * rect.width,
+        y: rect.top + (-point.y * 0.5 + 0.5) * rect.height,
+      });
     }
+    if (!safe || !shownLayers.length) return;
+    let width = 0;
+    let height = 0;
+    for (const layer of shownLayers) {
+      const element = labelsRef.current[layer];
+      if (!element) continue;
+      width = Math.max(width, element.offsetWidth);
+      height = Math.max(height, element.offsetHeight);
+    }
+    const layout = layoutExplodeLabels(anchors, width, height, safe);
+    shownLayers.forEach((layer, index) => {
+      const element = labelsRef.current[layer];
+      if (element) {
+        element.style.left = `${layout.rightX}px`;
+        element.style.top = `${layout.ys[index]}px`;
+        element.style.opacity = opacity.toFixed(3);
+      }
+      const leader = leadersRef.current[layer];
+      if (leader) {
+        leader.setAttribute("x1", String(layout.rightX));
+        leader.setAttribute("y1", String(layout.ys[index]));
+        leader.setAttribute("x2", String(anchors[index].x));
+        leader.setAttribute("y2", String(anchors[index].y));
+        leader.style.opacity = anchors[index].x - layout.rightX > 1 ? opacity.toFixed(3) : "0";
+      }
+    });
   });
   return null;
 }
@@ -3014,6 +3046,7 @@ export function Scene3D({
   const explodeRuntime = useMemo<RefObject<ExplodeRuntime>>(() => ({ current: createExplodeRuntime() }), []);
   const explodeOverlayRef = useRef<THREE.Group | null>(null);
   const explodeLabelsRef = useRef<Partial<Record<ExplodeLayerId, HTMLElement | null>>>({});
+  const explodeLeadersRef = useRef<Partial<Record<ExplodeLayerId, SVGLineElement | null>>>({});
   const [explodeEngaged, setExplodeEngaged] = useState(false);
   if (exploded && !explodeEngaged) setExplodeEngaged(true);
   const explodeLive = exploded || explodeEngaged;
@@ -3307,11 +3340,29 @@ export function Scene3D({
         explode={explodeRuntime}
       />
       {explodeLive ? (
-        <ExplodeLabelProjector runtime={explodeRuntime} exploding={exploded} shown={active} labelsRef={explodeLabelsRef} />
+        <ExplodeLabelProjector
+          runtime={explodeRuntime}
+          exploding={exploded}
+          shown={active}
+          frame={cutFrame}
+          labelsRef={explodeLabelsRef}
+          leadersRef={explodeLeadersRef}
+        />
       ) : null}
       </Canvas>
       {explodeLive && active ? (
         <div className="explode-label-layer">
+          <svg className="explode-leader-layer" aria-hidden="true">
+            {EXPLODE_LAYERS.map((layer) => (
+              <line
+                key={layer}
+                className="explode-leader"
+                ref={(element) => {
+                  explodeLeadersRef.current[layer] = element;
+                }}
+              />
+            ))}
+          </svg>
           {EXPLODE_LAYERS.map((layer) => (
             <div
               key={layer}
