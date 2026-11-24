@@ -1984,6 +1984,7 @@ export function useModelPage({
   }
 
   function applyNamedViewSnapshot(snapshot: NamedViewSnapshot): Promise<void> {
+    setExplodedOn(false);
     setTab(snapshot.tab);
     if (snapshot.tab === "drawing") setDrawing(snapshot.drawing);
     commitView(snapshot.view, true);

@@ -21,6 +21,7 @@ import { basePlinthBottomY, terrainTint } from "../lib/terrain";
 import { GROUND_ROADS_LAYER } from "../lib/groundRoads";
 import { hudSafeArea, type ScreenRect } from "../lib/heliodonSunDome";
 import { siteFrameFromModel } from "../lib/modelFrame";
+import { outline, type SiteFrame } from "../lib/siteFrame";
 import { auditBuildingSelection, mountSelectedBuildingsVisual } from "../lib/buildingSelectionVisual";
 import { CAMERA_FIT_INCLUDES_HELIODON } from "../lib/sceneCameraFit";
 import { shotFromCamera, type CameraShot } from "../lib/cameraShot";
@@ -155,6 +156,7 @@ import {
   explodeLayerOfObjectName,
   explodeLayerOfSelectionKind,
   explodeOffsets,
+  explodeOutlineSpecs,
   layerLabelAnchor,
   noExplodeBoxes,
   noExplodeOffsets,
@@ -290,6 +292,7 @@ export function createExplodeRuntime(): ExplodeRuntime {
 }
 
 const EXPLODE_GROUND_FILL_NAME = "ExplodeGroundFill";
+const EXPLODE_OUTLINES_NAME = "ExplodeOutlines";
 
 type ExplodeRun = { target: 0 | 1; from: number; startedAtMs: number };
 
@@ -354,6 +357,41 @@ function disposeExplodeGroundFill(fill: THREE.Group) {
   }
 }
 
+export function buildExplodeOutlines(frame: SiteFrame, boxes: ExplodeLayerBoxes): THREE.Group | null {
+  const ring = outline(frame)[0];
+  if (!ring || ring.length < 3) return null;
+  const group = new THREE.Group();
+  group.name = EXPLODE_OUTLINES_NAME;
+  group.userData.skipRhinoExport = true;
+  group.userData.noScenePick = true;
+  const points = (ring.at(-1)![0] === ring[0][0] && ring.at(-1)![1] === ring[0][1] ? ring.slice(0, -1) : ring).map(
+    ([east, north]) => new THREE.Vector3(east, 0, -north),
+  );
+  for (const layer of EXPLODE_LAYERS) {
+    if (!boxes[layer]) continue;
+    const line = new THREE.LineLoop(
+      new THREE.BufferGeometry().setFromPoints(points),
+      new THREE.LineBasicMaterial({ color: getColour("--ground-edge") }),
+    );
+    line.name = `${EXPLODE_OUTLINES_NAME}:${layer}`;
+    line.userData.explodeLayer = layer;
+    line.userData.skipRhinoExport = true;
+    line.userData.noScenePick = true;
+    line.raycast = () => {};
+    group.add(line);
+  }
+  return group.children.length ? group : null;
+}
+
+function disposeExplodeOutlines(group: THREE.Group) {
+  group.removeFromParent();
+  for (const child of group.children) {
+    const line = child as THREE.LineLoop;
+    line.geometry.dispose();
+    (line.material as THREE.Material).dispose();
+  }
+}
+
 type ExplodeLift = { restY: number; offset: number };
 
 export function measureExplodeLayers(
@@ -362,12 +400,10 @@ export function measureExplodeLayers(
   overlay: THREE.Object3D | null,
   applied: WeakMap<THREE.Object3D, ExplodeLift>,
 ): ExplodeLayerBoxes {
-  const merged: Record<ExplodeLayerId, THREE.Box3> = {
-    ground: new THREE.Box3(),
-    transport: new THREE.Box3(),
-    buildings: new THREE.Box3(),
-    trees: new THREE.Box3(),
-  };
+  const merged = Object.fromEntries(EXPLODE_LAYERS.map((layer) => [layer, new THREE.Box3()])) as Record<
+    ExplodeLayerId,
+    THREE.Box3
+  >;
   const settle = new THREE.Vector3();
   const include = (object: THREE.Object3D, layer: ExplodeLayerId, liftedBy: number) => {
     if (!object.visible) return;
@@ -376,7 +412,7 @@ export function measureExplodeLayers(
     merged[layer].union(box.translate(settle.set(0, -liftedBy, 0)));
   };
   for (const child of city.children) {
-    if (child.name === "IntroCutRing") continue;
+    if (child.name === "IntroCutRing" || child.name === EXPLODE_OUTLINES_NAME) continue;
     include(child, explodeLayerOfObjectName(child.name), applied.get(child)?.offset ?? 0);
   }
   if (importedMassing) include(importedMassing, "buildings", overlay?.position.y ?? 0);
@@ -398,7 +434,9 @@ export function applyExplodeOffsets(
     object.position.y = lifted.restY + offset;
     applied.set(object, lifted);
   };
-  for (const child of city.children) lift(child, offsets[explodeLayerOfObjectName(child.name)]);
+  for (const child of city.children) {
+    if (child.name !== EXPLODE_OUTLINES_NAME) lift(child, offsets[explodeLayerOfObjectName(child.name)]);
+  }
   if (overlay) lift(overlay, offsets.buildings);
 }
 
@@ -412,10 +450,14 @@ export function ExplodeLayers({
   gapM,
   measureKey,
   terrain,
+  frame,
+  snapKey = 0,
   onCollapsed,
   onTopLift,
 }: {
   terrain?: Pick<TerrainField, "min" | "max"> | null;
+  frame?: SiteFrame | null;
+  snapKey?: number;
   city: THREE.Group;
   overlayRef: RefObject<THREE.Group | null>;
   importedMassing: THREE.Object3D | null;
@@ -432,12 +474,19 @@ export function ExplodeLayers({
   const measured = useRef<{ city: THREE.Group; key: string } | null>(null);
   const fittedGap = useRef(gapM);
   const run = useRef<ExplodeRun | null>(null);
+  const seenSnapKey = useRef(snapKey);
   const groundFill = useRef<{ city: THREE.Group; fill: THREE.Group | null } | null>(null);
   const dropGroundFill = useCallback(() => {
     if (groundFill.current?.fill) disposeExplodeGroundFill(groundFill.current.fill);
     groundFill.current = null;
   }, []);
   useEffect(() => dropGroundFill, [city, terrain, dropGroundFill]);
+  const outlines = useRef<{ city: THREE.Group; frame: SiteFrame; boxes: ExplodeLayerBoxes; group: THREE.Group | null } | null>(null);
+  const dropOutlines = useCallback(() => {
+    if (outlines.current?.group) disposeExplodeOutlines(outlines.current.group);
+    outlines.current = null;
+  }, []);
+  useEffect(() => dropOutlines, [city, frame, dropOutlines]);
   useEffect(() => {
     invalidate();
   }, [city, exploded, gapM, measureKey, invalidate]);
@@ -447,10 +496,13 @@ export function ExplodeLayers({
     const introActive = state.scene.userData[INTRO_ACTIVE_KEY] === true;
     const target = exploded && !introActive ? 1 : 0;
     const nowMs = state.clock.elapsedTime * 1000;
-    if (introActive) rt.clock = 0;
-    if (introActive || run.current?.target !== target) run.current = { target, from: rt.clock, startedAtMs: nowMs };
+    const snapped = seenSnapKey.current !== snapKey;
+    seenSnapKey.current = snapKey;
+    if (introActive || (snapped && target === 0)) rt.clock = 0;
+    if (introActive || snapped || run.current?.target !== target) run.current = { target, from: rt.clock, startedAtMs: nowMs };
     if (target === 0 && rt.clock === 0 && rt.progress === 0) {
       dropGroundFill();
+      dropOutlines();
       dataset.exploded = "0";
       dataset.explodeProgress = "0.000";
       if (!exploded) onCollapsed();
@@ -469,15 +521,34 @@ export function ExplodeLayers({
       if (fill) city.add(fill);
       groundFill.current = { city, fill };
     }
-    if (rt.progress === 0) dropGroundFill();
+    if (rt.progress === 0) {
+      dropGroundFill();
+      dropOutlines();
+    }
     for (const mesh of groundFill.current?.fill?.children ?? []) mesh.visible = (mesh.userData.source as THREE.Object3D).visible;
     rt.offsets = explodeOffsets(rt.boxes, gapM, rt.progress);
     applyExplodeOffsets(city, overlayRef.current, rt.offsets, applied.current);
+    if (frame && rt.progress > 0) {
+      const held = outlines.current;
+      if (!held || held.city !== city || held.frame !== frame || held.boxes !== rt.boxes) {
+        dropOutlines();
+        const group = buildExplodeOutlines(frame, rt.boxes);
+        if (group) city.add(group);
+        outlines.current = { city, frame, boxes: rt.boxes, group };
+      }
+      const group = outlines.current?.group;
+      if (group) {
+        for (const spec of explodeOutlineSpecs(rt.boxes, rt.offsets)) {
+          const line = group.getObjectByName(`${EXPLODE_OUTLINES_NAME}:${spec.layer}`);
+          if (line) line.position.y = spec.baseY;
+        }
+      }
+    }
     if (stale || before !== rt.progress || fittedGap.current !== gapM) {
       fittedGap.current = gapM;
       const base = cityBoundsRef.current;
       rt.bounds = explodedBounds(base, rt.boxes, rt.offsets);
-      rt.fitToken += 1;
+      if (!(snapped && target === 0)) rt.fitToken += 1;
       const stacked = explodedBounds(base, rt.boxes, explodeOffsets(rt.boxes, gapM, 1));
       onTopLift(stacked && base ? Math.max(0, Math.ceil(stacked.max[1] - base.max[1])) : 0);
     }
@@ -895,6 +966,7 @@ function City({
   cityBoundsRef,
   onExplodeCollapsed,
   onExplodeTopLift,
+  explodeSnapKey,
 }: {
   model: CityModel;
   uniformBuildings: boolean;
@@ -931,6 +1003,7 @@ function City({
   cityBoundsRef: RefObject<Aabb | null>;
   onExplodeCollapsed: () => void;
   onExplodeTopLift: (liftM: number) => void;
+  explodeSnapKey: number;
 }) {
   const onBoundsRef = useRef(onBounds);
   onBoundsRef.current = onBounds;
@@ -1419,6 +1492,7 @@ function City({
     };
   }, [contours, group, invalidate]);
   useLayoutEffect(() => () => disposeObject(group), [group]);
+  const explodeFrame = useMemo(() => siteFrameFromModel(model), [model]);
   const explodeMeasureKey = [
     buildingsVisible,
     roadsVisible,
@@ -1444,6 +1518,8 @@ function City({
         gapM={explodeGapM}
         measureKey={explodeMeasureKey}
         terrain={model.terrain ?? null}
+        frame={explodeFrame}
+        snapKey={explodeSnapKey}
         onCollapsed={onExplodeCollapsed}
         onTopLift={onExplodeTopLift}
       />
@@ -3097,6 +3173,7 @@ export function Scene3D({
         explodeOverlayRef={explodeOverlayRef}
         cityBoundsRef={boundsRef}
         onExplodeCollapsed={onExplodeCollapsed}
+        explodeSnapKey={cameraRestore?.id ?? 0}
         onExplodeTopLift={setExplodeTopLiftM}
       />
       <group ref={explodeOverlayRef}>

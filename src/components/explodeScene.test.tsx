@@ -6,6 +6,7 @@ import { cornersOf, type Aabb } from "../lib/isoCamera";
 import { EXPLODE_LAYERS, explodeOffsets, liftedBox } from "../lib/modelExplode";
 import type { ProjectionMode } from "../lib/viewMemory";
 import type { SolarViewSettings } from "./SolarHeliodon";
+import { makeSiteFrame, type SiteFrame } from "../lib/siteFrame";
 import { GROUND_ROADS_LAYER } from "../lib/groundRoads";
 import { Cameras, ExplodeLayers, createExplodeRuntime, type ExplodeRuntime } from "./Scene3D";
 
@@ -35,13 +36,14 @@ function slab(name: string, bottom: number, top: number, half = HALF): THREE.Mes
   return mesh;
 }
 
-function sampleCity(): THREE.Group {
+function sampleCity(wet = false): THREE.Group {
   const city = new THREE.Group();
   city.name = "CityCut";
   const trees = new THREE.Group();
   trees.name = "Trees";
   trees.add(slab("TreesBucket", 0, 15, 40));
   city.add(slab("Terrain", -10, 0), slab("Roads", 0, 1), slab("Buildings", 0, 60, 30), trees);
+  if (wet) city.add(slab("Water", 0, 0.5, 60), slab("Green", 0, 0.5, 90));
   return city;
 }
 
@@ -72,7 +74,7 @@ async function frames(n: number, stepSec = 0.05) {
   }
 }
 
-type Opts = { exploded: boolean; gapM: number; projection?: ProjectionMode; terrain?: { min: number; max: number } };
+type Opts = { exploded: boolean; gapM: number; projection?: ProjectionMode; terrain?: { min: number; max: number }; frame?: SiteFrame; wet?: boolean };
 
 const cleanups: Array<() => Promise<void>> = [];
 afterEach(async () => {
@@ -84,7 +86,7 @@ async function mountExplode(initial: Opts) {
   const canvas = document.createElement("canvas");
   document.body.appendChild(canvas);
   const root = createRoot(canvas);
-  const city = sampleCity();
+  const city = sampleCity(initial.wet);
   const runtime: { current: ExplodeRuntime } = { current: createExplodeRuntime() };
   const overlay: { current: THREE.Group | null } = { current: null };
   const bounds: { current: Aabb | null } = { current: { min: [-HALF, -10, -HALF], max: [HALF, 60, HALF] } };
@@ -105,6 +107,7 @@ async function mountExplode(initial: Opts) {
         gapM={o.gapM}
         measureKey="all"
         terrain={o.terrain}
+        frame={o.frame}
         onCollapsed={collapsed}
         onTopLift={topLift}
       />
@@ -169,7 +172,7 @@ function stackInView(camera: THREE.OrthographicCamera, runtime: ExplodeRuntime):
   const point = new THREE.Vector3();
   for (const layer of EXPLODE_LAYERS) {
     const box = runtime.boxes[layer];
-    if (!box) return false;
+    if (!box) continue;
     for (const corner of cornersOf(liftedBox(box, runtime.offsets[layer]))) {
       point.set(corner[0], corner[1], corner[2]).project(camera);
       if (Math.abs(point.x) > 1 || Math.abs(point.y) > 1 || point.z < -1 || point.z > 1) return false;
@@ -207,7 +210,7 @@ describe("exploded axo in the 3D scene", () => {
     expect(rig.canvas.dataset.exploded).toBe("1");
     expect(rig.canvas.dataset.explodeProgress).toBe("1.000");
     const offsets = explodeOffsets(rig.runtime.current.boxes, 75, 1);
-    expect(offsets).toEqual({ ground: 0, transport: 75, buildings: 151, trees: 286 });
+    expect(offsets).toEqual({ ground: 0, water: 0, parks: 0, transport: 75, buildings: 151, trees: 286 });
     expect(layerY(rig.city, "Terrain")).toBe(0);
     expect(layerY(rig.city, "Roads")).toBe(75);
     expect(layerY(rig.city, "Buildings")).toBe(151);
@@ -253,6 +256,71 @@ describe("exploded axo in the 3D scene", () => {
     await frames(30);
     expect(rig.city.getObjectByName("ExplodeGroundFill")).toBeUndefined();
     for (const child of rig.city.children) expect(child.position.y).toBe(0);
+  });
+
+  it("lifts Water and Parks as their own layers between Ground and Roads", async () => {
+    const rig = await mountExplode({ exploded: false, gapM: 75, wet: true });
+    await rig.rerender({ exploded: true, gapM: 75, wet: true });
+    await frames(30);
+    const boxes = rig.runtime.current.boxes;
+    expect(EXPLODE_LAYERS.filter((layer) => boxes[layer])).toEqual(["ground", "water", "parks", "transport", "buildings", "trees"]);
+    const offsets = explodeOffsets(boxes, 75, 1);
+    expect(offsets.ground).toBe(0);
+    expect(offsets.water).toBeGreaterThan(0);
+    expect(offsets.parks).toBeGreaterThan(offsets.water);
+    expect(offsets.transport).toBeGreaterThan(offsets.parks);
+    expect(layerY(rig.city, "Water")).toBe(offsets.water);
+    expect(layerY(rig.city, "Green")).toBe(offsets.parks);
+    expect(layerY(rig.city, "Terrain")).toBe(0);
+  });
+
+  it("draws one thin boundary outline per present layer, only while exploded", async () => {
+    const frame = makeSiteFrame(SIDE, "circle");
+    const rig = await mountExplode({ exploded: false, gapM: 75, wet: true, frame });
+    const outlines = () => rig.city.getObjectByName("ExplodeOutlines");
+    expect(outlines()).toBeUndefined();
+    await rig.rerender({ exploded: true, gapM: 75, wet: true, frame });
+    await frames(3);
+    const mid = rig.runtime.current.progress;
+    expect(mid).toBeGreaterThan(0);
+    expect(mid).toBeLessThan(1);
+    await frames(30);
+    const group = outlines()!;
+    expect(group.userData.skipRhinoExport).toBe(true);
+    expect(group.children.map((child) => child.userData.explodeLayer)).toEqual([...EXPLODE_LAYERS]);
+    const { boxes, offsets } = rig.runtime.current;
+    for (const line of group.children as THREE.LineLoop[]) {
+      const layer = line.userData.explodeLayer as (typeof EXPLODE_LAYERS)[number];
+      expect(line.position.y).toBe(boxes[layer]!.min[1] + offsets[layer]);
+      expect(line).toBeInstanceOf(THREE.LineLoop);
+      expect(line.geometry.getAttribute("position").count).toBeGreaterThan(64);
+      const hits: THREE.Intersection[] = [];
+      line.raycast(new THREE.Raycaster(), hits);
+      expect(hits).toHaveLength(0);
+    }
+    expect(rig.runtime.current.bounds!.max[1]).toBe(boxes.trees!.max[1] + offsets.trees);
+    const treesY = group.children.find((child) => child.userData.explodeLayer === "trees")!.position.y;
+    await rig.rerender({ exploded: true, gapM: 150, wet: true, frame });
+    await frames(2);
+    const gapped = rig.runtime.current;
+    for (const line of outlines()!.children as THREE.LineLoop[]) {
+      const layer = line.userData.explodeLayer as (typeof EXPLODE_LAYERS)[number];
+      expect(line.position.y).toBe(gapped.boxes[layer]!.min[1] + gapped.offsets[layer]);
+    }
+    const treesOutline = (g: THREE.Object3D) => g.children.find((child) => child.userData.explodeLayer === "trees")!.position.y;
+    expect(treesOutline(outlines()!)).toBeGreaterThan(treesY);
+    await rig.rerender({ exploded: false, gapM: 150, wet: true, frame });
+    await frames(30);
+    expect(outlines()).toBeUndefined();
+    for (const child of rig.city.children) expect(child.position.y).toBe(0);
+  });
+
+  it("outlines only the layers that are present", async () => {
+    const frame = makeSiteFrame(SIDE, "square");
+    const rig = await mountExplode({ exploded: true, gapM: 75, frame });
+    await frames(30);
+    const layers = rig.city.getObjectByName("ExplodeOutlines")!.children.map((child) => child.userData.explodeLayer);
+    expect(layers).toEqual(["ground", "transport", "buildings", "trees"]);
   });
 
   it("still picks a building where it now sits", async () => {

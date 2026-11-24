@@ -17,6 +17,7 @@ import {
   explodeLayerOfObjectName,
   explodeLayerOfSelectionKind,
   explodeOffsets,
+  explodeOutlineSpecs,
   layerLabelAnchor,
   layerOffsets,
   liftedBox,
@@ -29,26 +30,32 @@ const HALF = 250;
 const slab = (bottom: number, top: number): Aabb => ({ min: [-HALF, bottom, -HALF], max: [HALF, top, HALF] });
 const BOXES: ExplodeLayerBoxes = {
   ground: slab(-20, 4),
+  water: slab(0, 1),
+  parks: slab(0, 1),
   transport: slab(0, 5),
   buildings: slab(0, 120),
   trees: slab(1, 25),
 };
 
 describe("explode layers", () => {
-  it("stacks Ground, Roads & transport, Buildings, Trees from the bottom up", () => {
-    expect([...EXPLODE_LAYERS]).toEqual(["ground", "transport", "buildings", "trees"]);
+  it("stacks Ground, Water, Parks, Roads & transport, Buildings, Trees from the bottom up", () => {
+    expect([...EXPLODE_LAYERS]).toEqual(["ground", "water", "parks", "transport", "buildings", "trees"]);
     expect(EXPLODE_LAYERS.map((layer) => EXPLODE_LAYER_LABELS[layer])).toEqual([
       "Ground",
+      "Water",
+      "Parks",
       "Roads & transport",
       "Buildings",
       "Trees",
     ]);
   });
 
-  it("classifies city objects into the four layers, unknown names to ground", () => {
-    for (const name of ["Terrain", "Ground", "BasePlinth", "GroundEdge", "Green", "Water", "Blocks", "Contours3d", "Site::Boundary", "Mystery"]) {
+  it("classifies city objects into the six layers, unknown names to ground", () => {
+    for (const name of ["Terrain", "Ground", "BasePlinth", "GroundEdge", "Blocks", "Contours3d", "Site::Boundary", "Mystery"]) {
       expect(explodeLayerOfObjectName(name)).toBe("ground");
     }
+    expect(explodeLayerOfObjectName("Water")).toBe("water");
+    expect(explodeLayerOfObjectName("Green")).toBe("parks");
     for (const name of ["Roads", "RailLines", "TramLines"]) expect(explodeLayerOfObjectName(name)).toBe("transport");
     for (const name of ["Buildings", "Buildings-manual", "Buildings-site", "Buildings::Site", "source:osm_tag", "BuildingEdges", "HeightEditOverlay"]) {
       expect(explodeLayerOfObjectName(name)).toBe("buildings");
@@ -105,15 +112,35 @@ describe("explodeOffsets", () => {
   });
 
   it("is the assembled scene at progress 0", () => {
-    expect(explodeOffsets(BOXES, 75, 0)).toEqual({ ground: 0, transport: 0, buildings: 0, trees: 0 });
+    expect(explodeOffsets(BOXES, 75, 0)).toEqual({ ground: 0, water: 0, parks: 0, transport: 0, buildings: 0, trees: 0 });
   });
 
   it("skips an empty layer without adding a second gap", () => {
     const noRoads: ExplodeLayerBoxes = { ...BOXES, transport: null };
     const offsets = explodeOffsets(noRoads, 50, 1);
-    expect(offsets.transport).toBe(0);
-    expect(noRoads.buildings!.min[1] + offsets.buildings - noRoads.ground!.max[1]).toBeCloseTo(50, 9);
-    expect(explodeOffsets(noExplodeBoxes(), 50, 1)).toEqual({ ground: 0, transport: 0, buildings: 0, trees: 0 });
+    expect(offsets.transport).toBe(offsets.parks);
+    expect(noRoads.buildings!.min[1] + offsets.buildings - (noRoads.parks!.max[1] + offsets.parks)).toBeCloseTo(50, 9);
+    const noWater: ExplodeLayerBoxes = { ...BOXES, water: null, parks: null };
+    const dry = explodeOffsets(noWater, 50, 1);
+    expect(dry.water).toBe(0);
+    expect(dry.parks).toBe(0);
+    expect(noWater.transport!.min[1] + dry.transport - noWater.ground!.max[1]).toBeCloseTo(50, 9);
+    expect(explodeOffsets(noExplodeBoxes(), 50, 1)).toEqual({ ground: 0, water: 0, parks: 0, transport: 0, buildings: 0, trees: 0 });
+  });
+});
+
+describe("explodeOutlineSpecs", () => {
+  it("gives one outline per present layer at that layer's lifted base", () => {
+    const noParks: ExplodeLayerBoxes = { ...BOXES, parks: null };
+    const offsets = explodeOffsets(noParks, 50, 1);
+    const specs = explodeOutlineSpecs(noParks, offsets);
+    expect(specs.map((spec) => spec.layer)).toEqual(["ground", "water", "transport", "buildings", "trees"]);
+    for (const spec of specs) expect(spec.baseY).toBe(noParks[spec.layer]!.min[1] + offsets[spec.layer]);
+    expect(specs[0].baseY).toBe(-20);
+  });
+
+  it("sits at the resting bases at progress 0", () => {
+    for (const spec of explodeOutlineSpecs(BOXES, explodeOffsets(BOXES, 50, 0))) expect(spec.baseY).toBe(BOXES[spec.layer]!.min[1]);
   });
 });
 

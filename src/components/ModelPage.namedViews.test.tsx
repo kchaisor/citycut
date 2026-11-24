@@ -8,9 +8,9 @@ import type { CityModel, Pt } from "../types";
 const probe = vi.hoisted(() => ({ solar: null as Record<string, unknown> | null, plan: null as { mode: string; vectorsOn: boolean } | null }));
 
 vi.mock("./Scene3D", () => ({
-  Scene3D: ({ solar }: { solar?: Record<string, unknown> }) => {
+  Scene3D: ({ solar, exploded }: { solar?: Record<string, unknown>; exploded?: boolean }) => {
     probe.solar = solar ?? null;
-    return <div data-testid="scene-3d" />;
+    return <div data-testid="scene-3d" data-exploded={String(exploded === true)} />;
   },
 }));
 vi.mock("./useWindPlan", async (original) => {
@@ -140,5 +140,22 @@ describe("Named views in ModelPage", () => {
       month: 12,
       day: 21,
     });
+  });
+
+  it("does not save Exploded axo in a named view, and applying a view puts the model back together", async () => {
+    const user = userEvent.setup();
+    render(<ModelPage model={sampleModel()} onHome={vi.fn()} onNewCut={vi.fn()} />);
+    const projection = () => screen.getByRole("group", { name: "3D projection" });
+    await user.click(within(projection()).getByRole("button", { name: "Exploded axo" }));
+    expect(screen.getByTestId("scene-3d").dataset.exploded).toBe("true");
+    await user.click(within(screen.getByRole("toolbar", { name: "Model tools" })).getByRole("button", { name: "Views" }));
+    await user.type(screen.getByRole("textbox", { name: "View name" }), "Stack");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    expect(window.localStorage.getItem("citycut.namedViews.v1")).not.toMatch(/explod/i);
+    expect(screen.getByTestId("scene-3d").dataset.exploded).toBe("true");
+    await user.click(screen.getByRole("button", { name: /^Stack/ }));
+    expect(screen.getByTestId("scene-3d").dataset.exploded).toBe("false");
+    expect(within(projection()).getByRole("button", { name: "Exploded axo" }).getAttribute("aria-pressed")).toBe("false");
+    expect(within(projection()).getByRole("button", { name: "Isometric" }).getAttribute("aria-pressed")).toBe("true");
   });
 });

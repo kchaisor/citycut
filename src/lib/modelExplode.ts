@@ -1,12 +1,14 @@
 import type { ScreenRect } from "./heliodonSunDome";
 import { fitOrthoZoom, type Aabb, type Vec3 } from "./isoCamera";
 
-export const EXPLODE_LAYERS = ["ground", "transport", "buildings", "trees"] as const;
+export const EXPLODE_LAYERS = ["ground", "water", "parks", "transport", "buildings", "trees"] as const;
 
 export type ExplodeLayerId = (typeof EXPLODE_LAYERS)[number];
 
 export const EXPLODE_LAYER_LABELS: Record<ExplodeLayerId, string> = {
   ground: "Ground",
+  water: "Water",
+  parks: "Parks",
   transport: "Roads & transport",
   buildings: "Buildings",
   trees: "Trees",
@@ -30,6 +32,8 @@ const BUILDING_NAMES = new Set(["Buildings", "Buildings-manual", "Buildings-site
 
 export function explodeLayerOfObjectName(name: string): ExplodeLayerId {
   if (name === "Trees") return "trees";
+  if (name === "Water") return "water";
+  if (name === "Green") return "parks";
   if (TRANSPORT_NAMES.has(name)) return "transport";
   if (BUILDING_NAMES.has(name) || name.startsWith("Buildings::") || name.startsWith("source:")) return "buildings";
   return "ground";
@@ -42,11 +46,22 @@ export function explodeLayerOfSelectionKind(kind: string | null | undefined): Ex
 }
 
 export function noExplodeOffsets(): ExplodeLayerOffsets {
-  return { ground: 0, transport: 0, buildings: 0, trees: 0 };
+  return { ground: 0, water: 0, parks: 0, transport: 0, buildings: 0, trees: 0 };
 }
 
 export function noExplodeBoxes(): ExplodeLayerBoxes {
-  return { ground: null, transport: null, buildings: null, trees: null };
+  return { ground: null, water: null, parks: null, transport: null, buildings: null, trees: null };
+}
+
+export type ExplodeOutlineSpec = { layer: ExplodeLayerId; baseY: number };
+
+export function explodeOutlineSpecs(boxes: ExplodeLayerBoxes, offsets: ExplodeLayerOffsets): ExplodeOutlineSpec[] {
+  const specs: ExplodeOutlineSpec[] = [];
+  for (const layer of EXPLODE_LAYERS) {
+    const box = boxes[layer];
+    if (box) specs.push({ layer, baseY: box.min[1] + offsets[layer] });
+  }
+  return specs;
 }
 
 export function easeInOutCubic(x: number): number {
