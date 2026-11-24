@@ -88,7 +88,51 @@ export type WindSheetStyle = {
   mono: string;
 };
 
-export type WindSheetCapture = { source: CanvasImageSource; width: number; height: number; frame: SheetFrame | null };
+export type WindSheetCapture = {
+  source: CanvasImageSource;
+  width: number;
+  height: number;
+  frame: SheetFrame | null;
+  trim?: SheetRect | null;
+};
+
+export type PixelGrid = { data: ArrayLike<number>; width: number; height: number };
+
+export type Rgb = { r: number; g: number; b: number };
+
+const TRIM_TOLERANCE = 4;
+
+export function contentBounds(image: PixelGrid, background: Rgb | null, tolerance = TRIM_TOLERANCE): SheetRect | null {
+  const { data, width, height } = image;
+  let minX = width;
+  let minY = height;
+  let maxX = -1;
+  let maxY = -1;
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const at = (y * width + x) * 4;
+      if (data[at + 3]! === 0) continue;
+      if (
+        background &&
+        Math.abs(data[at]! - background.r) <= tolerance &&
+        Math.abs(data[at + 1]! - background.g) <= tolerance &&
+        Math.abs(data[at + 2]! - background.b) <= tolerance
+      )
+        continue;
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+    }
+  }
+  if (maxX < 0) return null;
+  return { x: minX, y: minY, width: maxX - minX + 1, height: maxY - minY + 1 };
+}
+
+export function trimmedFrame(frame: SheetFrame, captureWidth: number, trim: SheetRect | null): SheetFrame {
+  if (!trim || !(captureWidth > 0)) return frame;
+  return { ...frame, metresAcross: (frame.metresAcross * trim.width) / captureWidth };
+}
 
 export type WindSheetMetrics = { planLegendEnd: number; furniture: { top: number; bottom: number } | null; notesRule: number };
 
@@ -442,8 +486,9 @@ export function drawWindSheet(
     ctx.fillStyle = style.page;
     ctx.fillRect(0, 0, layout.width, layout.height);
   }
-  const image = containRect(capture.width, capture.height, main);
-  ctx.drawImage(capture.source, image.x, image.y, image.width, image.height);
+  const trim = capture.trim ?? { x: 0, y: 0, width: capture.width, height: capture.height };
+  const image = containRect(trim.width, trim.height, main);
+  ctx.drawImage(capture.source, trim.x, trim.y, trim.width, trim.height, image.x, image.y, image.width, image.height);
   ctx.strokeStyle = style.rule;
   ctx.lineWidth = hairlinePx(layout);
   ctx.strokeRect(image.x - 0.5, image.y - 0.5, image.width + 1, image.height + 1);
@@ -458,8 +503,9 @@ export function drawWindSheet(
   drawRose(pen, input.stats);
 
   let cursor = layout.rose.y + layout.rose.height;
-  text(pen, ROSE_RINGS_KEY, column.x + column.width, cursor + fontSizePx(layout, -1), fonts.mono(-1), style.inkMuted, "right");
   cursor += Math.round(unit);
+  text(pen, ROSE_RINGS_KEY, layout.rose.x + layout.rose.width / 2, cursor + fontSizePx(layout, -1), fonts.mono(-1), style.inkMuted, "center");
+  cursor += fontSizePx(layout, -1) + Math.round(unit * 2);
   text(pen, input.seasonTimeLabel, column.x, cursor + fontSizePx(layout, 1), fonts.sans(1, 600), style.ink);
   cursor += Math.round(fontSizePx(layout, 1) * 1.6);
   text(pen, input.prevailing, column.x, cursor + fontSizePx(layout, 0), fonts.mono(0, 600), style.ink);
@@ -491,10 +537,11 @@ export function drawWindSheet(
 
   const height = furnitureHeight(layout);
   const furnitureTop = notesRule - Math.round(unit * 2) - height;
-  const fits = capture.frame != null && furnitureTop - Math.round(unit * 2) >= planLegendEnd + Math.round(unit);
+  const frame = capture.frame ? trimmedFrame(capture.frame, capture.width, capture.trim ?? null) : null;
+  const fits = frame != null && furnitureTop - Math.round(unit * 2) >= planLegendEnd + Math.round(unit);
   if (fits) {
     rule(pen, furnitureTop - Math.round(unit * 2));
-    drawFurniture(pen, image, capture.frame, furnitureTop);
+    drawFurniture(pen, image, frame, furnitureTop);
   }
   return { planLegendEnd, furniture: fits ? { top: furnitureTop, bottom: furnitureTop + height } : null, notesRule };
 }
@@ -504,6 +551,24 @@ async function loadSheetFonts(style: WindSheetStyle, layout: WindSheetLayout): P
   const fonts = fontsFor(layout, style);
   await Promise.all([fonts.sans(0, 500), fonts.sans(0, 600), fonts.sans(0, 700), fonts.mono(0, 500), fonts.mono(0, 600)].map((font) => document.fonts.load(font).catch(() => [])));
   await document.fonts.ready;
+}
+
+function measureTrim(bitmap: ImageBitmap, page: string, transparent: boolean): SheetRect | null {
+  const probe = document.createElement("canvas");
+  probe.width = bitmap.width;
+  probe.height = bitmap.height;
+  const ctx = probe.getContext("2d", { willReadFrequently: true });
+  if (!ctx) return null;
+  let background: Rgb | null = null;
+  if (!transparent) {
+    ctx.fillStyle = page;
+    ctx.fillRect(0, 0, 1, 1);
+    const [r, g, b] = ctx.getImageData(0, 0, 1, 1).data;
+    background = { r: r!, g: g!, b: b! };
+    ctx.clearRect(0, 0, 1, 1);
+  }
+  ctx.drawImage(bitmap, 0, 0);
+  return contentBounds(ctx.getImageData(0, 0, bitmap.width, bitmap.height), background);
 }
 
 export async function composeWindSheet(
@@ -522,7 +587,8 @@ export async function composeWindSheet(
     canvas.height = size.height;
     const ctx = canvas.getContext("2d");
     if (!ctx) throw new Error("Could not prepare the wind sheet.");
-    drawWindSheet(ctx, layout, { source: bitmap, width: bitmap.width, height: bitmap.height, frame: options.frame }, input, style, {
+    const trim = measureTrim(bitmap, style.page, options.highQuality);
+    drawWindSheet(ctx, layout, { source: bitmap, width: bitmap.width, height: bitmap.height, frame: options.frame, trim }, input, style, {
       transparent: options.highQuality,
     });
     const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));

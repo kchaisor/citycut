@@ -4,6 +4,8 @@ import type { NamedViewSnapshot } from "./namedViews";
 import {
   WIND_SHEET_SIZES,
   containRect,
+  contentBounds,
+  trimmedFrame,
   drawWindSheet,
   isWindSheetView,
   windSheetInput,
@@ -186,5 +188,64 @@ describe("drawWindSheet", () => {
     expect(spring?.seasonTimeLabel).toBe("Spring · Morning");
     expect(winter?.seasonTimeLabel).toBe("Winter · All day");
     expect(windSheetInput({ selection: null, scaleMaxMs: null, comfortShares: null }, snapshot("spring", "all"), "Site", "A")).toBeNull();
+  });
+});
+
+function grid(width: number, height: number, paint: (x: number, y: number) => [number, number, number, number]) {
+  const data = new Uint8ClampedArray(width * height * 4);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) data.set(paint(x, y), (y * width + x) * 4);
+  }
+  return { data, width, height };
+}
+
+describe("contentBounds", () => {
+  const white: [number, number, number, number] = [255, 255, 255, 255];
+  const blue: [number, number, number, number] = [10, 90, 200, 255];
+
+  it("trims an opaque capture to the pixels that are not the background", () => {
+    const image = grid(10, 8, (x, y) => (x >= 2 && x <= 6 && y >= 1 && y <= 5 ? blue : white));
+    expect(contentBounds(image, { r: 255, g: 255, b: 255 })).toEqual({ x: 2, y: 1, width: 5, height: 5 });
+  });
+
+  it("treats near-background pixels within tolerance as background", () => {
+    const image = grid(6, 6, (x, y) => (x === 3 && y === 3 ? blue : [253, 254, 255, 255]));
+    expect(contentBounds(image, { r: 255, g: 255, b: 255 })).toEqual({ x: 3, y: 3, width: 1, height: 1 });
+  });
+
+  it("trims a transparent capture to alpha above zero", () => {
+    const image = grid(8, 8, (x, y) => (x >= 1 && x <= 4 && y === 7 ? [255, 255, 255, 40] : [0, 0, 0, 0]));
+    expect(contentBounds(image, null)).toEqual({ x: 1, y: 7, width: 4, height: 1 });
+  });
+
+  it("returns null when nothing is drawn and the full rect when content fills the capture", () => {
+    expect(contentBounds(grid(4, 4, () => white), { r: 255, g: 255, b: 255 })).toBeNull();
+    expect(contentBounds(grid(4, 3, () => blue), { r: 255, g: 255, b: 255 })).toEqual({ x: 0, y: 0, width: 4, height: 3 });
+  });
+});
+
+describe("trimmedFrame", () => {
+  it("scales metres across by the trimmed share of the capture width", () => {
+    const frame = { metresAcross: 1000, northRad: 0.5 };
+    expect(trimmedFrame(frame, 2000, { x: 100, y: 0, width: 1500, height: 900 })).toEqual({ metresAcross: 750, northRad: 0.5 });
+    expect(trimmedFrame(frame, 2000, null)).toBe(frame);
+  });
+
+  it("keeps the scale bar true to the drawn pixels when the map is trimmed and refitted", () => {
+    vi.stubGlobal("Path2D", class {});
+    const input = windSheetInput({ selection: WIND_SHEET_SELECTION, scaleMaxMs: 8, comfortShares: null }, snapshot("spring", "morning"), "Rozelle NSW", "WS");
+    const layout = windSheetLayout(2480, 1754);
+    const trim = { x: 200, y: 100, width: 1200, height: 1200 };
+    const { ctx, texts } = stubContext();
+    const rects: number[][] = [];
+    const tracked = new Proxy(ctx, {
+      get: (target, key: string) => (key === "strokeRect" ? (...args: number[]) => void rects.push(args) : (target as unknown as Record<string, unknown>)[key]),
+    });
+    drawWindSheet(tracked, layout, { source: {} as CanvasImageSource, width: 1600, height: 1400, frame: { metresAcross: 800, northRad: null }, trim }, input!, STYLE, { transparent: false });
+    const image = containRect(trim.width, trim.height, layout.main);
+    const metresPerPx = (800 * (trim.width / 1600)) / image.width;
+    const bar = rects.find((rect) => rect[3] === Math.round(layout.unit));
+    expect(texts).toContain("100 m");
+    expect(bar![2]).toBeCloseTo(100 / metresPerPx, 5);
   });
 });
