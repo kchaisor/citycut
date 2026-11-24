@@ -196,6 +196,28 @@ export function rasterGroundWindWater(model: CityModel, grid: GroundWindRasterGr
   return water;
 }
 
+export const GROUND_WIND_WATER_ALPHA = 0.3;
+
+export function groundWindWaterAlpha(overWater: boolean): number {
+  return overWater ? GROUND_WIND_WATER_ALPHA : 1;
+}
+
+const waterMasks = new WeakMap<GroundWindObstacles, Uint8Array>();
+
+export function groundWindWaterMask(model: CityModel, obs: GroundWindObstacles): Uint8Array {
+  let mask = waterMasks.get(obs);
+  if (!mask) {
+    mask = rasterGroundWindWater(model, obs, obs.solid);
+    waterMasks.set(obs, mask);
+  }
+  return mask;
+}
+
+export function groundWindIsWater(obs: GroundWindObstacles, mask: Uint8Array, east: number, north: number): boolean {
+  const idx = groundWindCellIndex(obs, east, north);
+  return idx >= 0 && mask[idx] === 1;
+}
+
 export function groundWindObstaclesFromRasters(grid: GroundWindRasterGrid, heights: Float32Array, canopy: Float32Array): GroundWindObstacles {
   const { cols, rows, cellM } = grid;
   const solid = new Uint8Array(cols * rows);

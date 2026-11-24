@@ -67,6 +67,8 @@ Open Southbank (`?lat=-37.8216&lon=144.9645&km=0.5`) in 3D.
 - [ ] Opening Site Intelligence does not move the bar.
 - [ ] A named-view PNG or A3 sheet shows wind Flow and Streaks in the same colours as the screen (Flow is tone mapped and sRGB encoded in the export, as the screen composer does).
 
+- [ ] Flow streaks over water are drawn at 30% of their strength (set by the water areas, not by depth) and are never hidden by the water surface. A normal PNG and a "High quality, transparent" PNG show the same faint streaks over the harbour as the screen.
+
 ## Out of scope
 
 - No CFD and no live wind. No month options.
