@@ -89,6 +89,16 @@ describe("sun dome camera fit", () => {
     expect(safe).toEqual({ left: 316, top: 72, right: 1104, bottom: 794 });
   });
 
+  it("carves a tall side panel from the side, not as a top inset", () => {
+    const safe = hudSafeArea(viewport, [
+      { left: 73, top: 68, right: 320, bottom: 447 },
+      { left: 1095, top: 68, right: 1425, bottom: 430 },
+      { left: 390, top: 10, right: 1010, bottom: 55 },
+      { left: 450, top: 830, right: 985, bottom: 885 },
+    ]);
+    expect(safe).toEqual({ left: 336, top: 71, right: 1079, bottom: 814 });
+  });
+
   it("ignores panels outside the viewport", () => {
     expect(hudSafeArea(viewport, [{ left: 1500, top: 0, right: 1600, bottom: 100 }])).toEqual(viewport);
   });
