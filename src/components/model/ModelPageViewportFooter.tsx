@@ -1,9 +1,10 @@
-import { Eye, MoveUpRight, Sun, Wind } from "lucide-react";
-
+import { Eye, MoveUpRight, Pause, Play, Sun, Wind } from "lucide-react";
+import { setArrowAnimationPaused, useArrowAnimationPaused } from "../../lib/diagramArrowsMotion";
 import { activeAnalysisKinds, toggleAnalysis, type SiteAnalysisKind } from "../../lib/sidebarSections";
 import { solarSettingsOnStudyStart } from "../../lib/solarStudyView";
 
 export function ModelPageViewportFooter({ vm }: { vm: import("./useModelPage").ModelPageViewModel }) {
+  const arrowsPaused = useArrowAnimationPaused();
   const {
     analyses,
     commitRenderQuality,
@@ -92,6 +93,18 @@ export function ModelPageViewportFooter({ vm }: { vm: import("./useModelPage").M
                 <MoveUpRight size={12} strokeWidth={2.2} aria-hidden="true" />
                 <span>Arrows</span>
               </button>
+              {diagramArrows.state.arrows.some((arrow) => arrow.animation !== "none") ? (
+                <button
+                  type="button"
+                  data-diagram="arrows-pause"
+                  className={arrowsPaused ? "env-mode-btn active" : "env-mode-btn"}
+                  aria-pressed={arrowsPaused}
+                  aria-label={arrowsPaused ? "Play arrow animation" : "Pause arrow animation"}
+                  onClick={() => setArrowAnimationPaused(!arrowsPaused)}
+                >
+                  {arrowsPaused ? <Play size={12} strokeWidth={2.2} aria-hidden="true" /> : <Pause size={12} strokeWidth={2.2} aria-hidden="true" />}
+                </button>
+              ) : null}
             </div>
           </div>
         ) : (

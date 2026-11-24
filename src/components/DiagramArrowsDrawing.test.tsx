@@ -1,8 +1,8 @@
 // @vitest-environment happy-dom
-import { cleanup, render } from "@testing-library/react";
+import { act, cleanup, render } from "@testing-library/react";
 import { createRef } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { arrowTickerListeners } from "../lib/diagramArrowsMotion";
+import { arrowTickerListeners, setArrowAnimationPaused } from "../lib/diagramArrowsMotion";
 import type { DiagramArrow } from "../lib/diagramArrows";
 import { initialArrowToolState } from "../lib/diagramArrowsTool";
 import type { CityModel } from "../types";
@@ -10,6 +10,7 @@ import { DiagramArrowsDrawing } from "./DiagramArrowsDrawing";
 
 afterEach(() => {
   cleanup();
+  setArrowAnimationPaused(false);
   vi.unstubAllGlobals();
 });
 
@@ -116,5 +117,21 @@ describe("DiagramArrowsDrawing animation", () => {
     expect(arrowTickerListeners()).toBe(0);
     expect(window.__citycutDiagramArrowsAnim).toBeUndefined();
     expect(container.querySelectorAll("polygon")).toHaveLength(2);
+  });
+
+  it("renders static and stops the frame loop while paused, and resumes on play", () => {
+    const raf = vi.fn(() => 3);
+    vi.stubGlobal("requestAnimationFrame", raf);
+    vi.stubGlobal("cancelAnimationFrame", vi.fn());
+    const { container } = mount("draw-on");
+    expect(arrowTickerListeners()).toBe(1);
+    act(() => setArrowAnimationPaused(true));
+    expect(window.__citycutDiagramArrowsPaused).toBe(true);
+    expect(arrowTickerListeners()).toBe(0);
+    expect(window.__citycutDiagramArrowsAnim).toBeUndefined();
+    expect(container.querySelectorAll("polygon")).toHaveLength(2);
+    act(() => setArrowAnimationPaused(false));
+    expect(window.__citycutDiagramArrowsPaused).toBe(false);
+    expect(arrowTickerListeners()).toBe(1);
   });
 });

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react"
 import type { CityModel } from "../types";
 import { visibleIn3d, type DiagramArrow } from "../lib/diagramArrows";
 import { drawPlanArrows, registerStaticPlanArrows } from "../lib/diagramArrowsPlanDraw";
-import { animatedArrows, arrowClockSeconds, publishArrowAnimation, useArrowReducedMotion, useArrowTicker } from "../lib/diagramArrowsMotion";
+import { animatedArrows, arrowClockSeconds, publishArrowAnimation, useArrowMotionStopped, useArrowTicker } from "../lib/diagramArrowsMotion";
 import { useColourRevision } from "../lib/useColourRevision";
 import type { WindPlanTransformStore } from "./WindPlanOverlay";
 
@@ -20,7 +20,7 @@ export function DiagramArrowsPlanOverlay({
   const hostRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const colourRevision = useColourRevision();
-  const reducedMotion = useArrowReducedMotion();
+  const reducedMotion = useArrowMotionStopped();
   const shown = useMemo(() => visibleIn3d(arrows), [arrows]);
   const animated = useMemo(() => new Set(animatedArrows(shown, reducedMotion)), [shown, reducedMotion]);
   const tick = useArrowTicker(animated.size > 0);

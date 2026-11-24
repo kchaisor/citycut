@@ -19,7 +19,7 @@ import {
   arrowClockSeconds,
   lightenArrowColour,
   publishArrowAnimation,
-  useArrowReducedMotion,
+  useArrowMotionStopped,
   useArrowTicker,
 } from "../lib/diagramArrowsMotion";
 import {
@@ -144,7 +144,7 @@ export function DiagramArrowsDrawing({
     () => arrows.map((arrow) => ({ arrow, shape: buildArrowShape(arrow.points, arrow.style, arrow.width, model.sideM, mPerPx) })),
     [arrows, model.sideM, mPerPx],
   );
-  const reducedMotion = useArrowReducedMotion();
+  const reducedMotion = useArrowMotionStopped();
   const animated = useMemo(() => animatedArrows(arrows, reducedMotion), [arrows, reducedMotion]);
   useArrowTicker(animated.length > 0);
   useEffect(() => {

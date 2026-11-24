@@ -28,7 +28,7 @@ import {
   arrowMotionAt,
   lightenArrowColour,
   publishArrowAnimation,
-  useArrowReducedMotion,
+  useArrowMotionStopped,
 } from "../lib/diagramArrowsMotion";
 import { markExportOnly, markScreenOnly } from "../lib/screenOnly";
 import { useColourRevision } from "../lib/useColourRevision";
@@ -160,7 +160,7 @@ export function DiagramArrows3D({
   const showing = state.visible && active;
   const arrows = useMemo(() => (showing ? visibleIn3d(state.arrows) : []), [showing, state.arrows]);
   const handleRadius = model.sideM * HANDLE_SIDE_FRAC;
-  const reducedMotion = useArrowReducedMotion();
+  const reducedMotion = useArrowMotionStopped();
   const liveRef = useRef<LiveArrow[]>([]);
   const animatedCount = useMemo(() => animatedArrows(arrows, reducedMotion).length, [arrows, reducedMotion]);
 

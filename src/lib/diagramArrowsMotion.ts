@@ -12,6 +12,7 @@ const STREAK_LIGHTEN = 0.55;
 declare global {
   interface Window {
     __citycutDiagramArrowsAnim?: { readonly animated: number; readonly t: number };
+    __citycutDiagramArrowsPaused?: boolean;
   }
 }
 
@@ -63,6 +64,57 @@ export function arrowClockSeconds(): number {
 
 export function lightenArrowColour(css: string): THREE.Color {
   return new THREE.Color(css).lerp(new THREE.Color(1, 1, 1), STREAK_LIGHTEN);
+}
+
+export const ARROWS_PAUSED_STORAGE_KEY = "citycut.diagramArrows.paused.v1";
+
+function readPaused(): boolean {
+  try {
+    return sessionStorage.getItem(ARROWS_PAUSED_STORAGE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+let arrowsPaused = readPaused();
+const pausedListeners = new Set<() => void>();
+
+function publishPaused(): void {
+  window.__citycutDiagramArrowsPaused = arrowsPaused;
+}
+
+if (typeof window !== "undefined") publishPaused();
+
+export function arrowAnimationPaused(): boolean {
+  return arrowsPaused;
+}
+
+export function setArrowAnimationPaused(paused: boolean): void {
+  if (paused === arrowsPaused) return;
+  arrowsPaused = paused;
+  try {
+    if (paused) sessionStorage.setItem(ARROWS_PAUSED_STORAGE_KEY, "1");
+    else sessionStorage.removeItem(ARROWS_PAUSED_STORAGE_KEY);
+  } catch {
+    arrowsPaused = paused;
+  }
+  publishPaused();
+  for (const listener of pausedListeners) listener();
+}
+
+export function useArrowAnimationPaused(): boolean {
+  return useSyncExternalStore(
+    (listener) => {
+      pausedListeners.add(listener);
+      return () => pausedListeners.delete(listener);
+    },
+    () => arrowsPaused,
+    () => false,
+  );
+}
+
+export function useArrowMotionStopped(): boolean {
+  return useArrowReducedMotion() || useArrowAnimationPaused();
 }
 
 export function useArrowReducedMotion(): boolean {

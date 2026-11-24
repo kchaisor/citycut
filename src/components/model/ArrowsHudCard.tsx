@@ -1,3 +1,4 @@
+import { Pause, Play } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import {
   ARROW_ANIMATIONS,
@@ -14,6 +15,7 @@ import {
   type DiagramArrow,
 } from "../../lib/diagramArrows";
 import { ARROW_LABEL_FIELD_ID, selectedArrow, type ArrowToolAction, type ArrowToolState } from "../../lib/diagramArrowsTool";
+import { setArrowAnimationPaused, useArrowAnimationPaused } from "../../lib/diagramArrowsMotion";
 import { ArrowStyleSwatch } from "../DiagramArrowsDrawing";
 import { AnalysisHudCard } from "./AnalysisHudCard";
 
@@ -26,6 +28,7 @@ export function ArrowsHudCard({ arrows }: { arrows: ArrowsCardModel }) {
   useEffect(() => {
     firstSection.current?.parentElement?.scrollTo?.({ top: 0 });
   }, [collapsed]);
+  const paused = useArrowAnimationPaused();
   const selected = selectedArrow(state);
   const current: Pick<DiagramArrow, "style" | "colour" | "width" | "heightM" | "label" | "animation" | "showIn3d" | "showInDrawing"> =
     selected ?? state.defaults;
@@ -139,6 +142,16 @@ export function ArrowsHudCard({ arrows }: { arrows: ArrowsCardModel }) {
             </option>
           ))}
         </select>
+        <button
+          type="button"
+          className={paused ? "ac-seg-btn arrow-pause is-ink" : "ac-seg-btn arrow-pause"}
+          aria-pressed={paused}
+          aria-label={paused ? "Play arrow animation" : "Pause arrow animation"}
+          onClick={() => setArrowAnimationPaused(!paused)}
+        >
+          {paused ? <Play size={12} strokeWidth={2.2} aria-hidden="true" /> : <Pause size={12} strokeWidth={2.2} aria-hidden="true" />}
+          <span>{paused ? "Play" : "Pause"}</span>
+        </button>
       </div>
       <div className="ac-section">
         <label className="arrow-check">

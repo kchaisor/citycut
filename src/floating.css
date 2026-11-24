@@ -5686,6 +5686,7 @@ body,
 .arrow-colour-row { display: flex; gap: 8px; }
 .arrow-colour-btn { width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--float-tile-line); cursor: pointer; padding: 0; }
 .arrow-colour-btn.is-on { border-color: var(--ink); box-shadow: 0 0 0 2px var(--on-ink); }
+.arrow-pause { display: inline-flex; align-items: center; justify-content: center; gap: 6px; width: 100%; margin-top: 6px; }
 .arrow-field { width: 100%; box-sizing: border-box; padding: 4px 6px; font: inherit; border: 1px solid var(--float-tile-line); border-radius: 4px; background: transparent; color: var(--ink); }
 .arrow-check { display: flex; align-items: center; gap: 6px; font-size: 12px; }
 .arrow-list { list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 2px; }
