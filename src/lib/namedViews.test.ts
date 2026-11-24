@@ -50,6 +50,8 @@ const SNAPSHOT: NamedViewSnapshot = {
   hiddenUses: ["commercial" as never],
   landmarkLabelsOn: false,
   lineStyles: null,
+  exploded: false,
+  explodeGapM: null,
 };
 
 function memoryStorage(initial: Record<string, string> = {}) {
@@ -102,6 +104,36 @@ describe("named views capture and apply", () => {
     expect(restored.solar.sunHoursWindow).toBe("9to3");
   });
 
+  it("round-trips the exploded axo with its gap", () => {
+    const stack: NamedViewSnapshot = { ...SNAPSHOT, exploded: true, explodeGapM: 120 };
+    const view = captureNamedView("Stack", stack, { id: "x" })!;
+    const reloaded = parseNamedViewsStore(JSON.stringify(saveView(emptyNamedViewsStore(), "cut", view)));
+    const restored = applyNamedView(viewsForCut(reloaded, "cut")[0]!)!;
+    expect(restored.exploded).toBe(true);
+    expect(restored.explodeGapM).toBe(120);
+    expect(restored.pose).toEqual(SNAPSHOT.pose);
+  });
+
+  it("loads a view saved before the exploded axo was stored as assembled with the default gap", () => {
+    const legacy = JSON.parse(JSON.stringify(SNAPSHOT)) as Record<string, unknown>;
+    delete legacy.exploded;
+    delete legacy.explodeGapM;
+    const raw = JSON.stringify({ version: 1, byCut: { cut: [{ id: "o", name: "Old", savedAt: 1, snapshot: legacy }] } });
+    const restored = applyNamedView(viewsForCut(parseNamedViewsStore(raw), "cut")[0]!)!;
+    expect(restored.exploded).toBe(false);
+    expect(restored.explodeGapM).toBeNull();
+  });
+
+  it("drops the exploded flag outside the isometric 3D view and ignores a bad gap", () => {
+    const odd = { ...SNAPSHOT, exploded: true, explodeGapM: -5, view: { ...SNAPSHOT.view, projection: "plan" as const } };
+    const view = captureNamedView("Odd", odd)!;
+    expect(view.snapshot.exploded).toBe(false);
+    expect(view.snapshot.explodeGapM).toBeNull();
+    const bad = captureNamedView("Bad", { ...SNAPSHOT, exploded: true, explodeGapM: -5 })!;
+    expect(bad.snapshot.exploded).toBe(true);
+    expect(bad.snapshot.explodeGapM).toBeNull();
+  });
+
   it("defaults the wind plan for views saved before it was stored", () => {
     const legacy = JSON.parse(JSON.stringify(SNAPSHOT)) as Record<string, unknown>;
     delete legacy.windPlan;
@@ -121,7 +153,7 @@ describe("named views capture and apply", () => {
     expect(a.id).not.toBe(b.id);
   });
 
-  it("ignores exploded axo fields found in raw JSON", () => {
+  it("ignores unknown exploded axo fields found in raw JSON", () => {
     const raw = JSON.stringify({
       version: 1,
       byCut: {
@@ -136,7 +168,6 @@ describe("named views capture and apply", () => {
       },
     });
     const restored = applyNamedView(viewsForCut(parseNamedViewsStore(raw), "cut")[0]!)!;
-    expect(Object.keys(restored)).not.toContain("exploded");
     expect(Object.keys(restored)).not.toContain("axoSettings");
     expect(Object.keys(restored)).not.toContain("explodedGapM");
   });

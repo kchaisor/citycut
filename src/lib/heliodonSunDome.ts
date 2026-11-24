@@ -109,7 +109,9 @@ export function hudSafeArea(viewport: ScreenRect, huds: readonly ScreenRect[], p
       { side: "bottom", gap: viewport.bottom - hud.bottom, share: (viewport.bottom - hud.top) / height },
     ].filter((entry) => entry.share < 0.5);
     if (gaps.length === 0) continue;
-    const nearest = gaps.reduce((best, entry) => (entry.gap < best.gap ? entry : best));
+    const nearest = gaps.reduce((best, entry) =>
+      entry.share < best.share || (entry.share === best.share && entry.gap < best.gap) ? entry : best,
+    );
     if (nearest.side === "left") safe.left = Math.max(safe.left, hud.right + pad);
     else if (nearest.side === "right") safe.right = Math.min(safe.right, hud.left - pad);
     else if (nearest.side === "top") safe.top = Math.max(safe.top, hud.bottom + pad);

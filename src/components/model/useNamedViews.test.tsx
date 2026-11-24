@@ -34,6 +34,8 @@ function snapshot(tab: NamedViewSnapshot["tab"], corner: NamedViewSnapshot["view
     hiddenUses: [],
     landmarkLabelsOn: false,
     lineStyles: null,
+    exploded: false,
+    explodeGapM: null,
   };
 }
 
@@ -159,5 +161,72 @@ describe("useNamedViews", () => {
     const options = (png.mock.calls[1] as unknown[])[0] as { transparent: boolean; scale: number };
     expect(options.transparent).toBe(true);
     expect(options.scale).toBeGreaterThanOrEqual(2);
+  });
+});
+
+describe("useNamedViews with the exploded axo", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+    downloads.downloadBytes.mockClear();
+  });
+  afterEach(cleanup);
+
+  function exploded(gap: number): NamedViewSnapshot {
+    return { ...snapshot("3d"), exploded: true, explodeGapM: gap };
+  }
+
+  it("captures each view in its own exploded state and puts the original back exploded", async () => {
+    const live = { current: snapshot("3d") };
+    const log: string[] = [];
+    const png = vi.fn(async () => {
+      log.push(`capture:${live.current.exploded ? "exploded" : "assembled"}:${live.current.explodeGapM}`);
+      return new Blob([new Uint8Array([1])], { type: "image/png" });
+    });
+    const hook = renderHook(() =>
+      useNamedViews({
+        model: MODEL,
+        getSnapshot: () => live.current,
+        applySnapshot: async (next) => {
+          log.push(`apply:${next.exploded ? "exploded" : "assembled"}`);
+          live.current = next;
+        },
+        getExporter: () => ({ png: vi.fn(), viewportPng: png, shot: vi.fn() }),
+      }),
+    );
+    live.current = exploded(120);
+    act(() => void hook.result.current.save("Stack"));
+    live.current = snapshot("3d", "sw");
+    act(() => void hook.result.current.save("Flat"));
+    live.current = { ...snapshot("3d", "nw"), exploded: true, explodeGapM: 200 };
+    const original = live.current;
+    log.length = 0;
+    act(() => hook.result.current.exportAll());
+    await waitFor(() => expect(downloads.downloadBytes).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(hook.result.current.busy).toBeNull());
+    expect(log).toEqual([
+      "apply:assembled",
+      "capture:assembled:null",
+      "apply:exploded",
+      "capture:exploded:120",
+      "apply:exploded",
+    ]);
+    expect(live.current).toEqual(original);
+  });
+
+  it("waits for the exploded stack to settle before capturing an exploded view", async () => {
+    const live = { current: exploded(120) };
+    let settled = false;
+    const { hook, png } = mount(live, async () => {
+      await new Promise((resolve) => setTimeout(resolve, 80));
+      settled = true;
+    });
+    act(() => void hook.result.current.save("Stack"));
+    png.mockImplementationOnce(async () => {
+      expect(settled).toBe(true);
+      return new Blob([new Uint8Array([1])], { type: "image/png" });
+    });
+    act(() => hook.result.current.exportAll());
+    await waitFor(() => expect(downloads.downloadBytes).toHaveBeenCalledTimes(1));
+    expect(png).toHaveBeenCalledTimes(1);
   });
 });

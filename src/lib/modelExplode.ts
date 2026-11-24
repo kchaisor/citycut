@@ -1,4 +1,4 @@
-import type { ScreenRect } from "./heliodonSunDome";
+import { SUN_DOME_SAFE_PAD_PX, type ScreenRect } from "./heliodonSunDome";
 import { fitOrthoZoom, type Aabb, type Vec3 } from "./isoCamera";
 
 export const EXPLODE_LAYERS = ["ground", "water", "parks", "transport", "buildings", "trees"] as const;
@@ -25,6 +25,8 @@ export const EXPLODE_GAP_DEFAULT_RATIO = 0.3;
 export const EXPLODE_GAP_MAX_RATIO = 0.8;
 export const EXPLODE_LABEL_ROOM_PX = 136;
 export const EXPLODE_LABEL_GAP_PX = 12;
+export const EXPLODE_LABEL_HUD_PAD_PX = SUN_DOME_SAFE_PAD_PX;
+const EXPLODE_LABEL_MIN_BAND_SHARE = 0.25;
 export const EXPLODE_LABEL_FADE_START = 0.7;
 
 const TRANSPORT_NAMES = new Set(["Roads", "RailLines", "TramLines"]);
@@ -211,13 +213,50 @@ export function boundaryLabelAnchor(
 }
 
 export function separateExplodeLabels(ys: readonly number[], spacing: number, minY = -Infinity, maxY = Infinity): number[] {
-  const out: number[] = [];
-  for (let i = 0; i < ys.length; i++) {
-    const wanted = i === 0 ? Math.min(ys[i], maxY) : Math.min(ys[i], out[i - 1] - spacing);
-    out.push(wanted);
+  const count = ys.length;
+  if (count === 0) return [];
+  const step = count > 1 ? Math.min(spacing, Math.max(0, (maxY - minY) / (count - 1))) : spacing;
+  const order = ys.map((_, index) => index).sort((a, b) => ys[a] - ys[b] || b - a);
+  const placed = new Array<number>(count);
+  let floor = Infinity;
+  for (let i = count - 1; i >= 0; i--) {
+    floor = Math.min(ys[order[i]], i === count - 1 ? maxY : floor - step);
+    placed[i] = floor;
   }
-  const lift = out.length ? minY - out[out.length - 1] : 0;
-  return lift > 0 ? out.map((y) => y + lift) : out;
+  let ceiling = -Infinity;
+  for (let i = 0; i < count; i++) {
+    ceiling = Math.max(placed[i], i === 0 ? minY : ceiling + step);
+    placed[i] = ceiling;
+  }
+  const out = new Array<number>(count);
+  order.forEach((original, i) => {
+    out[original] = placed[i];
+  });
+  return out;
+}
+
+export function explodeLabelSafeRect(
+  view: ScreenRect,
+  huds: readonly ScreenRect[],
+  labelWidth: number,
+  anchors: readonly ScreenPoint[],
+  pad = EXPLODE_LABEL_HUD_PAD_PX,
+): ScreenRect {
+  if (!anchors.length) return view;
+  const anchorX = Math.min(...anchors.map((anchor) => anchor.x)) - EXPLODE_LABEL_GAP_PX;
+  const rightX = Math.max(view.left + labelWidth, Math.min(view.right, anchorX));
+  const leftX = rightX - labelWidth;
+  const inColumn = huds.filter(
+    (hud) =>
+      hud.right > leftX && hud.left < rightX && hud.right > view.left && hud.left < view.right && hud.bottom > view.top && hud.top < view.bottom,
+  );
+  const safe = { ...view };
+  const middle = (view.top + view.bottom) / 2;
+  for (const hud of inColumn) {
+    if ((hud.top + hud.bottom) / 2 < middle) safe.top = Math.max(safe.top, hud.bottom + pad);
+    else safe.bottom = Math.min(safe.bottom, hud.top - pad);
+  }
+  return safe.bottom - safe.top < (view.bottom - view.top) * EXPLODE_LABEL_MIN_BAND_SHARE ? view : safe;
 }
 
 export type ExplodeLabelLayout = { rightX: number; ys: number[] };

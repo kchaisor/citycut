@@ -162,6 +162,7 @@ import {
   EXPLODE_CORNER_DASH_PX,
   EXPLODE_CORNER_GAP_PX,
   type ExplodeCornerSpan,
+  explodeLabelSafeRect,
   layoutExplodeLabels,
   noExplodeBoxes,
   noExplodeOffsets,
@@ -548,6 +549,7 @@ export function ExplodeLayers({
     const snapped = seenSnapKey.current !== snapKey;
     seenSnapKey.current = snapKey;
     if (introActive || (snapped && target === 0)) rt.clock = 0;
+    else if (snapped && snapKey !== 0 && target === 1) rt.clock = 1;
     if (introActive || snapped || run.current?.target !== target) run.current = { target, from: rt.clock, startedAtMs: nowMs };
     if (target === 0 && rt.clock === 0 && rt.progress === 0) {
       dropGroundFill();
@@ -642,7 +644,7 @@ function ExplodeLabelProjector({
     const rt = runtime.current;
     const opacity = explodeLabelOpacity(rt.progress, exploding);
     const rect = opacity > 0 ? gl.domElement.getBoundingClientRect() : null;
-    const safe = rect ? explodeSafeRect(explodeViewRect(gl.domElement, size)) : null;
+    const view = rect ? explodeViewRect(gl.domElement, size) : null;
     camera.updateMatrixWorld();
     const right = camera.matrixWorld.elements;
     const shownLayers: ExplodeLayerId[] = [];
@@ -650,7 +652,7 @@ function ExplodeLabelProjector({
     for (const layer of EXPLODE_LAYERS) {
       const box = rt.boxes[layer];
       const world =
-        rect && safe && box
+        rect && view && box
           ? boundaryLabelAnchor(ring, box.min[1] + rt.offsets[layer], [right[0], right[1], right[2]])
           : null;
       if (!rect || !world) {
@@ -667,7 +669,7 @@ function ExplodeLabelProjector({
         y: rect.top + (-point.y * 0.5 + 0.5) * rect.height,
       });
     }
-    if (!safe || !shownLayers.length) return;
+    if (!view || !shownLayers.length) return;
     let width = 0;
     let height = 0;
     for (const layer of shownLayers) {
@@ -676,6 +678,7 @@ function ExplodeLabelProjector({
       width = Math.max(width, element.offsetWidth);
       height = Math.max(height, element.offsetHeight);
     }
+    const safe = explodeLabelSafeRect(view, liveHudRects(view), width, anchors);
     const layout = layoutExplodeLabels(anchors, width, height, safe);
     shownLayers.forEach((layer, index) => {
       const element = labelsRef.current[layer];
@@ -1715,8 +1718,22 @@ function FrameCameras({
   return null;
 }
 
+export function useExplodeLive(exploded: boolean, restoreId: number) {
+  const [engaged, setEngaged] = useState(false);
+  const [seenRestoreId, setSeenRestoreId] = useState(restoreId);
+  if (restoreId !== seenRestoreId) {
+    setSeenRestoreId(restoreId);
+    if (!exploded && engaged) setEngaged(false);
+  } else if (exploded && !engaged) {
+    setEngaged(true);
+  }
+  const onExplodeCollapsed = useCallback(() => setEngaged(false), []);
+  return { explodeLive: exploded || engaged, onExplodeCollapsed };
+}
+
 function ExplodeHandoff({
   explodeLive,
+  restoreId,
   projection,
   persp,
   ortho,
@@ -1726,6 +1743,7 @@ function ExplodeHandoff({
   fittedKeys,
 }: {
   explodeLive: boolean;
+  restoreId: number;
   projection: ProjectionMode;
   persp: THREE.PerspectiveCamera;
   ortho: THREE.OrthographicCamera;
@@ -1740,10 +1758,13 @@ function ExplodeHandoff({
 }) {
   const size = useThree((state) => state.size);
   const wasLive = useRef(explodeLive);
+  const seenRestoreId = useRef(restoreId);
   useLayoutEffect(() => {
     const left = wasLive.current && !explodeLive;
     wasLive.current = explodeLive;
-    if (!left || projection === "iso" || size.width < 2 || size.height < 2) return;
+    const restored = seenRestoreId.current !== restoreId;
+    seenRestoreId.current = restoreId;
+    if (!left || restored || projection === "iso" || size.width < 2 || size.height < 2) return;
     const oc = orthoControls.current;
     if (!oc) return;
     const key = `${snapId}:${size.width}x${size.height}`;
@@ -1772,7 +1793,7 @@ function ExplodeHandoff({
     persp.updateProjectionMatrix();
     pc.update();
     fittedKeys.persp.current = key;
-  }, [explodeLive, projection, size.width, size.height, snapId, persp, ortho, perspControls, orthoControls, fittedKeys]);
+  }, [explodeLive, restoreId, projection, size.width, size.height, snapId, persp, ortho, perspControls, orthoControls, fittedKeys]);
   return null;
 }
 
@@ -2792,6 +2813,7 @@ export function Cameras({
           <FrameCameras persp={persp} ortho={ortho} />
           <ExplodeHandoff
             explodeLive={explodeLive}
+            restoreId={cameraRestore?.id ?? 0}
             projection={projection}
             persp={persp}
             ortho={ortho}
@@ -3120,11 +3142,8 @@ export function Scene3D({
   const explodeOverlayRef = useRef<THREE.Group | null>(null);
   const explodeLabelsRef = useRef<Partial<Record<ExplodeLayerId, HTMLElement | null>>>({});
   const explodeLeadersRef = useRef<Partial<Record<ExplodeLayerId, SVGLineElement | null>>>({});
-  const [explodeEngaged, setExplodeEngaged] = useState(false);
-  if (exploded && !explodeEngaged) setExplodeEngaged(true);
-  const explodeLive = exploded || explodeEngaged;
+  const { explodeLive, onExplodeCollapsed } = useExplodeLive(exploded, cameraRestore?.id ?? 0);
   const projection: ProjectionMode = explodeLive ? "iso" : chosenProjection;
-  const onExplodeCollapsed = useCallback(() => setExplodeEngaged(false), []);
   const [explodeTopLiftM, setExplodeTopLiftM] = useState(0);
   const pickLifts = useRef(new WeakMap<SceneInspectWorld, number>());
   const onInspectPick = useCallback(

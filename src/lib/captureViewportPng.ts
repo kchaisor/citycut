@@ -15,6 +15,15 @@ export type ViewportOverlayLabel = {
   radius: number;
 };
 
+export type ViewportOverlayLine = {
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+  colour: string;
+  width: number;
+};
+
 export type ViewportRect = { x: number; y: number; width: number; height: number };
 
 export type ViewportOverlayCanvas = ViewportRect & { canvas: HTMLCanvasElement };
@@ -22,6 +31,7 @@ export type ViewportOverlayCanvas = ViewportRect & { canvas: HTMLCanvasElement }
 export type ViewportCapture = {
   background: string | null;
   labels: readonly ViewportOverlayLabel[];
+  lines?: readonly ViewportOverlayLine[];
   crop?: ViewportRect | null;
   overlays?: readonly ViewportOverlayCanvas[];
 };
@@ -109,31 +119,54 @@ function readOverlayCanvases(canvas: HTMLCanvasElement): ViewportOverlayCanvas[]
   return overlays;
 }
 
+function readLabel(node: HTMLElement, rect: DOMRect): ViewportOverlayLabel {
+  const box = node.getBoundingClientRect();
+  const style = getComputedStyle(node);
+  return {
+    text: node.textContent ?? "",
+    x: box.left - rect.left,
+    y: box.top - rect.top,
+    width: box.width,
+    height: box.height,
+    font: `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`,
+    color: opaqueColour(style.color),
+    fill: opaqueColour(style.backgroundColor),
+    stroke: opaqueColour(style.borderTopColor),
+    strokeWidth: parseFloat(style.borderTopWidth) || 0,
+    radius: parseFloat(style.borderTopLeftRadius) || 0,
+  };
+}
+
+function readExplodeLines(rect: DOMRect): ViewportOverlayLine[] {
+  const lines: ViewportOverlayLine[] = [];
+  for (const node of document.querySelectorAll<SVGLineElement>(".explode-leader")) {
+    if (Number(getComputedStyle(node).opacity) < 0.5) continue;
+    const style = getComputedStyle(node);
+    lines.push({
+      x1: Number(node.getAttribute("x1")) - rect.left,
+      y1: Number(node.getAttribute("y1")) - rect.top,
+      x2: Number(node.getAttribute("x2")) - rect.left,
+      y2: Number(node.getAttribute("y2")) - rect.top,
+      colour: opaqueColour(style.stroke),
+      width: parseFloat(style.strokeWidth) || 1,
+    });
+  }
+  return lines;
+}
+
 export function readViewportCapture(canvas: HTMLCanvasElement): ViewportCapture {
   const rect = canvas.getBoundingClientRect();
   const viewport = canvas.closest(".viewport") ?? canvas.parentElement;
   const background = viewport ? getComputedStyle(viewport).backgroundColor : "";
   const labels: ViewportOverlayLabel[] = [];
-  for (const node of document.querySelectorAll<HTMLElement>(".landmark-label.is-visible")) {
-    const box = node.getBoundingClientRect();
-    const style = getComputedStyle(node);
-    labels.push({
-      text: node.textContent ?? "",
-      x: box.left - rect.left,
-      y: box.top - rect.top,
-      width: box.width,
-      height: box.height,
-      font: `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`,
-      color: opaqueColour(style.color),
-      fill: opaqueColour(style.backgroundColor),
-      stroke: opaqueColour(style.borderTopColor),
-      strokeWidth: parseFloat(style.borderTopWidth) || 0,
-      radius: parseFloat(style.borderTopLeftRadius) || 0,
-    });
+  for (const node of document.querySelectorAll<HTMLElement>(".landmark-label.is-visible")) labels.push(readLabel(node, rect));
+  for (const node of document.querySelectorAll<HTMLElement>(".explode-layer-label")) {
+    if (Number(getComputedStyle(node).opacity) >= 0.5) labels.push(readLabel(node, rect));
   }
   return {
     background: background && background !== "rgba(0, 0, 0, 0)" ? background : null,
     labels,
+    lines: readExplodeLines(rect),
     crop: visibleViewportRect(canvas),
     overlays: readOverlayCanvases(canvas),
   };
@@ -240,6 +273,15 @@ export async function captureViewportPng(
         overlay.width * bufferRatio,
         overlay.height * bufferRatio,
       );
+    }
+    for (const line of capture.lines ?? []) {
+      context.globalAlpha = 1;
+      context.beginPath();
+      context.moveTo((line.x1 - crop.x) * bufferRatio, (line.y1 - crop.y) * bufferRatio);
+      context.lineTo((line.x2 - crop.x) * bufferRatio, (line.y2 - crop.y) * bufferRatio);
+      context.lineWidth = line.width * bufferRatio;
+      context.strokeStyle = line.colour;
+      context.stroke();
     }
     for (const label of capture.labels) drawLabel(context, label, bufferRatio, crop.x, crop.y);
     const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));

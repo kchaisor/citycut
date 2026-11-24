@@ -7,6 +7,7 @@ const READY: StudyReadySignals = {
   sunHoursSurfacesPending: false,
   windPlanApplicable: true,
   windPlanReady: true,
+  explodeSettled: true,
 };
 
 function study(over: { sunHours?: boolean; plan?: boolean }): NamedViewSnapshot {
@@ -32,6 +33,10 @@ describe("studiesReady", () => {
     expect(studiesReady(study({ plan: true }), { ...READY, windPlanReady: false })).toBe(false);
     expect(studiesReady(study({ plan: true }), { ...READY, windPlanReady: false, windPlanApplicable: false })).toBe(true);
     expect(studiesReady(study({}), { ...READY, windPlanReady: false })).toBe(true);
+  });
+
+  it("holds a 3D view until the exploded stack has settled", () => {
+    expect(studiesReady(study({}), { ...READY, explodeSettled: false })).toBe(false);
   });
 
   it("does not wait on sun hours when the study is off", () => {
