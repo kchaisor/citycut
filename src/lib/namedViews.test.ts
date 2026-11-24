@@ -330,10 +330,10 @@ describe("saved arrows", () => {
     points: [[0, 0], [30, 10]],
     style: "streak",
     colour: "blue",
-    width: "l",
+    width: 1.65,
     heightM: 40,
-    label: "Wind",
     animation: "none",
+    speed: 1,
     showIn3d: true,
     showInDrawing: false,
   };
@@ -343,6 +343,12 @@ describe("saved arrows", () => {
     const reread = parseNamedViewsStore(JSON.stringify(saveView(emptyNamedViewsStore(), "cut", saved)));
     const restored = applyNamedView(viewsForCut(reread, "cut")[0]!)!;
     expect(restored.arrows).toEqual({ visible: false, items: [arrow] });
+  });
+
+  it("reads a view saved with the old label and S, M, L width", () => {
+    const old = { ...arrow, width: "l", label: "Wind" };
+    const saved = captureNamedView("Old", { ...SNAPSHOT, arrows: { visible: true, items: [old as never] } })!;
+    expect(applyNamedView(saved)!.arrows!.items).toEqual([arrow]);
   });
 
   it("round-trips a view without arrows", () => {
