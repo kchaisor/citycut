@@ -41,6 +41,7 @@ import {
   capturePose,
   usableCameraMemory,
   type CameraMemory,
+  type CameraPose,
   type CameraMemoryRef,
   type CameraRestoreRequest,
 } from "../lib/cameraMemory";
@@ -138,6 +139,7 @@ import type { WindPlanState } from "./useWindPlan";
 import { InspectHudProjector, type InspectHudScreen } from "./InspectHudProjector";
 import { captureViewportPng, readViewportCapture, sheetCropRect, type ViewportPngOptions } from "../lib/captureViewportPng";
 import { planSheetFrame, type SheetFrame } from "../lib/sheetScale";
+import { wholeSiteFraming } from "../lib/sheetFraming";
 import { LandmarkLabelProjector, type LandmarkExportLabels, type LandmarkScreenState } from "./LandmarkLabelProjector";
 import type { LandmarkLabelSource } from "../lib/landmarkLabels";
 import type { WindPeriodId } from "../lib/windRose";
@@ -181,6 +183,7 @@ export type SceneExporter = {
   png: () => Promise<Blob>;
   viewportPng: (options?: ViewportPngOptions) => Promise<Blob>;
   sheetFrame: (crop: { aspect: number; minWidthPx: number }) => SheetFrame | null;
+  frameWholeSite: (crop: { aspect: number; minWidthPx: number }) => (() => void) | null;
   shot: () => CameraShot;
 };
 
@@ -2560,14 +2563,21 @@ function ExportBridge({
   onExportReady,
   solarDiagramOn,
   landmarkLabelsRef,
+  ortho,
+  orthoControls,
+  siteBounds,
 }: {
   onExportReady: (exporter: SceneExporter | null) => void;
   solarDiagramOn: boolean;
   landmarkLabelsRef?: RefObject<LandmarkExportLabels | null>;
+  ortho: THREE.OrthographicCamera;
+  orthoControls: RefObject<OrbitControlsImpl | null>;
+  siteBounds: Aabb;
 }) {
   const gl = useThree((state) => state.gl);
   const scene = useThree((state) => state.scene);
   const get = useThree((state) => state.get);
+  const invalidate = useThree((state) => state.invalidate);
   useLayoutEffect(() => {
     onExportReady({
       png: async () => {
@@ -2586,13 +2596,39 @@ function ExportBridge({
         const rect = sheetCropRect({ width: cssWidth, height: cssHeight }, free, crop.aspect);
         return planSheetFrame(get().camera, cssHeight, rect.width);
       },
+      frameWholeSite: (crop) => {
+        const controls = orthoControls.current;
+        if (!controls || get().camera !== ortho) return null;
+        const canvas = gl.domElement;
+        const cssWidth = canvas.clientWidth || canvas.width;
+        const cssHeight = canvas.clientHeight || canvas.height;
+        const free = readViewportCapture(canvas).crop ?? { x: 0, y: 0, width: cssWidth, height: cssHeight };
+        const rect = sheetCropRect({ width: cssWidth, height: cssHeight }, free, crop.aspect);
+        const saved = capturePose(ortho, controls);
+        const framing = wholeSiteFraming(siteBounds, { width: cssWidth, height: cssHeight }, rect);
+        const dx = framing.targetX - saved.target[0];
+        const dz = framing.targetZ - saved.target[2];
+        const hold = (pose: CameraPose) => {
+          flushControlInertia(controls);
+          applyPose(ortho, controls, pose);
+          holdControlPose(controls as HeldControl<THREE.Vector3>);
+          invalidate();
+        };
+        hold({
+          ...saved,
+          position: [saved.position[0] + dx, saved.position[1], saved.position[2] + dz],
+          target: [framing.targetX, saved.target[1], framing.targetZ],
+          zoom: framing.zoom,
+        });
+        return () => hold(saved);
+      },
       shot: () => {
         const frame = exportFrameSize(gl.domElement);
         return shotFromCamera(cameraForExportFrame(get().camera, frame.width, frame.height), frame.width, frame.height);
       },
     });
     return () => onExportReady(null);
-  }, [gl, scene, get, onExportReady, solarDiagramOn, landmarkLabelsRef]);
+  }, [gl, scene, get, invalidate, onExportReady, solarDiagramOn, landmarkLabelsRef, ortho, orthoControls, siteBounds]);
   return null;
 }
 
@@ -2787,6 +2823,10 @@ export function Cameras({
   const iso = projection === "iso";
   const plan = projection === "plan";
   const orthoView = iso || plan;
+  const cutBounds = useMemo(
+    () => sitePlanBounds(side, groundY, siteTopY, frameWidthM, frameHeightM),
+    [side, groundY, siteTopY, frameWidthM, frameHeightM],
+  );
   const heliodonClipBounds = useMemo(
     () =>
       orthoView && solar.showPath
@@ -2998,7 +3038,14 @@ export function Cameras({
             perspControls={perspControls}
             orthoControls={orthoControls}
           />
-          <ExportBridge onExportReady={onExportReady} solarDiagramOn={solarDiagramOn} landmarkLabelsRef={landmarkLabelsRef} />
+          <ExportBridge
+            onExportReady={onExportReady}
+            solarDiagramOn={solarDiagramOn}
+            landmarkLabelsRef={landmarkLabelsRef}
+            ortho={ortho}
+            orthoControls={orthoControls}
+            siteBounds={cutBounds}
+          />
         </>
       )}
     </>

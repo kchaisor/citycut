@@ -55,8 +55,18 @@ function windPlanSnapshot(period: NamedViewSnapshot["wind"]["period"], daypart: 
   };
 }
 
-function mount(live: { current: NamedViewSnapshot }, waitUntilReady?: (snapshot: NamedViewSnapshot) => Promise<void>) {
+function mount(
+  live: { current: NamedViewSnapshot },
+  waitUntilReady?: (snapshot: NamedViewSnapshot) => Promise<void>,
+  windSheetFraming?: "whole-site" | "saved",
+) {
   const applied: NamedViewSnapshot[] = [];
+  const log: string[] = [];
+  const restoreCamera = vi.fn(() => void log.push("restore"));
+  const frameWholeSite = vi.fn(() => {
+    log.push("frame");
+    return restoreCamera;
+  });
   const png = vi.fn(async () => new Blob([new Uint8Array([1, 2, 3])], { type: "image/png" }));
   const hook = renderHook(() =>
     useNamedViews({
@@ -66,12 +76,13 @@ function mount(live: { current: NamedViewSnapshot }, waitUntilReady?: (snapshot:
         applied.push(next);
         live.current = next;
       },
-      getExporter: () => ({ png: vi.fn(), viewportPng: png, sheetFrame: vi.fn(() => null), shot: vi.fn() }),
+      getExporter: () => ({ png: vi.fn(), viewportPng: png, sheetFrame: vi.fn(() => null), frameWholeSite, shot: vi.fn() }),
       waitUntilReady,
       getWindSheetSource: () => ({ selection: WIND_SHEET_SELECTION, scaleMaxMs: 8, comfortShares: null }),
+      windSheetFraming,
     }),
   );
-  return { hook, applied, png };
+  return { hook, applied, png, frameWholeSite, restoreCamera, log };
 }
 
 describe("useNamedViews", () => {
@@ -82,6 +93,48 @@ describe("useNamedViews", () => {
     sheets.composeWindSheet.mockResolvedValue(new Uint8Array([9, 9]));
   });
   afterEach(cleanup);
+
+  it("frames the whole site for wind sheets only, waits for readiness, and puts the camera back", async () => {
+    const live = { current: windPlanSnapshot("spring", "morning") };
+    const ready = vi.fn(async () => {});
+    const { hook, png, frameWholeSite, restoreCamera, log } = mount(live, ready);
+    act(() => void hook.result.current.save("WS - Spring"));
+    live.current = snapshot("3d");
+    act(() => void hook.result.current.save("Axo"));
+    live.current = snapshot("3d", "sw");
+    png.mockImplementation(async () => {
+      log.push("capture");
+      return new Blob([new Uint8Array([1])], { type: "image/png" });
+    });
+    act(() => hook.result.current.exportAll());
+    await waitFor(() => expect(hook.result.current.busy).toBeNull());
+    expect(frameWholeSite).toHaveBeenCalledTimes(1);
+    expect(frameWholeSite).toHaveBeenCalledWith({ aspect: expect.any(Number), minWidthPx: expect.any(Number) });
+    expect(restoreCamera).toHaveBeenCalledTimes(1);
+    expect(log.join(",")).toContain("frame,capture,restore");
+    expect(log.filter((entry) => entry === "capture")).toHaveLength(2);
+    expect(ready).toHaveBeenCalledTimes(3);
+  });
+
+  it("restores the camera when a wind sheet capture fails", async () => {
+    const live = { current: windPlanSnapshot("spring", "morning") };
+    const { hook, png, restoreCamera } = mount(live);
+    act(() => void hook.result.current.save("WS - Spring"));
+    png.mockRejectedValueOnce(new Error("lost context"));
+    act(() => hook.result.current.exportAll());
+    await waitFor(() => expect(hook.result.current.busy).toBeNull());
+    expect(restoreCamera).toHaveBeenCalledTimes(1);
+    expect(hook.result.current.warning).toBeTruthy();
+  });
+
+  it("keeps the saved camera when the sheet framing is saved", async () => {
+    const live = { current: windPlanSnapshot("spring", "morning") };
+    const { hook, frameWholeSite } = mount(live, undefined, "saved");
+    act(() => void hook.result.current.save("WS - Spring"));
+    act(() => hook.result.current.exportAll());
+    await waitFor(() => expect(hook.result.current.busy).toBeNull());
+    expect(frameWholeSite).not.toHaveBeenCalled();
+  });
 
   it("saves the live state and restores that snapshot on click", () => {
     const live = { current: snapshot("3d", "sw") };
@@ -250,7 +303,7 @@ describe("useNamedViews with the exploded axo", () => {
           log.push(`apply:${next.exploded ? "exploded" : "assembled"}`);
           live.current = next;
         },
-        getExporter: () => ({ png: vi.fn(), viewportPng: png, sheetFrame: vi.fn(() => null), shot: vi.fn() }),
+        getExporter: () => ({ png: vi.fn(), viewportPng: png, sheetFrame: vi.fn(() => null), frameWholeSite: vi.fn(() => null), shot: vi.fn() }),
       }),
     );
     live.current = exploded(120);
