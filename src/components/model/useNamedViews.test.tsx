@@ -58,7 +58,6 @@ function windPlanSnapshot(period: NamedViewSnapshot["wind"]["period"], daypart: 
 function mount(
   live: { current: NamedViewSnapshot },
   waitUntilReady?: (snapshot: NamedViewSnapshot) => Promise<void>,
-  windSheetFraming?: "whole-site" | "saved",
 ) {
   const applied: NamedViewSnapshot[] = [];
   const log: string[] = [];
@@ -79,7 +78,6 @@ function mount(
       getExporter: () => ({ png: vi.fn(), viewportPng: png, sheetFrame: vi.fn(() => null), frameWholeSite, shot: vi.fn() }),
       waitUntilReady,
       getWindSheetSource: () => ({ selection: WIND_SHEET_SELECTION, scaleMaxMs: 8, comfortShares: null }),
-      windSheetFraming,
     }),
   );
   return { hook, applied, png, frameWholeSite, restoreCamera, log };
@@ -129,11 +127,55 @@ describe("useNamedViews", () => {
 
   it("keeps the saved camera when the sheet framing is saved", async () => {
     const live = { current: windPlanSnapshot("spring", "morning") };
-    const { hook, frameWholeSite } = mount(live, undefined, "saved");
+    const { hook, frameWholeSite } = mount(live);
     act(() => void hook.result.current.save("WS - Spring"));
-    act(() => hook.result.current.exportAll());
+    act(() => hook.result.current.exportAll(false, "saved"));
     await waitFor(() => expect(hook.result.current.busy).toBeNull());
     expect(frameWholeSite).not.toHaveBeenCalled();
+    expect(sheets.composeWindSheet.mock.calls[0]![2]).not.toHaveProperty("cutMargin", expect.any(Number));
+  });
+
+  it("reframes whole-site sheets with the margin, for both export buttons, and leaves other views alone", async () => {
+    const live = { current: windPlanSnapshot("spring", "morning") };
+    const { hook, frameWholeSite } = mount(live);
+    act(() => void hook.result.current.save("WS - Spring"));
+    live.current = snapshot("3d");
+    act(() => void hook.result.current.save("Axo"));
+    const plan = hook.result.current.views.find((view) => view.name === "WS - Spring")!;
+    const axo = hook.result.current.views.find((view) => view.name === "Axo")!;
+    act(() => hook.result.current.exportSelected([axo.id], false, "whole-site"));
+    await waitFor(() => expect(hook.result.current.busy).toBeNull());
+    expect(frameWholeSite).not.toHaveBeenCalled();
+    act(() => hook.result.current.exportSelected([plan.id], false, "whole-site"));
+    await waitFor(() => expect(hook.result.current.busy).toBeNull());
+    expect(frameWholeSite).toHaveBeenCalledTimes(1);
+    expect(sheets.composeWindSheet.mock.calls[0]![2]).toMatchObject({ cutMargin: 0.045 });
+    act(() => hook.result.current.exportAll(false, "whole-site"));
+    await waitFor(() => expect(hook.result.current.busy).toBeNull());
+    expect(frameWholeSite).toHaveBeenCalledTimes(2);
+  });
+
+  it("defaults the framing to whole site and remembers a change per cut", () => {
+    const first = renderHook(() =>
+      useNamedViews({ model: MODEL, getSnapshot: () => snapshot("3d"), applySnapshot: async () => {}, getExporter: () => null }),
+    );
+    expect(first.result.current.windSheetFraming).toBe("whole-site");
+    act(() => first.result.current.setWindSheetFraming("saved"));
+    expect(first.result.current.windSheetFraming).toBe("saved");
+    first.unmount();
+    const again = renderHook(() =>
+      useNamedViews({ model: MODEL, getSnapshot: () => snapshot("3d"), applySnapshot: async () => {}, getExporter: () => null }),
+    );
+    expect(again.result.current.windSheetFraming).toBe("saved");
+    const other = renderHook(() =>
+      useNamedViews({
+        model: { ...MODEL, center: { lat: -33.86, lon: 151.2 } } as CityModel,
+        getSnapshot: () => snapshot("3d"),
+        applySnapshot: async () => {},
+        getExporter: () => null,
+      }),
+    );
+    expect(other.result.current.windSheetFraming).toBe("whole-site");
   });
 
   it("saves the live state and restores that snapshot on click", () => {

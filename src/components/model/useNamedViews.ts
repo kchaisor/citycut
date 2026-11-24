@@ -19,7 +19,15 @@ import {
   type NamedViewsStore,
 } from "../../lib/namedViews";
 import { HQ_DEFAULT_SCALE as HQ_EXPORT_SCALE } from "../../lib/captureViewportPng";
-import { WIND_SHEET_FRAMING, type WindSheetFraming } from "../../lib/sheetFraming";
+import {
+  WIND_SHEET_FRAMING,
+  WIND_SHEET_MARGIN,
+  readWindSheetFramingStore,
+  windSheetFramingForCut,
+  writeWindSheetFramingStore,
+  type WindSheetFraming,
+  type WindSheetFramingStore,
+} from "../../lib/sheetFraming";
 import { composeWindSheet, isWindSheetView, windSheetCropOption, windSheetInput, type WindSheetSource } from "../../lib/windSheet";
 import { zipStore, type ZipEntry } from "../../lib/zip";
 import type { CityModel } from "../../types";
@@ -36,7 +44,6 @@ type Args = {
   getExporter: () => SceneExporter | null;
   waitUntilReady?: (snapshot: NamedViewSnapshot) => Promise<void>;
   getWindSheetSource?: () => WindSheetSource;
-  windSheetFraming?: WindSheetFraming;
 };
 
 function nextFrame(): Promise<void> {
@@ -59,12 +66,24 @@ async function settle(snapshot: NamedViewSnapshot, waitUntilReady?: (snapshot: N
   await nextFrame();
 }
 
-export function useNamedViews({ model, getSnapshot, applySnapshot, getExporter, waitUntilReady, getWindSheetSource, windSheetFraming = WIND_SHEET_FRAMING }: Args) {
+export function useNamedViews({ model, getSnapshot, applySnapshot, getExporter, waitUntilReady, getWindSheetSource }: Args) {
   const cutId = modelCutSiteId(model.center, model.sideM);
   const [store, setStore] = useState<NamedViewsStore>(() => readNamedViewsStore(window.localStorage));
+  const [framingStore, setFramingStore] = useState<WindSheetFramingStore>(() => readWindSheetFramingStore(window.localStorage));
   const [busy, setBusy] = useState<NamedViewsBusy>(null);
   const [warning, setWarning] = useState<string | null>(null);
   const views = useMemo(() => viewsForCut(store, cutId), [store, cutId]);
+
+  const windSheetFraming = windSheetFramingForCut(framingStore, cutId);
+
+  const setWindSheetFraming = useCallback(
+    (framing: WindSheetFraming) => {
+      const next = { ...framingStore, [cutId]: framing };
+      setFramingStore(next);
+      writeWindSheetFramingStore(window.localStorage, next);
+    },
+    [cutId, framingStore],
+  );
 
   const commit = useCallback((next: NamedViewsStore) => {
     setStore(next);
@@ -94,7 +113,7 @@ export function useNamedViews({ model, getSnapshot, applySnapshot, getExporter, 
   );
 
   const exportViews = useCallback(
-    async (list: NamedView[], mode: Exclude<NamedViewsBusy, null>, highQuality: boolean) => {
+    async (list: NamedView[], mode: Exclude<NamedViewsBusy, null>, highQuality: boolean, framing: WindSheetFraming) => {
       const exportable = list.filter(isPngExportable);
       if (exportable.length === 0) {
         setWarning("Only 3D views can be exported as PNG. Pick a view saved in 3D.");
@@ -119,14 +138,14 @@ export function useNamedViews({ model, getSnapshot, applySnapshot, getExporter, 
               : null;
           const crop = sheet ? windSheetCropOption(highQuality) : null;
           const base = highQuality ? { transparent: true, scale: HQ_EXPORT_SCALE } : undefined;
-          const restoreCamera = crop && windSheetFraming === "whole-site" ? exporter.frameWholeSite(crop) : null;
+          const restoreCamera = crop && framing === "whole-site" ? exporter.frameWholeSite(crop) : null;
           let bytes: Uint8Array;
           try {
             if (restoreCamera) await settle(snapshot, waitUntilReady);
             const blob = await exporter.viewportPng(crop ? { ...base, crop } : base);
             bytes =
               sheet && crop
-                ? await composeWindSheet(blob, sheet, { highQuality, frame: exporter.sheetFrame(crop) })
+                ? await composeWindSheet(blob, sheet, { highQuality, frame: exporter.sheetFrame(crop), cutMargin: restoreCamera ? WIND_SHEET_MARGIN : undefined })
                 : new Uint8Array(await blob.arrayBuffer());
           } finally {
             restoreCamera?.();
@@ -146,21 +165,21 @@ export function useNamedViews({ model, getSnapshot, applySnapshot, getExporter, 
         setBusy(null);
       }
     },
-    [applySnapshot, getExporter, getSnapshot, getWindSheetSource, model, waitUntilReady, windSheetFraming],
+    [applySnapshot, getExporter, getSnapshot, getWindSheetSource, model, waitUntilReady],
   );
 
   const exportSelected = useCallback(
-    (ids: string[], highQuality = false) => {
+    (ids: string[], highQuality = false, framing: WindSheetFraming = WIND_SHEET_FRAMING) => {
       const list = selectedViews(views, ids);
-      if (list.length) void exportViews(list, "selected", highQuality);
+      if (list.length) void exportViews(list, "selected", highQuality, framing);
     },
     [exportViews, views],
   );
 
-  const exportAll = useCallback((highQuality = false) => {
-    if (views.length) void exportViews([...views], "all", highQuality);
+  const exportAll = useCallback((highQuality = false, framing: WindSheetFraming = WIND_SHEET_FRAMING) => {
+    if (views.length) void exportViews([...views], "all", highQuality, framing);
   }, [exportViews, views]);
 
-  return { views, busy, warning, save, rename, remove, restore, exportSelected, exportAll };
+  return { views, busy, warning, windSheetFraming, setWindSheetFraming, save, rename, remove, restore, exportSelected, exportAll };
 }
 

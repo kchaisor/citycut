@@ -78,6 +78,8 @@ export function ModelPageSidebarLeftB({ vm }: { vm: import("./useModelPage").Mod
                 onDelete={namedViews.remove}
                 onExportSelected={namedViews.exportSelected}
                 onExportAll={namedViews.exportAll}
+                windSheetFraming={namedViews.windSheetFraming}
+                onWindSheetFramingChange={namedViews.setWindSheetFraming}
               />
             </div>
 

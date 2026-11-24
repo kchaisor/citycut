@@ -18,6 +18,7 @@ import {
 import type { SiteWindSelection } from "./windRoseData";
 import { analyzeSiteWind } from "./windRoseStats";
 import { scaleBarLengthM, type SheetFrame } from "./sheetScale";
+import { cutMarginTrim } from "./sheetFraming";
 import type { WindPlanViewId } from "./windState";
 import { windPrevailingBadge } from "../components/model/windRoseCard";
 
@@ -578,7 +579,7 @@ function measureTrim(bitmap: ImageBitmap, page: string, transparent: boolean): S
 export async function composeWindSheet(
   capture: Blob,
   input: WindSheetInput,
-  options: { highQuality: boolean; frame: SheetFrame | null },
+  options: { highQuality: boolean; frame: SheetFrame | null; cutMargin?: number },
 ): Promise<Uint8Array> {
   const size = WIND_SHEET_SIZES[options.highQuality ? "highQuality" : "normal"];
   const layout = windSheetLayout(size.width, size.height);
@@ -591,7 +592,11 @@ export async function composeWindSheet(
     canvas.height = size.height;
     const ctx = canvas.getContext("2d");
     if (!ctx) throw new Error("Could not prepare the wind sheet.");
-    const trim = measureTrim(bitmap, style.page, options.highQuality);
+    const cutTrim =
+      options.cutMargin != null && options.frame?.cutM
+        ? cutMarginTrim(bitmap, options.frame.metresAcross, options.frame.cutM, options.cutMargin)
+        : null;
+    const trim = cutTrim ?? measureTrim(bitmap, style.page, options.highQuality);
     drawWindSheet(ctx, layout, { source: bitmap, width: bitmap.width, height: bitmap.height, frame: options.frame, trim }, input, style, {
       transparent: options.highQuality,
     });

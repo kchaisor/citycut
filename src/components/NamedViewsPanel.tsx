@@ -1,6 +1,8 @@
 import { Check, Pencil, Trash2 } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { isPngExportable, type NamedView } from "../lib/namedViews";
+import type { WindSheetFraming } from "../lib/sheetFraming";
+import { isWindSheetView } from "../lib/windSheet";
 
 export type NamedViewsBusy = "selected" | "all" | null;
 
@@ -12,9 +14,16 @@ export type NamedViewsPanelProps = {
   onRestore: (id: string) => void;
   onRename: (id: string, name: string) => void;
   onDelete: (id: string) => void;
-  onExportSelected: (ids: string[], highQuality: boolean) => void;
-  onExportAll: (highQuality: boolean) => void;
+  onExportSelected: (ids: string[], highQuality: boolean, framing: WindSheetFraming) => void;
+  onExportAll: (highQuality: boolean, framing: WindSheetFraming) => void;
+  windSheetFraming: WindSheetFraming;
+  onWindSheetFramingChange: (framing: WindSheetFraming) => void;
 };
+
+const FRAMING_OPTIONS: ReadonlyArray<{ id: WindSheetFraming; label: string }> = [
+  { id: "whole-site", label: "Whole site" },
+  { id: "saved", label: "Saved zoom" },
+];
 
 function viewMeta(view: NamedView): string {
   const { tab, view: camera } = view.snapshot;
@@ -32,6 +41,7 @@ export function NamedViewsPanel(props: NamedViewsPanelProps) {
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const tickedIds = views.filter((view) => ticked.has(view.id)).map((view) => view.id);
   const exporting = busy !== null;
+  const hasWindSheet = views.some((view) => isPngExportable(view) && isWindSheetView(view.snapshot));
 
   function submitSave(event: FormEvent) {
     event.preventDefault();
@@ -168,12 +178,31 @@ export function NamedViewsPanel(props: NamedViewsPanelProps) {
         <input type="checkbox" checked={highQuality} disabled={exporting} onChange={(event) => setHighQuality(event.target.checked)} />
         <span>High quality, transparent</span>
       </label>
+      {hasWindSheet && (
+        <div className="named-views-quality">
+          <span>A3 map</span>
+          <div className="ac-seg ac-seg-compact" role="group" aria-label="A3 map framing">
+            {FRAMING_OPTIONS.map((option) => (
+              <button
+                key={option.id}
+                type="button"
+                className={props.windSheetFraming === option.id ? "ac-seg-btn is-ink" : "ac-seg-btn"}
+                aria-pressed={props.windSheetFraming === option.id}
+                disabled={exporting}
+                onClick={() => props.onWindSheetFramingChange(option.id)}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
       <div className="named-views-export">
         <button
           type="button"
           className="named-views-primary"
           disabled={tickedIds.length === 0 || exporting}
-          onClick={() => props.onExportSelected(tickedIds, highQuality)}
+          onClick={() => props.onExportSelected(tickedIds, highQuality, props.windSheetFraming)}
         >
           {busy === "selected" ? "Exporting…" : "Export selected"}
         </button>
@@ -181,7 +210,7 @@ export function NamedViewsPanel(props: NamedViewsPanelProps) {
           type="button"
           className="named-views-primary"
           disabled={views.length === 0 || exporting}
-          onClick={() => props.onExportAll(highQuality)}
+          onClick={() => props.onExportAll(highQuality, props.windSheetFraming)}
         >
           {busy === "all" ? "Exporting…" : "Export all"}
         </button>

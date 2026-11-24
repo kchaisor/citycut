@@ -3,7 +3,17 @@ import { describe, expect, it } from "vitest";
 import { ISO_FIT_MARGIN } from "./isoCamera";
 import { PLAN_CAMERA_UP, planEye, sitePlanBounds } from "./planCamera";
 import { sheetCropRect } from "./captureViewportPng";
-import { WIND_SHEET_FRAMING, projectionCentre, wholeSiteFraming } from "./sheetFraming";
+import {
+  WIND_SHEET_FRAMING,
+  WIND_SHEET_FRAMING_STORAGE_KEY,
+  WIND_SHEET_MARGIN,
+  cutMarginTrim,
+  projectionCentre,
+  readWindSheetFramingStore,
+  windSheetFramingForCut,
+  wholeSiteFraming,
+  writeWindSheetFramingStore,
+} from "./sheetFraming";
 import { trimmedFrame, windSheetCropOption } from "./windSheet";
 
 const FILL = { width: 1120, height: 900 };
@@ -120,5 +130,69 @@ describe("sheet map scale for the Rozelle 1.47 km cut", () => {
     const metresAcross = rect.width / zoom;
     const trimmed = trimmedFrame({ metresAcross, northRad: null }, captureWidthPx, { x: 0, y: 0, width: Math.round(cutPx), height: Math.round(cutPx) });
     expect(trimmed.metresAcross).toBeCloseTo(cut, -1);
+  });
+});
+
+describe("wind sheet framing store", () => {
+  function memory(initial?: string) {
+    const map = new Map<string, string>(initial === undefined ? [] : [[WIND_SHEET_FRAMING_STORAGE_KEY, initial]]);
+    return { getItem: (key: string) => map.get(key) ?? null, setItem: (key: string, value: string) => void map.set(key, value) };
+  }
+
+  it("round-trips a choice per site and falls back to whole site", () => {
+    const storage = memory();
+    expect(windSheetFramingForCut(readWindSheetFramingStore(storage), "a")).toBe("whole-site");
+    expect(writeWindSheetFramingStore(storage, { a: "saved", b: "whole-site" })).toBe(true);
+    const store = readWindSheetFramingStore(storage);
+    expect(windSheetFramingForCut(store, "a")).toBe("saved");
+    expect(windSheetFramingForCut(store, "b")).toBe("whole-site");
+    expect(windSheetFramingForCut(store, "c")).toBe("whole-site");
+  });
+
+  it.each(["not json", "[]", "null", '{"a":"zoomed","b":3}'])("ignores invalid stored value %s", (raw) => {
+    const store = readWindSheetFramingStore(memory(raw));
+    expect(windSheetFramingForCut(store, "a")).toBe("whole-site");
+    expect(windSheetFramingForCut(store, "b")).toBe("whole-site");
+  });
+
+  it("reports a storage that refuses writes", () => {
+    const refusing = { getItem: () => null, setItem: () => { throw new Error("full"); } };
+    expect(writeWindSheetFramingStore(refusing, { a: "saved" })).toBe(false);
+  });
+});
+
+describe("whole-site margin", () => {
+  it("keeps the cut at about 91% of the trimmed map, centred, with the bar exact", () => {
+    const crop = windSheetCropOption(false);
+    const rect = sheetCropRect({ width: 1440, height: 900 }, { x: 0, y: 0, width: 1440, height: 900 }, crop.aspect);
+    const cut = 1000;
+    const bounds = sitePlanBounds(cut, 0, 60);
+    const framing = wholeSiteFraming(bounds, { x: 720, y: 450 }, rect, WIND_SHEET_MARGIN);
+    const plain = wholeSiteFraming(bounds, { x: 720, y: 450 }, rect);
+    expect(framing.zoom).toBeLessThan(plain.zoom);
+
+    const ratio = crop.minWidthPx / rect.width;
+    const capture = { width: Math.round(crop.minWidthPx), height: Math.round(rect.height * ratio) };
+    const metresAcross = rect.width / framing.zoom;
+    const trim = cutMarginTrim(capture, metresAcross, { width: cut, height: cut }, WIND_SHEET_MARGIN)!;
+
+    const pxPerMetre = capture.width / metresAcross;
+    expect(trim.width).toBe(trim.height);
+    expect((cut * pxPerMetre) / trim.width).toBeCloseTo(1 / (1 + 2 * WIND_SHEET_MARGIN), 2);
+    expect(Math.abs(trim.x + trim.width / 2 - capture.width / 2)).toBeLessThanOrEqual(1);
+    expect(Math.abs(trim.y + trim.height / 2 - capture.height / 2)).toBeLessThanOrEqual(1);
+    expect(trim.x).toBeGreaterThanOrEqual(0);
+    expect(trim.y).toBeGreaterThanOrEqual(0);
+    expect(trim.x + trim.width).toBeLessThanOrEqual(capture.width);
+    expect(trim.y + trim.height).toBeLessThanOrEqual(capture.height);
+
+    const trimmed = trimmedFrame({ metresAcross, northRad: null }, capture.width, trim);
+    expect(trimmed.metresAcross).toBeCloseTo(cut * (1 + 2 * WIND_SHEET_MARGIN), 0);
+    expect(trim.width / trimmed.metresAcross).toBeCloseTo(pxPerMetre, 1);
+  });
+
+  it("returns no trim when the scale or cut size is unknown", () => {
+    expect(cutMarginTrim({ width: 100, height: 100 }, 0, { width: 10, height: 10 }, 0.045)).toBeNull();
+    expect(cutMarginTrim({ width: 100, height: 100 }, 10, { width: 0, height: 10 }, 0.045)).toBeNull();
   });
 });

@@ -1,7 +1,7 @@
 import type * as THREE from "three";
 import { studioNorthNeedleDeg } from "./studioCompass";
 
-export type SheetFrame = { metresAcross: number; northRad: number | null };
+export type SheetFrame = { metresAcross: number; northRad: number | null; cutM?: { width: number; height: number } };
 
 export const SCALE_BAR_SHARE = 0.175;
 
