@@ -3,6 +3,7 @@ import type { DrawingKind } from "../components/DrawingPlan";
 import type { SolarViewSettings } from "../components/SolarHeliodon";
 import type { Tab } from "../components/model/modelPageConstants";
 import type { BuildingUse } from "../types";
+import { parseDiagramArrows, type DiagramArrow } from "./diagramArrows";
 import type { LineStyles } from "./drawingStyle";
 import { isIsoCorner } from "./isoCamera";
 import type { RenderQuality } from "./renderQuality";
@@ -18,6 +19,8 @@ export const NAMED_VIEWS_STORAGE_KEY = "citycut.namedViews.v1";
 export const NAMED_VIEWS_VERSION = 1;
 
 export type NamedViewWindPlan = { mode: WindPlanMode; vectorsOn: boolean; sector: number | null; view: WindPlanViewId };
+
+export type NamedViewArrows = { visible: boolean; items: DiagramArrow[] };
 
 export type NamedViewSnapshot = {
   view: ViewMemory;
@@ -41,6 +44,7 @@ export type NamedViewSnapshot = {
   lineStyles: LineStyles | null;
   exploded: boolean;
   explodeGapM: number | null;
+  arrows: NamedViewArrows | null;
 };
 
 export type NamedView = {
@@ -131,6 +135,11 @@ function parseWind(value: Record<string, unknown>): WindViewSettings {
   };
 }
 
+function parseArrows(value: unknown): NamedViewArrows | null {
+  if (!isRecord(value) || !Array.isArray(value.items)) return null;
+  return { visible: value.visible !== false, items: parseDiagramArrows(value.items) };
+}
+
 function parseSnapshot(value: unknown): NamedViewSnapshot | null {
   if (!isRecord(value)) return null;
   const view = parseViewMemory(value.view);
@@ -167,6 +176,7 @@ function parseSnapshot(value: unknown): NamedViewSnapshot | null {
     lineStyles: isRecord(value.lineStyles) ? ({ ...value.lineStyles } as LineStyles) : null,
     exploded,
     explodeGapM: exploded && finite(value.explodeGapM) && value.explodeGapM > 0 ? value.explodeGapM : null,
+    arrows: parseArrows(value.arrows),
   };
 }
 

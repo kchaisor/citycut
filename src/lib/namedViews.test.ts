@@ -52,6 +52,7 @@ const SNAPSHOT: NamedViewSnapshot = {
   lineStyles: null,
   exploded: false,
   explodeGapM: null,
+  arrows: null,
 };
 
 function memoryStorage(initial: Record<string, string> = {}) {

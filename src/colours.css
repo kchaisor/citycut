@@ -59,6 +59,13 @@
   --section-knife-poche: #000000;
   --section-knife-floor-line: #FFFFFF;
   --section-knife-plane: #FFFFFF;
+
+  --arrow-ink: #1F1F1D;
+  --arrow-red: #D7263D;
+  --arrow-blue: #2B6CB0;
+  --arrow-green: #3F8F5F;
+  --arrow-amber: #D9A300;
+  --arrow-handle: #FFF500;
   --section-knife-elevation-fill: #C8C8C8;
   --section-knife-elevation-sky: #F5F5F2;
   --section-knife-elevation-ground: #1E1D1B;
