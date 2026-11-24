@@ -17,6 +17,8 @@ import {
   explodeLayerOfObjectName,
   explodeLayerOfSelectionKind,
   explodeOffsets,
+  explodeCornerPoints,
+  explodeCornerSpan,
   explodeOutlineSpecs,
   layerLabelAnchor,
   layerOffsets,
@@ -141,6 +143,40 @@ describe("explodeOutlineSpecs", () => {
 
   it("sits at the resting bases at progress 0", () => {
     for (const spec of explodeOutlineSpecs(BOXES, explodeOffsets(BOXES, 50, 0))) expect(spec.baseY).toBe(BOXES[spec.layer]!.min[1]);
+  });
+});
+
+describe("explodeCornerPoints", () => {
+  it("keeps the 4 corners of a rectangle, open or closed", () => {
+    const ring: [number, number][] = [[-5, -3], [5, -3], [5, 3], [-5, 3]];
+    expect(explodeCornerPoints(ring)).toEqual(ring);
+    expect(explodeCornerPoints([...ring, ring[0]])).toEqual(ring);
+  });
+
+  it("drops straight-through vertices and keeps only turns over 30 degrees", () => {
+    const ring: [number, number][] = [[0, 0], [5, 0], [10, 0], [10, 10], [5, 10.5], [0, 10]];
+    expect(explodeCornerPoints(ring)).toEqual([[0, 0], [10, 0], [10, 10], [0, 10]]);
+  });
+
+  it("gives none for a circle-like ring", () => {
+    const ring: [number, number][] = Array.from({ length: 64 }, (_, i) => [
+      100 * Math.cos((i / 64) * 2 * Math.PI),
+      100 * Math.sin((i / 64) * 2 * Math.PI),
+    ]);
+    expect(explodeCornerPoints(ring)).toEqual([]);
+  });
+});
+
+describe("explodeCornerSpan", () => {
+  it("runs from the bottom layer base to the top layer base and grows with the gap", () => {
+    const at = (gap: number, progress: number) => explodeCornerSpan(explodeOutlineSpecs(BOXES, explodeOffsets(BOXES, gap, progress)))!;
+    expect(at(50, 1).baseY).toBe(BOXES.ground!.min[1]);
+    expect(at(100, 1).heightM).toBeGreaterThan(at(50, 1).heightM);
+    expect(at(50, 1).heightM).toBeGreaterThan(at(50, 0).heightM);
+  });
+
+  it("is absent with a single layer", () => {
+    expect(explodeCornerSpan([{ layer: "ground", baseY: 0 }])).toBeNull();
   });
 });
 

@@ -64,6 +64,41 @@ export function explodeOutlineSpecs(boxes: ExplodeLayerBoxes, offsets: ExplodeLa
   return specs;
 }
 
+export const EXPLODE_CORNER_MIN_TURN_DEG = 30;
+export const EXPLODE_CORNER_DASH_PX = 6;
+export const EXPLODE_CORNER_GAP_PX = 4;
+
+export function explodeCornerPoints(
+  ring: readonly (readonly [number, number])[],
+  minTurnDeg = EXPLODE_CORNER_MIN_TURN_DEG,
+): [number, number][] {
+  const closed = ring.length > 1 && ring[0][0] === ring[ring.length - 1][0] && ring[0][1] === ring[ring.length - 1][1];
+  const points = closed ? ring.slice(0, -1) : ring;
+  if (points.length < 3) return [];
+  const corners: [number, number][] = [];
+  for (let index = 0; index < points.length; index++) {
+    const prev = points[(index + points.length - 1) % points.length];
+    const here = points[index];
+    const next = points[(index + 1) % points.length];
+    const inX = here[0] - prev[0];
+    const inY = here[1] - prev[1];
+    const outX = next[0] - here[0];
+    const outY = next[1] - here[1];
+    if (Math.hypot(inX, inY) === 0 || Math.hypot(outX, outY) === 0) continue;
+    const turn = Math.abs(Math.atan2(inX * outY - inY * outX, inX * outX + inY * outY)) * (180 / Math.PI);
+    if (turn > minTurnDeg) corners.push([here[0], here[1]]);
+  }
+  return corners;
+}
+
+export type ExplodeCornerSpan = { baseY: number; heightM: number };
+
+export function explodeCornerSpan(specs: readonly ExplodeOutlineSpec[]): ExplodeCornerSpan | null {
+  if (specs.length < 2) return null;
+  const baseY = specs[0].baseY;
+  return { baseY, heightM: Math.max(0, specs[specs.length - 1].baseY - baseY) };
+}
+
 export function easeInOutCubic(x: number): number {
   const t = Math.min(1, Math.max(0, x));
   return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;

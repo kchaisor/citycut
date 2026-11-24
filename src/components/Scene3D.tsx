@@ -156,7 +156,12 @@ import {
   explodeLayerOfObjectName,
   explodeLayerOfSelectionKind,
   explodeOffsets,
+  explodeCornerPoints,
+  explodeCornerSpan,
   explodeOutlineSpecs,
+  EXPLODE_CORNER_DASH_PX,
+  EXPLODE_CORNER_GAP_PX,
+  type ExplodeCornerSpan,
   layerLabelAnchor,
   noExplodeBoxes,
   noExplodeOffsets,
@@ -293,6 +298,7 @@ export function createExplodeRuntime(): ExplodeRuntime {
 
 const EXPLODE_GROUND_FILL_NAME = "ExplodeGroundFill";
 const EXPLODE_OUTLINES_NAME = "ExplodeOutlines";
+const EXPLODE_CORNERS_NAME = "ExplodeCorners";
 
 type ExplodeRun = { target: 0 | 1; from: number; startedAtMs: number };
 
@@ -380,16 +386,59 @@ export function buildExplodeOutlines(frame: SiteFrame, boxes: ExplodeLayerBoxes)
     line.raycast = () => {};
     group.add(line);
   }
+  const corners = explodeCornerPoints(ring);
+  if (corners.length && EXPLODE_LAYERS.filter((layer) => boxes[layer]).length > 1) {
+    const cornerGroup = new THREE.Group();
+    cornerGroup.name = EXPLODE_CORNERS_NAME;
+    cornerGroup.userData.skipRhinoExport = true;
+    cornerGroup.userData.noScenePick = true;
+    corners.forEach(([east, north], index) => {
+      const line = new THREE.Line(
+        new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(east, 0, -north), new THREE.Vector3(east, 0, -north)]),
+        new THREE.LineDashedMaterial({ color: getColour("--ground-edge"), dashSize: 1, gapSize: 1 }),
+      );
+      line.name = `${EXPLODE_CORNERS_NAME}:${index}`;
+      line.frustumCulled = false;
+      line.userData.skipRhinoExport = true;
+      line.userData.noScenePick = true;
+      line.raycast = () => {};
+      cornerGroup.add(line);
+    });
+    group.add(cornerGroup);
+  }
   return group.children.length ? group : null;
+}
+
+export function updateExplodeCorners(group: THREE.Object3D, span: ExplodeCornerSpan | null, camera: THREE.Camera) {
+  const corners = group.getObjectByName(EXPLODE_CORNERS_NAME);
+  if (!corners) return;
+  corners.visible = span != null;
+  if (!span) return;
+  const zoom = (camera as THREE.OrthographicCamera).zoom || 1;
+  const verticalOnScreen = Math.max(0.1, Math.abs(camera.matrixWorld.elements[5]));
+  const worldPerPx = 1 / (zoom * verticalOnScreen);
+  for (const child of corners.children) {
+    const line = child as THREE.Line;
+    const material = line.material as THREE.LineDashedMaterial;
+    material.dashSize = EXPLODE_CORNER_DASH_PX * worldPerPx;
+    material.gapSize = EXPLODE_CORNER_GAP_PX * worldPerPx;
+    line.position.y = span.baseY;
+    const position = line.geometry.getAttribute("position") as THREE.BufferAttribute;
+    if (position.getY(1) !== span.heightM) {
+      position.setY(1, span.heightM);
+      position.needsUpdate = true;
+      line.computeLineDistances();
+    }
+  }
 }
 
 function disposeExplodeOutlines(group: THREE.Group) {
   group.removeFromParent();
-  for (const child of group.children) {
-    const line = child as THREE.LineLoop;
-    line.geometry.dispose();
-    (line.material as THREE.Material).dispose();
-  }
+  group.traverse((child) => {
+    if (!(child instanceof THREE.Line)) return;
+    child.geometry.dispose();
+    (child.material as THREE.Material).dispose();
+  });
 }
 
 type ExplodeLift = { restY: number; offset: number };
@@ -538,10 +587,12 @@ export function ExplodeLayers({
       }
       const group = outlines.current?.group;
       if (group) {
-        for (const spec of explodeOutlineSpecs(rt.boxes, rt.offsets)) {
+        const specs = explodeOutlineSpecs(rt.boxes, rt.offsets);
+        for (const spec of specs) {
           const line = group.getObjectByName(`${EXPLODE_OUTLINES_NAME}:${spec.layer}`);
           if (line) line.position.y = spec.baseY;
         }
+        updateExplodeCorners(group, explodeCornerSpan(specs), state.camera);
       }
     }
     if (stale || before !== rt.progress || fittedGap.current !== gapM) {

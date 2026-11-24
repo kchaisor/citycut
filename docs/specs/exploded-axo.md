@@ -28,6 +28,10 @@ Sketch or screenshot: Paper mock skipped (Paper weekly MCP limit, 24 Nov 2026). 
 2. **Boundary outline on every layer.** Each layer gets a thin dark line tracing the cut boundary (square, round or A3, in the Ground edge colour) at that layer's base, so every floating plane reads as the same site footprint. The outlines move with their layer during the animation and with the gap slider, show only while exploded, and cannot be picked or exported.
 3. **Named views do not save Exploded axo.** Applying a named view while exploded puts the model back together at once, so the saved camera pose is what you see.
 
+### Added (24 Nov 2026, 11:49 AM AEDT)
+
+4. **Dashed corner lines.** Thin dashed vertical lines, in the same dark Ground edge colour as the outlines, join each corner of the cut boundary on the bottom layer (Ground) to the same corner on the top layer (Trees), passing through every layer's outline. A square or A3 cut has 4 lines. A cut with many boundary points gets lines only at sharp corners (turns over 30°), and a round cut has none. The lines grow and shrink with the animation and the gap slider, show only while exploded, keep the same dash size on screen at any zoom, and cannot be picked or exported.
+
 ### As built (24 Nov 2026)
 
 - **Gap slider.** Opens at 0.3 × the cut side, rounded to 5 m (150 m on a 0.5 km cut, 300 m on a 1 km cut), so the layers read as separate. It runs from 10 m to 0.8 × the cut side (400 m / 800 m) in 5 m steps. The gap choice is not saved either.

@@ -287,9 +287,10 @@ describe("exploded axo in the 3D scene", () => {
     await frames(30);
     const group = outlines()!;
     expect(group.userData.skipRhinoExport).toBe(true);
-    expect(group.children.map((child) => child.userData.explodeLayer)).toEqual([...EXPLODE_LAYERS]);
+    const loops = group.children.filter((child) => child.userData.explodeLayer) as THREE.LineLoop[];
+    expect(loops.map((child) => child.userData.explodeLayer)).toEqual([...EXPLODE_LAYERS]);
     const { boxes, offsets } = rig.runtime.current;
-    for (const line of group.children as THREE.LineLoop[]) {
+    for (const line of loops) {
       const layer = line.userData.explodeLayer as (typeof EXPLODE_LAYERS)[number];
       expect(line.position.y).toBe(boxes[layer]!.min[1] + offsets[layer]);
       expect(line).toBeInstanceOf(THREE.LineLoop);
@@ -299,11 +300,11 @@ describe("exploded axo in the 3D scene", () => {
       expect(hits).toHaveLength(0);
     }
     expect(rig.runtime.current.bounds!.max[1]).toBe(boxes.trees!.max[1] + offsets.trees);
-    const treesY = group.children.find((child) => child.userData.explodeLayer === "trees")!.position.y;
+    const treesY = loops.find((child) => child.userData.explodeLayer === "trees")!.position.y;
     await rig.rerender({ exploded: true, gapM: 150, wet: true, frame });
     await frames(2);
     const gapped = rig.runtime.current;
-    for (const line of outlines()!.children as THREE.LineLoop[]) {
+    for (const line of outlines()!.children.filter((child) => child.userData.explodeLayer) as THREE.LineLoop[]) {
       const layer = line.userData.explodeLayer as (typeof EXPLODE_LAYERS)[number];
       expect(line.position.y).toBe(gapped.boxes[layer]!.min[1] + gapped.offsets[layer]);
     }
@@ -315,11 +316,60 @@ describe("exploded axo in the 3D scene", () => {
     for (const child of rig.city.children) expect(child.position.y).toBe(0);
   });
 
+  it("draws one dashed vertical line per corner from the bottom to the top layer base", async () => {
+    const frame = makeSiteFrame(SIDE, "square");
+    const rig = await mountExplode({ exploded: false, gapM: 75, frame });
+    const corners = () => rig.city.getObjectByName("ExplodeCorners");
+    expect(corners()).toBeUndefined();
+    await rig.rerender({ exploded: true, gapM: 75, frame });
+    await frames(3);
+    expect(rig.runtime.current.progress).toBeGreaterThan(0);
+    expect(rig.runtime.current.progress).toBeLessThan(1);
+    const midHeight = (corners()!.children[0] as THREE.Line).geometry.getAttribute("position").getY(1);
+    await frames(30);
+    const spans = (gapM: number) => {
+      const { boxes, offsets } = rig.runtime.current;
+      const group = corners()!;
+      expect(group.userData.skipRhinoExport).toBe(true);
+      expect(group.children).toHaveLength(4);
+      const bottom = boxes.ground!.min[1] + offsets.ground;
+      const top = boxes.trees!.min[1] + offsets.trees;
+      for (const child of group.children) {
+        const line = child as THREE.Line;
+        expect(line.material).toBeInstanceOf(THREE.LineDashedMaterial);
+        expect(line.geometry.getAttribute("lineDistance")).toBeDefined();
+        expect(line.position.y).toBe(bottom);
+        expect(line.geometry.getAttribute("position").getY(1)).toBeCloseTo(top - bottom, 9);
+        const hits: THREE.Intersection[] = [];
+        line.raycast(new THREE.Raycaster(), hits);
+        expect(hits).toHaveLength(0);
+      }
+      expect(gapM).toBeGreaterThan(0);
+      return top - bottom;
+    };
+    const short = spans(75);
+    expect(short).toBeGreaterThan(midHeight);
+    await rig.rerender({ exploded: true, gapM: 200, frame });
+    await frames(2);
+    expect(spans(200)).toBeGreaterThan(short);
+    await rig.rerender({ exploded: false, gapM: 200, frame });
+    await frames(30);
+    expect(corners()).toBeUndefined();
+  });
+
+  it("draws no corner lines on a round cut", async () => {
+    const frame = makeSiteFrame(SIDE, "circle");
+    const rig = await mountExplode({ exploded: true, gapM: 75, frame });
+    await frames(30);
+    expect(rig.city.getObjectByName("ExplodeOutlines")).toBeDefined();
+    expect(rig.city.getObjectByName("ExplodeCorners")).toBeUndefined();
+  });
+
   it("outlines only the layers that are present", async () => {
     const frame = makeSiteFrame(SIDE, "square");
     const rig = await mountExplode({ exploded: true, gapM: 75, frame });
     await frames(30);
-    const layers = rig.city.getObjectByName("ExplodeOutlines")!.children.map((child) => child.userData.explodeLayer);
+    const layers = rig.city.getObjectByName("ExplodeOutlines")!.children.map((child) => child.userData.explodeLayer).filter(Boolean);
     expect(layers).toEqual(["ground", "transport", "buildings", "trees"]);
   });
 
