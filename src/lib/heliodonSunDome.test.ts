@@ -7,7 +7,6 @@ import {
   SUN_DOME_HOUR_LABELS,
   SUN_DOME_SUN_LINE,
   SUN_DOME_SUN_PX,
-  easeInOutCubic,
   hudSafeArea,
   sunDomeArcs,
   sunDomeBearingLabels,
@@ -104,11 +103,5 @@ describe("sun dome camera fit", () => {
     expect(bounds.max[2]).toBe(radiusM);
     expect(bounds.max[1]).toBeGreaterThan(10 + HELIODON_LIFT_M + radiusM * 0.9);
     expect(bounds.max[1]).toBeLessThanOrEqual(10 + HELIODON_LIFT_M + radiusM);
-  });
-
-  it("eases in and out", () => {
-    expect(easeInOutCubic(0)).toBe(0);
-    expect(easeInOutCubic(0.5)).toBeCloseTo(0.5, 6);
-    expect(easeInOutCubic(1)).toBe(1);
   });
 });

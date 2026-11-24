@@ -31,7 +31,6 @@ export const SUN_DOME_BEARING_SIZE_PX = 10;
 export const SUN_DOME_CARDINAL_SIZE_PX = 20;
 export const SUN_DOME_SUN_PX = 14;
 export const SUN_DOME_SUN_LINE: SunDomeLineStyle = { widthPx: 1, ink: "--ink", opacity: 1, dashPx: [4, 3] };
-export const SUN_DOME_FIT_MS = 250;
 export const SUN_DOME_SAFE_PAD_PX = 16;
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"] as const;
@@ -118,11 +117,6 @@ export function hudSafeArea(viewport: ScreenRect, huds: readonly ScreenRect[], p
   }
   if (safe.right - safe.left < width * 0.25 || safe.bottom - safe.top < height * 0.25) return viewport;
   return safe;
-}
-
-export function easeInOutCubic(t: number): number {
-  const x = Math.min(1, Math.max(0, t));
-  return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
 }
 
 export function sunDomeBounds(input: {
