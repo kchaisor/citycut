@@ -75,7 +75,7 @@ async function frames(n: number, stepSec = 0.05) {
   }
 }
 
-type Opts = { exploded: boolean; gapM: number; projection?: ProjectionMode; terrain?: { min: number; max: number }; frame?: SiteFrame; wet?: boolean; solar?: SolarViewSettings; wind?: boolean };
+type Opts = { exploded: boolean; gapM: number; projection?: ProjectionMode; terrain?: { min: number; max: number }; frame?: SiteFrame; wet?: boolean; solar?: SolarViewSettings; wind?: boolean; explodeLive?: boolean };
 
 const cleanups: Array<() => Promise<void>> = [];
 afterEach(async () => {
@@ -146,6 +146,7 @@ async function mountExplode(initial: Opts) {
         lat={-37.8127}
         lon={144.98061}
         explode={runtime}
+        explodeLive={o.explodeLive ?? o.exploded}
       />
     </>
   );
@@ -171,6 +172,7 @@ async function mountExplode(initial: Opts) {
     collapsed,
     topLift,
     camera: () => store!.getState().camera,
+    controls: () => (store!.getState().controls as { target: THREE.Vector3 }).target,
     pose: () => {
       const state = store!.getState();
       const camera = state.camera;
@@ -502,5 +504,60 @@ describe("exploded axo in the 3D scene", () => {
       const rig = await expectStill({ exploded: true, gapM: 75 });
       expect(stackInView(rig.camera(), rig.runtime.current)).toBe(true);
     });
+  });
+});
+
+describe("leaving the exploded axo", () => {
+  async function collapseTo(projection: ProjectionMode) {
+    const rig = await mountExplode({ exploded: false, gapM: 75 });
+    await rig.rerender({ exploded: true, gapM: 75 });
+    await frames(30);
+    rig.collapsed.mockClear();
+    await rig.rerender({ exploded: false, gapM: 75, projection: "iso", explodeLive: true });
+    while (!rig.collapsed.mock.calls.length) await frames(1);
+    await frames(1);
+    const iso = rig.camera() as THREE.OrthographicCamera;
+    const end = {
+      target: rig.controls().clone(),
+      height: (iso.top - iso.bottom) / iso.zoom,
+      dir: rig.controls().clone().sub(iso.position).normalize(),
+      pose: rig.pose(),
+    };
+    await rig.rerender({ exploded: false, gapM: 75, projection, explodeLive: false });
+    await frames(3);
+    return { rig, end };
+  }
+
+  it("hands the perspective camera the collapse's target, direction and framing, then leaves it alone", async () => {
+    const { rig, end } = await collapseTo("perspective");
+    const persp = rig.camera() as unknown as THREE.PerspectiveCamera;
+    expect(persp.isPerspectiveCamera).toBe(true);
+    expect(rig.controls().distanceTo(end.target)).toBeLessThan(1e-3);
+    const dir = rig.controls().clone().sub(persp.position);
+    const height = 2 * dir.length() * Math.tan(THREE.MathUtils.degToRad(persp.fov / 2));
+    expect(Math.abs(height - end.height) / end.height).toBeLessThan(0.02);
+    expect(dir.normalize().distanceTo(end.dir)).toBeLessThan(1e-3);
+    const settled = rig.pose();
+    await frames(60);
+    expect(rig.pose()).toEqual(settled);
+  });
+
+  it("keeps the isometric camera where the collapse ended", async () => {
+    const { rig, end } = await collapseTo("iso");
+    expect(rig.pose()).toEqual(end.pose);
+    await frames(60);
+    expect(rig.pose()).toEqual(end.pose);
+  });
+
+  it("looks straight down at the same target and zoom for plan, then leaves it alone", async () => {
+    const { rig, end } = await collapseTo("plan");
+    const ortho = rig.camera() as THREE.OrthographicCamera;
+    expect(rig.controls().distanceTo(end.target)).toBeLessThan(1e-3);
+    const down = rig.controls().clone().sub(ortho.position).normalize();
+    expect(down.y).toBeLessThan(-0.999);
+    expect(ortho.zoom).toBeCloseTo(end.pose[6], 6);
+    const settled = rig.pose();
+    await frames(60);
+    rig.pose().forEach((v, k) => expect(v).toBeCloseTo(settled[k], 6));
   });
 });

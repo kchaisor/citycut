@@ -1715,6 +1715,67 @@ function FrameCameras({
   return null;
 }
 
+function ExplodeHandoff({
+  explodeLive,
+  projection,
+  persp,
+  ortho,
+  perspControls,
+  orthoControls,
+  snapId,
+  fittedKeys,
+}: {
+  explodeLive: boolean;
+  projection: ProjectionMode;
+  persp: THREE.PerspectiveCamera;
+  ortho: THREE.OrthographicCamera;
+  perspControls: RefObject<OrbitControlsImpl | null>;
+  orthoControls: RefObject<OrbitControlsImpl | null>;
+  snapId: number;
+  fittedKeys: {
+    persp: MutableRefObject<string | null>;
+    iso: MutableRefObject<string | null>;
+    plan: MutableRefObject<string | null>;
+  };
+}) {
+  const size = useThree((state) => state.size);
+  const wasLive = useRef(explodeLive);
+  useLayoutEffect(() => {
+    const left = wasLive.current && !explodeLive;
+    wasLive.current = explodeLive;
+    if (!left || projection === "iso" || size.width < 2 || size.height < 2) return;
+    const oc = orthoControls.current;
+    if (!oc) return;
+    const key = `${snapId}:${size.width}x${size.height}`;
+    const target = oc.target.clone();
+    const away = ortho.position.clone().sub(target);
+    const reach = Math.max(away.length(), 1);
+    if (projection === "plan") {
+      flushControlInertia(oc);
+      ortho.up.set(0, 0, -1);
+      ortho.position.set(target.x, target.y + reach, target.z + 0.01);
+      ortho.lookAt(target);
+      ortho.up.set(0, 0, -1);
+      ortho.updateProjectionMatrix();
+      oc.update();
+      fittedKeys.plan.current = key;
+      return;
+    }
+    const pc = perspControls.current;
+    if (!pc) return;
+    const visibleHeight = (ortho.top - ortho.bottom) / ortho.zoom;
+    const distance = visibleHeight / 2 / Math.tan(THREE.MathUtils.degToRad(persp.fov / 2));
+    flushControlInertia(pc);
+    persp.position.copy(target).addScaledVector(away.normalize(), distance);
+    pc.target.copy(target);
+    persp.lookAt(target);
+    persp.updateProjectionMatrix();
+    pc.update();
+    fittedKeys.persp.current = key;
+  }, [explodeLive, projection, size.width, size.height, snapId, persp, ortho, perspControls, orthoControls, fittedKeys]);
+  return null;
+}
+
 function PerspectiveFit({
   camera,
   controlsRef,
@@ -2636,6 +2697,7 @@ export function Cameras({
   frameHeightM,
   landmarkLabelsRef,
   explode,
+  explodeLive = false,
 }: {
   side: number;
   lift: number;
@@ -2661,6 +2723,7 @@ export function Cameras({
   frameHeightM: number;
   landmarkLabelsRef?: RefObject<LandmarkExportLabels | null>;
   explode?: RefObject<ExplodeRuntime>;
+  explodeLive?: boolean;
 }) {
   const orthoBoundsRef = useMemo<RefObject<Aabb | null>>(
     () => ({
@@ -2727,6 +2790,16 @@ export function Cameras({
         <>
           <BindCamera camera={orthoView ? ortho : persp} />
           <FrameCameras persp={persp} ortho={ortho} />
+          <ExplodeHandoff
+            explodeLive={explodeLive}
+            projection={projection}
+            persp={persp}
+            ortho={ortho}
+            perspControls={perspControls}
+            orthoControls={orthoControls}
+            snapId={snapId}
+            fittedKeys={fittedKeys}
+          />
           <PerspectiveFit
             camera={persp}
             controlsRef={perspControls}
@@ -3338,6 +3411,7 @@ export function Scene3D({
         gizmoOrbitLock={sectionKnifeGizmoInteraction.orbitLock}
         landmarkLabelsRef={landmarkExportRef}
         explode={explodeRuntime}
+        explodeLive={explodeLive}
       />
       {explodeLive ? (
         <ExplodeLabelProjector
