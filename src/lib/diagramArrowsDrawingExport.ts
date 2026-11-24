@@ -1,13 +1,12 @@
-import type { PdfChunk, PdfPath, PdfText } from "./aiDocument";
+import type { PdfChunk, PdfPath } from "./aiDocument";
 import { getColour } from "./colours";
-import { ARROW_COLOUR_TOKENS, arrowLabelAnchor, buildArrowShape, ribbonPolygon, visibleInDrawing, type DiagramArrow } from "./diagramArrows";
-import { LANDMARK_FONT_PX, LANDMARK_HALO_PX } from "./landmarkLabels";
+import { ARROW_COLOUR_TOKENS, visibleInDrawing, type DiagramArrow } from "./diagramArrows";
+import { buildArrowShape, shapeFills } from "./diagramArrowsShape";
 import { hexRgb } from "./lineweights";
 
 export const DIAGRAM_ARROWS_LAYER = "Diagram arrows";
 
-const MM_PER_CSS_PX = 25.4 / 96;
-const LABEL_LIFT_EM = 1.1;
+const EXPORT_BANDS = 8;
 
 export type ArrowSheetPoint = (east: number, north: number) => [number, number];
 
@@ -16,25 +15,14 @@ export function diagramArrowsChunk(
   sideM: number,
   toSheet: ArrowSheetPoint,
 ): PdfChunk | null {
-  const shown = visibleInDrawing(arrows ?? []);
-  if (shown.length === 0) return null;
-  const sizeMm = LANDMARK_FONT_PX * MM_PER_CSS_PX;
-  const ink = hexRgb(getColour("--landmark-label"));
-  const halo = { color: hexRgb(getColour("--landmark-label-halo")), widthMm: LANDMARK_HALO_PX * MM_PER_CSS_PX };
   const paths: PdfPath[] = [];
-  const texts: PdfText[] = [];
-  for (const arrow of shown) {
+  for (const arrow of visibleInDrawing(arrows ?? [])) {
     const fill = hexRgb(getColour(ARROW_COLOUR_TOKENS[arrow.colour]));
     const shape = buildArrowShape(arrow.points, arrow.style, arrow.width, sideM);
-    for (const polygon of [...shape.ribbons.map(ribbonPolygon), ...shape.heads]) {
-      paths.push({ rings: [polygon.map(([east, north]) => toSheet(east, north))], close: true, fill, evenOdd: false });
+    for (const { polygon, alpha } of shapeFills(shape, EXPORT_BANDS)) {
+      const path: PdfPath = { rings: [polygon.map(([east, north]) => toSheet(east, north))], close: true, fill, evenOdd: false };
+      paths.push(alpha < 1 ? { ...path, opacity: alpha } : path);
     }
-    const label = arrow.label.trim();
-    if (label === "") continue;
-    const [east, north] = arrowLabelAnchor(arrow.points);
-    const [x, y] = toSheet(east, north);
-    texts.push({ x, y: y + sizeMm * LABEL_LIFT_EM, sizeMm, text: label, color: ink, anchor: "middle", weight: 500, halo });
   }
-  if (paths.length === 0 && texts.length === 0) return null;
-  return { name: DIAGRAM_ARROWS_LAYER, paths, texts };
+  return paths.length === 0 ? null : { name: DIAGRAM_ARROWS_LAYER, paths, texts: [] };
 }

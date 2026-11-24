@@ -114,6 +114,10 @@ export function ModelPageSidebar({ vm }: { vm: import("./useModelPage").ModelPag
                   }
                 : undefined,
             }}
+            arrows={{
+              active: arrowsCardOn,
+              onToggle: () => vm.diagramArrows.dispatch({ type: "setActive", active: !arrowsCardOn }),
+            }}
             rightMeta={`MGA${mgaCrs(model.center.lon).zone}`}
             rightBelow={
               analysisCardOn || sunHoursLegendAlone || explodeCardOn || arrowsCardOn ? (

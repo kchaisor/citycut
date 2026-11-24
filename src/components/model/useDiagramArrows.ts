@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useReducer, useRef, useState } from "react";
+import { useCallback, useEffect, useReducer, useRef } from "react";
 import type { CityModel } from "../../types";
 import {
   arrowsForCut,
@@ -10,14 +10,12 @@ import {
 import { arrowKeyContext, arrowToolKeyAction, arrowToolReducer, initialArrowToolState } from "../../lib/diagramArrowsTool";
 import { modelCutSiteId } from "../../lib/introPlayed";
 import type { NamedViewArrows } from "../../lib/namedViews";
-import type { ArrowScreenLabel } from "../DiagramArrows3D";
 
 export function useDiagramArrows(model: Pick<CityModel, "center" | "sideM">) {
   const cutId = modelCutSiteId(model.center, model.sideM);
   const [state, dispatch] = useReducer(arrowToolReducer, cutId, (id) =>
     initialArrowToolState(arrowsForCut(readDiagramArrowsStore(window.localStorage), id)),
   );
-  const [labels, setLabels] = useState<ArrowScreenLabel[]>([]);
   const loadedCut = useRef(cutId);
 
   useEffect(() => {
@@ -36,13 +34,6 @@ export function useDiagramArrows(model: Pick<CityModel, "center" | "sideM">) {
     if (!state.active) return;
     const onKey = (event: KeyboardEvent) => {
       const context = arrowKeyContext(event.target);
-      if (context.label) {
-        if (event.key === "Enter" || event.key === "Escape") {
-          event.preventDefault();
-          (event.target as HTMLElement).blur();
-        }
-        return;
-      }
       const action = arrowToolKeyAction(state, event.key, context);
       if (!action) return;
       event.preventDefault();
@@ -57,5 +48,5 @@ export function useDiagramArrows(model: Pick<CityModel, "center" | "sideM">) {
     if (saved) dispatch({ type: "replace", arrows: saved.items as DiagramArrow[], visible: saved.visible });
   }, []);
 
-  return { state, dispatch, labels, setLabels, snapshot, restore };
+  return { state, dispatch, snapshot, restore };
 }

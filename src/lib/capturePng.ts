@@ -3,12 +3,9 @@ import { getColour } from "./colours";
 import { withScreenOnlyHidden } from "./screenOnly";
 import { cameraForExportFrame, type ExportFrame } from "./exportFrame";
 import { drawLandmarkLabels, type CanvasLandmarkLabel } from "./landmarkLabelText";
-import { drawArrowLabels, type CanvasArrowLabel } from "./diagramArrowLabels";
 import { withStreamStillFrame } from "./windDiagramStreams";
 
 export type PngLandmarkLabels = (camera: THREE.Camera, width: number, height: number) => CanvasLandmarkLabel[];
-
-export type PngArrowLabels = (camera: THREE.Camera, width: number, height: number) => CanvasArrowLabel[];
 
 export async function captureViewPng(
   gl: THREE.WebGLRenderer,
@@ -16,7 +13,6 @@ export async function captureViewPng(
   camera: THREE.Camera,
   frame?: ExportFrame,
   landmarkLabels: PngLandmarkLabels | null = null,
-  arrowLabels: PngArrowLabels | null = null,
 ): Promise<Blob> {
   const PNG_BACKGROUND = getColour("--export-backdrop");
   const previousBackground = scene.background;
@@ -71,11 +67,6 @@ export async function captureViewPng(
     const cssWidth = sourceWidth / pixelRatio;
     const cssHeight = sourceHeight / pixelRatio;
     drawLandmarkLabels(context, landmarkLabels(renderCamera, cssWidth, cssHeight), cssWidth, cssHeight, width / cssWidth);
-  }
-  if (arrowLabels) {
-    const cssWidth = sourceWidth / pixelRatio;
-    const cssHeight = sourceHeight / pixelRatio;
-    drawArrowLabels(context, arrowLabels(renderCamera, cssWidth, cssHeight), width / cssWidth);
   }
   const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
   if (!blob) throw new Error("Could not encode the PNG.");

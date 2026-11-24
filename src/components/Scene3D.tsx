@@ -133,16 +133,14 @@ import {
 import { windSceneLayers } from "../lib/windState";
 import { GroundWindFlow } from "./GroundWindFlow";
 import { WindDiagramStreams } from "./WindDiagramStreams";
-import { arrowViewportLabels } from "../lib/diagramArrowLabels";
 import { withArrowEditorHidden } from "../lib/diagramArrows3d";
 import { DiagramArrowsPlanOverlay } from "./DiagramArrowsPlanOverlay";
-import { DiagramArrows3D, type ArrowExportLabels, type ArrowScreenLabel } from "./DiagramArrows3D";
+import { DiagramArrows3D } from "./DiagramArrows3D";
 import type { ArrowToolAction, ArrowToolState } from "../lib/diagramArrowsTool";
 
 export type DiagramArrowsBinding = {
   state: ArrowToolState;
   dispatch: (action: ArrowToolAction) => void;
-  onLabels: (labels: ArrowScreenLabel[]) => void;
 };
 import type { PrevailingStream } from "../lib/windPrevailingStreams";
 import { createWindPlanTransformStore, WindPlanOverlay, WindPlanProjector } from "./WindPlanOverlay";
@@ -2576,7 +2574,6 @@ function ExportBridge({
   onExportReady,
   solarDiagramOn,
   landmarkLabelsRef,
-  arrowLabelsRef,
   ortho,
   orthoControls,
   siteBounds,
@@ -2584,7 +2581,6 @@ function ExportBridge({
   onExportReady: (exporter: SceneExporter | null) => void;
   solarDiagramOn: boolean;
   landmarkLabelsRef?: RefObject<LandmarkExportLabels | null>;
-  arrowLabelsRef?: RefObject<ArrowExportLabels | null>;
   ortho: THREE.OrthographicCamera;
   orthoControls: RefObject<OrbitControlsImpl | null>;
   siteBounds: Aabb;
@@ -2598,7 +2594,7 @@ function ExportBridge({
       png: async () => {
         const city = scene.getObjectByName("CityCut");
         const render = () =>
-          captureViewPng(gl, scene, get().camera, exportFrameSize(gl.domElement), landmarkLabelsRef?.current ?? null, arrowLabelsRef?.current ?? null);
+          captureViewPng(gl, scene, get().camera, exportFrameSize(gl.domElement), landmarkLabelsRef?.current ?? null);
         if (city && solarDiagramOn) return withBuildingExportColours(city, false, render);
         return render();
       },
@@ -2606,9 +2602,7 @@ function ExportBridge({
         const canvas = gl.domElement;
         const camera = get().camera;
         const capture = readViewportCapture(canvas);
-        const arrowLabels = arrowLabelsRef?.current?.(camera, canvas.clientWidth || canvas.width, canvas.clientHeight || canvas.height) ?? [];
-        const withArrows = { ...capture, labels: [...capture.labels, ...arrowViewportLabels(arrowLabels)] };
-        return withArrowEditorHidden(scene, () => captureViewportPng(gl, scene, camera, withArrows, options));
+        return withArrowEditorHidden(scene, () => captureViewportPng(gl, scene, camera, capture, options));
       },
       sheetFrame: (crop) => {
         const canvas = gl.domElement;
@@ -2653,7 +2647,7 @@ function ExportBridge({
       },
     });
     return () => onExportReady(null);
-  }, [gl, scene, get, invalidate, onExportReady, solarDiagramOn, landmarkLabelsRef, arrowLabelsRef, ortho, orthoControls, siteBounds]);
+  }, [gl, scene, get, invalidate, onExportReady, solarDiagramOn, landmarkLabelsRef, ortho, orthoControls, siteBounds]);
   return null;
 }
 
@@ -2789,7 +2783,6 @@ export function Cameras({
   frameWidthM,
   frameHeightM,
   landmarkLabelsRef,
-  arrowLabelsRef,
   explode,
   explodeLive = false,
 }: {
@@ -2816,7 +2809,6 @@ export function Cameras({
   frameWidthM: number;
   frameHeightM: number;
   landmarkLabelsRef?: RefObject<LandmarkExportLabels | null>;
-  arrowLabelsRef?: RefObject<ArrowExportLabels | null>;
   explode?: RefObject<ExplodeRuntime>;
   explodeLive?: boolean;
 }) {
@@ -3069,7 +3061,6 @@ export function Cameras({
             onExportReady={onExportReady}
             solarDiagramOn={solarDiagramOn}
             landmarkLabelsRef={landmarkLabelsRef}
-            arrowLabelsRef={arrowLabelsRef}
             ortho={ortho}
             orthoControls={orthoControls}
             siteBounds={cutBounds}
@@ -3249,7 +3240,6 @@ export function Scene3D({
     [explodeRuntime, inspectAnchor, inspectAnchorLayer],
   );
   const landmarkExportRef = useRef<LandmarkExportLabels | null>(null);
-  const arrowExportRef = useRef<ArrowExportLabels | null>(null);
   const sceneCutKey = modelCutSiteId(model.center, model.sideM);
   const introSkip = useMemo(
     () => introAlreadyPlayedForCut(introPlayed?.current ?? null, sceneCutKey),
@@ -3276,6 +3266,7 @@ export function Scene3D({
   const onSectionKnifeGizmoInteractionChange = useCallback((state: SectionKnifeGizmoInteraction) => {
     setSectionKnifeGizmoInteraction(state);
   }, []);
+  const [arrowOrbitLock, setArrowOrbitLock] = useState(false);
   const lift = model.terrain ? (model.terrain.min + model.terrain.max) / 2 : 0;
   const colourTick = useColourRevision();
   const modelBg = useMemo(() => themeColor("--model-bg"), [colourTick]);
@@ -3488,9 +3479,8 @@ export function Scene3D({
           state={diagramArrows.state}
           dispatch={diagramArrows.dispatch}
           active={active}
-          flatLabels={projection === "plan" || windLayers.planOverlay}
-          labelsRef={arrowExportRef}
-          onLabels={diagramArrows.onLabels}
+          flat={projection === "plan" || windLayers.planOverlay}
+          onOrbitLock={setArrowOrbitLock}
         />
       ) : null}
       {onCompassHeading ? <StudioCompassTracker onHeading={onCompassHeading} /> : null}
@@ -3529,9 +3519,8 @@ export function Scene3D({
         cameraRestore={cameraRestore}
         onCameraRestored={onCameraRestored}
         introEnabled={!introSkip}
-        gizmoOrbitLock={sectionKnifeGizmoInteraction.orbitLock}
+        gizmoOrbitLock={sectionKnifeGizmoInteraction.orbitLock || arrowOrbitLock}
         landmarkLabelsRef={landmarkExportRef}
-        arrowLabelsRef={arrowExportRef}
         explode={explodeRuntime}
         explodeLive={explodeLive}
       />

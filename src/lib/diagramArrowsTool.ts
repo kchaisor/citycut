@@ -3,11 +3,13 @@ import {
   DEFAULT_ARROW,
   MIN_ARROW_POINTS,
   clampArrowHeight,
-  dedupePoints,
+  clampArrowSpeed,
+  clampArrowWidth,
   newArrowId,
   type ArrowDefaults,
   type DiagramArrow,
 } from "./diagramArrows";
+import { dedupePoints } from "./diagramArrowsPath";
 
 export type ArrowToolState = {
   active: boolean;
@@ -54,6 +56,8 @@ export function selectedArrow(state: ArrowToolState): DiagramArrow | null {
 function normalisePatch(patch: Partial<ArrowDefaults>): Partial<ArrowDefaults> {
   const next = { ...patch };
   if (next.heightM !== undefined) next.heightM = Number.isFinite(next.heightM) ? clampArrowHeight(next.heightM) : DEFAULT_ARROW.heightM;
+  if (next.width !== undefined) next.width = Number.isFinite(next.width) ? clampArrowWidth(next.width) : DEFAULT_ARROW.width;
+  if (next.speed !== undefined) next.speed = Number.isFinite(next.speed) ? clampArrowSpeed(next.speed) : DEFAULT_ARROW.speed;
   return next;
 }
 
@@ -143,22 +147,21 @@ export function arrowToolReducer(state: ArrowToolState, action: ArrowToolAction)
   }
 }
 
-export type ArrowKeyContext = { label: boolean; editable: boolean; panel: boolean };
+export type ArrowKeyContext = { editable: boolean; panel: boolean };
 
 export const ARROW_PANEL_CLASS = "arrows-card";
-export const ARROW_LABEL_FIELD_ID = "arrow-label";
 
 export function arrowKeyContext(target: EventTarget | null): ArrowKeyContext {
   const el = target as HTMLElement | null;
-  if (!el || !el.tagName) return { label: false, editable: false, panel: false };
+  if (!el || !el.tagName) return { editable: false, panel: false };
   const editable = el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT" || el.isContentEditable;
-  return { label: el.id === ARROW_LABEL_FIELD_ID, editable, panel: Boolean(el.closest?.(`.${ARROW_PANEL_CLASS}`)) };
+  return { editable, panel: Boolean(el.closest?.(`.${ARROW_PANEL_CLASS}`)) };
 }
 
-const NO_CONTEXT: ArrowKeyContext = { label: false, editable: false, panel: false };
+const NO_CONTEXT: ArrowKeyContext = { editable: false, panel: false };
 
 export function arrowToolKeyAction(state: ArrowToolState, key: string, context: ArrowKeyContext = NO_CONTEXT): ArrowToolAction | null {
-  if (!state.active || context.label) return null;
+  if (!state.active) return null;
   if (context.editable && !(context.panel && (key === "Enter" || key === "Escape"))) return null;
   if (key === "Enter") return state.draft ? { type: "finishDraft" } : null;
   if (key === "Escape") return { type: "escape" };

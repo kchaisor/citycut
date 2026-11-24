@@ -170,7 +170,7 @@ export function readViewportCapture(canvas: HTMLCanvasElement): ViewportCapture 
   const viewport = canvas.closest(".viewport") ?? canvas.parentElement;
   const background = viewport ? getComputedStyle(viewport).backgroundColor : "";
   const labels: ViewportOverlayLabel[] = [];
-  for (const node of document.querySelectorAll<HTMLElement>(".landmark-label.is-visible:not(.arrow-label)")) labels.push(readLabel(node, rect));
+  for (const node of document.querySelectorAll<HTMLElement>(".landmark-label.is-visible")) labels.push(readLabel(node, rect));
   for (const node of document.querySelectorAll<HTMLElement>(".explode-layer-label")) {
     if (Number(getComputedStyle(node).opacity) >= 0.5) labels.push(readLabel(node, rect));
   }

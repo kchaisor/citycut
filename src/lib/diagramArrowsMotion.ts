@@ -1,6 +1,8 @@
 import * as THREE from "three";
 import { useEffect, useState, useSyncExternalStore } from "react";
-import { buildArrowShape, buildStreakRibbons, type ArrowMotion, type ArrowRibbon, type ArrowShape, type DiagramArrow } from "./diagramArrows";
+import type { DiagramArrow } from "./diagramArrows";
+import type { ArrowRibbon } from "./diagramArrowsPath";
+import { buildArrowShape, buildCometRibbons, emptyArrowShape, type ArrowMotion, type ArrowShape } from "./diagramArrowsShape";
 import { systemPrefersReducedMotion } from "./windStreakMotion";
 
 export const DRAW_ON_GROW_S = 1.6;
@@ -31,17 +33,25 @@ export function arrowMotionAt(animation: DiagramArrow["animation"], seconds: num
   return null;
 }
 
-export function animatedArrowShape(
-  arrow: Pick<DiagramArrow, "points" | "style" | "width" | "animation">,
-  sideM: number,
-  floorMPerPx: number,
-  seconds: number | null,
-): { body: ArrowShape; streaks: ArrowRibbon[] } {
-  const live = seconds !== null;
-  return {
-    body: buildArrowShape(arrow.points, arrow.style, arrow.width, sideM, floorMPerPx, live ? arrowMotionAt(arrow.animation, seconds) : null),
-    streaks: live && arrow.animation === "streaks" ? buildStreakRibbons(arrow.points, arrow.style, arrow.width, sideM, floorMPerPx, seconds) : [],
-  };
+export type LiveArrowShape = { body: ArrowShape; comets: ArrowRibbon[]; lightComets: boolean };
+
+type LiveArrowSource = Pick<DiagramArrow, "points" | "style" | "width" | "animation" | "speed">;
+
+export function arrowKeepsBodyWhileLive(arrow: Pick<DiagramArrow, "style" | "animation">): boolean {
+  return arrow.animation === "streaks" && arrow.style !== "streak";
+}
+
+export function liveArrowShape(arrow: LiveArrowSource, sideM: number, floorMPerPx: number, seconds: number | null): LiveArrowShape {
+  const still = buildArrowShape(arrow.points, arrow.style, arrow.width, sideM, floorMPerPx);
+  if (seconds === null || arrow.animation === "none") return { body: still, comets: [], lightComets: false };
+  const t = seconds * arrow.speed;
+  if (arrow.style === "streak") {
+    return { body: emptyArrowShape(), comets: buildCometRibbons(arrow.points, arrow.style, arrow.width, sideM, floorMPerPx, t), lightComets: false };
+  }
+  if (arrow.animation === "streaks") {
+    return { body: still, comets: buildCometRibbons(arrow.points, arrow.style, arrow.width, sideM, floorMPerPx, t), lightComets: true };
+  }
+  return { body: buildArrowShape(arrow.points, arrow.style, arrow.width, sideM, floorMPerPx, arrowMotionAt(arrow.animation, t)), comets: [], lightComets: false };
 }
 
 export function animatedArrows<T extends Pick<DiagramArrow, "animation">>(arrows: readonly T[], reducedMotion: boolean): T[] {

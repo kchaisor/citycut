@@ -1,23 +1,14 @@
 import { useEffect, useMemo, useRef, type Dispatch, type RefObject } from "react";
 import type { CityModel, Pt } from "../types";
 import { getColour } from "../lib/colours";
-import {
-  ARROW_COLOUR_TOKENS,
-  arrowLabelAnchor,
-  buildArrowShape,
-  hitArrow,
-  nearestPointIndex,
-  ribbonPolygon,
-  smoothArrowPath,
-  visibleInDrawing,
-  type ArrowShape,
-  type DiagramArrow,
-} from "../lib/diagramArrows";
+import { ARROW_COLOUR_TOKENS, hitArrow, visibleInDrawing, type DiagramArrow } from "../lib/diagramArrows";
+import { nearestPointIndex, smoothArrowPath, type ArrowRibbon } from "../lib/diagramArrowsPath";
+import { buildArrowShape, emptyArrowShape, shapeFills, type ArrowShape } from "../lib/diagramArrowsShape";
 import {
   animatedArrows,
-  animatedArrowShape,
   arrowClockSeconds,
   lightenArrowColour,
+  liveArrowShape,
   publishArrowAnimation,
   useArrowMotionStopped,
   useArrowTicker,
@@ -30,11 +21,11 @@ import {
   type ArrowToolState,
   type ClickStamp,
 } from "../lib/diagramArrowsTool";
-import { LANDMARK_FONT_PX, LANDMARK_HALO_PX } from "../lib/landmarkLabels";
 import { useColourRevision } from "../lib/useColourRevision";
 
 const HIT_PX = 10;
 const HANDLE_PX = 5;
+const SWATCH_SIDE_M = 400;
 
 function svgPoints(points: readonly Pt[]): string {
   return points.map(([east, north]) => `${east},${-north}`).join(" ");
@@ -43,14 +34,15 @@ function svgPoints(points: readonly Pt[]): string {
 export function ArrowShapePolygons({ shape, fill, opacity = 1 }: { shape: ArrowShape; fill: string; opacity?: number }) {
   return (
     <>
-      {shape.ribbons.map((ribbon, index) => (
-        <polygon key={`r${index}`} points={svgPoints(ribbonPolygon(ribbon))} fill={fill} fillOpacity={opacity} />
-      ))}
-      {shape.heads.map((head, index) => (
-        <polygon key={`h${index}`} points={svgPoints(head)} fill={fill} fillOpacity={opacity} />
+      {shapeFills(shape).map(({ polygon, alpha }, index) => (
+        <polygon key={index} points={svgPoints(polygon)} fill={fill} fillOpacity={alpha * opacity} />
       ))}
     </>
   );
+}
+
+function cometShape(comets: readonly ArrowRibbon[]): ArrowShape {
+  return { ...emptyArrowShape(), ribbons: [...comets] };
 }
 
 export function ArrowStyleSwatch({ style, colour }: Pick<DiagramArrow, "style" | "colour">) {
@@ -62,8 +54,8 @@ export function ArrowStyleSwatch({ style, colour }: Pick<DiagramArrow, "style" |
           [60, 0],
         ],
         style,
-        "m",
-        900,
+        1,
+        SWATCH_SIDE_M,
       ),
     [style],
   );
@@ -106,7 +98,7 @@ export function useDrawingArrowClicks({
     last.current = stamp;
     let hit: { id: string; point: number | null } | null = null;
     const current = selectedArrow(state);
-    if (current && state.visible) {
+    if (current && state.visible && current.showInDrawing) {
       const point = nearestPointIndex(current.points, ground, HIT_PX * mPerPx);
       if (point !== null) hit = { id: current.id, point };
     }
@@ -177,9 +169,6 @@ export function DiagramArrowsDrawing({
   }
 
   if (shapes.length === 0 && !draftShape && !draft) return null;
-  const fontSize = LANDMARK_FONT_PX * pxM;
-  const ink = getColour("--landmark-label");
-  const halo = getColour("--landmark-label-halo");
   return (
     <g className="diagram-arrows" data-tick={colourTick} data-arrows-drawing={arrows.length}>
       {shapes.map(({ arrow, shape }) => {
@@ -191,41 +180,16 @@ export function DiagramArrowsDrawing({
             </g>
           );
         }
-        const live = animatedArrowShape(arrow, model.sideM, mPerPx, seconds);
+        const live = liveArrowShape(arrow, model.sideM, mPerPx, seconds);
         return (
           <g key={arrow.id} data-arrow-id={arrow.id} data-arrow-animation={arrow.animation}>
-            <ArrowShapePolygons shape={arrow.animation === "streaks" ? shape : live.body} fill={fill} />
-            {live.streaks.length > 0 ? (
-              <ArrowShapePolygons shape={{ ribbons: live.streaks, heads: [] }} fill={lightenArrowColour(fill).getStyle()} opacity={0.9} />
+            <ArrowShapePolygons shape={live.body} fill={fill} />
+            {live.comets.length > 0 ? (
+              <ArrowShapePolygons shape={cometShape(live.comets)} fill={live.lightComets ? lightenArrowColour(fill).getStyle() : fill} />
             ) : null}
           </g>
         );
       })}
-      <g className="plan-landmark-labels" data-arrow-labels="drawing">
-        {arrows.map((arrow) => {
-          if (!arrow.label) return null;
-          const [east, north] = arrowLabelAnchor(arrow.points);
-          return (
-            <text
-              key={arrow.id}
-              className="plan-landmark-label is-visible"
-              data-arrow-label={arrow.id}
-              x={east}
-              y={-north - fontSize * 1.1}
-              fontSize={fontSize}
-              textAnchor="middle"
-              dominantBaseline="central"
-              fill={ink}
-              stroke={halo}
-              strokeWidth={LANDMARK_HALO_PX * 2 * pxM}
-              strokeLinejoin="round"
-              paintOrder="stroke"
-            >
-              {arrow.label}
-            </text>
-          );
-        })}
-      </g>
       {draftShape ? <ArrowShapePolygons shape={draftShape} fill={getColour(ARROW_COLOUR_TOKENS[state.defaults.colour])} opacity={0.65} /> : null}
       {draft?.map(([east, north], index) => (
         <circle key={`d${index}`} cx={east} cy={-north} r={HANDLE_PX * pxM * 0.7} fill={getColour("--arrow-ink")} />

@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { attachShiftPickPass } from "../../lib/shiftPickPass";
 import { BuildingHeightPopover, ImportedBuildingPopover } from "../BuildingHeightPopover";
 import { LoadingHudPill } from "../LoadingHudPill";
-import { DiagramArrowLabelLayer } from "../DiagramArrowLabelLayer";
 import { LandmarkLabelLayer } from "../LandmarkLabelLayer";
 
 import { TreeInspectHud, TerrainInspectHud } from "../SceneInspectHud";import { DrawingPlan } from "../DrawingPlan";
@@ -216,9 +215,8 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
                 exploded={vm.exploded}
                 explodeGapM={vm.explodeGap.gapM}
                 inspectAnchorLayer={explodeLayerOfSelectionKind(sceneSelection?.kind)}
-                diagramArrows={{ state: diagramArrows.state, dispatch: diagramArrows.dispatch, onLabels: diagramArrows.setLabels }}
+                diagramArrows={{ state: diagramArrows.state, dispatch: diagramArrows.dispatch }}
               />
-              {tab === "3d" && diagramArrows.state.visible && <DiagramArrowLabelLayer labels={diagramArrows.labels} />}
               {tab === "3d" && landmarkLabelsOn && (
                 <LandmarkLabelLayer
                   state={landmarkScreens}

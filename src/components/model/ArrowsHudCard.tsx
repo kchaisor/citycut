@@ -6,15 +6,18 @@ import {
   ARROW_COLOURS,
   ARROW_COLOUR_LABELS,
   ARROW_COLOUR_TOKENS,
+  ARROW_SPEED_STEP,
   ARROW_STYLES,
   ARROW_STYLE_LABELS,
-  ARROW_WIDTHS,
-  ARROW_WIDTH_LABELS,
+  ARROW_WIDTH_STEP,
   MAX_ARROW_HEIGHT_M,
-  MAX_ARROW_LABEL_LENGTH,
-  type DiagramArrow,
+  MAX_ARROW_SPEED,
+  MAX_ARROW_WIDTH,
+  MIN_ARROW_SPEED,
+  MIN_ARROW_WIDTH,
+  type ArrowDefaults,
 } from "../../lib/diagramArrows";
-import { ARROW_LABEL_FIELD_ID, selectedArrow, type ArrowToolAction, type ArrowToolState } from "../../lib/diagramArrowsTool";
+import { selectedArrow, type ArrowToolAction, type ArrowToolState } from "../../lib/diagramArrowsTool";
 import { setArrowAnimationPaused, useArrowAnimationPaused } from "../../lib/diagramArrowsMotion";
 import { ArrowStyleSwatch } from "../DiagramArrowsDrawing";
 import { AnalysisHudCard } from "./AnalysisHudCard";
@@ -30,9 +33,8 @@ export function ArrowsHudCard({ arrows }: { arrows: ArrowsCardModel }) {
   }, [collapsed]);
   const paused = useArrowAnimationPaused();
   const selected = selectedArrow(state);
-  const current: Pick<DiagramArrow, "style" | "colour" | "width" | "heightM" | "label" | "animation" | "showIn3d" | "showInDrawing"> =
-    selected ?? state.defaults;
-  const patch = (value: Partial<typeof current>) => dispatch({ type: "patch", patch: value });
+  const current: ArrowDefaults = selected ?? state.defaults;
+  const patch = (value: Partial<ArrowDefaults>) => dispatch({ type: "patch", patch: value });
   const hint = state.draft
     ? `${state.draft.length} point${state.draft.length === 1 ? "" : "s"}: Enter or double-click to finish, Esc to cancel`
     : selected
@@ -83,47 +85,33 @@ export function ArrowsHudCard({ arrows }: { arrows: ArrowsCardModel }) {
         </div>
       </div>
       <div className="ac-section">
-        <span className="ac-kicker">Width</span>
-        <div className="ac-seg ac-seg-3" role="group" aria-label="Arrow width">
-          {ARROW_WIDTHS.map((width) => (
-            <button
-              key={width}
-              type="button"
-              className={current.width === width ? "ac-seg-btn is-ink" : "ac-seg-btn"}
-              aria-pressed={current.width === width}
-              onClick={() => patch({ width })}
-            >
-              {ARROW_WIDTH_LABELS[width]}
-            </button>
-          ))}
+        <div className="ac-slider-head">
+          <span className="ac-kicker">Width</span>
+          <output className="ac-value">{current.width.toFixed(1)}x</output>
         </div>
+        <input
+          type="range"
+          aria-label="Arrow width"
+          min={MIN_ARROW_WIDTH}
+          max={MAX_ARROW_WIDTH}
+          step={ARROW_WIDTH_STEP}
+          value={current.width}
+          onChange={(event) => patch({ width: Number(event.target.value) })}
+        />
       </div>
       <div className="ac-section">
-        <label className="ac-kicker" htmlFor="arrow-height">
-          Height (m)
-        </label>
+        <div className="ac-slider-head">
+          <span className="ac-kicker">Height</span>
+          <output className="ac-value">{current.heightM} m</output>
+        </div>
         <input
-          id="arrow-height"
-          className="arrow-field"
-          type="number"
+          type="range"
+          aria-label="Height (m)"
           min={0}
           max={MAX_ARROW_HEIGHT_M}
           step={1}
           value={current.heightM}
           onChange={(event) => patch({ heightM: Number(event.target.value) })}
-        />
-      </div>
-      <div className="ac-section">
-        <label className="ac-kicker" htmlFor={ARROW_LABEL_FIELD_ID}>
-          Label
-        </label>
-        <input
-          id={ARROW_LABEL_FIELD_ID}
-          className="arrow-field"
-          type="text"
-          maxLength={MAX_ARROW_LABEL_LENGTH}
-          value={current.label}
-          onChange={(event) => patch({ label: event.target.value })}
         />
       </div>
       <div className="ac-section">
@@ -134,7 +122,7 @@ export function ArrowsHudCard({ arrows }: { arrows: ArrowsCardModel }) {
           id="arrow-animation"
           className="arrow-field"
           value={current.animation}
-          onChange={(event) => patch({ animation: event.target.value as DiagramArrow["animation"] })}
+          onChange={(event) => patch({ animation: event.target.value as ArrowDefaults["animation"] })}
         >
           {ARROW_ANIMATIONS.map((animation) => (
             <option key={animation} value={animation}>
@@ -142,6 +130,19 @@ export function ArrowsHudCard({ arrows }: { arrows: ArrowsCardModel }) {
             </option>
           ))}
         </select>
+        <div className="ac-slider-head">
+          <span className="ac-kicker">Speed</span>
+          <output className="ac-value">{current.speed}x</output>
+        </div>
+        <input
+          type="range"
+          aria-label="Animation speed"
+          min={MIN_ARROW_SPEED}
+          max={MAX_ARROW_SPEED}
+          step={ARROW_SPEED_STEP}
+          value={current.speed}
+          onChange={(event) => patch({ speed: Number(event.target.value) })}
+        />
         <button
           type="button"
           className={paused ? "ac-seg-btn arrow-pause is-ink" : "ac-seg-btn arrow-pause"}
@@ -166,6 +167,7 @@ export function ArrowsHudCard({ arrows }: { arrows: ArrowsCardModel }) {
           />
           <span>Show in Drawing</span>
         </label>
+        <p className="ac-note">{selected ? "Applies to the selected arrow." : "Applies to the next arrow."}</p>
       </div>
       <div className="ac-section">
         <span className="ac-kicker">Arrows</span>
@@ -178,12 +180,12 @@ export function ArrowsHudCard({ arrows }: { arrows: ArrowsCardModel }) {
                 aria-pressed={arrow.id === state.selectedId}
                 onClick={() => dispatch({ type: "select", id: arrow.id })}
               >
-                {arrow.label || `Arrow ${index + 1}`}
+                {`Arrow ${index + 1}`}
               </button>
               <button
                 type="button"
                 className="arrow-list-delete"
-                aria-label={`Delete ${arrow.label || `Arrow ${index + 1}`}`}
+                aria-label={`Delete Arrow ${index + 1}`}
                 onClick={() => dispatch({ type: "deleteArrow", id: arrow.id })}
               >
                 Delete
