@@ -139,7 +139,7 @@ import type { WindPlanState } from "./useWindPlan";
 import { InspectHudProjector, type InspectHudScreen } from "./InspectHudProjector";
 import { captureViewportPng, readViewportCapture, sheetCropRect, type ViewportPngOptions } from "../lib/captureViewportPng";
 import { planSheetFrame, type SheetFrame } from "../lib/sheetScale";
-import { wholeSiteFraming } from "../lib/sheetFraming";
+import { projectionCentre, wholeSiteFraming } from "../lib/sheetFraming";
 import { LandmarkLabelProjector, type LandmarkExportLabels, type LandmarkScreenState } from "./LandmarkLabelProjector";
 import type { LandmarkLabelSource } from "../lib/landmarkLabels";
 import type { WindPeriodId } from "../lib/windRose";
@@ -2605,7 +2605,7 @@ function ExportBridge({
         const free = readViewportCapture(canvas).crop ?? { x: 0, y: 0, width: cssWidth, height: cssHeight };
         const rect = sheetCropRect({ width: cssWidth, height: cssHeight }, free, crop.aspect);
         const saved = capturePose(ortho, controls);
-        const framing = wholeSiteFraming(siteBounds, { width: cssWidth, height: cssHeight }, rect);
+        const framing = wholeSiteFraming(siteBounds, projectionCentre({ width: cssWidth, height: cssHeight }, ortho.view), rect);
         const dx = framing.targetX - saved.target[0];
         const dz = framing.targetZ - saved.target[2];
         const hold = (pose: CameraPose) => {
