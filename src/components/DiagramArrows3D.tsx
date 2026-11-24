@@ -6,6 +6,7 @@ import { getColour } from "../lib/colours";
 import {
   ARROW_COLOUR_TOKENS,
   buildArrowShape,
+  buildStreakRibbons,
   distanceToPath,
   nearestPointIndex,
   smoothArrowPath,
@@ -21,7 +22,15 @@ import {
   type ArrowToolState,
   type ClickStamp,
 } from "../lib/diagramArrowsTool";
-import { markScreenOnly } from "../lib/screenOnly";
+import {
+  animatedArrows,
+  arrowClockSeconds,
+  arrowMotionAt,
+  lightenArrowColour,
+  publishArrowAnimation,
+  useArrowReducedMotion,
+} from "../lib/diagramArrowsMotion";
+import { markExportOnly, markScreenOnly } from "../lib/screenOnly";
 import { useColourRevision } from "../lib/useColourRevision";
 
 export type { ArrowScreenLabel };
@@ -31,11 +40,48 @@ const HANDLE_HIT_PX = 12;
 const BODY_HIT_PX = 9;
 const CLICK_MAX_PX = 5;
 const HANDLE_SIDE_FRAC = 0.008;
+const STREAK_LIFT_M = 0.05;
+const STREAK_OPACITY = 0.9;
+
+type LiveArrow = { arrow: DiagramArrow; mesh: THREE.Mesh };
+
+const EMPTY_GEOMETRY = new THREE.BufferGeometry();
+
+function liveGeometry(arrow: DiagramArrow, model: CityModel, groundAt: ReturnType<typeof groundAtFor>, seconds: number): THREE.BufferGeometry {
+  const shape =
+    arrow.animation === "streaks"
+      ? { ribbons: buildStreakRibbons(arrow.points, arrow.style, arrow.width, model.sideM, 0, seconds), heads: [] }
+      : buildArrowShape(arrow.points, arrow.style, arrow.width, model.sideM, 0, arrowMotionAt(arrow.animation, seconds));
+  return arrowShapeGeometry(shape, groundAt, arrow.heightM, arrow.animation === "streaks" ? STREAK_LIFT_M : 0) ?? EMPTY_GEOMETRY;
+}
+
+function liveMesh(arrow: DiagramArrow, model: CityModel, groundAt: ReturnType<typeof groundAtFor>, seconds: number): THREE.Mesh {
+  const streaks = arrow.animation === "streaks";
+  const base = getColour(ARROW_COLOUR_TOKENS[arrow.colour]);
+  const material = new THREE.MeshBasicMaterial({
+    color: streaks ? lightenArrowColour(base) : base,
+    side: THREE.DoubleSide,
+    transparent: streaks,
+    opacity: streaks ? STREAK_OPACITY : 1,
+    depthWrite: !streaks,
+    polygonOffset: streaks,
+    polygonOffsetFactor: -2,
+    polygonOffsetUnits: -2,
+    toneMapped: false,
+  });
+  const mesh = new THREE.Mesh(liveGeometry(arrow, model, groundAt, seconds), material);
+  mesh.renderOrder = streaks ? 41 : 40;
+  mesh.frustumCulled = false;
+  mesh.userData.noScenePick = true;
+  markScreenOnly(mesh);
+  markArrowEditor(mesh);
+  return mesh;
+}
 
 function disposeGroup(group: THREE.Group): void {
   for (const child of [...group.children]) {
     const mesh = child as THREE.Mesh;
-    mesh.geometry?.dispose();
+    if (mesh.geometry !== EMPTY_GEOMETRY) mesh.geometry?.dispose();
     (mesh.material as THREE.Material | undefined)?.dispose();
     group.remove(child);
   }
@@ -112,6 +158,14 @@ export function DiagramArrows3D({
   const showing = state.visible && active;
   const arrows = useMemo(() => (showing ? visibleIn3d(state.arrows) : []), [showing, state.arrows]);
   const handleRadius = model.sideM * HANDLE_SIDE_FRAC;
+  const reducedMotion = useArrowReducedMotion();
+  const liveRef = useRef<LiveArrow[]>([]);
+  const animatedCount = useMemo(() => animatedArrows(arrows, reducedMotion).length, [arrows, reducedMotion]);
+
+  useEffect(() => {
+    if (animatedCount === 0) return;
+    return publishArrowAnimation(animatedCount);
+  }, [animatedCount]);
 
   useLayoutEffect(() => {
     scene.add(root);
@@ -123,9 +177,23 @@ export function DiagramArrows3D({
 
   useLayoutEffect(() => {
     disposeGroup(root);
+    liveRef.current = [];
+    const seconds = arrowClockSeconds();
+    const animated = new Set(animatedArrows(arrows, reducedMotion));
     for (const arrow of arrows) {
       const mesh = arrowMesh(arrow, model, groundAt, 1);
-      if (mesh) root.add(mesh);
+      if (mesh) {
+        if (animated.has(arrow) && arrow.animation !== "streaks") {
+          mesh.visible = false;
+          markExportOnly(mesh);
+        }
+        root.add(mesh);
+      }
+      if (animated.has(arrow)) {
+        const live = liveMesh(arrow, model, groundAt, seconds);
+        liveRef.current.push({ arrow, mesh: live });
+        root.add(live);
+      }
     }
     const draft = showing && state.active ? state.draft : null;
     if (draft) {
@@ -145,7 +213,7 @@ export function DiagramArrows3D({
       );
     }
     invalidate();
-  }, [root, arrows, state.draft, state.defaults, state.active, state.selectedId, state.selectedPoint, hover, showing, model, groundAt, handleRadius, colourRevision, invalidate]);
+  }, [root, arrows, state.draft, state.defaults, state.active, state.selectedId, state.selectedPoint, hover, showing, model, groundAt, handleRadius, colourRevision, reducedMotion, invalidate]);
 
   useEffect(() => {
     if (!active || !state.active) {
@@ -276,6 +344,15 @@ export function DiagramArrows3D({
   }, [labelled]);
 
   useFrame(() => {
+    const live = liveRef.current;
+    if (live.length > 0) {
+      const seconds = arrowClockSeconds();
+      for (const item of live) {
+        if (item.mesh.geometry !== EMPTY_GEOMETRY) item.mesh.geometry.dispose();
+        item.mesh.geometry = liveGeometry(item.arrow, model, groundRef.current, seconds);
+      }
+      invalidate();
+    }
     if (labelled.length === 0) return;
     const signature = `${camera.matrixWorld.elements.join(",")}|${camera.projectionMatrix.elements.join(",")}|${size.width}x${size.height}|${labelled.map((a) => a.id + a.label + a.heightM + a.points.join(";")).join("|")}`;
     if (signature === labelSignature.current) return;

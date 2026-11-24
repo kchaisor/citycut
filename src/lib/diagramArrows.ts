@@ -238,50 +238,126 @@ export function ribbonAlong(path: readonly Pt[], halfWidthAt: (fraction: number)
 
 export type ArrowShape = { ribbons: ArrowRibbon[]; heads: ArrowHead[] };
 
-export function buildArrowShape(
-  points: readonly Pt[],
-  style: ArrowStyle,
-  width: ArrowWidth,
-  sideM: number,
-  floorMPerPx = 0,
-): ArrowShape {
-  const shape: ArrowShape = { ribbons: [], heads: [] };
+export type ArrowMotion = { kind: "draw-on"; progress: number } | { kind: "dashes"; phase: number };
+
+const MARCH_DASH = { onFrac: 2.4, offFrac: 1.6 };
+const STREAK_LENGTH_UNITS = 7;
+const STREAK_MIN_HALF_UNITS = 0.4;
+const STREAK_TAIL_WIDTH_FRAC = 0.15;
+
+type ArrowMetrics = {
+  smooth: Pt[];
+  preset: StylePreset;
+  unit: number;
+  half: number;
+  total: number;
+  headLen: number;
+  headHalf: number;
+  tailLen: number;
+};
+
+function arrowMetrics(points: readonly Pt[], style: ArrowStyle, width: ArrowWidth, sideM: number, floorMPerPx: number): ArrowMetrics | null {
   const smooth = smoothArrowPath(points);
-  if (smooth.length < 2) return shape;
+  if (smooth.length < 2) return null;
   const preset = ARROW_PRESETS[style];
   const unit = Math.max(arrowUnitM(width, sideM), floorMPerPx * MIN_UNIT_PX);
   const half = Math.max(unit * preset.halfWidthFrac, floorMPerPx * MIN_HALF_WIDTH_PX);
   const total = pathLength(smooth);
   const headLen = preset.head ? Math.min(unit * preset.head.lengthFrac, total * 0.45) : 0;
   const headHalf = preset.head ? unit * preset.head.halfWidthFrac : 0;
-  const tailLen = preset.tailHead ? headLen : 0;
+  return { smooth, preset, unit, half, total, headLen, headHalf, tailLen: preset.tailHead ? headLen : 0 };
+}
+
+function arrowBody(m: ArrowMetrics): Pt[] {
+  return subPath(m.smooth, m.tailLen, m.total - m.headLen);
+}
+
+export function buildArrowShape(
+  points: readonly Pt[],
+  style: ArrowStyle,
+  width: ArrowWidth,
+  sideM: number,
+  floorMPerPx = 0,
+  motion: ArrowMotion | null = null,
+): ArrowShape {
+  const shape: ArrowShape = { ribbons: [], heads: [] };
+  const m = arrowMetrics(points, style, width, sideM, floorMPerPx);
+  if (!m) return shape;
+  const { smooth, preset, unit, half, total, headLen, headHalf } = m;
+  const progress = motion?.kind === "draw-on" ? Math.max(0, Math.min(1, motion.progress)) : 1;
   if (preset.head) {
-    const end = pointAtDistance(smooth, total);
-    shape.heads.push(arrowHead(end.point, end.dir, headLen, headHalf));
+    if (progress >= 1 - EPS) {
+      const end = pointAtDistance(smooth, total);
+      shape.heads.push(arrowHead(end.point, end.dir, headLen, headHalf));
+    }
     if (preset.tailHead) {
       const start = pointAtDistance(smooth, 0);
       shape.heads.push(arrowHead(start.point, [-start.dir[0], -start.dir[1]], headLen, headHalf));
     }
   }
-  const bodyStart = tailLen;
-  const bodyEnd = total - headLen;
-  const body = subPath(smooth, bodyStart, bodyEnd);
+  const body = arrowBody(m);
   if (body.length < 2) return shape;
+  const bodyLen = pathLength(body);
+  const limit = bodyLen * progress;
   const bodyHalf = preset.taper ? (f: number) => half * (STREAK_TAIL_FRAC + (1 - STREAK_TAIL_FRAC) * f) : () => half;
-  if (preset.dash) {
-    const on = unit * preset.dash.onFrac;
-    const off = unit * preset.dash.offFrac;
-    const bodyLen = pathLength(body);
-    for (let at = 0; at < bodyLen - EPS; at += on + off) {
-      const dash = subPath(body, at, Math.min(at + on, bodyLen));
-      const ribbon = ribbonAlong(dash, () => half);
+  const dash = preset.dash ?? (motion?.kind === "dashes" ? MARCH_DASH : null);
+  if (dash) {
+    const on = unit * dash.onFrac;
+    const period = on + unit * dash.offFrac;
+    const shift = motion?.kind === "dashes" ? (((motion.phase % 1) + 1) % 1) * period : 0;
+    for (let at = shift - period; at < limit - EPS; at += period) {
+      const from = Math.max(0, at);
+      const to = Math.min(at + on, limit);
+      if (to - from < EPS) continue;
+      const ribbon = ribbonAlong(subPath(body, from, to), (f) => bodyHalf((from + f * (to - from)) / bodyLen));
       if (ribbon) shape.ribbons.push(ribbon);
     }
     return shape;
   }
-  const ribbon = ribbonAlong(body, bodyHalf);
+  const ribbon = ribbonAlong(subPath(body, 0, limit), (f) => bodyHalf((f * limit) / bodyLen));
   if (ribbon) shape.ribbons.push(ribbon);
   return shape;
+}
+
+export type StreakSpan = { from: number; to: number; startM: number };
+
+export function streakSpans(seconds: number, bodyLen: number, unit: number): StreakSpan[] {
+  if (bodyLen < EPS || unit <= 0) return [];
+  const length = unit * STREAK_LENGTH_UNITS;
+  const spacing = unit * 22;
+  const lead = (((seconds * unit * 9) % spacing) + spacing) % spacing;
+  const spans: StreakSpan[] = [];
+  for (let head = lead; head - length < bodyLen; head += spacing) {
+    const from = Math.max(0, head - length);
+    const to = Math.min(head, bodyLen);
+    if (to - from > EPS) spans.push({ from, to, startM: head - length });
+  }
+  return spans;
+}
+
+export function buildStreakRibbons(
+  points: readonly Pt[],
+  style: ArrowStyle,
+  width: ArrowWidth,
+  sideM: number,
+  floorMPerPx: number,
+  seconds: number,
+): ArrowRibbon[] {
+  const m = arrowMetrics(points, style, width, sideM, floorMPerPx);
+  if (!m) return [];
+  const body = arrowBody(m);
+  if (body.length < 2) return [];
+  const length = m.unit * STREAK_LENGTH_UNITS;
+  const half = Math.max(m.half, m.unit * STREAK_MIN_HALF_UNITS);
+  const ribbons: ArrowRibbon[] = [];
+  for (const span of streakSpans(seconds, pathLength(body), m.unit)) {
+    const ribbon = ribbonAlong(subPath(body, span.from, span.to), (f) => {
+      const along = (span.from + f * (span.to - span.from) - span.startM) / length;
+      return half * (STREAK_TAIL_WIDTH_FRAC + (1 - STREAK_TAIL_WIDTH_FRAC) * along);
+    });
+    if (ribbon) ribbons.push(ribbon);
+  }
+  return ribbons;
 }
 
 export function ribbonPolygon(ribbon: ArrowRibbon): Pt[] {

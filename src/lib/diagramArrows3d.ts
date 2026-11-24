@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import type { Pt } from "../types";
 import { arrowLabelAnchor, type ArrowShape, type DiagramArrow } from "./diagramArrows";
+import { CITYCUT_EXPORT_ONLY } from "./screenOnly";
 import { sampleTerrain } from "./terrain";
 import type { CityModel } from "../types";
 
@@ -13,9 +14,9 @@ export function groundAtFor(model: Pick<CityModel, "terrain" | "sideM">): Ground
   return field ? (east, north) => sampleTerrain(field, east, north, model.sideM) : () => 0;
 }
 
-export function arrowShapeGeometry(shape: ArrowShape, groundAt: GroundAt, heightM: number): THREE.BufferGeometry | null {
+export function arrowShapeGeometry(shape: ArrowShape, groundAt: GroundAt, heightM: number, liftM = 0): THREE.BufferGeometry | null {
   const positions: number[] = [];
-  const vertex = (point: Pt) => positions.push(point[0], groundAt(point[0], point[1]) + heightM + ARROW_LIFT_EPSILON_M, -point[1]);
+  const vertex = (point: Pt) => positions.push(point[0], groundAt(point[0], point[1]) + heightM + ARROW_LIFT_EPSILON_M + liftM, -point[1]);
   for (const ribbon of shape.ribbons) {
     for (let i = 1; i < ribbon.left.length; i += 1) {
       const a = ribbon.left[i - 1]!;
@@ -58,7 +59,12 @@ export function markArrowEditor(object: THREE.Object3D): void {
 
 export function withArrowEditorHidden<T>(root: THREE.Object3D, work: () => T): T {
   const hidden: THREE.Object3D[] = [];
+  const revealed: THREE.Object3D[] = [];
   root.traverse((object) => {
+    if (object.userData[CITYCUT_EXPORT_ONLY] && !object.visible) {
+      object.visible = true;
+      revealed.push(object);
+    }
     if (object.userData[ARROW_EDITOR] && object.visible) {
       object.visible = false;
       hidden.push(object);
@@ -68,6 +74,7 @@ export function withArrowEditorHidden<T>(root: THREE.Object3D, work: () => T): T
     return work();
   } finally {
     for (const object of hidden) object.visible = true;
+    for (const object of revealed) object.visible = false;
   }
 }
 
