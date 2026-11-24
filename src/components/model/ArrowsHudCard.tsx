@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ARROW_ANIMATIONS,
   ARROW_ANIMATION_LABELS,
@@ -22,6 +22,10 @@ export type ArrowsCardModel = { state: ArrowToolState; dispatch: (action: ArrowT
 export function ArrowsHudCard({ arrows }: { arrows: ArrowsCardModel }) {
   const { state, dispatch } = arrows;
   const [collapsed, setCollapsed] = useState(false);
+  const firstSection = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    firstSection.current?.parentElement?.scrollTo?.({ top: 0 });
+  }, [collapsed]);
   const selected = selectedArrow(state);
   const current: Pick<DiagramArrow, "style" | "colour" | "width" | "heightM" | "label" | "animation" | "showIn3d" | "showInDrawing"> =
     selected ?? state.defaults;
@@ -42,8 +46,8 @@ export function ArrowsHudCard({ arrows }: { arrows: ArrowsCardModel }) {
       collapsed={collapsed}
       onToggle={() => setCollapsed(!collapsed)}
     >
-      <div className="ac-section">
-        <span className="ac-kicker">Style</span>
+      <div className="ac-section" ref={firstSection}>
+        <span className="ac-kicker">Arrow style</span>
         <div className="arrow-style-grid" role="group" aria-label="Arrow style">
           {ARROW_STYLES.map((style) => (
             <button

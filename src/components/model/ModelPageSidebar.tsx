@@ -106,7 +106,7 @@ export function ModelPageSidebar({ vm }: { vm: import("./useModelPage").ModelPag
               open: siteIntelOpen,
               onToggle: () => setSiteIntelOpen(!siteIntelOpen),
               icon: <PanelRight size={16} strokeWidth={1.75} aria-hidden="true" />,
-              fold: analysisCardOn
+              fold: analysisCardOn || arrowsCardOn
                 ? {
                     folded: siteIntelFolded,
                     onToggle: () => setSiteIntelFolded(!siteIntelFolded),

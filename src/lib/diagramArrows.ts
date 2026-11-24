@@ -88,7 +88,7 @@ type StylePreset = {
 };
 
 export const ARROW_PRESETS: Record<ArrowStyle, StylePreset> = {
-  streak: { halfWidthFrac: 0.5, taper: true, head: { lengthFrac: 2.2, halfWidthFrac: 1.1 }, tailHead: false, dash: null },
+  streak: { halfWidthFrac: 0.7, taper: true, head: { lengthFrac: 2.2, halfWidthFrac: 1.1 }, tailHead: false, dash: null },
   bold: { halfWidthFrac: 0.5, taper: false, head: { lengthFrac: 3, halfWidthFrac: 1.6 }, tailHead: false, dash: null },
   line: { halfWidthFrac: 0.12, taper: false, head: { lengthFrac: 2.4, halfWidthFrac: 0.9 }, tailHead: false, dash: null },
   dashed: { halfWidthFrac: 0.14, taper: false, head: { lengthFrac: 2.4, halfWidthFrac: 0.9 }, tailHead: false, dash: { onFrac: 2.4, offFrac: 1.6 } },
@@ -102,6 +102,9 @@ export function arrowUnitM(width: ArrowWidth, sideM: number): number {
 }
 
 const EPS = 1e-6;
+const MIN_UNIT_PX = 7;
+const MIN_HALF_WIDTH_PX = 1.25;
+const STREAK_TAIL_FRAC = 0.3;
 
 function dist(a: Pt, b: Pt): number {
   return Math.hypot(b[0] - a[0], b[1] - a[1]);
@@ -240,13 +243,14 @@ export function buildArrowShape(
   style: ArrowStyle,
   width: ArrowWidth,
   sideM: number,
+  floorMPerPx = 0,
 ): ArrowShape {
   const shape: ArrowShape = { ribbons: [], heads: [] };
   const smooth = smoothArrowPath(points);
   if (smooth.length < 2) return shape;
   const preset = ARROW_PRESETS[style];
-  const unit = arrowUnitM(width, sideM);
-  const half = unit * preset.halfWidthFrac;
+  const unit = Math.max(arrowUnitM(width, sideM), floorMPerPx * MIN_UNIT_PX);
+  const half = Math.max(unit * preset.halfWidthFrac, floorMPerPx * MIN_HALF_WIDTH_PX);
   const total = pathLength(smooth);
   const headLen = preset.head ? Math.min(unit * preset.head.lengthFrac, total * 0.45) : 0;
   const headHalf = preset.head ? unit * preset.head.halfWidthFrac : 0;
@@ -263,7 +267,7 @@ export function buildArrowShape(
   const bodyEnd = total - headLen;
   const body = subPath(smooth, bodyStart, bodyEnd);
   if (body.length < 2) return shape;
-  const bodyHalf = preset.taper ? (f: number) => half * (0.12 + 0.88 * f) : () => half;
+  const bodyHalf = preset.taper ? (f: number) => half * (STREAK_TAIL_FRAC + (1 - STREAK_TAIL_FRAC) * f) : () => half;
   if (preset.dash) {
     const on = unit * preset.dash.onFrac;
     const off = unit * preset.dash.offFrac;

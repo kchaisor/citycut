@@ -18,6 +18,12 @@ describe("ArrowsHudCard", () => {
     expect(dispatch).toHaveBeenCalledWith({ type: "patch", patch: { style: "dashed" } });
   });
 
+  it("puts the arrow style picker first in the card", () => {
+    render(<ArrowsHudCard arrows={{ state: { ...initialArrowToolState(), active: true }, dispatch: vi.fn() }} />);
+    const body = document.querySelector(".analysis-card-body")!;
+    expect(body.firstElementChild?.querySelector("[aria-label='Arrow style']")).toBeTruthy();
+  });
+
   it("shows the animation placeholder note and a Done button", () => {
     const dispatch = vi.fn();
     render(<ArrowsHudCard arrows={{ state: { ...initialArrowToolState(), active: true }, dispatch }} />);

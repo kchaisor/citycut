@@ -1973,6 +1973,10 @@ export function useModelPage({
   }, []);
 
   const diagramArrows = useDiagramArrows(model);
+  const arrowToolActive = diagramArrows.state.active;
+  useEffect(() => {
+    if (arrowToolActive) setSiteIntelFolded(true);
+  }, [arrowToolActive]);
 
   function namedViewSnapshot(): NamedViewSnapshot {
     const memory = cameraMemory.current;

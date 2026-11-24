@@ -710,6 +710,7 @@ export function DrawingPlan({
           dispatch={diagramArrows.dispatch}
           svgRef={svgRef}
           viewWidthM={view.w}
+          viewHeightM={view.h}
           hover={arrowHover}
         />
       )}

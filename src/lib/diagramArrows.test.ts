@@ -119,6 +119,18 @@ describe("arrow shapes", () => {
     expect(buildArrowShape(points, "bold", "m", 500).ribbons.length).toBe(1);
   });
 
+  it("keeps heads and the streak base at a minimum on-screen size", () => {
+    const path: [number, number][] = [[0, 0], [400, 0]];
+    const small = buildArrowShape(path, "dashed", "s", 1470);
+    const floored = buildArrowShape(path, "dashed", "s", 1470, 2.5);
+    const headSpan = (shape: typeof small) => Math.abs(shape.heads[0]![1][1] - shape.heads[0]![2][1]);
+    expect(headSpan(floored)).toBeGreaterThanOrEqual(2 * 0.9 * 7 * 2.5 - 1e-6);
+    expect(headSpan(floored)).toBeGreaterThan(headSpan(small));
+    const streak = buildArrowShape(path, "streak", "m", 1470);
+    const tail = streak.ribbons[0]!;
+    expect(Math.abs(tail.left[0]![1] - tail.right[0]![1])).toBeGreaterThan(3);
+  });
+
   it("tapers the streak towards the tail", () => {
     const { ribbons } = buildArrowShape([[0, 0], [200, 0]], "streak", "l", 500);
     const ribbon = ribbons[0]!;

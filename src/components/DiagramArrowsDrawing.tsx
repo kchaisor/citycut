@@ -21,11 +21,11 @@ import {
   type ArrowToolState,
   type ClickStamp,
 } from "../lib/diagramArrowsTool";
+import { LANDMARK_FONT_PX, LANDMARK_HALO_PX } from "../lib/landmarkLabels";
 import { useColourRevision } from "../lib/useColourRevision";
 
 const HIT_PX = 10;
 const HANDLE_PX = 5;
-const LABEL_PX = 12;
 
 function svgPoints(points: readonly Pt[]): string {
   return points.map(([east, north]) => `${east},${-north}`).join(" ");
@@ -116,6 +116,7 @@ export function DiagramArrowsDrawing({
   dispatch,
   svgRef,
   viewWidthM,
+  viewHeightM,
   hover,
 }: {
   model: CityModel;
@@ -123,22 +124,25 @@ export function DiagramArrowsDrawing({
   dispatch: Dispatch<ArrowToolAction>;
   svgRef: RefObject<SVGSVGElement | null>;
   viewWidthM: number;
+  viewHeightM: number;
   hover: Pt | null;
 }) {
   const colourTick = useColourRevision();
   const arrows = useMemo(() => (state.visible ? visibleInDrawing(state.arrows) : []), [state.visible, state.arrows]);
+  const rect = svgRef.current?.getBoundingClientRect();
+  const mPerPx = Math.max(viewWidthM / Math.max(1, rect?.width || 1200), viewHeightM / Math.max(1, rect?.height || 800));
   const shapes = useMemo(
-    () => arrows.map((arrow) => ({ arrow, shape: buildArrowShape(arrow.points, arrow.style, arrow.width, model.sideM) })),
-    [arrows, model.sideM],
+    () => arrows.map((arrow) => ({ arrow, shape: buildArrowShape(arrow.points, arrow.style, arrow.width, model.sideM, mPerPx) })),
+    [arrows, model.sideM, mPerPx],
   );
   const draft = state.visible && state.active ? state.draft : null;
   const draftPoints = draft && hover ? [...draft, hover] : draft;
   const draftShape =
     draftPoints && draftPoints.length >= 2
-      ? buildArrowShape(draftPoints, state.defaults.style, state.defaults.width, model.sideM)
+      ? buildArrowShape(draftPoints, state.defaults.style, state.defaults.width, model.sideM, mPerPx)
       : null;
   const selected = state.active ? selectedArrow(state) : null;
-  const pxM = viewWidthM / Math.max(1, svgRef.current?.getBoundingClientRect().width || 1200);
+  const pxM = mPerPx;
 
   function startDrag(event: React.PointerEvent<SVGCircleElement>, id: string, index: number) {
     event.stopPropagation();
@@ -156,26 +160,41 @@ export function DiagramArrowsDrawing({
   }
 
   if (shapes.length === 0 && !draftShape && !draft) return null;
-  const fontSize = LABEL_PX * pxM;
+  const fontSize = LANDMARK_FONT_PX * pxM;
+  const ink = getColour("--landmark-label");
+  const halo = getColour("--landmark-label-halo");
   return (
     <g className="diagram-arrows" data-tick={colourTick} data-arrows-drawing={arrows.length}>
       {shapes.map(({ arrow, shape }) => (
         <g key={arrow.id} data-arrow-id={arrow.id}>
           <ArrowShapePolygons shape={shape} fill={getColour(ARROW_COLOUR_TOKENS[arrow.colour])} />
-          {arrow.label ? (
+        </g>
+      ))}
+      <g className="plan-landmark-labels" data-arrow-labels="drawing">
+        {arrows.map((arrow) => {
+          if (!arrow.label) return null;
+          const [east, north] = arrowLabelAnchor(arrow.points);
+          return (
             <text
-              x={arrowLabelAnchor(arrow.points)[0]}
-              y={-arrowLabelAnchor(arrow.points)[1] - fontSize * 0.8}
+              key={arrow.id}
+              className="plan-landmark-label is-visible"
+              data-arrow-label={arrow.id}
+              x={east}
+              y={-north - fontSize * 1.1}
               fontSize={fontSize}
               textAnchor="middle"
-              fontFamily="Helvetica, Arial, sans-serif"
-              fill={getColour(ARROW_COLOUR_TOKENS[arrow.colour])}
+              dominantBaseline="central"
+              fill={ink}
+              stroke={halo}
+              strokeWidth={LANDMARK_HALO_PX * 2 * pxM}
+              strokeLinejoin="round"
+              paintOrder="stroke"
             >
               {arrow.label}
             </text>
-          ) : null}
-        </g>
-      ))}
+          );
+        })}
+      </g>
       {draftShape ? <ArrowShapePolygons shape={draftShape} fill={getColour(ARROW_COLOUR_TOKENS[state.defaults.colour])} opacity={0.65} /> : null}
       {draft?.map(([east, north], index) => (
         <circle key={`d${index}`} cx={east} cy={-north} r={HANDLE_PX * pxM * 0.7} fill={getColour("--arrow-ink")} />
