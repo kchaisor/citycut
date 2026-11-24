@@ -11,6 +11,7 @@ import { DrawingIsometric } from "../DrawingIsometric";
 import { SatellitePane } from "../SatellitePane";import { Scene3D } from "../Scene3D";
 
 import { sceneSelectionBuildingId } from "../../lib/sceneInspectPick";
+import { explodeLayerOfSelectionKind } from "../../lib/modelExplode";
 import { qaHideHeightPopoverFromSearch } from "../../lib/qaCameraBridge";
 import { sunStudyMutedOn, toggleSelection } from "../../lib/sunStudyPlan";
 import { SceneBoundary } from "../SceneBoundary";
@@ -210,6 +211,9 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
                 landmarkSources={landmarkSources}
                 landmarkLabelsOn={landmarkLabelsOn}
                 onLandmarkScreens={setLandmarkScreens}
+                exploded={vm.exploded}
+                explodeGapM={vm.explodeGap.gapM}
+                inspectAnchorLayer={explodeLayerOfSelectionKind(sceneSelection?.kind)}
               />
               {tab === "3d" && landmarkLabelsOn && (
                 <LandmarkLabelLayer

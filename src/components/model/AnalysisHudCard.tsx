@@ -12,7 +12,7 @@ export function AnalysisHudCard({
   className,
   children,
 }: {
-  kind: SiteAnalysisKind;
+  kind: SiteAnalysisKind | "exploded-axo";
   title: string;
   meta: string;
   label: string;

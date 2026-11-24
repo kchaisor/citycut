@@ -13,10 +13,12 @@ export function InspectHudProjector({
   world,
   enabled,
   onScreen,
+  lift,
 }: {
   world: SceneInspectWorld | null;
   enabled: boolean;
   onScreen: (screen: InspectHudScreen | null) => void;
+  lift?: () => number;
 }) {
   const camera = useThree((state) => state.camera);
   const size = useThree((state) => state.size);
@@ -27,7 +29,7 @@ export function InspectHudProjector({
       onScreen(null);
       return;
     }
-    point.set(world.east, world.up, -world.north);
+    point.set(world.east, world.up + (lift?.() ?? 0), -world.north);
     point.project(camera);
     const inView = point.z > -1 && point.z < 1 && Math.abs(point.x) <= 1.05 && Math.abs(point.y) <= 1.05;
     const canvasX = (point.x * 0.5 + 0.5) * size.width;
