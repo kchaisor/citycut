@@ -140,7 +140,7 @@ import { SceneExporter } from "../Scene3D";
 import type { CameraMemoryRef, CameraRestoreRequest } from "../../lib/cameraMemory";
 import type { NamedViewSnapshot } from "../../lib/namedViews";
 import { useNamedViews } from "./useNamedViews";
-import { waitForStudies, type StudyReadySignals } from "../../lib/studyReady";import { ExportBusy } from "../../lib/exportTiles";
+import { explodeSettledOnCanvas, waitForExplodeSettled, waitForStudies, type StudyReadySignals } from "../../lib/studyReady";import { ExportBusy } from "../../lib/exportTiles";
 
 import { useWalkPlayback, useWalkViewshed } from "../useWalkViewshed";
 
@@ -1980,14 +1980,22 @@ export function useModelPage({
       hiddenUses: [...hiddenBuildingUses],
       landmarkLabelsOn,
       lineStyles,
+      exploded: tab === "3d" && exploded,
+      explodeGapM: tab === "3d" && exploded ? explodeGap.gapM : null,
     };
   }
 
-  function applyNamedViewSnapshot(snapshot: NamedViewSnapshot): Promise<void> {
-    setExplodedOn(false);
+  async function applyNamedViewSnapshot(snapshot: NamedViewSnapshot): Promise<void> {
+    await restoreNamedViewSnapshot(snapshot);
+    if (snapshot.tab === "3d") await waitForExplodeSettled(snapshot.exploded);
+  }
+
+  function restoreNamedViewSnapshot(snapshot: NamedViewSnapshot): Promise<void> {
     setTab(snapshot.tab);
     if (snapshot.tab === "drawing") setDrawing(snapshot.drawing);
     commitView(snapshot.view, true);
+    setExplodedOn(snapshot.exploded);
+    if (snapshot.exploded) setExplodeGapChoiceM(resolveExplodeGapM(explodeGap.range, snapshot.explodeGapM));
     setAnalyses(snapshot.analyses);
     commitSolar({ ...solar, ...snapshot.solar });
     commitWind({ ...windSettings, ...snapshot.wind });
@@ -2026,6 +2034,7 @@ export function useModelPage({
     sunHoursSurfacesPending: false,
     windPlanApplicable: false,
     windPlanReady: true,
+    explodeSettled: true,
   });
   useEffect(() => {
     studySignals.current = {
@@ -2033,6 +2042,7 @@ export function useModelPage({
       sunHoursSurfacesPending: sunHoursGround.pendingSurfaces,
       windPlanApplicable: siteWind != null && windPlan.hasData,
       windPlanReady: windPlan.ready,
+      explodeSettled: true,
     };
   });
 
@@ -2041,7 +2051,8 @@ export function useModelPage({
     getSnapshot: namedViewSnapshot,
     applySnapshot: applyNamedViewSnapshot,
     getExporter: () => exportRef.current,
-    waitUntilReady: (snapshot) => waitForStudies(snapshot, () => studySignals.current),
+    waitUntilReady: (snapshot) =>
+      waitForStudies(snapshot, () => ({ ...studySignals.current, explodeSettled: explodeSettledOnCanvas(snapshot.exploded) })),
   });
   const landmarkByBuilding = useMemo(
     (): ReadonlyMap<number, WikidataLandmark> =>

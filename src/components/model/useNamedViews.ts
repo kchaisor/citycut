@@ -43,7 +43,7 @@ function nextFrame(): Promise<void> {
 }
 
 function needsLabelSettling(snapshot: NamedViewSnapshot): boolean {
-  return Boolean(snapshot.analyses.view || snapshot.landmarkLabelsOn);
+  return Boolean(snapshot.analyses.view || snapshot.landmarkLabelsOn || snapshot.exploded);
 }
 
 async function settle(snapshot: NamedViewSnapshot, waitUntilReady?: (snapshot: NamedViewSnapshot) => Promise<void>): Promise<void> {

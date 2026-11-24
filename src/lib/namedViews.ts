@@ -37,6 +37,8 @@ export type NamedViewSnapshot = {
   hiddenUses: BuildingUse[];
   landmarkLabelsOn: boolean;
   lineStyles: LineStyles | null;
+  exploded: boolean;
+  explodeGapM: number | null;
 };
 
 export type NamedView = {
@@ -121,6 +123,7 @@ function parseSnapshot(value: unknown): NamedViewSnapshot | null {
   if (!view || !analyses || !tab) return null;
   if (!isRecord(value.solar) || !isRecord(value.wind) || !isRecord(value.display)) return null;
   const viewshed = isRecord(value.viewshed) ? value.viewshed : {};
+  const exploded = value.exploded === true && tab === "3d" && view.projection === "iso";
   return {
     view,
     pose: parsePose(value.pose),
@@ -146,6 +149,8 @@ function parseSnapshot(value: unknown): NamedViewSnapshot | null {
       : [],
     landmarkLabelsOn: value.landmarkLabelsOn !== false,
     lineStyles: isRecord(value.lineStyles) ? ({ ...value.lineStyles } as LineStyles) : null,
+    exploded,
+    explodeGapM: exploded && finite(value.explodeGapM) && value.explodeGapM > 0 ? value.explodeGapM : null,
   };
 }
 

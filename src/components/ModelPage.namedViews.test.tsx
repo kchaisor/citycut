@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ModelPage } from "./ModelPage";
@@ -8,9 +8,9 @@ import type { CityModel, Pt } from "../types";
 const probe = vi.hoisted(() => ({ solar: null as Record<string, unknown> | null, plan: null as { mode: string; vectorsOn: boolean } | null }));
 
 vi.mock("./Scene3D", () => ({
-  Scene3D: ({ solar, exploded }: { solar?: Record<string, unknown>; exploded?: boolean }) => {
+  Scene3D: ({ solar, exploded, explodeGapM }: { solar?: Record<string, unknown>; exploded?: boolean; explodeGapM?: number }) => {
     probe.solar = solar ?? null;
-    return <div data-testid="scene-3d" data-exploded={String(exploded === true)} />;
+    return <div data-testid="scene-3d" data-exploded={String(exploded === true)} data-explode-gap={String(explodeGapM)} />;
   },
 }));
 vi.mock("./useWindPlan", async (original) => {
@@ -142,20 +142,68 @@ describe("Named views in ModelPage", () => {
     });
   });
 
-  it("does not save Exploded axo in a named view, and applying a view puts the model back together", async () => {
+  it("saves the exploded axo with its gap, restores it, and collapses when a view saved assembled is applied", async () => {
     const user = userEvent.setup();
     render(<ModelPage model={sampleModel()} onHome={vi.fn()} onNewCut={vi.fn()} />);
     const projection = () => screen.getByRole("group", { name: "3D projection" });
+    const scene = () => screen.getByTestId("scene-3d");
     await user.click(within(projection()).getByRole("button", { name: "Exploded axo" }));
-    expect(screen.getByTestId("scene-3d").dataset.exploded).toBe("true");
+    fireEvent.change(screen.getByRole("slider", { name: "Layer gap" }), { target: { value: "120" } });
+    expect(scene().getAttribute("data-explode-gap")).toBe("120");
     await user.click(within(screen.getByRole("toolbar", { name: "Model tools" })).getByRole("button", { name: "Views" }));
     await user.type(screen.getByRole("textbox", { name: "View name" }), "Stack");
     await user.click(screen.getByRole("button", { name: "Save" }));
-    expect(window.localStorage.getItem("citycut.namedViews.v1")).not.toMatch(/explod/i);
-    expect(screen.getByTestId("scene-3d").dataset.exploded).toBe("true");
+    const saved = JSON.parse(window.localStorage.getItem("citycut.namedViews.v1")!) as {
+      byCut: Record<string, { snapshot: { exploded: boolean; explodeGapM: number } }[]>;
+    };
+    const [stack] = Object.values(saved.byCut)[0]!;
+    expect(stack!.snapshot.exploded).toBe(true);
+    expect(stack!.snapshot.explodeGapM).toBe(120);
+
+    await user.click(within(projection()).getByRole("button", { name: "Isometric" }));
+    expect(scene().dataset.exploded).toBe("false");
+    await user.type(screen.getByRole("textbox", { name: "View name" }), "Flat");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
     await user.click(screen.getByRole("button", { name: /^Stack/ }));
-    expect(screen.getByTestId("scene-3d").dataset.exploded).toBe("false");
-    expect(within(projection()).getByRole("button", { name: "Exploded axo" }).getAttribute("aria-pressed")).toBe("false");
+    expect(scene().dataset.exploded).toBe("true");
+    expect(scene().getAttribute("data-explode-gap")).toBe("120");
+    expect(within(projection()).getByRole("button", { name: "Exploded axo" }).getAttribute("aria-pressed")).toBe("true");
+
+    await user.click(screen.getByRole("button", { name: /^Flat/ }));
+    expect(scene().dataset.exploded).toBe("false");
     expect(within(projection()).getByRole("button", { name: "Isometric" }).getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("clamps a saved gap to the cut's range and opens views saved before exploded existed assembled", async () => {
+    const user = userEvent.setup();
+    const model = sampleModel();
+    const first = render(<ModelPage model={model} onHome={vi.fn()} onNewCut={vi.fn()} />);
+    await user.click(within(screen.getByRole("group", { name: "3D projection" })).getByRole("button", { name: "Exploded axo" }));
+    await user.click(within(screen.getByRole("toolbar", { name: "Model tools" })).getByRole("button", { name: "Views" }));
+    await user.type(screen.getByRole("textbox", { name: "View name" }), "Huge");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    first.unmount();
+    const stored = JSON.parse(window.localStorage.getItem("citycut.namedViews.v1")!) as {
+      byCut: Record<string, { snapshot: Record<string, unknown> }[]>;
+    };
+    const [view] = Object.values(stored.byCut)[0]!;
+    view!.snapshot.explodeGapM = 99999;
+    window.localStorage.setItem("citycut.namedViews.v1", JSON.stringify(stored));
+
+    render(<ModelPage model={model} onHome={vi.fn()} onNewCut={vi.fn()} />);
+    await user.click(within(screen.getByRole("toolbar", { name: "Model tools" })).getByRole("button", { name: "Views" }));
+    await user.click(screen.getByRole("button", { name: /^Huge/, hidden: true }));
+    expect(screen.getByTestId("scene-3d").dataset.exploded).toBe("true");
+    expect(screen.getByTestId("scene-3d").getAttribute("data-explode-gap")).toBe("800");
+
+    delete view!.snapshot.exploded;
+    delete view!.snapshot.explodeGapM;
+    window.localStorage.setItem("citycut.namedViews.v1", JSON.stringify(stored));
+    cleanup();
+    render(<ModelPage model={model} onHome={vi.fn()} onNewCut={vi.fn()} />);
+    await user.click(within(screen.getByRole("toolbar", { name: "Model tools" })).getByRole("button", { name: "Views" }));
+    await user.click(screen.getByRole("button", { name: /^Huge/, hidden: true }));
+    expect(screen.getByTestId("scene-3d").dataset.exploded).toBe("false");
   });
 });

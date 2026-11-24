@@ -159,6 +159,18 @@ describe("readViewportCapture", () => {
     expect(capture.background).toBe("rgb(250, 250, 250)");
     expect(capture.labels.map((label) => label.text)).toEqual(["Flinders"]);
   });
+
+  it("reads the exploded axo layer labels and leaders once they are showing", () => {
+    document.body.innerHTML = `
+      <div class="viewport"><canvas id="c"></canvas></div>
+      <svg><line class="explode-leader" x1="10" y1="20" x2="40" y2="50" style="opacity: 1; stroke: rgb(10, 20, 30); stroke-width: 1px"></line>
+      <line class="explode-leader" x1="0" y1="0" x2="5" y2="5" style="opacity: 0"></line></svg>
+      <div class="explode-layer-label" style="opacity: 1">Ground</div>
+      <div class="explode-layer-label" style="opacity: 0">Trees</div>`;
+    const capture = readViewportCapture(document.getElementById("c") as HTMLCanvasElement);
+    expect(capture.labels.map((label) => label.text)).toEqual(["Ground"]);
+    expect(capture.lines).toEqual([{ x1: 10, y1: 20, x2: 40, y2: 50, colour: "rgb(10, 20, 30)", width: 1 }]);
+  });
 });
 
 describe("visibleViewportRect", () => {

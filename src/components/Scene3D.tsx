@@ -548,6 +548,7 @@ export function ExplodeLayers({
     const snapped = seenSnapKey.current !== snapKey;
     seenSnapKey.current = snapKey;
     if (introActive || (snapped && target === 0)) rt.clock = 0;
+    else if (snapped && snapKey !== 0 && target === 1) rt.clock = 1;
     if (introActive || snapped || run.current?.target !== target) run.current = { target, from: rt.clock, startedAtMs: nowMs };
     if (target === 0 && rt.clock === 0 && rt.progress === 0) {
       dropGroundFill();

@@ -20,13 +20,13 @@ Sketch or screenshot: Paper mock skipped (Paper weekly MCP limit, 24 Nov 2026). 
 6. **Gap slider in the right-hand cards.** While exploded, an **Exploded axo** card in the right-hand column (not the bottom Analysis bar, which holds only the analysis toggles and High / Fast) has a **Layer gap** slider with a metres readout. The gap is the clear space between one layer's top and the next layer's bottom. Moving it updates the stack live and re-fits the camera to the new extents.
 7. **Going back.** Clicking Perspective, Isometric or Plan animates the layers back together, then the chosen view continues from where the collapse ended, with no extra zoom or re-fit (Kelvin, 24 Nov 2026, 1:29 PM AEDT). Perspective keeps the same target and view direction at an equivalent framing. Isometric stays put. Plan looks straight down at the same target and zoom.
 8. **Reduced motion.** With the system reduced-motion setting on, the layers and camera jump straight to the end state with no animation.
-9. **Nothing else changes.** Building picking and selection, sun hours, the Solar Study toggle, wind and the Drawing tab work as before, exploded or not. Exploded is not saved: a reload or a new cut opens the model assembled.
+9. **Nothing else changes.** Building picking and selection, sun hours, the Solar Study toggle, wind and the Drawing tab work as before, exploded or not. Exploded is saved in named views only (not across reloads otherwise): a reload or a new cut opens the model assembled.
 
 ### Kelvin's preferences (24 Nov 2026, 11:05 AM AEDT)
 
 1. **Water and Parks are their own layers.** Water sits above Ground and Parks above Water, each with its own label, so lakes, rivers and green space float as separate sheets. A cut with no water, or with Water or Landscape switched off, skips that layer: no label and no extra gap.
 2. **Boundary outline on every layer.** Each layer gets a thin dark line tracing the cut boundary (square, round or A3, in the Ground edge colour) at that layer's base, so every floating plane reads as the same site footprint. The outlines move with their layer during the animation and with the gap slider, show only while exploded, and cannot be picked or exported.
-3. **Named views do not save Exploded axo.** Applying a named view while exploded puts the model back together at once, so the saved camera pose is what you see.
+3. **Named views save Exploded axo** (24 Nov 2026, 1:29 PM AEDT). A view saved exploded comes back exploded, with its gap and camera, and no animation. A view saved assembled collapses at once.
 
 ### Added (24 Nov 2026, 11:49 AM AEDT)
 

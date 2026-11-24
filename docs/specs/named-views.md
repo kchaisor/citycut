@@ -22,9 +22,13 @@ Sketch or screenshot: no Paper mock (Paper weekly limit still in force, 24 Nov 2
 7. **High quality, transparent.** A toggle in the Export PNG section, for both Export selected and Export all, renders at 2x or more (3x, capped by the graphics card) on a transparent background, with the same visible-area crop.
 8. **Exports match what you see between the panels.** The PNG is cropped to the free area between the left rail and cards, right cards, top bar and bottom Analysis bar, and building height labels are drawn at full opacity at the output scale.
 
+### Kelvin's preferences (24 Nov 2026, 1:29 PM AEDT)
+
+9. **Named views save and restore the exploded axo.** On or off, the layer gap, the corner and the layer labels come back with the camera, landing directly in the finished exploded arrangement with no animation. A view saved assembled collapses at once when clicked while exploded. Views saved before this load as not exploded.
+10. **Export selected and Export all capture exploded views as shown and never collapse them.** An exploded view exports exploded (labels, outlines, corner lines and layer gap), an assembled view exports assembled, whatever the current state. Export waits for the stack to be fully in place, nothing animates, and the view you were on, exploded or not, is put back afterwards.
+
 ### Out of scope
 
-- Exploded axo state is not saved or restored (that draft is on hold and this work branches off main).
 - Sharing views between computers or accounts, cloud sync, and embedding views in a URL.
 - Exporting the left or right panels, the top bar, or the bottom Analysis bar as part of the PNG.
 
@@ -44,8 +48,9 @@ Sketch or screenshot: no Paper mock (Paper weekly limit still in force, 24 Nov 2
 - **Where it lives.** Views is the fourth left-rail button (after Import) and opens a white card panel in the Import style. Saved views are kept in the browser (`citycut.namedViews.v1`), one list per site and cut size (latitude, longitude and cut size). Newest first. Duplicate names are allowed.
 - **What a view remembers.** Camera position, target and zoom, Perspective / Isometric / Plan and the isometric corner, 3D / Drawing / Satellite (and which drawing), Solar Study, Wind Rose and Viewshed Walk on/off with their settings (date, time, sun path, shadows, sun study, sun hours and window, wind season, design wind and time of day, wind streaks, sun dome size), High / Fast, picked sun-study buildings, all Display settings, colour by use, source colours, hidden building uses, landmark labels and drawing line styles.
 - **Viewshed.** Only eye height and radius are stored. The walk path itself is not saved, because the walk tool does not expose its points.
-- **Not remembered.** Open panels, selections, pop-ups and busy states. Exploded axo is never saved or restored; a saved Drawing view of the exploded axo comes back as the site plan.
+- **Not remembered.** Open panels, selections, pop-ups and busy states. A saved Drawing view of the exploded axo comes back as the site plan.
 - **Restoring.** Clicking a view name switches the mode and settings, then puts the camera back after the view has been fitted, so the automatic fit does not overwrite it.
+- **Exploded axo.** The snapshot stores exploded on/off and the layer gap (`exploded`, `explodeGapM`). Restoring an exploded view sets isometric, the corner, exploded and the gap (clamped to the cut's range) and lands in the finished stack, with the saved camera applied after the stack has landed. Export waits for `data-explode-progress` to reach 1 (or 0 for an assembled view), and the layer labels and leader lines are drawn into the PNG as they sit on screen.
 - **Export.** One ticked view downloads as `<view name>.png`. Two or more download as one zip, `citycut-<place>-<lat>-<lon>-<size>m-views.zip`, of PNGs named after the views (a repeated name gets `-2`, `-3`). Each PNG is a WYSIWYG capture of the live viewport: the same camera, materials, background and overlays as on screen (sun hours, wind, sun dome, landmark labels), at the canvas's own pixel size, with no app chrome. It does not use the publication 2x PNG pipeline. The app restores each view in turn, waits for it to settle (about a second when sun hours, sun study, wind, viewshed or landmark labels are on), captures it, and finally puts back the view you were on.
 - **Drawing and Satellite views.** They can be saved and restored, but not exported as PNG in this pass: the PNG export only covers the 3D canvas, and a clean capture of the drawing or map without the surrounding panels is not reliable yet. Those rows say "restore only", Export skips them, and the panel says how many were skipped.
 - **Studies (round 2).** The snapshot also stores the wind plan heatmap mode (speed or comfort), wind ticks on/off and the selected wind sector. Older saved views open with speed, ticks on and the prevailing sector. Sun hours settings (on, window, colour only selected, date, shadows, dome, High / Fast) were already part of the snapshot and are covered by tests.

@@ -75,7 +75,7 @@ async function frames(n: number, stepSec = 0.05) {
   }
 }
 
-type Opts = { exploded: boolean; gapM: number; projection?: ProjectionMode; terrain?: { min: number; max: number }; frame?: SiteFrame; wet?: boolean; solar?: SolarViewSettings; wind?: boolean; explodeLive?: boolean };
+type Opts = { exploded: boolean; gapM: number; projection?: ProjectionMode; terrain?: { min: number; max: number }; frame?: SiteFrame; wet?: boolean; solar?: SolarViewSettings; wind?: boolean; explodeLive?: boolean; snapKey?: number };
 
 const cleanups: Array<() => Promise<void>> = [];
 afterEach(async () => {
@@ -124,6 +124,7 @@ async function mountExplode(initial: Opts) {
         measureKey="all"
         terrain={o.terrain}
         frame={o.frame}
+        snapKey={o.snapKey}
         onCollapsed={collapsed}
         onTopLift={topLift}
       />
@@ -438,6 +439,25 @@ describe("exploded axo in the 3D scene", () => {
     expect(rig.canvas.dataset.exploded).toBe("0");
     expect(rig.camera().zoom).toBeCloseTo(assembled.zoom, 6);
     expect(rig.camera().position.toArray()).toEqual(assembled.position);
+  });
+
+  it("lands directly in the finished exploded state on a restore snap, with no animation", async () => {
+    const rig = await mountExplode({ exploded: false, gapM: 75 });
+    await rig.rerender({ exploded: true, gapM: 75, snapKey: 1 });
+    await frames(1, 0.001);
+    expect(rig.runtime.current.progress).toBe(1);
+    expect(rig.canvas.dataset.exploded).toBe("1");
+    expect(rig.canvas.dataset.explodeProgress).toBe("1.000");
+    expect(layerY(rig.city, "Trees")).toBe(286);
+  });
+
+  it("collapses at once on a restore snap", async () => {
+    const rig = await mountExplode({ exploded: true, gapM: 75 });
+    await frames(30);
+    await rig.rerender({ exploded: false, gapM: 75, snapKey: 1 });
+    await frames(1, 0.001);
+    expect(rig.runtime.current.progress).toBe(0);
+    expect(layerY(rig.city, "Trees")).toBe(0);
   });
 
   it("measures a layer added while exploded without counting the lift twice", async () => {

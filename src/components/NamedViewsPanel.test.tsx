@@ -27,6 +27,8 @@ const SNAPSHOT: NamedViewSnapshot = {
   hiddenUses: [],
   landmarkLabelsOn: true,
   lineStyles: null,
+  exploded: false,
+  explodeGapM: null,
 };
 
 function makeViews(): NamedView[] {
