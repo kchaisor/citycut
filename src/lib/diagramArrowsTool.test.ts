@@ -67,9 +67,9 @@ describe("arrow tool reducer", () => {
     expect(styled.defaults).toMatchObject({ style: "double", colour: "blue" });
     const made = run(styled, { type: "beginDraft" }, { type: "addPoint", point: [0, 0] }, { type: "addPoint", point: [9, 9] }, { type: "finishDraft", id: "a" });
     expect(made.arrows[0]).toMatchObject({ style: "double", colour: "blue" });
-    const edited = run(made, { type: "patch", patch: { label: "Flow", heightM: 600 } });
-    expect(selectedArrow(edited)).toMatchObject({ label: "Flow", heightM: 500, style: "double" });
-    expect(edited.defaults.label).toBe("");
+    const edited = run(made, { type: "patch", patch: { width: 2, heightM: 600 } });
+    expect(selectedArrow(edited)).toMatchObject({ width: 2, heightM: 500, style: "double" });
+    expect(edited.defaults.width).toBe(DEFAULT_ARROW.width);
   });
 
   it("moves and deletes points but keeps at least two", () => {
@@ -159,11 +159,11 @@ describe("new-arrow defaults", () => {
     expect(made.selectedId).toBe("a");
     const fresh = run(made, { type: "beginDraft" });
     expect(fresh.selectedId).toBeNull();
-    const edited = run(fresh, { type: "patch", patch: { colour: "red", label: "Next" } });
-    expect(edited.defaults).toMatchObject({ colour: "red", label: "Next" });
-    expect(edited.arrows[0]).toMatchObject({ colour: DEFAULT_ARROW.colour, label: "" });
+    const edited = run(fresh, { type: "patch", patch: { colour: "red", speed: 2 } });
+    expect(edited.defaults).toMatchObject({ colour: "red", speed: 2 });
+    expect(edited.arrows[0]).toMatchObject({ colour: DEFAULT_ARROW.colour, speed: DEFAULT_ARROW.speed });
     const drawn = run(edited, { type: "addPoint", point: [0, 0] }, { type: "addPoint", point: [9, 0] }, { type: "finishDraft", id: "b" });
-    expect(drawn.arrows[1]).toMatchObject({ id: "b", colour: "red", label: "Next" });
+    expect(drawn.arrows[1]).toMatchObject({ id: "b", colour: "red", speed: 2 });
     expect(drawn.selectedId).toBe("b");
   });
 
@@ -178,8 +178,8 @@ describe("new-arrow defaults", () => {
 
   it("edits the defaults while placing even if a selection somehow remains", () => {
     const stray: ArrowToolState = { ...withArrow(), draft: [[0, 0]] };
-    const edited = run(stray, { type: "patch", patch: { width: "l" } });
-    expect(edited.defaults.width).toBe("l");
+    const edited = run(stray, { type: "patch", patch: { width: 1.65 } });
+    expect(edited.defaults.width).toBe(1.65);
     expect(edited.arrows[0]!.width).toBe(DEFAULT_ARROW.width);
     expect(run(stray, { type: "addPoint", point: [1, 1] }).selectedId).toBeNull();
   });
@@ -229,13 +229,6 @@ describe("keys from focused controls", () => {
     const context = arrowKeyContext(panel("input", { type: "number" }));
     expect(arrowToolKeyAction(drafting, "Backspace", context)).toBeNull();
     expect(arrowToolKeyAction(drafting, "Delete", context)).toBeNull();
-  });
-
-  it("ignores every key in the Label field", () => {
-    const label = panel("input", { type: "text", id: "arrow-label" });
-    const context = arrowKeyContext(label);
-    expect(context.label).toBe(true);
-    for (const key of ["Enter", "Escape", "Backspace", "Delete"]) expect(arrowToolKeyAction(drafting, key, context)).toBeNull();
   });
 
   it("ignores Enter in text fields outside the Arrows panel", () => {

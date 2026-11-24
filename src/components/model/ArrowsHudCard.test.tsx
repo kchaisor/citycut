@@ -2,6 +2,7 @@
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { arrowAnimationPaused, setArrowAnimationPaused } from "../../lib/diagramArrowsMotion";
+import { parseDiagramArrows, type DiagramArrow } from "../../lib/diagramArrows";
 import { initialArrowToolState } from "../../lib/diagramArrowsTool";
 import { ArrowsHudCard } from "./ArrowsHudCard";
 
@@ -11,15 +12,63 @@ afterEach(() => {
 });
 
 describe("ArrowsHudCard", () => {
-  it("lists the five styles in a named group and patches the style", () => {
-    const dispatch = vi.fn();
-    render(<ArrowsHudCard arrows={{ state: { ...initialArrowToolState(), active: true }, dispatch }} />);
+  const card = (arrows: DiagramArrow[] = [], dispatch = vi.fn()) => {
+    const selectedId = arrows[0]?.id ?? null;
+    render(<ArrowsHudCard arrows={{ state: { ...initialArrowToolState(arrows), active: true, selectedId }, dispatch }} />);
+    return dispatch;
+  };
+  const stored = (over: Record<string, unknown> = {}) =>
+    parseDiagramArrows([{ id: "a", points: [[0, 0], [100, 0]], style: "bold", width: 1.4, heightM: 30, speed: 2, ...over }]);
+
+  it("lists the eight styles in a named group and patches the style", () => {
+    const dispatch = card();
     const group = screen.getByRole("group", { name: "Arrow style" });
-    for (const name of ["Streak", "Bold", "Line", "Dashed", "Double"]) {
-      expect(within(group).getByRole("button", { name })).toBeTruthy();
-    }
-    fireEvent.click(within(group).getByRole("button", { name: "Dashed" }));
-    expect(dispatch).toHaveBeenCalledWith({ type: "patch", patch: { style: "dashed" } });
+    const names = ["Streak", "Tapered flow", "Bold", "Line", "Dashed", "Dotted", "Chevron run", "Double"];
+    expect(within(group).getAllByRole("button").map((button) => button.textContent)).toEqual(names);
+    for (const name of names) expect(within(group).getByRole("button", { name })).toBeTruthy();
+    fireEvent.click(within(group).getByRole("button", { name: "Tapered flow" }));
+    expect(dispatch).toHaveBeenCalledWith({ type: "patch", patch: { style: "tapered" } });
+    fireEvent.click(within(group).getByRole("button", { name: "Chevron run" }));
+    expect(dispatch).toHaveBeenCalledWith({ type: "patch", patch: { style: "chevron" } });
+  });
+
+  it("has Width, Height and Animation speed sliders that patch numbers and no Label field", () => {
+    const dispatch = card();
+    expect(screen.queryByLabelText(/label/i)).toBeNull();
+    expect(document.getElementById("arrow-label")).toBeNull();
+    const width = screen.getByLabelText("Arrow width") as HTMLInputElement;
+    const height = screen.getByLabelText("Height (m)") as HTMLInputElement;
+    const speed = screen.getByLabelText("Animation speed") as HTMLInputElement;
+    for (const slider of [width, height, speed]) expect(slider.type).toBe("range");
+    fireEvent.change(width, { target: { value: "1.8" } });
+    fireEvent.change(height, { target: { value: "75" } });
+    fireEvent.change(speed, { target: { value: "2.5" } });
+    expect(dispatch).toHaveBeenCalledWith({ type: "patch", patch: { width: 1.8 } });
+    expect(dispatch).toHaveBeenCalledWith({ type: "patch", patch: { heightM: 75 } });
+    expect(dispatch).toHaveBeenCalledWith({ type: "patch", patch: { speed: 2.5 } });
+  });
+
+  it("shows the selected arrow's width, height and speed", () => {
+    card(stored());
+    expect((screen.getByLabelText("Arrow width") as HTMLInputElement).value).toBe("1.4");
+    expect((screen.getByLabelText("Height (m)") as HTMLInputElement).value).toBe("30");
+    expect((screen.getByLabelText("Animation speed") as HTMLInputElement).value).toBe("2");
+  });
+
+  it("toggles Show in 3D and Show in Drawing and says whom they apply to", () => {
+    const dispatch = card();
+    expect(screen.getByText("Applies to the next arrow.")).toBeTruthy();
+    fireEvent.click(screen.getByLabelText("Show in 3D"));
+    expect(dispatch).toHaveBeenCalledWith({ type: "patch", patch: { showIn3d: false } });
+    fireEvent.click(screen.getByLabelText("Show in Drawing"));
+    expect(dispatch).toHaveBeenCalledWith({ type: "patch", patch: { showInDrawing: false } });
+  });
+
+  it("reflects the selected arrow's visibility in the checkboxes", () => {
+    card(stored({ showIn3d: false }));
+    expect(screen.getByText("Applies to the selected arrow.")).toBeTruthy();
+    expect((screen.getByLabelText("Show in 3D") as HTMLInputElement).checked).toBe(false);
+    expect((screen.getByLabelText("Show in Drawing") as HTMLInputElement).checked).toBe(true);
   });
 
   it("puts the arrow style picker first in the card", () => {

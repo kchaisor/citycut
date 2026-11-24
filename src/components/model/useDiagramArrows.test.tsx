@@ -55,19 +55,4 @@ describe("keyboard while placing", () => {
     expect(hook.result.current.state.arrows).toHaveLength(1);
     expect(hook.result.current.state.draft).toBeNull();
   });
-
-  it("Enter and Escape in the Label field only blur it", () => {
-    const { hook, card } = setup();
-    const input = document.createElement("input");
-    input.id = "arrow-label";
-    card.append(input);
-    input.focus();
-    press(input, "Enter");
-    expect(document.activeElement).not.toBe(input);
-    input.focus();
-    press(input, "Escape");
-    expect(document.activeElement).not.toBe(input);
-    expect(hook.result.current.state.arrows).toHaveLength(0);
-    expect(hook.result.current.state.draft).toHaveLength(2);
-  });
 });

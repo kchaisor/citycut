@@ -1,28 +1,22 @@
 import { describe, expect, it } from "vitest";
-import type { Pt } from "../types";
 import {
-  ARROW_PRESETS,
   ARROW_STYLES,
   DEFAULT_ARROW,
-  arrowHead,
-  arrowLabelAnchor,
   arrowsForCut,
-  buildArrowShape,
-  dedupePoints,
   hitArrow,
-  nearestPointIndex,
   parseDiagramArrow,
   parseDiagramArrows,
   parseDiagramArrowsStore,
-  pathLength,
+  visibleIn3d,
+  visibleInDrawing,
   readDiagramArrowsStore,
-  smoothArrowPath,
   withCutArrows,
   writeDiagramArrowsStore,
   emptyDiagramArrowsStore,
   DIAGRAM_ARROWS_STORAGE_KEY,
   type DiagramArrow,
 } from "./diagramArrows";
+import { arrowMidpoint, dedupePoints, nearestPointIndex, pathLength } from "./diagramArrowsPath";
 
 const ARROW: DiagramArrow = {
   id: "a1",
@@ -34,7 +28,8 @@ const ARROW: DiagramArrow = {
   ...DEFAULT_ARROW,
   style: "dashed",
   colour: "red",
-  label: "Prevailing flow",
+  width: 1.4,
+  speed: 2,
   heightM: 35,
 };
 
@@ -49,113 +44,35 @@ function memoryStorage() {
   };
 }
 
-describe("smoothArrowPath", () => {
-  const controls: Pt[] = [
-    [0, 0],
-    [40, 25],
-    [80, -10],
-    [120, 30],
-  ];
-
-  it("passes through every control point", () => {
-    const path = smoothArrowPath(controls);
-    for (const control of controls) {
-      expect(path.some((p) => Math.hypot(p[0] - control[0], p[1] - control[1]) < 1e-6)).toBe(true);
-    }
-    expect(path[0]).toEqual(controls[0]);
-    expect(path[path.length - 1]).toEqual(controls[3]);
+describe("arrow styles", () => {
+  it("offers the eight styles in picker order", () => {
+    expect([...ARROW_STYLES]).toEqual(["streak", "tapered", "bold", "line", "dashed", "dotted", "chevron", "double"]);
   });
 
-  it("is smooth: consecutive samples turn gently", () => {
-    const path = smoothArrowPath(controls, 20);
-    for (let i = 2; i < path.length; i += 1) {
-      const a = [path[i - 1]![0] - path[i - 2]![0], path[i - 1]![1] - path[i - 2]![1]];
-      const b = [path[i]![0] - path[i - 1]![0], path[i]![1] - path[i - 1]![1]];
-      const cos = (a[0]! * b[0]! + a[1]! * b[1]!) / (Math.hypot(a[0]!, a[1]!) * Math.hypot(b[0]!, b[1]!));
-      expect(cos).toBeGreaterThan(0.8);
-    }
-  });
-
-  it("returns a straight segment for two points", () => {
-    expect(smoothArrowPath([[0, 0], [10, 0]])).toEqual([[0, 0], [10, 0]]);
-  });
-
-  it("ignores duplicate points and short input", () => {
-    expect(smoothArrowPath([[1, 1], [1, 1], [1, 1]])).toEqual([[1, 1]]);
-    expect(smoothArrowPath([])).toEqual([]);
-    const path = smoothArrowPath([[0, 0], [0, 0], [30, 0], [30, 0], [60, 20]]);
-    expect(path.every((p) => Number.isFinite(p[0]) && Number.isFinite(p[1]))).toBe(true);
-    expect(path[path.length - 1]).toEqual([60, 20]);
-  });
-
-  it("does not overshoot wildly on uneven spacing", () => {
-    const path = smoothArrowPath([[0, 0], [1, 0], [100, 0]]);
-    expect(Math.max(...path.map((p) => Math.abs(p[1])))).toBeLessThan(1);
+  it("finds the midpoint near the middle of the path", () => {
+    expect(arrowMidpoint([[0, 0], [100, 0]])[0]).toBeCloseTo(50);
   });
 });
 
-describe("arrow shapes", () => {
-  it("builds a head whose tip is the end of the path", () => {
-    const head = arrowHead([10, 0], [1, 0], 4, 2);
-    expect(head[0]).toEqual([10, 0]);
-    expect(head[1]).toEqual([6, 2]);
-    expect(head[2]).toEqual([6, -2]);
+describe("arrow visibility", () => {
+  const both = ARROW;
+  const only3d: DiagramArrow = { ...ARROW, id: "b", showInDrawing: false };
+  const onlyDrawing: DiagramArrow = { ...ARROW, id: "c", showIn3d: false };
+  const neither: DiagramArrow = { ...ARROW, id: "d", showIn3d: false, showInDrawing: false };
+  const all = [both, only3d, onlyDrawing, neither];
+
+  it("filters 3D, Plan and PNG arrows by Show in 3D alone", () => {
+    expect(visibleIn3d(all).map((arrow) => arrow.id)).toEqual([both.id, "b"]);
   });
 
-  it("gives every style a head at the end and double a second head at the start", () => {
-    const points: Pt[] = [[-100, 0], [0, 20], [100, 0]];
-    for (const style of ARROW_STYLES) {
-      const shape = buildArrowShape(points, style, "m", 500);
-      expect(shape.heads.length).toBe(ARROW_PRESETS[style].tailHead ? 2 : 1);
-      expect(shape.heads[0]![0]).toEqual([100, 0]);
-      expect(shape.ribbons.length).toBeGreaterThan(0);
-    }
-    expect(buildArrowShape(points, "double", "m", 500).heads[1]![0]).toEqual([-100, 0]);
+  it("filters Drawing, SVG, AI and 3dm arrows by Show in Drawing alone", () => {
+    expect(visibleInDrawing(all).map((arrow) => arrow.id)).toEqual([both.id, "c"]);
   });
 
-  it("splits a dashed arrow into several dashes and a solid one into one body", () => {
-    const points: Pt[] = [[0, 0], [300, 0]];
-    expect(buildArrowShape(points, "dashed", "m", 500).ribbons.length).toBeGreaterThan(3);
-    expect(buildArrowShape(points, "bold", "m", 500).ribbons.length).toBe(1);
-  });
-
-  it("keeps heads and the streak base at a minimum on-screen size", () => {
-    const path: [number, number][] = [[0, 0], [400, 0]];
-    const small = buildArrowShape(path, "dashed", "s", 1470);
-    const floored = buildArrowShape(path, "dashed", "s", 1470, 2.5);
-    const headSpan = (shape: typeof small) => Math.abs(shape.heads[0]![1][1] - shape.heads[0]![2][1]);
-    expect(headSpan(floored)).toBeGreaterThanOrEqual(2 * 0.9 * 7 * 2.5 - 1e-6);
-    expect(headSpan(floored)).toBeGreaterThan(headSpan(small));
-    const streak = buildArrowShape(path, "streak", "m", 1470);
-    const tail = streak.ribbons[0]!;
-    expect(Math.abs(tail.left[0]![1] - tail.right[0]![1])).toBeGreaterThan(3);
-  });
-
-  it("tapers the streak towards the tail", () => {
-    const { ribbons } = buildArrowShape([[0, 0], [200, 0]], "streak", "l", 500);
-    const ribbon = ribbons[0]!;
-    const tail = Math.abs(ribbon.left[0]![1] - ribbon.right[0]![1]);
-    const front = Math.abs(ribbon.left[ribbon.left.length - 1]![1] - ribbon.right[ribbon.right.length - 1]![1]);
-    expect(front).toBeGreaterThan(tail * 3);
-  });
-
-  it("scales width with the site size and the width setting", () => {
-    const points: Pt[] = [[0, 0], [300, 0]];
-    const half = (side: number, width: "s" | "l") => {
-      const ribbon = buildArrowShape(points, "bold", width, side).ribbons[0]!;
-      return Math.abs(ribbon.left[0]![1] - ribbon.right[0]![1]);
-    };
-    expect(half(500, "l")).toBeGreaterThan(half(500, "s"));
-    expect(half(1000, "s")).toBeGreaterThan(half(500, "s"));
-  });
-
-  it("returns an empty shape for fewer than two distinct points", () => {
-    expect(buildArrowShape([[3, 3], [3, 3]], "bold", "m", 500)).toEqual({ ribbons: [], heads: [] });
-  });
-
-  it("finds the label anchor near the middle of the path", () => {
-    const anchor = arrowLabelAnchor([[0, 0], [100, 0]]);
-    expect(anchor[0]).toBeCloseTo(50);
+  it("keeps both on for stored arrows without the flags and reads explicit false", () => {
+    const base = { id: "x", points: [[0, 0], [5, 5]] };
+    expect(parseDiagramArrow(base)).toMatchObject({ showIn3d: true, showInDrawing: true });
+    expect(parseDiagramArrow({ ...base, showIn3d: false, showInDrawing: false })).toMatchObject({ showIn3d: false, showInDrawing: false });
   });
 });
 
@@ -182,8 +99,8 @@ describe("parse and store", () => {
   });
 
   it("falls back to defaults for bad fields and drops bad arrows", () => {
-    const loose = parseDiagramArrow({ id: "x", points: [[0, 0], [5, 5]], style: "wavy", colour: 4, width: "xl", heightM: "high", label: 7, animation: "spin" });
-    expect(loose).toMatchObject({ ...DEFAULT_ARROW, id: "x", label: "" });
+    const loose = parseDiagramArrow({ id: "x", points: [[0, 0], [5, 5]], style: "wavy", colour: 4, width: "xl", heightM: "high", speed: "fast", animation: "spin" });
+    expect(loose).toMatchObject({ ...DEFAULT_ARROW, id: "x" });
     expect(parseDiagramArrow({ id: "x", points: [[0, 0]] })).toBeNull();
     expect(parseDiagramArrow({ id: "x", points: [[0, 0], [0, 0]] })).toBeNull();
     expect(parseDiagramArrow({ id: "", points: [[0, 0], [1, 1]] })).toBeNull();
@@ -191,12 +108,29 @@ describe("parse and store", () => {
     expect(parseDiagramArrow(null)).toBeNull();
   });
 
-  it("clamps height and label length and drops duplicate ids", () => {
-    const tall = parseDiagramArrow({ ...ARROW, heightM: 99999, label: "x".repeat(200) })!;
-    expect(tall.heightM).toBe(500);
-    expect(tall.label.length).toBe(60);
+  it("clamps height, width and speed and drops duplicate ids", () => {
+    const extreme = parseDiagramArrow({ ...ARROW, heightM: 99999, width: 40, speed: 0 })!;
+    expect(extreme.heightM).toBe(500);
+    expect(extreme.width).toBe(2.5);
+    expect(extreme.speed).toBe(0.25);
     expect(parseDiagramArrows([ARROW, ARROW, { nope: true }])).toEqual([ARROW]);
     expect(parseDiagramArrows("nope")).toEqual([]);
+  });
+
+  it("maps the old S, M and L widths and defaults a missing speed", () => {
+    const legacy = (width: string) => parseDiagramArrow({ id: "x", points: [[0, 0], [5, 5]], width })!;
+    expect(legacy("s").width).toBe(0.55);
+    expect(legacy("m").width).toBe(1);
+    expect(legacy("l").width).toBe(1.65);
+    expect(legacy("m").speed).toBe(1);
+  });
+
+  it("ignores a stored label silently", () => {
+    const old = parseDiagramArrow({ ...ARROW, label: "Prevailing flow" })!;
+    expect(old).toEqual(ARROW);
+    expect("label" in old).toBe(false);
+    const store = { version: 1, byCut: { c: [{ ...ARROW, label: "Old", width: "l" }] } };
+    expect(arrowsForCut(parseDiagramArrowsStore(JSON.stringify(store)), "c")).toEqual([{ ...ARROW, width: 1.65 }]);
   });
 
   it("round-trips the per-site store and keeps sites apart", () => {

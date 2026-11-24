@@ -3,7 +3,8 @@ import { parseNativeAiLayers, aiLayerLabel } from "./aiNative";
 import { sitePlanAi8, sitePlanChunks, sitePlanSvg } from "./aiPlan";
 import { model } from "./aiExport.test";
 import { getColour } from "./colours";
-import { ARROW_COLOUR_TOKENS, buildArrowShape, type DiagramArrow } from "./diagramArrows";
+import { ARROW_COLOUR_TOKENS, type DiagramArrow } from "./diagramArrows";
+import { buildArrowShape, shapeFills } from "./diagramArrowsShape";
 import { DIAGRAM_ARROWS_LAYER } from "./diagramArrowsDrawingExport";
 import { sitePlanRhinoLayerNames, sitePlanTo3dm } from "./planRhinoExport";
 import { loadRhino } from "./rhinoExport";
@@ -13,10 +14,10 @@ const arrow = (over: Partial<DiagramArrow>): DiagramArrow => ({
   points: [[-30, 0], [0, 10], [30, 0]],
   style: "bold",
   colour: "red",
-  width: "m",
+  width: 1,
   heightM: 20,
-  label: "",
   animation: "none",
+  speed: 1,
   showIn3d: true,
   showInDrawing: true,
   ...over,
@@ -24,8 +25,7 @@ const arrow = (over: Partial<DiagramArrow>): DiagramArrow => ({
 
 const SIDE = model().sideM;
 const shapeCount = (a: DiagramArrow) => {
-  const shape = buildArrowShape(a.points, a.style, a.width, SIDE);
-  return shape.ribbons.length + shape.heads.length;
+  return shapeFills(buildArrowShape(a.points, a.style, a.width, SIDE), 8).length;
 };
 
 function layerGroup(svg: string, label: string): string | null {
@@ -39,8 +39,8 @@ function hex(token: string): string {
 }
 
 describe("arrows in the Drawing .svg", () => {
-  it("writes one filled path per ribbon and head in the Diagram arrows layer, with colour and label", async () => {
-    const bold = arrow({ label: "Ferry route" });
+  it("writes one filled path per shape in the Diagram arrows layer, with colour and no label", async () => {
+    const bold = arrow({ ...({ label: "Ferry route" } as object) });
     const dashed = arrow({ id: "b", style: "dashed", colour: "blue", points: [[-40, -20], [40, -20]] });
     const hidden = arrow({ id: "c", showInDrawing: false });
     const svg = await sitePlanSvg(model(), 1000, undefined, { arrows: [bold, dashed, hidden] });
@@ -51,13 +51,38 @@ describe("arrows in the Drawing .svg", () => {
     expect(group).toContain(`fill="${hex("--arrow-red")}"`);
     expect(group).toContain(`fill="${hex("--arrow-blue")}"`);
     expect(group).not.toContain("stroke-dasharray");
-    expect(group.match(/<text /g)).toHaveLength(1);
-    expect(group).toContain(">Ferry route</text>");
+    expect(group).not.toContain("<text");
+    expect(group).not.toContain("Ferry route");
+    expect(svg).not.toContain("Ferry route");
+  });
+
+  it("writes the streak style as faded comets with no solid body", async () => {
+    const streak = arrow({ style: "streak", points: [[-200, 0], [200, 0]] });
+    const group = layerGroup(await sitePlanSvg(model(), 1000, undefined, { arrows: [streak] }), DIAGRAM_ARROWS_LAYER)!;
+    expect(group.match(/<path /g)).toHaveLength(shapeCount(streak));
+    expect(group).toMatch(/opacity="0\.\d+/);
+  });
+
+  it("drops arrows with Show in Drawing off, whatever else is on", async () => {
+    const shown = arrow({ id: "shown" });
+    const off = arrow({ id: "off", showIn3d: true, showInDrawing: false, points: [[-40, -20], [40, -20]] });
+    const group = layerGroup(await sitePlanSvg(model(), 1000, undefined, { arrows: [shown, off] }), DIAGRAM_ARROWS_LAYER)!;
+    expect(group.match(/<path /g)).toHaveLength(shapeCount(shown));
+    const only3d = arrow({ id: "three", showIn3d: true, showInDrawing: false });
+    expect(sitePlanChunks(model(), 1000, undefined, { arrows: [only3d] }).some((c) => c.name === DIAGRAM_ARROWS_LAYER)).toBe(false);
+  });
+
+  it("keeps Show in Drawing arrows even when Show in 3D is off", async () => {
+    const drawingOnly = arrow({ showIn3d: false });
+    const group = layerGroup(await sitePlanSvg(model(), 1000, undefined, { arrows: [drawingOnly] }), DIAGRAM_ARROWS_LAYER)!;
+    expect(group.match(/<path /g)).toHaveLength(shapeCount(drawingOnly));
   });
 
   it("styles change the shape count: double has two heads, dashed has gaps", () => {
     expect(shapeCount(arrow({ style: "double" }))).toBe(3);
     expect(shapeCount(arrow({ style: "bold" }))).toBe(2);
+    expect(shapeCount(arrow({ style: "dotted", points: [[-40, 0], [40, 0]] }))).toBeGreaterThan(5);
+    expect(shapeCount(arrow({ style: "chevron", points: [[-40, 0], [40, 0]] }))).toBeGreaterThan(2);
     expect(shapeCount(arrow({ style: "dashed", points: [[-40, 0], [40, 0]] }))).toBeGreaterThan(2);
   });
 
@@ -78,15 +103,23 @@ describe("arrows in the Drawing .ai", () => {
     expect(parseNativeAiLayers(sitePlanAi8(model(), 1000))).not.toContain(label);
   });
 
-  it("carries the arrow fill colour, shapes and label text in the layer chunk", () => {
-    const chunk = sitePlanChunks(model(), 1000, undefined, { arrows: [arrow({ label: "Flow", colour: "green" })] }).find(
+  it("carries the arrow fill colour and shapes, with no text, in the layer chunk", () => {
+    const chunk = sitePlanChunks(model(), 1000, undefined, { arrows: [arrow({ colour: "green", ...({ label: "Flow" } as object) })] }).find(
       (c) => c.name === DIAGRAM_ARROWS_LAYER,
     )!;
     expect(chunk.paths).toHaveLength(2);
     const [r, g, b] = chunk.paths![0]!.fill!;
     const toHex = (v: number) => Math.round(v * 255).toString(16).padStart(2, "0");
     expect(`#${toHex(r)}${toHex(g)}${toHex(b)}`).toBe(hex(ARROW_COLOUR_TOKENS.green));
-    expect(chunk.texts!.map((t) => t.text)).toEqual(["Flow"]);
+    expect(chunk.texts ?? []).toEqual([]);
+  });
+
+  it("gives faded comet bands an opacity below one in the .ai layer", () => {
+    const chunk = sitePlanChunks(model(), 1000, undefined, { arrows: [arrow({ style: "streak", points: [[-200, 0], [200, 0]] })] }).find(
+      (c) => c.name === DIAGRAM_ARROWS_LAYER,
+    )!;
+    expect(chunk.paths!.some((path) => (path.opacity ?? 1) < 1)).toBe(true);
+    expect(chunk.paths!.every((path) => (path.opacity ?? 1) >= 0 && (path.opacity ?? 1) <= 1)).toBe(true);
   });
 });
 

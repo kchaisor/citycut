@@ -3,7 +3,7 @@ import { act, cleanup, render } from "@testing-library/react";
 import { createRef } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { arrowTickerListeners, setArrowAnimationPaused } from "../lib/diagramArrowsMotion";
-import type { DiagramArrow } from "../lib/diagramArrows";
+import { parseDiagramArrows, type DiagramArrow } from "../lib/diagramArrows";
 import { initialArrowToolState } from "../lib/diagramArrowsTool";
 import type { CityModel } from "../types";
 import { DiagramArrowsDrawing } from "./DiagramArrowsDrawing";
@@ -14,27 +14,18 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("DiagramArrowsDrawing labels", () => {
-  it("renders each label as haloed SVG text", () => {
-    const state = initialArrowToolState([
-      {
-        id: "a",
-        points: [[0, 0], [100, 0]],
-        style: "dashed",
-        colour: "red",
-        width: "m",
-        heightM: 20,
-        label: "Ferry route",
-        animation: "none",
-        showIn3d: true,
-        showInDrawing: true,
-      },
+describe("DiagramArrowsDrawing labels and visibility", () => {
+  const stored = (over: Record<string, unknown> = {}) =>
+    parseDiagramArrows([
+      { id: "a", points: [[0, 0], [100, 0]], style: "dashed", colour: "red", width: "m", heightM: 20, label: "Ferry route", ...over },
     ]);
-    const { container } = render(
+
+  function mountArrows(arrows: DiagramArrow[]) {
+    return render(
       <svg>
         <DiagramArrowsDrawing
           model={{ sideM: 1470 } as CityModel}
-          state={state}
+          state={initialArrowToolState(arrows)}
           dispatch={vi.fn()}
           svgRef={createRef<SVGSVGElement>()}
           viewWidthM={1470}
@@ -43,10 +34,23 @@ describe("DiagramArrowsDrawing labels", () => {
         />
       </svg>,
     );
-    const text = container.querySelector("text[data-arrow-label='a']")!;
-    expect(text.textContent).toBe("Ferry route");
-    expect(text.getAttribute("paint-order")).toBe("stroke");
-    expect(Number(text.getAttribute("stroke-width"))).toBeGreaterThan(0);
+  }
+
+  it("draws no label text for an arrow stored with a legacy label", () => {
+    const { container } = mountArrows(stored());
+    expect(container.querySelector("polygon, path, circle")).toBeTruthy();
+    expect(container.querySelector("text")).toBeNull();
+    expect(container.textContent).not.toContain("Ferry route");
+  });
+
+  it("draws nothing for an arrow that is hidden in Drawing", () => {
+    const { container } = mountArrows(stored({ showInDrawing: false }));
+    expect(container.querySelector("polygon, path, circle")).toBeNull();
+  });
+
+  it("draws the arrow while it is shown in Drawing even when hidden in 3D", () => {
+    const { container } = mountArrows(stored({ showIn3d: false }));
+    expect(container.querySelector("polygon, path, circle")).toBeTruthy();
   });
 });
 
@@ -56,10 +60,10 @@ describe("DiagramArrowsDrawing animation", () => {
     points: [[0, 0], [300, 0]],
     style: "bold",
     colour: "blue",
-    width: "m",
+    width: 1,
     heightM: 20,
-    label: "",
     animation,
+    speed: 1,
     showIn3d: true,
     showInDrawing: true,
   });
