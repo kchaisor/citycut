@@ -184,8 +184,7 @@ describe("site plan .3dm", () => {
     const exportOpts = {
       sunStudy: { layers: studyLayers },
       heliodon: planHeliodonForExport({
-        showPath: false,
-        sunStudyDate: date,
+        showPath: true,
         diagram,
       }),
       shadows: null,

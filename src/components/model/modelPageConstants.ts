@@ -1,4 +1,4 @@
-import { Building2, Download, DraftingCompass, Info, Trees, Upload } from "lucide-react";
+import { Building2, Camera, Download, DraftingCompass, Info, Trees, Upload } from "lucide-react";
 import type { IsoCorner } from "../../lib/isoCamera";
 import type { SidebarSectionId } from "../../lib/sidebarSections";
 
@@ -33,6 +33,7 @@ export const SECTION_ICONS: Record<SidebarSectionId, typeof Info> = {
   trees: Trees,
   drawing: DraftingCompass,
   import: Upload,
+  views: Camera,
   exports: Download,
 };
 

@@ -21,6 +21,7 @@ function stubPlan(mode: WindPlanState["mode"], scaleMaxMs: number | null, comfor
     dirLabel: "S",
     selectSector: () => {},
     stepSector: () => {},
+    restoreSector: () => {},
     sectorReferenceMs: () => 3.9,
     referenceMs: 5,
     hasData: true,

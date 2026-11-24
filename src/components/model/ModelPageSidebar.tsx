@@ -502,6 +502,10 @@ export function ModelPageSidebar({ vm }: { vm: import("./useModelPage").ModelPag
                 <span className="sidebar-status">
                   {massing.imported.length} model{massing.imported.length === 1 ? "" : "s"}
                 </span>
+              ) : leftOpen === "views" ? (
+                <span className="sidebar-status">
+                  {vm.namedViews.views.length} saved
+                </span>
               ) : null
             }
             rightStatus={

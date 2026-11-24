@@ -137,7 +137,10 @@ import { isometricDrawingBounds } from "../../lib/isometricDrawing";import { Sid
 import { SceneExporter } from "../Scene3D";
 
 
-import type { CameraMemoryRef } from "../../lib/cameraMemory";import { ExportBusy } from "../../lib/exportTiles";
+import type { CameraMemoryRef, CameraRestoreRequest } from "../../lib/cameraMemory";
+import type { NamedViewSnapshot } from "../../lib/namedViews";
+import { useNamedViews } from "./useNamedViews";
+import { waitForStudies, type StudyReadySignals } from "../../lib/studyReady";import { ExportBusy } from "../../lib/exportTiles";
 
 import { useWalkPlayback, useWalkViewshed } from "../useWalkViewshed";
 
@@ -200,6 +203,8 @@ export type ModelPageProps = {
 };
 
 const SITE_INTEL_STORAGE_KEY = "citycut.siteIntelligence";
+
+const CAMERA_RESTORE_CAP_MS = 3000;
 
 export function useModelPage({
   model,
@@ -414,14 +419,7 @@ export function useModelPage({
     };
   }
 
-  function heliodonDiagramExport(): HeliodonDiagramExportOptions | null {
-    if (!solar.showPath) return null;
-    return {
-      ...planShadowInput(),
-      sideM: model.sideM,
-      radiusFactor: solar.radiusFactor,
-    };
-  }
+  const sunDomeOn = solarSettingsForActiveAnalysis(solar, analyses).showPath;
 
   function heliodonPlanDiagramBase(): HeliodonDiagramExportOptions {
     return {
@@ -431,14 +429,12 @@ export function useModelPage({
     };
   }
 
+  function heliodonDiagramExport(): HeliodonDiagramExportOptions | null {
+    return planHeliodonForExport({ showPath: sunDomeOn, diagram: heliodonPlanDiagramBase() });
+  }
+
   function planHeliodonForSiteExport(): HeliodonDiagramExportOptions | null {
-    const direct = heliodonDiagramExport();
-    if (direct) return direct;
-    return planHeliodonForExport({
-      showPath: solar.showPath,
-      sunStudyDate,
-      diagram: heliodonPlanDiagramBase(),
-    });
+    return heliodonDiagramExport();
   }
 
   function sitePlanExportOptions(): SitePlanExportOptions {
@@ -487,8 +483,8 @@ export function useModelPage({
   }, [wantWindTable, model.center.lat, model.center.lon, model.siteAnchor?.lat, model.siteAnchor?.lon]);
 
   function heliodonRhinoExport(): HeliodonGroundExportOptions | null {
-    if (!solar.showPath) return null;
-    return { ...heliodonDiagramExport()!, radiusFactor: solar.radiusFactor };
+    const diagram = heliodonDiagramExport();
+    return diagram ? { ...diagram, radiusFactor: solar.radiusFactor } : null;
   }
   const exportRef = useRef<SceneExporter | null>(null);
   const onExportReady = useCallback((exporter: SceneExporter | null) => {
@@ -1944,6 +1940,108 @@ export function useModelPage({
   const wikidata = useWikidataLandmarks(model);
   const [landmarkLabelsOn, setLandmarkLabelsOn] = useState(LANDMARK_LABELS_DEFAULT_ON);
   const [landmarkScreens, setLandmarkScreens] = useState<LandmarkScreenState | null>(null);
+  const [cameraRestore, setCameraRestore] = useState<CameraRestoreRequest | null>(null);
+  const cameraRestoreSeq = useRef(0);
+  const cameraRestoreWaiters = useRef(new Map<number, () => void>());
+  const onCameraRestored = useCallback((id: number) => {
+    setCameraRestore((current) => (current?.id === id ? null : current));
+    for (const [waiting, resolve] of cameraRestoreWaiters.current) {
+      if (waiting <= id) {
+        cameraRestoreWaiters.current.delete(waiting);
+        resolve();
+      }
+    }
+  }, []);
+
+  function namedViewSnapshot(): NamedViewSnapshot {
+    const memory = cameraMemory.current;
+    const pose = memory ? (view.projection === "perspective" ? memory.persp : memory.ortho) : null;
+    return {
+      view,
+      pose,
+      tab,
+      drawing,
+      analyses,
+      solar,
+      wind: windSettings,
+      windStreaksOn,
+      windPlan: {
+        mode: windPlan.mode,
+        vectorsOn: windPlan.vectorsOn,
+        sector: designWind ? null : windPlan.sector,
+      },
+      renderQuality,
+      sunDomeSizeM,
+      viewshed: { eyeM: walk.eyeM, radiusM: walk.radiusM },
+      sunStudySelected,
+      display: view3dDisplay,
+      colourByUse,
+      showSource,
+      hiddenUses: [...hiddenBuildingUses],
+      landmarkLabelsOn,
+      lineStyles,
+    };
+  }
+
+  function applyNamedViewSnapshot(snapshot: NamedViewSnapshot): Promise<void> {
+    setTab(snapshot.tab);
+    if (snapshot.tab === "drawing") setDrawing(snapshot.drawing);
+    commitView(snapshot.view, true);
+    setAnalyses(snapshot.analyses);
+    commitSolar({ ...solar, ...snapshot.solar });
+    commitWind({ ...windSettings, ...snapshot.wind });
+    setWindStreaksOn(snapshot.windStreaksOn);
+    windPlan.setMode(snapshot.windPlan.mode);
+    windPlan.setVectorsOn(snapshot.windPlan.vectorsOn);
+    windPlan.restoreSector(snapshot.wind.period, snapshot.windPlan.sector);
+    commitRenderQuality(snapshot.renderQuality);
+    setSunDomeSizeM(snapshot.sunDomeSizeM);
+    if (snapshot.viewshed.eyeM > 0) walk.setEyeM(snapshot.viewshed.eyeM);
+    if (snapshot.viewshed.radiusM > 0) walk.setRadiusM(snapshot.viewshed.radiusM);
+    setSunStudySelected(snapshot.sunStudySelected);
+    commitView3dDisplay({ ...view3dDisplay, ...snapshot.display });
+    setColourByUse(snapshot.colourByUse);
+    setShowSource(snapshot.showSource);
+    setHiddenBuildingUses(new Set(snapshot.hiddenUses));
+    setLandmarkLabelsOn(snapshot.landmarkLabelsOn);
+    const savedLines = snapshot.lineStyles;
+    if (savedLines) setLineStyles((current) => ({ ...current, ...savedLines }));
+    if (!snapshot.pose) return Promise.resolve();
+    cameraRestoreSeq.current += 1;
+    const id = cameraRestoreSeq.current;
+    setCameraRestore({ id, projection: snapshot.view.projection, pose: snapshot.pose });
+    if (snapshot.tab !== "3d") return Promise.resolve();
+    return new Promise<void>((resolve) => {
+      cameraRestoreWaiters.current.set(id, resolve);
+      window.setTimeout(() => {
+        cameraRestoreWaiters.current.delete(id);
+        resolve();
+      }, CAMERA_RESTORE_CAP_MS);
+    });
+  }
+
+  const studySignals = useRef<StudyReadySignals>({
+    sunHoursPending: false,
+    sunHoursSurfacesPending: false,
+    windPlanApplicable: false,
+    windPlanReady: true,
+  });
+  useEffect(() => {
+    studySignals.current = {
+      sunHoursPending: sunHoursGround.pending,
+      sunHoursSurfacesPending: sunHoursGround.pendingSurfaces,
+      windPlanApplicable: siteWind != null && windPlan.hasData,
+      windPlanReady: windPlan.ready,
+    };
+  });
+
+  const namedViews = useNamedViews({
+    model,
+    getSnapshot: namedViewSnapshot,
+    applySnapshot: applyNamedViewSnapshot,
+    getExporter: () => exportRef.current,
+    waitUntilReady: (snapshot) => waitForStudies(snapshot, () => studySignals.current),
+  });
   const landmarkByBuilding = useMemo(
     (): ReadonlyMap<number, WikidataLandmark> =>
       wikidata.status === "ok" ? landmarksByBuilding(wikidata.matches, model.buildings) : new Map(),
@@ -2238,6 +2336,9 @@ export function useModelPage({
     buildingsAsMesh,
     busy,
     cameraMemory,
+    cameraRestore,
+    namedViews,
+    onCameraRestored,
     introPlayed,
     colourByUse,
     comFetchBounds,

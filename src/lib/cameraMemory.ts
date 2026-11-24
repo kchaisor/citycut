@@ -64,3 +64,9 @@ export function applyPose(
 export function usableCameraMemory(memory: CameraMemory | null, snapId: number): CameraMemory | null {
   return memory && memory.snapId === snapId ? memory : null;
 }
+
+export type CameraRestoreRequest = {
+  id: number;
+  projection: "perspective" | "iso" | "plan";
+  pose: CameraPose;
+};
