@@ -8,6 +8,7 @@ import type { ProjectionMode } from "../lib/viewMemory";
 import type { SolarViewSettings } from "./SolarHeliodon";
 import { makeSiteFrame, type SiteFrame } from "../lib/siteFrame";
 import { GROUND_ROADS_LAYER } from "../lib/groundRoads";
+import { SolarHeliodon } from "./SolarHeliodon";
 import { Cameras, ExplodeLayers, createExplodeRuntime, type ExplodeRuntime } from "./Scene3D";
 
 extend(THREE as unknown as Parameters<typeof extend>[0]);
@@ -74,17 +75,21 @@ async function frames(n: number, stepSec = 0.05) {
   }
 }
 
-type Opts = { exploded: boolean; gapM: number; projection?: ProjectionMode; terrain?: { min: number; max: number }; frame?: SiteFrame; wet?: boolean };
+type Opts = { exploded: boolean; gapM: number; projection?: ProjectionMode; terrain?: { min: number; max: number }; frame?: SiteFrame; wet?: boolean; solar?: SolarViewSettings; wind?: boolean; explodeLive?: boolean };
 
 const cleanups: Array<() => Promise<void>> = [];
 afterEach(async () => {
   while (cleanups.length) await cleanups.pop()!();
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
 async function mountExplode(initial: Opts) {
   const canvas = document.createElement("canvas");
   document.body.appendChild(canvas);
+  canvas.getBoundingClientRect = () => new DOMRect(0, 0, W, H);
+  document.body.getBoundingClientRect = () => new DOMRect(0, 0, W, H);
+  vi.spyOn(performance, "now").mockImplementation(() => clock * 1000);
   const root = createRoot(canvas);
   const city = sampleCity(initial.wet);
   const runtime: { current: ExplodeRuntime } = { current: createExplodeRuntime() };
@@ -92,11 +97,22 @@ async function mountExplode(initial: Opts) {
   const bounds: { current: Aabb | null } = { current: { min: [-HALF, -10, -HALF], max: [HALF, 60, HALF] } };
   const collapsed = vi.fn();
   const topLift = vi.fn();
-  let store: { getState: () => { camera: THREE.OrthographicCamera } } | null = null;
+  let store: { getState: () => { camera: THREE.OrthographicCamera; controls: unknown } } | null = null;
+  const windFlow = new THREE.Group();
+  windFlow.name = "WindFlow";
+  windFlow.add(slab("WindStreaks", 0, 90, 140));
   const element = (o: Opts) => (
     <>
       <primitive object={city} />
       <group ref={overlay} />
+      {o.wind ? <primitive object={windFlow} /> : null}
+      <SolarHeliodon
+        lat={-37.8127}
+        lon={144.98061}
+        sideM={SIDE}
+        groundY={0}
+        settings={o.solar ?? SOLAR}
+      />
       <ExplodeLayers
         city={city}
         overlayRef={overlay}
@@ -124,12 +140,13 @@ async function mountExplode(initial: Opts) {
         snapId={0}
         boundsRef={bounds}
         onExportReady={() => {}}
-        solarDiagramOn={false}
+        solarDiagramOn={o.solar?.showPath ?? false}
         heliodonRadius={SIDE * 0.6}
-        solar={SOLAR}
+        solar={o.solar ?? SOLAR}
         lat={-37.8127}
         lon={144.98061}
         explode={runtime}
+        explodeLive={o.explodeLive ?? o.exploded}
       />
     </>
   );
@@ -140,7 +157,7 @@ async function mountExplode(initial: Opts) {
       frameloop: "never",
       dpr: 1,
     });
-    store = root.render(element(initial)) as unknown as { getState: () => { camera: THREE.OrthographicCamera } };
+    store = root.render(element(initial)) as unknown as { getState: () => { camera: THREE.OrthographicCamera; controls: unknown } };
   });
   await frames(4);
   cleanups.push(async () => {
@@ -155,6 +172,13 @@ async function mountExplode(initial: Opts) {
     collapsed,
     topLift,
     camera: () => store!.getState().camera,
+    controls: () => (store!.getState().controls as { target: THREE.Vector3 }).target,
+    pose: () => {
+      const state = store!.getState();
+      const camera = state.camera;
+      const target = (state.controls as { target: THREE.Vector3 }).target;
+      return [...camera.position.toArray(), ...target.toArray(), camera.zoom];
+    },
     rerender: async (o: Opts) => {
       await act(async () => {
         root.render(element(o));
@@ -437,5 +461,103 @@ describe("exploded axo in the 3D scene", () => {
     await frames(1);
     expect(rig.runtime.current.progress).toBe(0);
     expect(layerY(rig.city, "Trees")).toBe(0);
+  });
+
+  describe("analysis toggles never move the camera", () => {
+    const SUN_ON: SolarViewSettings = { ...SOLAR, showPath: true };
+    const SHADOWS_ON: SolarViewSettings = { ...SUN_ON, castShadows: true, hour: 15 };
+
+    function expectSame(now: number[], before: number[]) {
+      expect(now).toHaveLength(before.length);
+      for (const [i, v] of now.entries()) expect(Math.abs(v - before[i])).toBeLessThan(1e-6);
+    }
+
+    async function expectStill(opts: Opts) {
+      const rig = await mountExplode(opts);
+      await frames(40);
+      const before = rig.pose();
+      await rig.rerender({ ...opts, solar: SUN_ON });
+      await frames(20);
+      expectSame(rig.pose(), before);
+      await rig.rerender({ ...opts, solar: SHADOWS_ON, wind: true });
+      await frames(20);
+      expectSame(rig.pose(), before);
+      await rig.rerender({ ...opts, solar: SOLAR });
+      await frames(20);
+      expectSame(rig.pose(), before);
+      return rig;
+    }
+
+    it("keeps the Isometric camera still when Solar Study, shadows and wind come on", async () => {
+      await expectStill({ exploded: false, gapM: 75 });
+    });
+
+    it("keeps the Perspective camera still when Solar Study, shadows and wind come on", async () => {
+      await expectStill({ exploded: false, gapM: 75, projection: "perspective" });
+    });
+
+    it("keeps the Plan camera still when Solar Study, shadows and wind come on", async () => {
+      await expectStill({ exploded: false, gapM: 75, projection: "plan" });
+    });
+
+    it("keeps the exploded stack where it was fitted when Solar Study, shadows and wind come on", async () => {
+      const rig = await expectStill({ exploded: true, gapM: 75 });
+      expect(stackInView(rig.camera(), rig.runtime.current)).toBe(true);
+    });
+  });
+});
+
+describe("leaving the exploded axo", () => {
+  async function collapseTo(projection: ProjectionMode) {
+    const rig = await mountExplode({ exploded: false, gapM: 75 });
+    await rig.rerender({ exploded: true, gapM: 75 });
+    await frames(30);
+    rig.collapsed.mockClear();
+    await rig.rerender({ exploded: false, gapM: 75, projection: "iso", explodeLive: true });
+    while (!rig.collapsed.mock.calls.length) await frames(1);
+    await frames(1);
+    const iso = rig.camera() as THREE.OrthographicCamera;
+    const end = {
+      target: rig.controls().clone(),
+      height: (iso.top - iso.bottom) / iso.zoom,
+      dir: rig.controls().clone().sub(iso.position).normalize(),
+      pose: rig.pose(),
+    };
+    await rig.rerender({ exploded: false, gapM: 75, projection, explodeLive: false });
+    await frames(3);
+    return { rig, end };
+  }
+
+  it("hands the perspective camera the collapse's target, direction and framing, then leaves it alone", async () => {
+    const { rig, end } = await collapseTo("perspective");
+    const persp = rig.camera() as unknown as THREE.PerspectiveCamera;
+    expect(persp.isPerspectiveCamera).toBe(true);
+    expect(rig.controls().distanceTo(end.target)).toBeLessThan(1e-3);
+    const dir = rig.controls().clone().sub(persp.position);
+    const height = 2 * dir.length() * Math.tan(THREE.MathUtils.degToRad(persp.fov / 2));
+    expect(Math.abs(height - end.height) / end.height).toBeLessThan(0.02);
+    expect(dir.normalize().distanceTo(end.dir)).toBeLessThan(1e-3);
+    const settled = rig.pose();
+    await frames(60);
+    expect(rig.pose()).toEqual(settled);
+  });
+
+  it("keeps the isometric camera where the collapse ended", async () => {
+    const { rig, end } = await collapseTo("iso");
+    expect(rig.pose()).toEqual(end.pose);
+    await frames(60);
+    expect(rig.pose()).toEqual(end.pose);
+  });
+
+  it("looks straight down at the same target and zoom for plan, then leaves it alone", async () => {
+    const { rig, end } = await collapseTo("plan");
+    const ortho = rig.camera() as THREE.OrthographicCamera;
+    expect(rig.controls().distanceTo(end.target)).toBeLessThan(1e-3);
+    const down = rig.controls().clone().sub(ortho.position).normalize();
+    expect(down.y).toBeLessThan(-0.999);
+    expect(ortho.zoom).toBeCloseTo(end.pose[6], 6);
+    const settled = rig.pose();
+    await frames(60);
+    rig.pose().forEach((v, k) => expect(v).toBeCloseTo(settled[k], 6));
   });
 });

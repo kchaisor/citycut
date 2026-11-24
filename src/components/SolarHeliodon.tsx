@@ -18,7 +18,6 @@ import { sunDomeRadiusM } from "../lib/heliodonRadius";
 import {
   SUN_DOME_BEARING_SIZE_PX,
   SUN_DOME_CARDINAL_SIZE_PX,
-  SUN_DOME_FIT_MS,
   SUN_DOME_HALO_PX,
   SUN_DOME_HORIZON_LINE,
   SUN_DOME_HOUR_LINE,
@@ -28,18 +27,14 @@ import {
   SUN_DOME_SUN_PX,
   SUN_DOME_TICK_PX,
   SUN_DOME_TICK_STEP_DEG,
-  easeInOutCubic,
-  hudSafeArea,
   sunDomeArcs,
   sunDomeBearingLabels,
-  sunDomeBounds,
   sunDomeHourLabel,
   sunDomeSunLinePositions,
   type ScreenRect,
   type SunDomeLineStyle,
 } from "../lib/heliodonSunDome";
 import { heliodonPalette } from "../lib/heliodonPalette";
-import { cornersOf, type Aabb } from "../lib/isoCamera";
 import { meanTerrainElevation } from "../lib/terrain";
 import { themeColor } from "../lib/themeColor";
 import type { TerrainField } from "../types";
@@ -74,7 +69,6 @@ export type SolarViewSettings = {
 
 const OVERLAY_ORDER = 1000;
 const GHOST_OPACITY = 0.38;
-const LABEL_REACH_PX = SUN_DOME_TICK_PX + SUN_DOME_LABEL_GAP_PX + 14;
 
 const vec = (point: Vec3) => new THREE.Vector3(point[0], point[1], point[2]);
 
@@ -468,7 +462,6 @@ function useSunDomeFrame(root: DomeRoot | null, sun: DomeSprite | null, centre: 
   });
 }
 
-type FitPose = { position: THREE.Vector3; target: THREE.Vector3; zoom: number };
 
 export function canvasScreenRect(canvas: HTMLCanvasElement): ScreenRect {
   const rect = canvas.getBoundingClientRect();
@@ -487,124 +480,6 @@ export function liveHudRects(viewport: ScreenRect): ScreenRect[] {
     rects.push({ left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom });
   }
   return rects;
-}
-
-function sunDomeFitPose(
-  camera: THREE.PerspectiveCamera | THREE.OrthographicCamera,
-  target: THREE.Vector3,
-  bounds: Aabb,
-  canvas: ScreenRect,
-  safe: ScreenRect,
-): FitPose | null {
-  const probe = camera.clone();
-  const direction = camera.position.clone().sub(target).normalize();
-  const span = camera.position.distanceTo(target);
-  const corners = cornersOf(bounds).map(vec);
-  const centre = new THREE.Vector3().addVectors(vec(bounds.min), vec(bounds.max)).multiplyScalar(0.5);
-  const canvasWidth = canvas.right - canvas.left;
-  const canvasHeight = canvas.bottom - canvas.top;
-  const ortho = (probe as THREE.OrthographicCamera).isOrthographicCamera;
-  const place = (scale: number) => {
-    probe.position.copy(centre).addScaledVector(direction, ortho ? span : scale);
-    if (ortho) probe.zoom = 1 / scale;
-    probe.lookAt(centre);
-    probe.updateMatrixWorld();
-    probe.updateProjectionMatrix();
-    let left = Infinity;
-    let right = -Infinity;
-    let top = Infinity;
-    let bottom = -Infinity;
-    for (const corner of corners) {
-      const ndc = scratch.ndc.copy(corner).project(probe);
-      if (!ortho && ndc.z > 1) return null;
-      const x = ((ndc.x + 1) / 2) * canvasWidth;
-      const y = ((1 - ndc.y) / 2) * canvasHeight;
-      left = Math.min(left, x);
-      right = Math.max(right, x);
-      top = Math.min(top, y);
-      bottom = Math.max(bottom, y);
-    }
-    return { left, right, top, bottom };
-  };
-  const safeWidth = safe.right - safe.left - LABEL_REACH_PX * 2;
-  const safeHeight = safe.bottom - safe.top - LABEL_REACH_PX * 2;
-  if (safeWidth < 40 || safeHeight < 40) return null;
-  const fits = (scale: number) => {
-    const box = place(scale);
-    return box != null && box.right - box.left <= safeWidth && box.bottom - box.top <= safeHeight;
-  };
-  const start = ortho ? 1 / Math.max(probe.zoom, 1e-6) : Math.max(span, 1);
-  let lo = start / 64;
-  let hi = start;
-  while (!fits(hi) && hi < start * 4096) hi *= 2;
-  if (!fits(hi)) return null;
-  for (let i = 0; i < 40; i++) {
-    const mid = (lo + hi) / 2;
-    if (fits(mid)) hi = mid;
-    else lo = mid;
-  }
-  const box = place(hi);
-  if (!box) return null;
-  const wpp = worldPerPixel(probe, centre, canvasHeight);
-  const dx = (safe.left + safe.right) / 2 - canvas.left - (box.left + box.right) / 2;
-  const dy = (safe.top + safe.bottom) / 2 - canvas.top - (box.top + box.bottom) / 2;
-  const right = new THREE.Vector3().setFromMatrixColumn(probe.matrixWorld, 0);
-  const up = new THREE.Vector3().setFromMatrixColumn(probe.matrixWorld, 1);
-  const shift = right.multiplyScalar(-dx * wpp).addScaledVector(up, dy * wpp);
-  return {
-    position: probe.position.clone().add(shift),
-    target: centre.clone().add(shift),
-    zoom: ortho ? probe.zoom : camera.zoom,
-  };
-}
-
-type OrbitLike = {
-  target: THREE.Vector3;
-  update: () => void;
-  addEventListener: (type: "start", listener: () => void) => void;
-  removeEventListener: (type: "start", listener: () => void) => void;
-};
-type FitAnimation = { from: FitPose; to: FitPose; startedAt: number };
-
-function useSunDomeAutoFit(show: boolean, bounds: Aabb) {
-  const camera = useThree((state) => state.camera) as THREE.PerspectiveCamera | THREE.OrthographicCamera;
-  const controls = useThree((state) => state.controls) as unknown as OrbitLike | null;
-  const gl = useThree((state) => state.gl);
-  const invalidate = useThree((state) => state.invalidate);
-  const shown = useRef<boolean | null>(null);
-  const animation = useRef<FitAnimation | null>(null);
-
-  useEffect(() => {
-    const previous = shown.current;
-    shown.current = show;
-    if (!show || previous !== false || !controls) return;
-    const canvas = canvasScreenRect(gl.domElement);
-    const safe = hudSafeArea(canvas, liveHudRects(canvas));
-    const to = sunDomeFitPose(camera, controls.target, bounds, canvas, safe);
-    if (!to) return;
-    const from = { position: camera.position.clone(), target: controls.target.clone(), zoom: camera.zoom };
-    const reduced = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-    animation.current = { from, to, startedAt: reduced ? -Infinity : performance.now() };
-    const cancel = () => {
-      animation.current = null;
-    };
-    controls.addEventListener("start", cancel);
-    invalidate();
-    return () => controls.removeEventListener("start", cancel);
-  }, [show, bounds, camera, controls, gl, invalidate]);
-
-  useFrame(() => {
-    const run = animation.current;
-    if (!run || !controls) return;
-    const t = easeInOutCubic((performance.now() - run.startedAt) / SUN_DOME_FIT_MS);
-    camera.position.lerpVectors(run.from.position, run.to.position, t);
-    controls.target.lerpVectors(run.from.target, run.to.target, t);
-    camera.zoom = THREE.MathUtils.lerp(run.from.zoom, run.to.zoom, t);
-    camera.updateProjectionMatrix();
-    controls.update();
-    if (t >= 1) animation.current = null;
-    else invalidate();
-  });
 }
 
 export function SolarHeliodon({
@@ -639,10 +514,6 @@ export function SolarHeliodon({
   );
   const ground = useMemo<GroundHeight>(() => flatDialGround(dialPlaneY), [dialPlaneY]);
   const centre = useMemo(() => new THREE.Vector3(0, ground(0, 0) + HELIODON_LIFT_M, 0), [ground]);
-  const bounds = useMemo(
-    () => sunDomeBounds({ lat, lon, year, selected: { month, day }, radiusM: radius, groundY: dialPlaneY }),
-    [lat, lon, year, month, day, radius, dialPlaneY],
-  );
 
   const root = useDisposable(() => {
     const group = new THREE.Group() as DomeRoot;
@@ -712,7 +583,6 @@ export function SolarHeliodon({
     return retainPostOverlay(scene);
   }, [show, scene, camera]);
   useSunDomeFrame(show ? root : null, sunVisible ? dot : null, centre);
-  useSunDomeAutoFit(show, bounds);
 
   if (!show) return null;
   return (

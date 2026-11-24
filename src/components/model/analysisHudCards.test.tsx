@@ -293,7 +293,7 @@ describe("Sun dome size slider", () => {
     const source = (file: string) => readFileSync(path.join(process.cwd(), file), "utf8");
     expect(source("src/components/model/SolarStudyHudCard.tsx")).not.toMatch(/radiusFactor|HELIODON_RADIUS/);
     expect(source("src/components/SolarHeliodon.tsx")).toContain("const radius = radiusM ?? sunDomeRadiusM(sideM);");
-    expect(source("src/components/SolarHeliodon.tsx")).toContain("if (!show || previous !== false || !controls) return;");
+    expect(source("src/components/SolarHeliodon.tsx")).not.toMatch(/AutoFit|controls\.target/);
   });
 });
 
