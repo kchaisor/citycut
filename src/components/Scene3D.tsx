@@ -162,6 +162,7 @@ import {
   EXPLODE_CORNER_DASH_PX,
   EXPLODE_CORNER_GAP_PX,
   type ExplodeCornerSpan,
+  explodeLabelSafeRect,
   layoutExplodeLabels,
   noExplodeBoxes,
   noExplodeOffsets,
@@ -643,7 +644,7 @@ function ExplodeLabelProjector({
     const rt = runtime.current;
     const opacity = explodeLabelOpacity(rt.progress, exploding);
     const rect = opacity > 0 ? gl.domElement.getBoundingClientRect() : null;
-    const safe = rect ? explodeSafeRect(explodeViewRect(gl.domElement, size)) : null;
+    const view = rect ? explodeViewRect(gl.domElement, size) : null;
     camera.updateMatrixWorld();
     const right = camera.matrixWorld.elements;
     const shownLayers: ExplodeLayerId[] = [];
@@ -651,7 +652,7 @@ function ExplodeLabelProjector({
     for (const layer of EXPLODE_LAYERS) {
       const box = rt.boxes[layer];
       const world =
-        rect && safe && box
+        rect && view && box
           ? boundaryLabelAnchor(ring, box.min[1] + rt.offsets[layer], [right[0], right[1], right[2]])
           : null;
       if (!rect || !world) {
@@ -668,7 +669,7 @@ function ExplodeLabelProjector({
         y: rect.top + (-point.y * 0.5 + 0.5) * rect.height,
       });
     }
-    if (!safe || !shownLayers.length) return;
+    if (!view || !shownLayers.length) return;
     let width = 0;
     let height = 0;
     for (const layer of shownLayers) {
@@ -677,6 +678,7 @@ function ExplodeLabelProjector({
       width = Math.max(width, element.offsetWidth);
       height = Math.max(height, element.offsetHeight);
     }
+    const safe = explodeLabelSafeRect(view, liveHudRects(view), width, anchors);
     const layout = layoutExplodeLabels(anchors, width, height, safe);
     shownLayers.forEach((layer, index) => {
       const element = labelsRef.current[layer];

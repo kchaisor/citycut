@@ -20,6 +20,7 @@ import {
   explodeCornerPoints,
   explodeCornerSpan,
   explodeOutlineSpecs,
+  explodeLabelSafeRect,
   layoutExplodeLabels,
   separateExplodeLabels,
   layerOffsets,
@@ -357,5 +358,66 @@ describe("exploded bounds and camera fit", () => {
     }
     expect(layoutExplodeLabels([{ x: 360, y: 400 }], 110, 20, safe).rightX).toBe(448);
     expect(layoutExplodeLabels([{ x: 1300, y: 400 }], 110, 20, safe).rightX).toBe(1082);
+  });
+
+  const LABEL_VIEW = { left: 0, top: 0, right: 1440, bottom: 900 };
+  const LABEL_ANCHORS = [683, 612, 548, 485, 419, 213].map((y) => ({ x: 576, y }));
+
+  function expectClearColumn(ys: readonly number[], height: number, minY: number, maxY: number) {
+    const sorted = [...ys].sort((a, b) => a - b);
+    for (const y of ys) {
+      expect(y).toBeGreaterThanOrEqual(minY - 1e-6);
+      expect(y).toBeLessThanOrEqual(maxY + 1e-6);
+    }
+    for (let i = 1; i < sorted.length; i++) expect(sorted[i] - sorted[i - 1]).toBeGreaterThanOrEqual(height - 1e-6);
+  }
+
+  it("keeps every label at its own anchor when a tall panel sits beside the label column", () => {
+    const panel = { left: 75, top: 70, right: 320, bottom: 440 };
+    const safe = explodeLabelSafeRect(LABEL_VIEW, [panel], 60, LABEL_ANCHORS);
+    expect(safe).toEqual(LABEL_VIEW);
+    const layout = layoutExplodeLabels(LABEL_ANCHORS, 60, 20, safe);
+    layout.ys.forEach((y, i) => expect(Math.abs(y - LABEL_ANCHORS[i].y)).toBeLessThanOrEqual(1));
+    for (const y of layout.ys) {
+      expect(y - 10).toBeGreaterThanOrEqual(0);
+      expect(y + 10).toBeLessThanOrEqual(900);
+    }
+  });
+
+  it("keeps labels inside the band, in order and apart, when the anchors are taller than the band", () => {
+    const anchors = [900, 700, 500, 300, 100, -40].map((y) => ({ x: 576, y }));
+    const safe = { left: 0, top: 100, right: 1440, bottom: 400 };
+    const layout = layoutExplodeLabels(anchors, 60, 20, safe);
+    expectClearColumn(layout.ys, 22, 110, 390);
+    for (let i = 1; i < layout.ys.length; i++) expect(layout.ys[i]).toBeLessThan(layout.ys[i - 1]);
+    const crowded = layoutExplodeLabels(
+      [400, 400, 400, 400, 400, 400].map((y) => ({ x: 576, y })),
+      60,
+      20,
+      { left: 0, top: 300, right: 1440, bottom: 500 },
+    );
+    expectClearColumn(crowded.ys, 22, 310, 490);
+  });
+
+  it("pushes labels clear of a panel that overlaps the label column", () => {
+    const top = { left: 480, top: 0, right: 700, bottom: 300 };
+    const safeTop = explodeLabelSafeRect(LABEL_VIEW, [top], 60, LABEL_ANCHORS);
+    expect(safeTop.top).toBeGreaterThanOrEqual(300);
+    const layoutTop = layoutExplodeLabels(LABEL_ANCHORS, 60, 20, safeTop);
+    for (const y of layoutTop.ys) expect(y - 10).toBeGreaterThanOrEqual(300);
+    expectClearColumn(layoutTop.ys, 24, safeTop.top + 10, safeTop.bottom - 10);
+
+    const rail = { left: 75, top: 70, right: 540, bottom: 460 };
+    const safeRail = explodeLabelSafeRect(LABEL_VIEW, [rail], 60, LABEL_ANCHORS);
+    const layoutRail = layoutExplodeLabels(LABEL_ANCHORS, 60, 20, safeRail);
+    expect(layoutRail.rightX).toBeLessThanOrEqual(564);
+    for (const y of layoutRail.ys) expect(y - 10).toBeGreaterThanOrEqual(rail.bottom);
+
+  });
+
+  it("separates labels from both ends without leaving the band", () => {
+    expect(separateExplodeLabels([100, 100, 100], 24, 90, 500)).toEqual([138, 114, 90]);
+    expect(separateExplodeLabels([600, 600, 600], 24, 0, 500)).toEqual([500, 476, 452]);
+    expect(separateExplodeLabels([0, 10, 20], 100, 0, 100)).toEqual([0, 50, 100]);
   });
 });
