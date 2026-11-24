@@ -155,8 +155,22 @@ export function arrowToolKeyAction(state: ArrowToolState, key: string): ArrowToo
 
 export type ArrowClick = { ground: Pt; hit: { id: string; point: number | null } | null };
 
-export function arrowToolClickActions(state: ArrowToolState, click: ArrowClick): ArrowToolAction[] {
+export const DOUBLE_CLICK_MS = 350;
+export const DOUBLE_CLICK_PX = 6;
+
+export type ClickStamp = { t: number; x: number; y: number };
+
+export function isDoubleClick(previous: ClickStamp | null, next: ClickStamp): boolean {
+  return (
+    previous !== null &&
+    next.t - previous.t <= DOUBLE_CLICK_MS &&
+    Math.hypot(next.x - previous.x, next.y - previous.y) <= DOUBLE_CLICK_PX
+  );
+}
+
+export function arrowToolClickActions(state: ArrowToolState, click: ArrowClick, double = false): ArrowToolAction[] {
   if (!state.active) return [];
+  if (double && state.draft) return [{ type: "finishDraft" }];
   if (state.draft) return [{ type: "addPoint", point: click.ground }];
   if (click.hit) return [{ type: "select", id: click.hit.id, point: click.hit.point }];
   if (state.selectedId) return [{ type: "select", id: null }];

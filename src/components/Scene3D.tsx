@@ -133,6 +133,14 @@ import {
 import { windSceneLayers } from "../lib/windState";
 import { GroundWindFlow } from "./GroundWindFlow";
 import { WindDiagramStreams } from "./WindDiagramStreams";
+import { DiagramArrows3D, type ArrowExportLabels, type ArrowScreenLabel } from "./DiagramArrows3D";
+import type { ArrowToolAction, ArrowToolState } from "../lib/diagramArrowsTool";
+
+export type DiagramArrowsBinding = {
+  state: ArrowToolState;
+  dispatch: (action: ArrowToolAction) => void;
+  onLabels: (labels: ArrowScreenLabel[]) => void;
+};
 import type { PrevailingStream } from "../lib/windPrevailingStreams";
 import { createWindPlanTransformStore, WindPlanOverlay, WindPlanProjector } from "./WindPlanOverlay";
 import type { WindPlanState } from "./useWindPlan";
@@ -1041,6 +1049,7 @@ function City({
   onClearSceneInspect,
   pickBuildings,
   onScenePoint,
+  arrowToolActive = false,
   sectionKnife,
   onSectionKnifePoseChange,
   onSectionKnifeGizmoInteractionChange,
@@ -1078,6 +1087,7 @@ function City({
   onClearSceneInspect?: () => void;
   pickBuildings: boolean;
   onScenePoint?: ((east: number, north: number, up: number) => void) | null;
+  arrowToolActive?: boolean;
   sectionKnife?: SectionKnifeToolState | null;
   onSectionKnifePoseChange?: (pose: SectionKnifePose) => void;
   onSectionKnifeGizmoInteractionChange?: (state: SectionKnifeGizmoInteraction) => void;
@@ -1643,7 +1653,7 @@ function City({
       <SceneInspectPickLayer
         root={group}
         model={model}
-        enabled={!sectionKnife?.active && !onScenePoint}
+        enabled={!sectionKnife?.active && !onScenePoint && !arrowToolActive}
         buildingsPickable={pickBuildings && buildingsVisible}
         treesPickable={Boolean(model.layers.trees) && treesVisible}
         importedMassing={importedMassing}
@@ -2563,6 +2573,7 @@ function ExportBridge({
   onExportReady,
   solarDiagramOn,
   landmarkLabelsRef,
+  arrowLabelsRef,
   ortho,
   orthoControls,
   siteBounds,
@@ -2570,6 +2581,7 @@ function ExportBridge({
   onExportReady: (exporter: SceneExporter | null) => void;
   solarDiagramOn: boolean;
   landmarkLabelsRef?: RefObject<LandmarkExportLabels | null>;
+  arrowLabelsRef?: RefObject<ArrowExportLabels | null>;
   ortho: THREE.OrthographicCamera;
   orthoControls: RefObject<OrbitControlsImpl | null>;
   siteBounds: Aabb;
@@ -2583,7 +2595,7 @@ function ExportBridge({
       png: async () => {
         const city = scene.getObjectByName("CityCut");
         const render = () =>
-          captureViewPng(gl, scene, get().camera, exportFrameSize(gl.domElement), landmarkLabelsRef?.current ?? null);
+          captureViewPng(gl, scene, get().camera, exportFrameSize(gl.domElement), landmarkLabelsRef?.current ?? null, arrowLabelsRef?.current ?? null);
         if (city && solarDiagramOn) return withBuildingExportColours(city, false, render);
         return render();
       },
@@ -2631,7 +2643,7 @@ function ExportBridge({
       },
     });
     return () => onExportReady(null);
-  }, [gl, scene, get, invalidate, onExportReady, solarDiagramOn, landmarkLabelsRef, ortho, orthoControls, siteBounds]);
+  }, [gl, scene, get, invalidate, onExportReady, solarDiagramOn, landmarkLabelsRef, arrowLabelsRef, ortho, orthoControls, siteBounds]);
   return null;
 }
 
@@ -2767,6 +2779,7 @@ export function Cameras({
   frameWidthM,
   frameHeightM,
   landmarkLabelsRef,
+  arrowLabelsRef,
   explode,
   explodeLive = false,
 }: {
@@ -2793,6 +2806,7 @@ export function Cameras({
   frameWidthM: number;
   frameHeightM: number;
   landmarkLabelsRef?: RefObject<LandmarkExportLabels | null>;
+  arrowLabelsRef?: RefObject<ArrowExportLabels | null>;
   explode?: RefObject<ExplodeRuntime>;
   explodeLive?: boolean;
 }) {
@@ -3045,6 +3059,7 @@ export function Cameras({
             onExportReady={onExportReady}
             solarDiagramOn={solarDiagramOn}
             landmarkLabelsRef={landmarkLabelsRef}
+            arrowLabelsRef={arrowLabelsRef}
             ortho={ortho}
             orthoControls={orthoControls}
             siteBounds={cutBounds}
@@ -3126,6 +3141,7 @@ export function Scene3D({
   walkRippleArrivals = null,
   walkRipplePlaying = false,
   onScenePoint = null,
+  diagramArrows = null,
   sectionKnife = null,
   onSectionKnifePoseChange = undefined,
   onCompassHeading = undefined,
@@ -3182,6 +3198,7 @@ export function Scene3D({
   walkRippleArrivals?: Map<number, number> | null;
   walkRipplePlaying?: boolean;
   onScenePoint?: ((east: number, north: number, up: number) => void) | null;
+  diagramArrows?: DiagramArrowsBinding | null;
   sectionKnife?: SectionKnifeToolState | null;
   onSectionKnifePoseChange?: (pose: SectionKnifePose) => void;
   onCompassHeading?: (deg: number) => void;
@@ -3222,6 +3239,7 @@ export function Scene3D({
     [explodeRuntime, inspectAnchor, inspectAnchorLayer],
   );
   const landmarkExportRef = useRef<LandmarkExportLabels | null>(null);
+  const arrowExportRef = useRef<ArrowExportLabels | null>(null);
   const sceneCutKey = modelCutSiteId(model.center, model.sideM);
   const introSkip = useMemo(
     () => introAlreadyPlayedForCut(introPlayed?.current ?? null, sceneCutKey),
@@ -3390,8 +3408,9 @@ export function Scene3D({
         onBounds={onBounds}
         onSceneInspectPick={onInspectPick}
         onClearSceneInspect={onClearSceneInspect}
-        pickBuildings={model.layers.buildings && !onScenePoint}
+        pickBuildings={model.layers.buildings && !onScenePoint && !diagramArrows?.state.active}
         onScenePoint={onScenePoint}
+        arrowToolActive={Boolean(diagramArrows?.state.active)}
         heightEditBuildingId={heightEditBuildingId}
         selectedBuildingIds={selectedBuildingIds}
         display={display}
@@ -3453,6 +3472,16 @@ export function Scene3D({
           exportRef={landmarkExportRef}
         />
       ) : null}
+      {diagramArrows ? (
+        <DiagramArrows3D
+          model={model}
+          state={diagramArrows.state}
+          dispatch={diagramArrows.dispatch}
+          active={active}
+          labelsRef={arrowExportRef}
+          onLabels={diagramArrows.onLabels}
+        />
+      ) : null}
       {onCompassHeading ? <StudioCompassTracker onHeading={onCompassHeading} /> : null}
       <WindLayer
         model={windModel ?? model}
@@ -3491,6 +3520,7 @@ export function Scene3D({
         introEnabled={!introSkip}
         gizmoOrbitLock={sectionKnifeGizmoInteraction.orbitLock}
         landmarkLabelsRef={landmarkExportRef}
+        arrowLabelsRef={arrowExportRef}
         explode={explodeRuntime}
         explodeLive={explodeLive}
       />

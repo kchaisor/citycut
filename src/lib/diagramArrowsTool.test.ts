@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { DEFAULT_ARROW } from "./diagramArrows";
 import {
   arrowToolClickActions,
+  isDoubleClick,
   arrowToolKeyAction,
   arrowToolReducer,
   initialArrowToolState,
@@ -134,5 +135,18 @@ describe("arrow tool clicks", () => {
 
   it("does nothing when the tool is off", () => {
     expect(arrowToolClickActions(initialArrowToolState(), { ground: [0, 0], hit: null })).toEqual([]);
+  });
+
+  it("finishes the draft on the second click of a double-click without adding a point", () => {
+    const drafting = run(ACTIVE, { type: "beginDraft" }, { type: "addPoint", point: [0, 0] }, { type: "addPoint", point: [9, 0] });
+    expect(arrowToolClickActions(drafting, { ground: [9.1, 0], hit: null }, true)).toEqual([{ type: "finishDraft" }]);
+    expect(arrowToolClickActions(ACTIVE, { ground: [9, 0], hit: null }, true)[0]).toEqual({ type: "beginDraft" });
+  });
+
+  it("recognises a double-click by time and distance", () => {
+    expect(isDoubleClick(null, { t: 0, x: 0, y: 0 })).toBe(false);
+    expect(isDoubleClick({ t: 0, x: 10, y: 10 }, { t: 200, x: 12, y: 11 })).toBe(true);
+    expect(isDoubleClick({ t: 0, x: 10, y: 10 }, { t: 900, x: 10, y: 10 })).toBe(false);
+    expect(isDoubleClick({ t: 0, x: 10, y: 10 }, { t: 100, x: 60, y: 10 })).toBe(false);
   });
 });

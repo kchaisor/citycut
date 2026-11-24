@@ -5151,6 +5151,7 @@ body,
 }
 .landmark-label.is-visible { opacity: 1; pointer-events: auto; }
 .landmark-label:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.landmark-label.arrow-label.is-visible { pointer-events: none; cursor: default; }
 
 .explode-label-layer {
   position: fixed;
