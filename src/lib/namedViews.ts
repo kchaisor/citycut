@@ -9,7 +9,9 @@ import type { RenderQuality } from "./renderQuality";
 import { NO_ANALYSES, SITE_ANALYSIS_KINDS, type ActiveAnalyses } from "./sidebarSections";
 import type { View3dDisplaySettings } from "./view3dDisplay";
 import type { ViewMemory } from "./viewMemory";
-import type { WindViewSettings } from "./windState";
+import { isDesignWindId } from "./windDesignWinds";
+import { isWindDaypartId } from "./windDayparts";
+import { isWindPeriod, type WindViewSettings } from "./windState";
 import type { WindPlanMode } from "./windPlanField";
 
 export const NAMED_VIEWS_STORAGE_KEY = "citycut.namedViews.v1";
@@ -115,6 +117,19 @@ function parseWindPlan(value: unknown): NamedViewWindPlan {
   };
 }
 
+function parseWind(value: Record<string, unknown>): WindViewSettings {
+  const text = (field: unknown): string | null => (typeof field === "string" ? field : null);
+  const period = text(value.period);
+  const designWind = text(value.designWind);
+  const daypart = text(value.daypart);
+  return {
+    enabled: value.enabled === true,
+    period: isWindPeriod(period) ? period : "annual",
+    designWind: isDesignWindId(designWind) ? designWind : null,
+    daypart: isWindDaypartId(daypart) ? daypart : "all",
+  };
+}
+
 function parseSnapshot(value: unknown): NamedViewSnapshot | null {
   if (!isRecord(value)) return null;
   const view = parseViewMemory(value.view);
@@ -131,7 +146,7 @@ function parseSnapshot(value: unknown): NamedViewSnapshot | null {
     drawing: DRAWING_KINDS.find((d) => d === value.drawing) ?? "site",
     analyses,
     solar: { ...value.solar } as SolarViewSettings,
-    wind: { ...value.wind } as WindViewSettings,
+    wind: parseWind(value.wind),
     windStreaksOn: value.windStreaksOn === true,
     windPlan: parseWindPlan(value.windPlan),
     renderQuality: value.renderQuality === "fast" ? "fast" : "high",

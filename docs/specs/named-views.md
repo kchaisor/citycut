@@ -28,6 +28,10 @@ Sketch or screenshot: no Paper mock (Paper weekly limit still in force, 24 Nov 2
 10. **Export selected and Export all capture exploded views as shown and never collapse them.** An exploded view exports exploded (labels, outlines, corner lines and layer gap), an assembled view exports assembled, whatever the current state. Export waits for the stack to be fully in place, nothing animates, and the view you were on, exploded or not, is put back afterwards.
 11. **Export restores your exact view, with no animation.** After any export the tab, projection, exploded state and gap, and the camera position, target and zoom are back exactly as before, and the restore never plays a collapse or re-fits the camera.
 
+### Kelvin's preference (24 Nov 2026, 3:21 PM AEDT)
+
+12. **Plan wind views export as an A3 sheet with the wind rose beside the map.** When you export a named view that is in Plan with Wind Rose on, the PNG is an A3 landscape sheet: the plan wind map on the left and, in a column on the right, the site name and view name, the wind rose for the season and time of day saved in that view, the speed scale, prevailing wind and calm, the plan legend, and the station and "Indicative only, not a CFD study" notes. These are for exported named views only, so the on-screen view and every other export stay as they are.
+
 ### Out of scope
 
 - Sharing views between computers or accounts, cloud sync, and embedding views in a URL.
@@ -38,6 +42,7 @@ Sketch or screenshot: no Paper mock (Paper weekly limit still in force, 24 Nov 2
 - [ ] Saving a view, reloading the page, and clicking the view brings back the camera and the switched-on analysis, display and Satellite / 3D / Drawing settings.
 - [ ] Two different cuts keep separate lists.
 - [ ] Export selected downloads only the ticked views; Export all downloads every saved view for this cut. One view is a PNG; more than one is a zip of PNGs named after the views.
+- [ ] Exporting a Plan view with Wind Rose on (for example "WS - Spring", Morning) gives an A3 landscape PNG with the map and that view's own wind rose, season and time of day; other views export as before.
 - [ ] The Views tab opens a panel that matches the Import card style.
 
 ## Estimated runs
@@ -61,3 +66,4 @@ Sketch or screenshot: no Paper mock (Paper weekly limit still in force, 24 Nov 2
 - **Overlays in the PNG.** The wind plan heatmap is a DOM canvas over the 3D canvas, so it is drawn into the PNG after the 3D frame. Landmark height pills are drawn at full opacity at the output scale. The compass N/S/E/W and sun dome date marks are 3D sprites, so they are already in the render.
 - **Known gaps.** The wind plan canvas is drawn at its on-screen resolution, so it is softer than the 3D render in high quality. Dome sprite text is also rasterised at on-screen resolution. Satellite and Drawing views remain restore only.
 - **Sun dome and wind streaks in 3D exports.** 3D exports include the sun dome and wind streaks (the same post-overlay objects you see on screen), in both normal and HQ modes, for the current view and for a restored saved view. The capture render enables the post-overlay layer on the camera for that frame, because the studio post pass hides it from the live camera while it draws them separately.
+- **A3 wind sheet.** A saved view with 3D, Plan and Wind Rose on exports as an A3 landscape sheet (`src/lib/windSheet.ts`): 2480 x 1754 px (150 dpi), or 4961 x 3508 px (300 dpi) with no page fill for High quality, transparent. The usual WYSIWYG capture is fitted, undistorted, in the left area (about 68% of the width) inside a hairline frame. The right column holds the site name and view name, the wind rose, "Spring · Morning" style label, speed scale, prevailing wind and calm, the plan legend (speed or comfort), and the station, source and CFD notes. The rose, season and time of day come from that view's own saved values (`wind.period`, `wind.daypart`, design wind), not from the screen. The snapshot parser now validates those fields and older views open as Annual and All day with no design wind. With no wind data the view exports as the plain PNG. The Quick export 2x PNG, Rhino and `.ai` are untouched.

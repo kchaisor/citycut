@@ -283,3 +283,32 @@ describe("named view file names", () => {
     );
   });
 });
+
+describe("saved wind season and time of day", () => {
+  function reopen(wind: unknown) {
+    const view = { id: "v", name: "Wind", savedAt: 1, snapshot: { ...SNAPSHOT, wind } };
+    return applyNamedView(view as never)!.wind;
+  }
+
+  it("falls back to annual, all day and no design wind for older or invalid views", () => {
+    const fallback = { enabled: true, period: "annual", designWind: null, daypart: "all" };
+    expect(reopen({ enabled: true })).toEqual(fallback);
+    expect(reopen({ enabled: true, period: "monsoon", daypart: "midnight", designWind: "north" })).toEqual(fallback);
+    expect(reopen({ enabled: true, period: 4, daypart: null, designWind: 7 })).toEqual(fallback);
+  });
+
+  it("round-trips Spring, Morning and a design wind", () => {
+    expect(reopen({ enabled: false, period: "spring", daypart: "morning", designWind: null })).toEqual({
+      enabled: false,
+      period: "spring",
+      designWind: null,
+      daypart: "morning",
+    });
+    expect(reopen({ enabled: true, period: "annual", daypart: "afternoon", designWind: "design-ne" }).designWind).toBe("design-ne");
+    const saved = captureNamedView("Spring", { ...SNAPSHOT, wind: { enabled: true, period: "spring", designWind: null, daypart: "morning" } })!;
+    const store = saveView(emptyNamedViewsStore(), "cut", saved);
+    const reread = parseNamedViewsStore(JSON.stringify(store));
+    expect(reread.byCut.cut![0]!.snapshot.wind).toMatchObject({ period: "spring", daypart: "morning" });
+  });
+});
+

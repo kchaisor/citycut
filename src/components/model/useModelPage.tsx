@@ -139,6 +139,7 @@ import { SceneExporter } from "../Scene3D";
 
 import type { CameraMemoryRef, CameraRestoreRequest } from "../../lib/cameraMemory";
 import type { NamedViewSnapshot } from "../../lib/namedViews";
+import type { WindSheetSource } from "../../lib/windSheet";
 import { useNamedViews } from "./useNamedViews";
 import { explodeSettledOnCanvas, waitForExplodeSettled, waitForStudies, type StudyReadySignals } from "../../lib/studyReady";import { ExportBusy } from "../../lib/exportTiles";
 
@@ -2029,6 +2030,11 @@ export function useModelPage({
     });
   }
 
+  const windSheetSource = useRef<WindSheetSource>({ selection: null, scaleMaxMs: null, comfortShares: null });
+  useEffect(() => {
+    windSheetSource.current = { selection: siteWind, scaleMaxMs: windPlan.scaleMaxMs, comfortShares: windPlan.comfortShares };
+  });
+
   const studySignals = useRef<StudyReadySignals>({
     sunHoursPending: false,
     sunHoursSurfacesPending: false,
@@ -2051,6 +2057,7 @@ export function useModelPage({
     getSnapshot: namedViewSnapshot,
     applySnapshot: applyNamedViewSnapshot,
     getExporter: () => exportRef.current,
+    getWindSheetSource: () => windSheetSource.current,
     waitUntilReady: (snapshot) =>
       waitForStudies(snapshot, () => ({ ...studySignals.current, explodeSettled: explodeSettledOnCanvas(snapshot.exploded) })),
   });
