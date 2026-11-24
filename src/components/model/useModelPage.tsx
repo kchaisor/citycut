@@ -8,7 +8,12 @@ import { viewportIsNarrow } from "../../lib/panelCollapse";
 import * as THREE from "three";import { BUILDING_USES, BUILDING_USE_META, countSourcesGrouped, countUses, uniformBuildingColor } from "../../lib/buildingUse";
 
 import { commitColour, getColour, resetStoredColours } from "../../lib/colours";
-import { viewStyleFootpathChipColor, viewStyleRoadChipColor } from "../../lib/viewStyle3d";
+import {
+  viewStyleFootpathChipColor,
+  viewStyleFootpathColourTokens,
+  viewStyleRoadChipColor,
+  viewStyleRoadColourTokens,
+} from "../../lib/viewStyle3d";
 import { useColourRevision } from "../../lib/useColourRevision";import { mgaCrs } from "../../lib/crsZone";
 
 import { planHeliodonForExport } from "../../lib/planHeliodonExport";
@@ -2130,11 +2135,11 @@ export function useModelPage({
         color: viewStyleRoadChipColor(view3dDisplay.primaryView, colourByUse, showSource),
         available: model.layers.roads && model.roads.some((r) => r.kind === "road" && r.grade !== "path"),
         onPick: (value: string) => {
-          commitColour("--road-local", value);
-          commitColour("--road-arterial", value);
-          commitColour("--road-fill", value);
-          if (view3dDisplay.primaryView || !isLayer3dVisible(view3dDisplay, "roads")) {
-            commitView3dDisplay(setLayer3dVisible({ ...view3dDisplay, primaryView: false }, "roads", true));
+          for (const token of viewStyleRoadColourTokens(view3dDisplay.primaryView, colourByUse, showSource)) {
+            commitColour(token, value);
+          }
+          if (!isLayer3dVisible(view3dDisplay, "roads")) {
+            commitView3dDisplay(setLayer3dVisible(view3dDisplay, "roads", true));
           }
           setLineStyles(readDrawingStyle());
         },
@@ -2146,10 +2151,11 @@ export function useModelPage({
         color: viewStyleFootpathChipColor(view3dDisplay.primaryView, colourByUse, showSource),
         available: model.layers.roads && model.roads.some((r) => r.kind === "road" && r.grade === "path"),
         onPick: (value: string) => {
-          commitColour("--road-path", value);
-          commitColour("--path-fill", value);
-          if (view3dDisplay.primaryView || !isLayer3dVisible(view3dDisplay, "footpaths")) {
-            commitView3dDisplay(setLayer3dVisible({ ...view3dDisplay, primaryView: false }, "footpaths", true));
+          for (const token of viewStyleFootpathColourTokens(view3dDisplay.primaryView, colourByUse, showSource)) {
+            commitColour(token, value);
+          }
+          if (!isLayer3dVisible(view3dDisplay, "footpaths")) {
+            commitView3dDisplay(setLayer3dVisible(view3dDisplay, "footpaths", true));
           }
           setLineStyles(readDrawingStyle());
         },
