@@ -4,7 +4,7 @@ import { ISO_FIT_MARGIN } from "./isoCamera";
 import { PLAN_CAMERA_UP, planEye, sitePlanBounds } from "./planCamera";
 import { sheetCropRect } from "./captureViewportPng";
 import { WIND_SHEET_FRAMING, projectionCentre, wholeSiteFraming } from "./sheetFraming";
-import { windSheetCropOption } from "./windSheet";
+import { trimmedFrame, windSheetCropOption } from "./windSheet";
 
 const FILL = { width: 1120, height: 900 };
 const INSET = 320;
@@ -97,5 +97,28 @@ describe("projectionCentre", () => {
 
   it("sits at the fill centre when the view is inset", () => {
     expect(projectionCentre(CANVAS, planCamera(INSET).view)).toEqual({ x: INSET + FILL.width / 2, y: FILL.height / 2 });
+  });
+});
+
+describe("sheet map scale for the Rozelle 1.47 km cut", () => {
+  it("keeps the whole cut in the capture and reports exactly the cut width after the trim", () => {
+    const crop = windSheetCropOption(false);
+    const rect = sheetCropRect({ width: 1440, height: 900 }, { x: 0, y: 0, width: 1440, height: 900 }, crop.aspect);
+    expect(rect.width).toBeCloseTo(943.6, 0);
+    expect(rect.height).toBe(900);
+
+    const cut = 1471;
+    const zoom = wholeSiteFraming(sitePlanBounds(cut, 0, 60), { x: 720, y: 450 }, rect).zoom;
+    expect(zoom).toBeCloseTo(0.5665, 3);
+
+    const ratio = crop.minWidthPx / rect.width;
+    const captureWidthPx = Math.round(crop.minWidthPx);
+    const cutPx = cut * zoom * ratio;
+    expect(cutPx).toBeLessThan(rect.height * ratio);
+    expect(cutPx).toBeLessThan(captureWidthPx);
+
+    const metresAcross = rect.width / zoom;
+    const trimmed = trimmedFrame({ metresAcross, northRad: null }, captureWidthPx, { x: 0, y: 0, width: Math.round(cutPx), height: Math.round(cutPx) });
+    expect(trimmed.metresAcross).toBeCloseTo(cut, -1);
   });
 });
