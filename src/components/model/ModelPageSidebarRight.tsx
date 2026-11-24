@@ -281,18 +281,6 @@ export function ModelPageSidebarRight({ vm }: { vm: import("./useModelPage").Mod
                       onChange={(event) => vm.diagramArrows.dispatch({ type: "setVisible", visible: event.target.checked })}
                     />
                   </label>
-                  <button
-                    type="button"
-                    className="arrows-tool-btn"
-                    aria-pressed={vm.diagramArrows.state.active}
-                    onClick={() => {
-                      const { state, dispatch } = vm.diagramArrows;
-                      if (!state.visible) dispatch({ type: "setVisible", visible: true });
-                      dispatch({ type: "setActive", active: !state.active });
-                    }}
-                  >
-                    Arrows
-                  </button>
                 </section>
                 <section className="sidebar-group">
                   <div className="sidebar-gh">

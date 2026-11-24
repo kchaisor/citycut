@@ -834,6 +834,7 @@ describe("Display panel controls by view tab", () => {
       "Viewshed Walk",
       "High",
       "Fast",
+      "Arrows",
     ]);
     expect(document.querySelector(".analysis-hud-card")).toBeNull();
     expect(screen.queryByLabelText("Live solar telemetry")).toBeNull();

@@ -5,7 +5,6 @@ import type { Pt, CityModel } from "../types";
 import { getColour } from "../lib/colours";
 import {
   ARROW_COLOUR_TOKENS,
-  arrowLabelAnchor,
   buildArrowShape,
   distanceToPath,
   nearestPointIndex,
@@ -13,7 +12,7 @@ import {
   visibleIn3d,
   type DiagramArrow,
 } from "../lib/diagramArrows";
-import { arrowShapeGeometry, arrowWorldPoint, groundAtFor, intersectArrowPlane } from "../lib/diagramArrows3d";
+import { arrowShapeGeometry, arrowWorldPoint, groundAtFor, intersectArrowPlane, markArrowEditor, type ArrowScreenLabel, projectArrowLabels, projectGroundPoint } from "../lib/diagramArrows3d";
 import {
   arrowToolClickActions,
   isDoubleClick,
@@ -25,13 +24,12 @@ import {
 import { markScreenOnly } from "../lib/screenOnly";
 import { useColourRevision } from "../lib/useColourRevision";
 
-export type ArrowScreenLabel = { id: string; text: string; x: number; y: number };
+export type { ArrowScreenLabel };
 export type ArrowExportLabels = (camera: THREE.Camera, width: number, height: number) => ArrowScreenLabel[];
 
 const HANDLE_HIT_PX = 12;
 const BODY_HIT_PX = 9;
 const CLICK_MAX_PX = 5;
-const LABEL_LIFT_PX = 16;
 const HANDLE_SIDE_FRAC = 0.008;
 
 function disposeGroup(group: THREE.Group): void {
@@ -75,13 +73,8 @@ function handleMesh(at: THREE.Vector3, radius: number, selected: boolean): THREE
   mesh.renderOrder = 60;
   mesh.userData.noScenePick = true;
   markScreenOnly(mesh);
+  markArrowEditor(mesh);
   return mesh;
-}
-
-function projectPoint(camera: THREE.Camera, world: THREE.Vector3, rect: { width: number; height: number }): Pt | null {
-  const ndc = world.clone().project(camera);
-  if (ndc.z < -1 || ndc.z > 1) return null;
-  return [(ndc.x * 0.5 + 0.5) * rect.width, (-ndc.y * 0.5 + 0.5) * rect.height];
 }
 
 export function DiagramArrows3D({
@@ -140,6 +133,7 @@ export function DiagramArrows3D({
       const mesh = preview.length >= 2 ? arrowMesh({ ...state.defaults, points: preview }, model, groundAt, 0.65) : null;
       if (mesh) {
         markScreenOnly(mesh);
+        markArrowEditor(mesh);
         root.add(mesh);
       }
       for (const point of draft) root.add(handleMesh(arrowWorldPoint(point, groundAt, state.defaults.heightM), handleRadius, false));
@@ -174,7 +168,7 @@ export function DiagramArrows3D({
 
     const screenPath = (arrow: Pick<DiagramArrow, "points" | "heightM">, rect: DOMRect): Pt[] =>
       smoothArrowPath(arrow.points).flatMap((point) => {
-        const at = projectPoint(camera, arrowWorldPoint(point, groundRef.current, arrow.heightM), rect);
+        const at = projectGroundPoint(camera, arrowWorldPoint(point, groundRef.current, arrow.heightM), rect);
         return at ? [at] : [];
       });
 
@@ -185,7 +179,7 @@ export function DiagramArrows3D({
       const current = stateRef.current;
       const selected = selectedArrow(current);
       if (selected?.showIn3d) {
-        const handles = selected.points.map((point) => projectPoint(camera, arrowWorldPoint(point, groundRef.current, selected.heightM), rect) ?? [-1e6, -1e6]);
+        const handles = selected.points.map((point) => projectGroundPoint(camera, arrowWorldPoint(point, groundRef.current, selected.heightM), rect) ?? [-1e6, -1e6]);
         const index = nearestPointIndex(handles as Pt[], local, HANDLE_HIT_PX);
         if (index !== null) return { id: selected.id, point: index };
       }
@@ -264,18 +258,8 @@ export function DiagramArrows3D({
   const labelSignature = useRef("");
   const labelled = useMemo(() => arrows.filter((arrow) => arrow.label.trim() !== ""), [arrows]);
 
-  const projectLabels = (cam: THREE.Camera, width: number, height: number, offsetX: number, offsetY: number): ArrowScreenLabel[] => {
-    cam.updateMatrixWorld();
-    const rect = { width, height };
-    const out: ArrowScreenLabel[] = [];
-    for (const arrow of labelled) {
-      const anchor = arrowLabelAnchor(arrow.points);
-      const at = projectPoint(cam, arrowWorldPoint(anchor, groundRef.current, arrow.heightM), rect);
-      if (!at || at[0] < 0 || at[0] > width || at[1] < 0 || at[1] > height) continue;
-      out.push({ id: arrow.id, text: arrow.label.trim(), x: offsetX + at[0], y: offsetY + at[1] - LABEL_LIFT_PX });
-    }
-    return out;
-  };
+  const projectLabels = (cam: THREE.Camera, width: number, height: number, offsetX: number, offsetY: number): ArrowScreenLabel[] =>
+    projectArrowLabels(cam, labelled, groundRef.current, width, height, offsetX, offsetY);
 
   useEffect(() => {
     if (labelled.length === 0) {

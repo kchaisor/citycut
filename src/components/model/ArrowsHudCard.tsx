@@ -13,7 +13,7 @@ import {
   MAX_ARROW_LABEL_LENGTH,
   type DiagramArrow,
 } from "../../lib/diagramArrows";
-import { selectedArrow, type ArrowToolAction, type ArrowToolState } from "../../lib/diagramArrowsTool";
+import { ARROW_LABEL_FIELD_ID, selectedArrow, type ArrowToolAction, type ArrowToolState } from "../../lib/diagramArrowsTool";
 import { ArrowStyleSwatch } from "../DiagramArrowsDrawing";
 import { AnalysisHudCard } from "./AnalysisHudCard";
 
@@ -111,11 +111,11 @@ export function ArrowsHudCard({ arrows }: { arrows: ArrowsCardModel }) {
         />
       </div>
       <div className="ac-section">
-        <label className="ac-kicker" htmlFor="arrow-label">
+        <label className="ac-kicker" htmlFor={ARROW_LABEL_FIELD_ID}>
           Label
         </label>
         <input
-          id="arrow-label"
+          id={ARROW_LABEL_FIELD_ID}
           className="arrow-field"
           type="text"
           maxLength={MAX_ARROW_LABEL_LENGTH}

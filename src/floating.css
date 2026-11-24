@@ -5692,6 +5692,4 @@ body,
 .arrow-list li { display: flex; justify-content: space-between; gap: 6px; }
 .arrow-list li.is-on .arrow-list-select { font-weight: 600; }
 .arrow-list button { background: transparent; border: 0; color: var(--ink); font: inherit; font-size: 12px; cursor: pointer; padding: 2px 0; }
-.arrows-tool-btn { margin-top: 8px; width: 100%; padding: 6px 8px; border: 1px solid var(--float-tile-line); border-radius: 6px; background: transparent; color: var(--ink); font: inherit; cursor: pointer; }
-.arrows-tool-btn[aria-pressed="true"] { background: var(--ink); color: var(--on-ink); }
 .arrow-swatch { display: block; }

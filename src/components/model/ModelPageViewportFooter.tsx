@@ -1,4 +1,4 @@
-import { Eye, Sun, Wind } from "lucide-react";
+import { Eye, MoveUpRight, Sun, Wind } from "lucide-react";
 
 import { activeAnalysisKinds, toggleAnalysis, type SiteAnalysisKind } from "../../lib/sidebarSections";
 import { solarSettingsOnStudyStart } from "../../lib/solarStudyView";
@@ -9,6 +9,7 @@ export function ModelPageViewportFooter({ vm }: { vm: import("./useModelPage").M
     commitRenderQuality,
     commitSolar,
     commitWind,
+    diagramArrows,
     model,
     renderQuality,
     setAnalyses,
@@ -79,6 +80,18 @@ export function ModelPageViewportFooter({ vm }: { vm: import("./useModelPage").M
                   </button>
                 ))}
               </div>
+              <span className="v-sep hud-sep" aria-hidden="true" />
+              <span className="env-console-title">Diagram</span>
+              <button
+                type="button"
+                data-diagram="arrows"
+                aria-pressed={diagramArrows.state.active}
+                className={diagramArrows.state.active ? "env-mode-btn active" : "env-mode-btn"}
+                onClick={() => diagramArrows.dispatch({ type: "setActive", active: !diagramArrows.state.active })}
+              >
+                <MoveUpRight size={12} strokeWidth={2.2} aria-hidden="true" />
+                <span>Arrows</span>
+              </button>
             </div>
           </div>
         ) : (

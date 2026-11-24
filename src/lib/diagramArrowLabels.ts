@@ -1,6 +1,7 @@
 import { getColour } from "./colours";
 import { LANDMARK_FONT_PX } from "./landmarkLabels";
 import { landmarkLabelFont, measureLabelText } from "./landmarkLabelText";
+import type { ViewportOverlayLabel } from "./captureViewportPng";
 
 export type CanvasArrowLabel = { text: string; x: number; y: number };
 
@@ -25,4 +26,26 @@ export function drawArrowLabels(context: CanvasRenderingContext2D, labels: reado
     context.fillText(label.text, label.x * scale, label.y * scale);
   }
   context.restore();
+}
+
+export function arrowViewportLabels(labels: readonly CanvasArrowLabel[]): ViewportOverlayLabel[] {
+  const font = landmarkLabelFont(LANDMARK_FONT_PX);
+  const fill = getColour("--landmark-label-halo");
+  const color = getColour("--landmark-label");
+  return labels.map((label) => {
+    const width = measureLabelText(label.text) + PAD_X_PX * 2;
+    return {
+      text: label.text,
+      x: label.x - width / 2,
+      y: label.y - HEIGHT_PX / 2,
+      width,
+      height: HEIGHT_PX,
+      font,
+      color,
+      fill,
+      stroke: fill,
+      strokeWidth: 0,
+      radius: RADIUS_PX,
+    };
+  });
 }

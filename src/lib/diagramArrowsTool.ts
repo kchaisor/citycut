@@ -68,7 +68,7 @@ export function arrowToolReducer(state: ArrowToolState, action: ArrowToolAction)
   switch (action.type) {
     case "setActive":
       return action.active
-        ? { ...state, active: true }
+        ? { ...state, active: true, visible: true }
         : { ...state, active: false, draft: null, selectedId: null, selectedPoint: null };
     case "setVisible":
       return action.visible
@@ -86,7 +86,7 @@ export function arrowToolReducer(state: ArrowToolState, action: ArrowToolAction)
     case "beginDraft":
       return { ...state, active: true, visible: true, draft: [], selectedId: null, selectedPoint: null };
     case "addPoint":
-      return state.draft ? { ...state, draft: [...state.draft, action.point] } : state;
+      return state.draft ? { ...state, draft: [...state.draft, action.point], selectedId: null, selectedPoint: null } : state;
     case "undoPoint":
       return state.draft ? { ...state, draft: state.draft.slice(0, -1) } : state;
     case "finishDraft":
@@ -97,7 +97,12 @@ export function arrowToolReducer(state: ArrowToolState, action: ArrowToolAction)
       if (state.selectedId) return { ...state, selectedId: null };
       return state;
     case "select":
-      return { ...state, selectedId: action.id, selectedPoint: action.id ? (action.point ?? null) : null };
+      return {
+        ...state,
+        draft: action.id ? null : state.draft,
+        selectedId: action.id,
+        selectedPoint: action.id ? (action.point ?? null) : null,
+      };
     case "movePoint":
       return {
         ...state,
@@ -130,7 +135,7 @@ export function arrowToolReducer(state: ArrowToolState, action: ArrowToolAction)
       };
     case "patch": {
       const patch = normalisePatch(action.patch);
-      if (state.selectedId) {
+      if (state.selectedId && !state.draft) {
         return { ...state, arrows: state.arrows.map((arrow) => (arrow.id === state.selectedId ? { ...arrow, ...patch } : arrow)) };
       }
       return { ...state, defaults: { ...state.defaults, ...patch } };
@@ -138,8 +143,23 @@ export function arrowToolReducer(state: ArrowToolState, action: ArrowToolAction)
   }
 }
 
-export function arrowToolKeyAction(state: ArrowToolState, key: string): ArrowToolAction | null {
-  if (!state.active) return null;
+export type ArrowKeyContext = { label: boolean; editable: boolean; panel: boolean };
+
+export const ARROW_PANEL_CLASS = "arrows-card";
+export const ARROW_LABEL_FIELD_ID = "arrow-label";
+
+export function arrowKeyContext(target: EventTarget | null): ArrowKeyContext {
+  const el = target as HTMLElement | null;
+  if (!el || !el.tagName) return { label: false, editable: false, panel: false };
+  const editable = el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT" || el.isContentEditable;
+  return { label: el.id === ARROW_LABEL_FIELD_ID, editable, panel: Boolean(el.closest?.(`.${ARROW_PANEL_CLASS}`)) };
+}
+
+const NO_CONTEXT: ArrowKeyContext = { label: false, editable: false, panel: false };
+
+export function arrowToolKeyAction(state: ArrowToolState, key: string, context: ArrowKeyContext = NO_CONTEXT): ArrowToolAction | null {
+  if (!state.active || context.label) return null;
+  if (context.editable && !(context.panel && (key === "Enter" || key === "Escape"))) return null;
   if (key === "Enter") return state.draft ? { type: "finishDraft" } : null;
   if (key === "Escape") return { type: "escape" };
   if (key === "Backspace") {

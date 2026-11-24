@@ -133,6 +133,8 @@ import {
 import { windSceneLayers } from "../lib/windState";
 import { GroundWindFlow } from "./GroundWindFlow";
 import { WindDiagramStreams } from "./WindDiagramStreams";
+import { arrowViewportLabels } from "../lib/diagramArrowLabels";
+import { withArrowEditorHidden } from "../lib/diagramArrows3d";
 import { DiagramArrows3D, type ArrowExportLabels, type ArrowScreenLabel } from "./DiagramArrows3D";
 import type { ArrowToolAction, ArrowToolState } from "../lib/diagramArrowsTool";
 
@@ -2599,7 +2601,14 @@ function ExportBridge({
         if (city && solarDiagramOn) return withBuildingExportColours(city, false, render);
         return render();
       },
-      viewportPng: (options) => captureViewportPng(gl, scene, get().camera, readViewportCapture(gl.domElement), options),
+      viewportPng: (options) => {
+        const canvas = gl.domElement;
+        const camera = get().camera;
+        const capture = readViewportCapture(canvas);
+        const arrowLabels = arrowLabelsRef?.current?.(camera, canvas.clientWidth || canvas.width, canvas.clientHeight || canvas.height) ?? [];
+        const withArrows = { ...capture, labels: [...capture.labels, ...arrowViewportLabels(arrowLabels)] };
+        return withArrowEditorHidden(scene, () => captureViewportPng(gl, scene, camera, withArrows, options));
+      },
       sheetFrame: (crop) => {
         const canvas = gl.domElement;
         const cssWidth = canvas.clientWidth || canvas.width;

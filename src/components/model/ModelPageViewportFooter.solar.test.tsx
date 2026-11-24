@@ -57,6 +57,7 @@ function expectBarIsModesAndQualityOnly() {
     "Viewshed Walk",
     "High",
     "Fast",
+    "Arrows",
   ]);
   expect(within(el).getByText("Analysis")).toBeTruthy();
   expect(within(el).queryByRole("slider")).toBeNull();
@@ -81,6 +82,20 @@ describe("Analysis bar", () => {
     expectBarIsModesAndQualityOnly();
     expect(bar().querySelector("[inert]")).toBeNull();
     expect(bar().querySelector(".env-solar-idle, .env-solar-chrome, .env-bottom-row")).toBeNull();
+  });
+
+  it("has a Diagram group with an Arrows toggle that opens and closes the tool, in 3D and Drawing", () => {
+    for (const props of [{}, { tab: "drawing" as const }]) {
+      render(<Hud {...props} />);
+      const button = within(bar()).getByRole("button", { name: "Arrows" });
+      expect(within(bar()).getByText("Diagram")).toBeTruthy();
+      expect(button.getAttribute("aria-pressed")).toBe("false");
+      fireEvent.click(button);
+      expect(within(bar()).getByRole("button", { name: "Arrows" }).getAttribute("aria-pressed")).toBe("true");
+      fireEvent.click(within(bar()).getByRole("button", { name: "Arrows" }));
+      expect(within(bar()).getByRole("button", { name: "Arrows" }).getAttribute("aria-pressed")).toBe("false");
+      cleanup();
+    }
   });
 
   it("stays that one row with any mix of analyses on, in 3D, Plan and Drawing", () => {
@@ -138,7 +153,8 @@ describe("Analysis bar", () => {
     const group = screen.getByRole("group", { name: "Render quality" });
     const high = within(group).getByRole("button", { name: "High render quality" });
     const fast = within(group).getByRole("button", { name: "Fast render quality" });
-    expect(bar().querySelector(".env-top-row")?.lastElementChild).toBe(group);
+    expect(group.nextElementSibling?.classList.contains("hud-sep")).toBe(true);
+    expect(bar().querySelector(".env-top-row")?.lastElementChild?.textContent).toBe("Arrows");
     expect(high.getAttribute("aria-pressed")).toBe("true");
     expect(fast.getAttribute("aria-pressed")).toBe("false");
     fireEvent.click(fast);

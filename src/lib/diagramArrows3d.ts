@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import type { Pt } from "../types";
-import type { ArrowShape } from "./diagramArrows";
+import { arrowLabelAnchor, type ArrowShape, type DiagramArrow } from "./diagramArrows";
 import { sampleTerrain } from "./terrain";
 import type { CityModel } from "../types";
 
@@ -48,4 +48,55 @@ export function intersectArrowPlane(ray: THREE.Ray, groundAt: GroundAt, heightM:
     y = groundAt(found[0], found[1]) + heightM;
   }
   return found;
+}
+
+export const ARROW_EDITOR = "citycutArrowEditor";
+
+export function markArrowEditor(object: THREE.Object3D): void {
+  object.userData[ARROW_EDITOR] = true;
+}
+
+export function withArrowEditorHidden<T>(root: THREE.Object3D, work: () => T): T {
+  const hidden: THREE.Object3D[] = [];
+  root.traverse((object) => {
+    if (object.userData[ARROW_EDITOR] && object.visible) {
+      object.visible = false;
+      hidden.push(object);
+    }
+  });
+  try {
+    return work();
+  } finally {
+    for (const object of hidden) object.visible = true;
+  }
+}
+
+export type ArrowScreenLabel = { id: string; text: string; x: number; y: number };
+
+export const ARROW_LABEL_LIFT_PX = 16;
+
+export function projectGroundPoint(camera: THREE.Camera, world: THREE.Vector3, rect: { width: number; height: number }): Pt | null {
+  const ndc = world.clone().project(camera);
+  if (ndc.z < -1 || ndc.z > 1) return null;
+  return [(ndc.x * 0.5 + 0.5) * rect.width, (-ndc.y * 0.5 + 0.5) * rect.height];
+}
+
+export function projectArrowLabels(
+  camera: THREE.Camera,
+  arrows: readonly Pick<DiagramArrow, "id" | "label" | "points" | "heightM">[],
+  groundAt: GroundAt,
+  width: number,
+  height: number,
+  offsetX = 0,
+  offsetY = 0,
+): ArrowScreenLabel[] {
+  camera.updateMatrixWorld();
+  const out: ArrowScreenLabel[] = [];
+  for (const arrow of arrows) {
+    if (arrow.label.trim() === "") continue;
+    const at = projectGroundPoint(camera, arrowWorldPoint(arrowLabelAnchor(arrow.points), groundAt, arrow.heightM), { width, height });
+    if (!at || at[0] < 0 || at[0] > width || at[1] < 0 || at[1] > height) continue;
+    out.push({ id: arrow.id, text: arrow.label.trim(), x: offsetX + at[0], y: offsetY + at[1] - ARROW_LABEL_LIFT_PX });
+  }
+  return out;
 }

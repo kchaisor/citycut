@@ -7,16 +7,10 @@ import {
   writeDiagramArrowsStore,
   type DiagramArrow,
 } from "../../lib/diagramArrows";
-import { arrowToolKeyAction, arrowToolReducer, initialArrowToolState } from "../../lib/diagramArrowsTool";
+import { arrowKeyContext, arrowToolKeyAction, arrowToolReducer, initialArrowToolState } from "../../lib/diagramArrowsTool";
 import { modelCutSiteId } from "../../lib/introPlayed";
 import type { NamedViewArrows } from "../../lib/namedViews";
 import type { ArrowScreenLabel } from "../DiagramArrows3D";
-
-function isTyping(target: EventTarget | null): boolean {
-  const el = target as HTMLElement | null;
-  if (!el || !el.tagName) return false;
-  return el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT" || el.isContentEditable;
-}
 
 export function useDiagramArrows(model: Pick<CityModel, "center" | "sideM">) {
   const cutId = modelCutSiteId(model.center, model.sideM);
@@ -41,8 +35,15 @@ export function useDiagramArrows(model: Pick<CityModel, "center" | "sideM">) {
   useEffect(() => {
     if (!state.active) return;
     const onKey = (event: KeyboardEvent) => {
-      if (isTyping(event.target)) return;
-      const action = arrowToolKeyAction(state, event.key);
+      const context = arrowKeyContext(event.target);
+      if (context.label) {
+        if (event.key === "Enter" || event.key === "Escape") {
+          event.preventDefault();
+          (event.target as HTMLElement).blur();
+        }
+        return;
+      }
+      const action = arrowToolKeyAction(state, event.key, context);
       if (!action) return;
       event.preventDefault();
       dispatch(action);

@@ -1,6 +1,8 @@
+// @vitest-environment happy-dom
 import { describe, expect, it } from "vitest";
 import { DEFAULT_ARROW } from "./diagramArrows";
 import {
+  arrowKeyContext,
   arrowToolClickActions,
   isDoubleClick,
   arrowToolKeyAction,
@@ -148,5 +150,96 @@ describe("arrow tool clicks", () => {
     expect(isDoubleClick({ t: 0, x: 10, y: 10 }, { t: 200, x: 12, y: 11 })).toBe(true);
     expect(isDoubleClick({ t: 0, x: 10, y: 10 }, { t: 900, x: 10, y: 10 })).toBe(false);
     expect(isDoubleClick({ t: 0, x: 10, y: 10 }, { t: 100, x: 60, y: 10 })).toBe(false);
+  });
+});
+
+describe("new-arrow defaults", () => {
+  it("clears the selection on New arrow so panel edits set the defaults", () => {
+    const made = withArrow();
+    expect(made.selectedId).toBe("a");
+    const fresh = run(made, { type: "beginDraft" });
+    expect(fresh.selectedId).toBeNull();
+    const edited = run(fresh, { type: "patch", patch: { colour: "red", label: "Next" } });
+    expect(edited.defaults).toMatchObject({ colour: "red", label: "Next" });
+    expect(edited.arrows[0]).toMatchObject({ colour: DEFAULT_ARROW.colour, label: "" });
+    const drawn = run(edited, { type: "addPoint", point: [0, 0] }, { type: "addPoint", point: [9, 0] }, { type: "finishDraft", id: "b" });
+    expect(drawn.arrows[1]).toMatchObject({ id: "b", colour: "red", label: "Next" });
+    expect(drawn.selectedId).toBe("b");
+  });
+
+  it("applies edits to the new arrow right after finishing, and to the defaults after New arrow again", () => {
+    const made = run(withArrow(), { type: "patch", patch: { style: "bold" } });
+    expect(made.arrows[0]!.style).toBe("bold");
+    expect(made.defaults.style).toBe(DEFAULT_ARROW.style);
+    const next = run(made, { type: "beginDraft" }, { type: "patch", patch: { style: "line" } });
+    expect(next.arrows[0]!.style).toBe("bold");
+    expect(next.defaults.style).toBe("line");
+  });
+
+  it("edits the defaults while placing even if a selection somehow remains", () => {
+    const stray: ArrowToolState = { ...withArrow(), draft: [[0, 0]] };
+    const edited = run(stray, { type: "patch", patch: { width: "l" } });
+    expect(edited.defaults.width).toBe("l");
+    expect(edited.arrows[0]!.width).toBe(DEFAULT_ARROW.width);
+    expect(run(stray, { type: "addPoint", point: [1, 1] }).selectedId).toBeNull();
+  });
+
+  it("selecting an arrow loads it and abandons a half-placed draft", () => {
+    const state = run(withArrow(), { type: "beginDraft" }, { type: "addPoint", point: [3, 3] }, { type: "select", id: "a" });
+    expect(state.draft).toBeNull();
+    expect(selectedArrow(state)?.id).toBe("a");
+  });
+});
+
+describe("closing the tool", () => {
+  it("clears selection, draft and point on Done and on the toolbar toggle", () => {
+    const state = run(withArrow(), { type: "select", id: "a", point: 1 });
+    const done = run(state, { type: "setActive", active: false });
+    expect(done).toMatchObject({ active: false, draft: null, selectedId: null, selectedPoint: null });
+    const placing = run(withArrow(), { type: "beginDraft" }, { type: "addPoint", point: [1, 1] }, { type: "setActive", active: false });
+    expect(placing).toMatchObject({ active: false, draft: null, selectedId: null });
+  });
+
+  it("opening the tool turns arrows visible", () => {
+    const hidden = run(initialArrowToolState(), { type: "setVisible", visible: false }, { type: "setActive", active: true });
+    expect(hidden).toMatchObject({ active: true, visible: true });
+  });
+});
+
+describe("keys from focused controls", () => {
+  const drafting = run(ACTIVE, { type: "beginDraft" }, { type: "addPoint", point: [0, 0] }, { type: "addPoint", point: [5, 5] });
+  const panel = (tag: string, props: Record<string, string> = {}) => {
+    const card = document.createElement("div");
+    card.className = "arrows-card";
+    const el = document.createElement(tag);
+    for (const [key, value] of Object.entries(props)) el.setAttribute(key, value);
+    card.append(el);
+    return el;
+  };
+
+  it("finishes on Enter and cancels on Escape from panel buttons, selects and number inputs", () => {
+    for (const el of [panel("button"), panel("select"), panel("input", { type: "number" })]) {
+      const context = arrowKeyContext(el);
+      expect(arrowToolKeyAction(drafting, "Enter", context)).toEqual({ type: "finishDraft" });
+      expect(arrowToolKeyAction(drafting, "Escape", context)).toEqual({ type: "escape" });
+    }
+  });
+
+  it("leaves Backspace and Delete to panel text editing", () => {
+    const context = arrowKeyContext(panel("input", { type: "number" }));
+    expect(arrowToolKeyAction(drafting, "Backspace", context)).toBeNull();
+    expect(arrowToolKeyAction(drafting, "Delete", context)).toBeNull();
+  });
+
+  it("ignores every key in the Label field", () => {
+    const label = panel("input", { type: "text", id: "arrow-label" });
+    const context = arrowKeyContext(label);
+    expect(context.label).toBe(true);
+    for (const key of ["Enter", "Escape", "Backspace", "Delete"]) expect(arrowToolKeyAction(drafting, key, context)).toBeNull();
+  });
+
+  it("ignores Enter in text fields outside the Arrows panel", () => {
+    const outside = document.createElement("input");
+    expect(arrowToolKeyAction(drafting, "Enter", arrowKeyContext(outside))).toBeNull();
   });
 });

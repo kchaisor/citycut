@@ -1974,8 +1974,15 @@ export function useModelPage({
 
   const diagramArrows = useDiagramArrows(model);
   const arrowToolActive = diagramArrows.state.active;
+  const foldBeforeArrows = useRef<boolean | null>(null);
   useEffect(() => {
-    if (arrowToolActive) setSiteIntelFolded(true);
+    if (arrowToolActive) {
+      foldBeforeArrows.current = siteIntelFolded;
+      setSiteIntelFolded(true);
+    } else if (foldBeforeArrows.current !== null) {
+      setSiteIntelFolded(foldBeforeArrows.current);
+      foldBeforeArrows.current = null;
+    }
   }, [arrowToolActive]);
 
   function namedViewSnapshot(): NamedViewSnapshot {
