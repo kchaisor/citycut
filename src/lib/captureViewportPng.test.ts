@@ -10,7 +10,7 @@ import {
   sheetCropRect,
   visibleViewportRect,
 } from "./captureViewportPng";
-import { POST_OVERLAY_LAYER, moveToPostOverlay, setPostOverlayDeferred } from "./postOverlay";
+import { POST_OVERLAY_LAYER, moveToPostOverlay, retainPostOverlay, setPostOverlayDeferred } from "./postOverlay";
 import { markScreenOnly } from "./screenOnly";
 
 const guards = vi.hoisted(() => ({
@@ -26,6 +26,14 @@ vi.mock("./screenOnly", async (original) => ({
 vi.mock("./exportFrame", () => ({ cameraForExportFrame: guards.cameraForExportFrame }));
 vi.mock("./windDiagramStreams", () => ({ withStreamStillFrame: guards.withStreamStillFrame }));
 vi.mock("./colours", () => ({ getColour: guards.getColour }));
+
+const passStubs = () => ({
+  autoClear: true,
+  toneMapping: THREE.ACESFilmicToneMapping,
+  shadowMap: { autoUpdate: true, needsUpdate: false },
+  setRenderTarget: vi.fn(),
+  clearDepth: vi.fn(),
+});
 
 type Stub = { drawn: unknown[]; fills: string[] };
 
@@ -59,6 +67,7 @@ function renderer(order: string[]) {
   domElement.width = 400;
   domElement.height = 300;
   const gl = {
+    ...passStubs(),
     domElement,
     render: vi.fn((_scene: THREE.Scene, _camera: THREE.Camera): void => {
       order.push("render");
@@ -94,7 +103,7 @@ describe("captureViewportPng", () => {
     const blob = await captureViewportPng(gl, scene, camera, { background: "rgb(1, 2, 3)", labels: [] });
 
     expect(blob.type).toBe("image/png");
-    expect(render).toHaveBeenCalledTimes(1);
+    expect(render).toHaveBeenCalledTimes(2);
     expect(render.mock.calls[0]![0]).toBe(scene);
     expect(render.mock.calls[0]![1]).toBe(camera);
     expect(domeVisible).toBe(true);
@@ -122,7 +131,8 @@ describe("captureViewportPng", () => {
     setPostOverlayDeferred(camera, true);
     const maskBefore = camera.layers.mask;
     const seen: Array<{ dome: boolean; streaks: boolean; body: boolean }> = [];
-    render.mockImplementation((_scene: THREE.Scene, live: THREE.Camera) => {
+    render.mockImplementation((drawn: THREE.Scene, live: THREE.Camera) => {
+      if (drawn !== scene) return;
       seen.push({
         dome: live.layers.test(dome.layers),
         streaks: live.layers.test(streaks.children[0]!.layers),
@@ -136,6 +146,68 @@ describe("captureViewportPng", () => {
     expect(camera.layers.isEnabled(POST_OVERLAY_LAYER)).toBe(false);
     expect(camera.layers.mask).toBe(maskBefore);
     expect(dome.visible).toBe(true);
+  });
+
+  it("blends the scene in a linear half-float target, then writes it to the canvas with the renderer's tone mapping and no blending", async () => {
+    stubCanvas();
+    const { gl, render, domElement } = renderer([]);
+    const raw = gl as unknown as ReturnType<typeof passStubs>;
+    const disposed: string[] = [];
+    vi.spyOn(THREE.WebGLRenderTarget.prototype, "dispose").mockImplementation(() => void disposed.push("target"));
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera();
+    const seen: Array<{ target: THREE.WebGLRenderTarget | null; material?: THREE.ShaderMaterial; autoClear: boolean }> = [];
+    let current: THREE.WebGLRenderTarget | null = null;
+    raw.setRenderTarget.mockImplementation((target: THREE.WebGLRenderTarget | null) => void (current = target));
+    render.mockImplementation((drawn: THREE.Scene) => {
+      const quad = drawn.children[0] as THREE.Mesh | undefined;
+      seen.push({
+        target: current,
+        material: drawn === scene ? undefined : (quad?.material as THREE.ShaderMaterial),
+        autoClear: raw.autoClear,
+      });
+    });
+
+    await captureViewportPng(gl, scene, camera, { background: null, labels: [] });
+
+    expect(seen).toHaveLength(2);
+    const [main, output] = seen;
+    expect(main!.target).not.toBeNull();
+    expect(main!.target!.texture.type).toBe(THREE.HalfFloatType);
+    expect(main!.target!.texture.colorSpace).toBe(THREE.NoColorSpace);
+    expect(main!.target!.width).toBe(domElement.width);
+    expect(output!.target).toBeNull();
+    expect(output!.autoClear).toBe(false);
+    expect(output!.material!.blending).toBe(THREE.NoBlending);
+    expect(output!.material!.toneMapped).toBe(true);
+    expect(output!.material!.fragmentShader).toContain("#include <tonemapping_fragment>");
+    expect(output!.material!.fragmentShader).toContain("#include <colorspace_fragment>");
+    expect(raw.autoClear).toBe(true);
+    expect(disposed).toEqual(["target"]);
+  });
+
+  it("draws the deferred post-overlay objects after the output pass, on the target depth", async () => {
+    stubCanvas();
+    const { gl, render } = renderer([]);
+    const scene = new THREE.Scene();
+    const streaks = new THREE.Mesh();
+    moveToPostOverlay(streaks);
+    scene.add(streaks);
+    retainPostOverlay(scene);
+    const camera = new THREE.PerspectiveCamera();
+    const calls: string[] = [];
+    render.mockImplementation((drawn: THREE.Scene, live: THREE.Camera) => {
+      if (drawn !== scene) {
+        calls.push(drawn.children[0] === streaks ? "streaks" : "pass");
+        return;
+      }
+      calls.push(live.layers.test(streaks.layers) ? "scene+streaks" : "scene");
+    });
+
+    await captureViewportPng(gl, scene, camera, { background: null, labels: [] });
+
+    expect(calls).toEqual(["scene", "pass", "pass", "scene+streaks"]);
+    expect((gl as unknown as ReturnType<typeof passStubs>).clearDepth).toHaveBeenCalledTimes(1);
   });
 
   it("rejects a canvas that is not on screen", async () => {
@@ -225,6 +297,7 @@ describe("high quality capture", () => {
     let ratio = 1;
     const log: string[] = [];
     const gl = {
+      ...passStubs(),
       domElement,
       getPixelRatio: () => ratio,
       setPixelRatio: vi.fn((next: number) => {
@@ -299,6 +372,8 @@ describe("high quality capture", () => {
     expect(scene.background).toBe(original);
     expect(raw.setPixelRatio).toHaveBeenLastCalledWith(1);
     expect(raw.setClearAlpha).toHaveBeenLastCalledWith(1);
+    expect(log.indexOf("alpha:0")).toBeLessThan(log.indexOf("render:clear"));
+    expect(log.indexOf("render:clear")).toBeLessThan(log.indexOf("alpha:1"));
   });
 
   it("renders post-overlay objects in the high quality capture and in the restoring frame", async () => {
@@ -317,7 +392,8 @@ describe("high quality capture", () => {
     const camera = new THREE.PerspectiveCamera();
     setPostOverlayDeferred(camera, true);
     const seen: boolean[] = [];
-    (raw.render as unknown as ReturnType<typeof vi.fn>).mockImplementation((_scene: THREE.Scene, live: THREE.Camera) => {
+    (raw.render as unknown as ReturnType<typeof vi.fn>).mockImplementation((drawn: THREE.Scene, live: THREE.Camera) => {
+      if (drawn !== scene) return;
       seen.push(live.layers.test(dome.layers));
     });
 
