@@ -139,7 +139,6 @@ export function ArrowsHudCard({ arrows }: { arrows: ArrowsCardModel }) {
             </option>
           ))}
         </select>
-        <p className="ac-note">Animation preview comes next</p>
       </div>
       <div className="ac-section">
         <label className="arrow-check">

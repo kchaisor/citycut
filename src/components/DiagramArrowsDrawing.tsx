@@ -1,4 +1,4 @@
-import { useMemo, useRef, type Dispatch, type RefObject } from "react";
+import { useEffect, useMemo, useRef, type Dispatch, type RefObject } from "react";
 import type { CityModel, Pt } from "../types";
 import { getColour } from "../lib/colours";
 import {
@@ -13,6 +13,15 @@ import {
   type ArrowShape,
   type DiagramArrow,
 } from "../lib/diagramArrows";
+import {
+  animatedArrows,
+  animatedArrowShape,
+  arrowClockSeconds,
+  lightenArrowColour,
+  publishArrowAnimation,
+  useArrowReducedMotion,
+  useArrowTicker,
+} from "../lib/diagramArrowsMotion";
 import {
   arrowToolClickActions,
   isDoubleClick,
@@ -135,6 +144,14 @@ export function DiagramArrowsDrawing({
     () => arrows.map((arrow) => ({ arrow, shape: buildArrowShape(arrow.points, arrow.style, arrow.width, model.sideM, mPerPx) })),
     [arrows, model.sideM, mPerPx],
   );
+  const reducedMotion = useArrowReducedMotion();
+  const animated = useMemo(() => animatedArrows(arrows, reducedMotion), [arrows, reducedMotion]);
+  useArrowTicker(animated.length > 0);
+  useEffect(() => {
+    if (animated.length === 0) return;
+    return publishArrowAnimation(animated.length);
+  }, [animated.length]);
+  const seconds = arrowClockSeconds();
   const draft = state.visible && state.active ? state.draft : null;
   const draftPoints = draft && hover ? [...draft, hover] : draft;
   const draftShape =
@@ -165,11 +182,25 @@ export function DiagramArrowsDrawing({
   const halo = getColour("--landmark-label-halo");
   return (
     <g className="diagram-arrows" data-tick={colourTick} data-arrows-drawing={arrows.length}>
-      {shapes.map(({ arrow, shape }) => (
-        <g key={arrow.id} data-arrow-id={arrow.id}>
-          <ArrowShapePolygons shape={shape} fill={getColour(ARROW_COLOUR_TOKENS[arrow.colour])} />
-        </g>
-      ))}
+      {shapes.map(({ arrow, shape }) => {
+        const fill = getColour(ARROW_COLOUR_TOKENS[arrow.colour]);
+        if (!animated.includes(arrow)) {
+          return (
+            <g key={arrow.id} data-arrow-id={arrow.id}>
+              <ArrowShapePolygons shape={shape} fill={fill} />
+            </g>
+          );
+        }
+        const live = animatedArrowShape(arrow, model.sideM, mPerPx, seconds);
+        return (
+          <g key={arrow.id} data-arrow-id={arrow.id} data-arrow-animation={arrow.animation}>
+            <ArrowShapePolygons shape={arrow.animation === "streaks" ? shape : live.body} fill={fill} />
+            {live.streaks.length > 0 ? (
+              <ArrowShapePolygons shape={{ ribbons: live.streaks, heads: [] }} fill={lightenArrowColour(fill).getStyle()} opacity={0.9} />
+            ) : null}
+          </g>
+        );
+      })}
       <g className="plan-landmark-labels" data-arrow-labels="drawing">
         {arrows.map((arrow) => {
           if (!arrow.label) return null;

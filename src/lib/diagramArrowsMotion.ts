@@ -1,6 +1,6 @@
 import * as THREE from "three";
-import { useEffect, useState } from "react";
-import type { ArrowMotion, DiagramArrow } from "./diagramArrows";
+import { useEffect, useState, useSyncExternalStore } from "react";
+import { buildArrowShape, buildStreakRibbons, type ArrowMotion, type ArrowRibbon, type ArrowShape, type DiagramArrow } from "./diagramArrows";
 import { systemPrefersReducedMotion } from "./windStreakMotion";
 
 export const DRAW_ON_GROW_S = 1.6;
@@ -28,6 +28,19 @@ export function arrowMotionAt(animation: DiagramArrow["animation"], seconds: num
   if (animation === "draw-on") return { kind: "draw-on", progress: drawOnProgress(seconds) };
   if (animation === "dashes") return { kind: "dashes", phase: dashPhase(seconds) };
   return null;
+}
+
+export function animatedArrowShape(
+  arrow: Pick<DiagramArrow, "points" | "style" | "width" | "animation">,
+  sideM: number,
+  floorMPerPx: number,
+  seconds: number | null,
+): { body: ArrowShape; streaks: ArrowRibbon[] } {
+  const live = seconds !== null;
+  return {
+    body: buildArrowShape(arrow.points, arrow.style, arrow.width, sideM, floorMPerPx, live ? arrowMotionAt(arrow.animation, seconds) : null),
+    streaks: live && arrow.animation === "streaks" ? buildStreakRibbons(arrow.points, arrow.style, arrow.width, sideM, floorMPerPx, seconds) : [],
+  };
 }
 
 export function animatedArrows<T extends Pick<DiagramArrow, "animation">>(arrows: readonly T[], reducedMotion: boolean): T[] {
@@ -74,4 +87,36 @@ export function publishArrowAnimation(animated: number): () => void {
   return () => {
     delete window.__citycutDiagramArrowsAnim;
   };
+}
+
+const tickListeners = new Set<() => void>();
+let tickFrame = 0;
+let tickVersion = 0;
+
+function tick(): void {
+  tickVersion += 1;
+  for (const listener of tickListeners) listener();
+  tickFrame = tickListeners.size > 0 ? requestAnimationFrame(tick) : 0;
+}
+
+function subscribeTicker(listener: () => void): () => void {
+  tickListeners.add(listener);
+  if (tickFrame === 0) tickFrame = requestAnimationFrame(tick);
+  return () => {
+    tickListeners.delete(listener);
+    if (tickListeners.size === 0 && tickFrame !== 0) {
+      cancelAnimationFrame(tickFrame);
+      tickFrame = 0;
+    }
+  };
+}
+
+const idleSubscribe = () => () => {};
+
+export function arrowTickerListeners(): number {
+  return tickListeners.size;
+}
+
+export function useArrowTicker(active: boolean): number {
+  return useSyncExternalStore(active ? subscribeTicker : idleSubscribe, () => tickVersion, () => 0);
 }

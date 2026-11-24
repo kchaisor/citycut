@@ -24,10 +24,10 @@ describe("ArrowsHudCard", () => {
     expect(body.firstElementChild?.querySelector("[aria-label='Arrow style']")).toBeTruthy();
   });
 
-  it("shows the animation placeholder note and a Done button", () => {
+  it("has no animation placeholder note and a Done button", () => {
     const dispatch = vi.fn();
     render(<ArrowsHudCard arrows={{ state: { ...initialArrowToolState(), active: true }, dispatch }} />);
-    expect(screen.getByText("Animation preview comes next")).toBeTruthy();
+    expect(screen.queryByText("Animation preview comes next")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Done" }));
     expect(dispatch).toHaveBeenCalledWith({ type: "setActive", active: false });
   });
