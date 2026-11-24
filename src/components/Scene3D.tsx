@@ -135,6 +135,7 @@ import { GroundWindFlow } from "./GroundWindFlow";
 import { WindDiagramStreams } from "./WindDiagramStreams";
 import { arrowViewportLabels } from "../lib/diagramArrowLabels";
 import { withArrowEditorHidden } from "../lib/diagramArrows3d";
+import { DiagramArrowsPlanOverlay } from "./DiagramArrowsPlanOverlay";
 import { DiagramArrows3D, type ArrowExportLabels, type ArrowScreenLabel } from "./DiagramArrows3D";
 import type { ArrowToolAction, ArrowToolState } from "../lib/diagramArrowsTool";
 
@@ -3572,6 +3573,9 @@ export function Scene3D({
         </div>
       ) : null}
       {windLayers.planOverlay && windPlan ? <WindPlanOverlay model={windPlanOutlineModel ?? model} plan={windPlan} store={windPlanStore} /> : null}
+      {windLayers.planOverlay && windPlan && diagramArrows && diagramArrows.state.visible && active ? (
+        <DiagramArrowsPlanOverlay model={model} arrows={diagramArrows.state.arrows} store={windPlanStore} />
+      ) : null}
     </div>
   );
 }

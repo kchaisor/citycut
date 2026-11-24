@@ -1,0 +1,38 @@
+// @vitest-environment happy-dom
+import { cleanup, render } from "@testing-library/react";
+import { afterEach, describe, expect, it } from "vitest";
+import type { DiagramArrow } from "../lib/diagramArrows";
+import type { CityModel } from "../types";
+import { DiagramArrowsPlanOverlay } from "./DiagramArrowsPlanOverlay";
+import { createWindPlanTransformStore } from "./WindPlanOverlay";
+
+afterEach(cleanup);
+
+const arrow = (over: Partial<DiagramArrow>): DiagramArrow => ({
+  id: "a",
+  points: [[0, 0], [300, 0]],
+  style: "bold",
+  colour: "blue",
+  width: "m",
+  heightM: 20,
+  label: "",
+  animation: "none",
+  showIn3d: true,
+  showInDrawing: true,
+  ...over,
+});
+
+describe("DiagramArrowsPlanOverlay", () => {
+  it("renders a canvas inside a wind-plan-overlay layer after the wind map in DOM order, so capture composites it on top", () => {
+    const store = createWindPlanTransformStore();
+    const { container } = render(
+      <div className="viewport">
+        <div className="wind-plan-overlay"><canvas className="wind-plan-canvas" /></div>
+        <DiagramArrowsPlanOverlay model={{ sideM: 1470 } as CityModel} arrows={[arrow({}), arrow({ id: "b", showIn3d: false })]} store={store} />
+      </div>,
+    );
+    const canvases = [...container.querySelectorAll<HTMLCanvasElement>(".wind-plan-overlay canvas")];
+    expect(canvases).toHaveLength(2);
+    expect(canvases[1]!.closest(".diagram-arrows-plan")?.getAttribute("data-plan-arrows")).toBe("1");
+  });
+});
