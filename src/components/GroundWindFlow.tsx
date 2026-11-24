@@ -101,6 +101,8 @@ void main() {
   float a = vAlpha * coverage;
   if (a < 0.004) discard;
   gl_FragColor = vec4(rampAt(vSpeed), a);
+#include <tonemapping_fragment>
+#include <colorspace_fragment>
 }
 `;
 
@@ -120,7 +122,7 @@ function createStreakGeometry(count: number) {
   return { geometry, data, vertices };
 }
 
-function makeWindMaterial(width: number, height: number) {
+export function makeWindMaterial(width: number, height: number) {
   const empty = GROUND_WIND_EMPTY_MASK_RECT;
   return new THREE.ShaderMaterial({
     vertexShader: VERTEX_SHADER,
@@ -138,7 +140,6 @@ function makeWindMaterial(width: number, height: number) {
     depthWrite: false,
     depthTest: true,
     side: THREE.DoubleSide,
-    toneMapped: false,
   });
 }
 

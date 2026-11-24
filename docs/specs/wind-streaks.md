@@ -65,6 +65,7 @@ Open Southbank (`?lat=-37.8216&lon=144.9645&km=0.5`) in 3D.
 - [ ] With Solar Study, Wind Rose and Viewshed Walk all on, three headers show and only the last one turned on is open; clicking another header swaps which one is open.
 - [ ] With Solar Study and Wind Rose on, drag Sun dome size from 0.5× to 2× cut: the fans move in and out with the dome, fade at the dome (and may sit outside the cut, well past the crop at 2×), and no arrow gets longer, thicker or a bigger head. Turn the Sun dome off: the fans fill the cut as they do with Wind Rose alone, with no 7% inset.
 - [ ] Opening Site Intelligence does not move the bar.
+- [ ] A named-view PNG or A3 sheet shows wind Flow and Streaks in the same colours as the screen (Flow is tone mapped and sRGB encoded in the export, as the screen composer does).
 
 ## Out of scope
 
