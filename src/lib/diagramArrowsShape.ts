@@ -234,7 +234,7 @@ function cometRibbon(m: ArrowMetrics, layout: CometLayout, headAt: number): Arro
   const samples: { s: number; half: number }[] = [];
   for (let j = 0; j <= COMET_TAIL_SAMPLES; j += 1) {
     const s = (bodyLen * j) / COMET_TAIL_SAMPLES;
-    samples.push({ s, half: half * sine(s / bodyLen) });
+    samples.push({ s, half: half * clamp01(s / bodyLen) });
   }
   samples.push({ s: bodyLen, half: headHalf });
   for (let j = 1; j <= COMET_HEAD_SAMPLES; j += 1) {
@@ -247,8 +247,8 @@ function cometRibbon(m: ArrowMetrics, layout: CometLayout, headAt: number): Arro
     const d = headAt - layout.length + sample.s;
     if (d < 0 || d > m.bodyLen) continue;
     path.push(pointAtDistance(m.body, d).point);
-    halves.push(sample.half);
     const envelope = fade > PATH_EPS ? smooth01(d / fade) * smooth01((m.bodyLen - d) / fade) : 1;
+    halves.push(sample.half * envelope);
     alpha.push(Math.pow(sample.s / layout.length, COMET_FADE_POWER) * envelope);
   }
   return ribbonFromProfile(path, halves, alpha);

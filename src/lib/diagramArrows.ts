@@ -123,7 +123,7 @@ function parsePoints(value: unknown): Pt[] | null {
 }
 
 export function clampArrowHeight(value: number): number {
-  return Math.min(MAX_ARROW_HEIGHT_M, Math.max(0, value));
+  return Math.min(MAX_ARROW_HEIGHT_M, Math.max(0, Math.round(value)));
 }
 
 export function clampArrowWidth(value: number): number {

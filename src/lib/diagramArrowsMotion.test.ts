@@ -115,6 +115,14 @@ describe("flowing comets", () => {
     expect(head(0.2)).toBeGreaterThan(head(0.1));
   });
 
+  it("tapers every comet tail to a point", () => {
+    for (const ribbon of buildCometRibbons(POINTS, "streak", 1, 1000, 0, null)) {
+      const first = Math.hypot(ribbon.left[0]![0] - ribbon.right[0]![0], ribbon.left[0]![1] - ribbon.right[0]![1]);
+      const mid = Math.hypot(ribbon.left[5]![0] - ribbon.right[5]![0], ribbon.left[5]![1] - ribbon.right[5]![1]);
+      expect(first).toBeLessThan(mid * 0.1);
+    }
+  });
+
   it("keeps every comet on the body and fades it out at both ends", () => {
     for (const t of [0, 0.37, 1.2, 5.5]) {
       for (const ribbon of buildCometRibbons(POINTS, "streak", 1, 1000, 0, t)) {
