@@ -14,7 +14,7 @@ export function viewStyleRoadChipColor(
   colourBySource: boolean,
 ): string {
   if (usesPrimaryRoadCanvas(primaryView, colourByUse, colourBySource)) return getColour("--primary-road");
-  if (isWhiteCard3dView(primaryView, colourByUse, colourBySource)) return getColour("--primary-surface");
+  if (isWhiteCard3dView(primaryView, colourByUse, colourBySource)) return getColour("--card-road");
   return getColour("--road-local");
 }
 
@@ -24,7 +24,7 @@ export function viewStyleFootpathChipColor(
   colourBySource: boolean,
 ): string {
   if (usesPrimaryRoadCanvas(primaryView, colourByUse, colourBySource)) return getColour("--primary-footpath");
-  if (isWhiteCard3dView(primaryView, colourByUse, colourBySource)) return getColour("--primary-surface");
+  if (isWhiteCard3dView(primaryView, colourByUse, colourBySource)) return getColour("--card-footpath");
   return getColour("--road-path");
 }
 
@@ -34,7 +34,8 @@ export function viewStyleRoadColourTokens(
   colourBySource: boolean,
 ): ColourKey[] {
   const drawing: ColourKey[] = ["--road-local", "--road-arterial", "--road-fill"];
-  return usesPrimaryRoadCanvas(primaryView, colourByUse, colourBySource) ? ["--primary-road", ...drawing] : drawing;
+  if (usesPrimaryRoadCanvas(primaryView, colourByUse, colourBySource)) return ["--primary-road", ...drawing];
+  return isWhiteCard3dView(primaryView, colourByUse, colourBySource) ? ["--card-road", ...drawing] : drawing;
 }
 
 export function viewStyleFootpathColourTokens(
@@ -43,5 +44,6 @@ export function viewStyleFootpathColourTokens(
   colourBySource: boolean,
 ): ColourKey[] {
   const drawing: ColourKey[] = ["--road-path", "--path-fill"];
-  return usesPrimaryRoadCanvas(primaryView, colourByUse, colourBySource) ? ["--primary-footpath", ...drawing] : drawing;
+  if (usesPrimaryRoadCanvas(primaryView, colourByUse, colourBySource)) return ["--primary-footpath", ...drawing];
+  return isWhiteCard3dView(primaryView, colourByUse, colourBySource) ? ["--card-footpath", ...drawing] : drawing;
 }

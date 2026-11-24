@@ -139,4 +139,46 @@ describe("Roads and Footpaths colour chips in Primary view", () => {
     expect(getColour("--primary-road").toLowerCase()).toBe(defaultRoad);
     expect(getColour("--primary-footpath").toLowerCase()).toBe(defaultFootpath);
   });
+
+  it("writes the Card tokens when Roads and Footpaths colours change in Card view", async () => {
+    const user = userEvent.setup();
+    render(
+      <ModelPage model={roadsModel()} onHome={vi.fn()} onNewCut={vi.fn()} />,
+    );
+    const viewModesSection = screen.getByRole("region", { name: "View modes" });
+    const layersSection = screen.getByRole("region", { name: "Layers" });
+    const hex = (six: string) => `${String.fromCharCode(35)}${six}`;
+    const primaryRoad = getColour("--primary-road").toLowerCase();
+    const primaryFootpath = getColour("--primary-footpath").toLowerCase();
+    const surface = getColour("--primary-surface").toLowerCase();
+
+    await user.click(within(viewModesSection).getByRole("button", { name: "Card" }));
+    const primaryViewCheckbox = within(viewModesSection).getByLabelText(
+      "Primary view",
+    ) as HTMLInputElement;
+    expect(primaryViewCheckbox.checked).toBe(false);
+    const roadsChip = within(layersSection).getByLabelText("Roads colour") as HTMLInputElement;
+    const footpathsChip = within(layersSection).getByLabelText("Footpaths colour") as HTMLInputElement;
+    expect(roadsChip.value.toLowerCase()).toBe(hex("ffffff"));
+    expect(footpathsChip.value.toLowerCase()).toBe(hex("ffffff"));
+
+    fireEvent.change(roadsChip, { target: { value: hex("556677") } });
+    expect(getColour("--card-road").toLowerCase()).toBe(hex("556677"));
+    expect(getColour("--primary-road").toLowerCase()).toBe(primaryRoad);
+    expect(getColour("--primary-surface").toLowerCase()).toBe(surface);
+    expect(roadsChip.value.toLowerCase()).toBe(hex("556677"));
+
+    fireEvent.change(footpathsChip, { target: { value: hex("778899") } });
+    expect(getColour("--card-footpath").toLowerCase()).toBe(hex("778899"));
+    expect(getColour("--primary-footpath").toLowerCase()).toBe(primaryFootpath);
+    expect(getColour("--primary-surface").toLowerCase()).toBe(surface);
+    expect(footpathsChip.value.toLowerCase()).toBe(hex("778899"));
+    expect(primaryViewCheckbox.checked).toBe(false);
+
+    await user.click(
+      within(layersSection).getByRole("button", { name: "Reset colours" }),
+    );
+    expect(getColour("--card-road").toLowerCase()).toBe(hex("ffffff"));
+    expect(getColour("--card-footpath").toLowerCase()).toBe(hex("ffffff"));
+  });
 });
