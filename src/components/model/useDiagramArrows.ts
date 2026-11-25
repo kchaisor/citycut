@@ -34,7 +34,7 @@ export function useDiagramArrows(model: Pick<CityModel, "center" | "sideM">) {
     if (!state.active) return;
     const onKey = (event: KeyboardEvent) => {
       const context = arrowKeyContext(event.target);
-      const action = arrowToolKeyAction(state, event.key, context);
+      const action = arrowToolKeyAction(state, event.key, context, event.ctrlKey || event.metaKey);
       if (!action) return;
       event.preventDefault();
       dispatch(action);

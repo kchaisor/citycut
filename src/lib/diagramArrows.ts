@@ -34,13 +34,14 @@ export type DiagramArrow = {
   colour: ArrowColour;
   width: number;
   heightM: number;
+  pointHeights?: number[];
   animation: ArrowAnimation;
   speed: number;
   showIn3d: boolean;
   showInDrawing: boolean;
 };
 
-export type ArrowDefaults = Omit<DiagramArrow, "id" | "points">;
+export type ArrowDefaults = Omit<DiagramArrow, "id" | "points" | "pointHeights">;
 
 export const ARROW_STYLE_LABELS: Record<ArrowStyle, string> = {
   streak: "Streak",
@@ -122,6 +123,38 @@ function parsePoints(value: unknown): Pt[] | null {
   return points;
 }
 
+function parsePointHeights(value: unknown, count: number): number[] | undefined {
+  if (!Array.isArray(value) || value.length !== count) return undefined;
+  return value.every((item) => typeof item === "number" && Number.isFinite(item)) ? (value as number[]).slice() : undefined;
+}
+
+function roundHeight(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
+export function flattenArrowHeights(bases: readonly number[]): number[] {
+  if (bases.length === 0) return [];
+  const average = roundHeight(bases.reduce((sum, value) => sum + value, 0) / bases.length);
+  return bases.map(() => average);
+}
+
+export function smoothArrowHeights(points: readonly Pt[], bases: readonly number[]): number[] {
+  let current = bases.map(roundHeight);
+  if (current.length < 3) return current;
+  for (let pass = 0; pass < 2; pass += 1) {
+    const before = current;
+    current = before.map((value, i) => {
+      if (i === 0 || i === before.length - 1) return value;
+      const back = points[i - 1] && points[i] ? Math.hypot(points[i]![0] - points[i - 1]![0], points[i]![1] - points[i - 1]![1]) : 1;
+      const ahead = points[i + 1] && points[i] ? Math.hypot(points[i + 1]![0] - points[i]![0], points[i + 1]![1] - points[i]![1]) : 1;
+      const share = back + ahead > 1e-9 ? back / (back + ahead) : 0.5;
+      const along = before[i - 1]! + (before[i + 1]! - before[i - 1]!) * share;
+      return roundHeight(0.5 * value + 0.5 * along);
+    });
+  }
+  return current;
+}
+
 export function clampArrowHeight(value: number): number {
   return Math.min(MAX_ARROW_HEIGHT_M, Math.max(0, Math.round(value)));
 }
@@ -148,9 +181,11 @@ export function parseDiagramArrow(value: unknown): DiagramArrow | null {
   const points = parsePoints(value.points);
   if (!points || dedupePoints(points).length < MIN_ARROW_POINTS) return null;
   const height = typeof value.heightM === "number" && Number.isFinite(value.heightM) ? clampArrowHeight(value.heightM) : DEFAULT_ARROW_HEIGHT_M;
+  const pointHeights = parsePointHeights(value.pointHeights, points.length);
   return {
     id: value.id,
     points,
+    ...(pointHeights ? { pointHeights } : {}),
     style: oneOf(ARROW_STYLES, value.style, DEFAULT_ARROW.style),
     colour: oneOf(ARROW_COLOURS, value.colour, DEFAULT_ARROW.colour),
     width: parseWidth(value.width),

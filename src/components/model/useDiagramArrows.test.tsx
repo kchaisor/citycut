@@ -56,3 +56,34 @@ describe("keyboard while placing", () => {
     expect(hook.result.current.state.draft).toBeNull();
   });
 });
+
+describe("keyboard undo", () => {
+  const press = (key: string, init: KeyboardEventInit) =>
+    act(() => void window.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, ...init })));
+
+  it("Ctrl+Z and Cmd+Z undo the last edit while the tool is active", () => {
+    const { result } = renderHook(() => useDiagramArrows(model));
+    act(() => {
+      result.current.dispatch({ type: "beginDraft" });
+      result.current.dispatch({ type: "addPoint", point: [0, 0] });
+      result.current.dispatch({ type: "addPoint", point: [10, 0] });
+      result.current.dispatch({ type: "finishDraft", id: "a" });
+    });
+    expect(result.current.state.arrows).toHaveLength(1);
+    press("z", { ctrlKey: true });
+    expect(result.current.state.arrows).toHaveLength(0);
+    act(() => result.current.dispatch({ type: "replace", arrows: [arrow("b")] }));
+    act(() => result.current.dispatch({ type: "setActive", active: true }));
+    act(() => result.current.dispatch({ type: "select", id: "b" }));
+    act(() => result.current.dispatch({ type: "patch", patch: { width: 2 } }));
+    press("z", { metaKey: true });
+    expect(result.current.state.arrows[0]!.width).toBe(DEFAULT_ARROW.width);
+  });
+
+  it("ignores Ctrl+Z when the tool is not active", () => {
+    const { result } = renderHook(() => useDiagramArrows(model));
+    act(() => result.current.restore({ visible: true, items: [arrow("a")] }));
+    press("z", { ctrlKey: true });
+    expect(result.current.state.arrows).toHaveLength(1);
+  });
+});

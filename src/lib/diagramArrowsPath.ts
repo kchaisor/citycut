@@ -196,3 +196,83 @@ export function nearestPointIndex(points: readonly Pt[], at: Pt, toleranceM: num
   });
   return best;
 }
+
+function hermiteTangents(knots: readonly number[], heights: readonly number[]): number[] {
+  const n = heights.length;
+  const slope = (i: number) => (heights[i + 1]! - heights[i]!) / Math.max(knots[i + 1]! - knots[i]!, PATH_EPS);
+  if (n === 1) return [0];
+  const tangents: number[] = [slope(0)];
+  for (let i = 1; i < n - 1; i += 1) {
+    const before = slope(i - 1);
+    const after = slope(i);
+    if (before * after <= 0) {
+      tangents.push(0);
+      continue;
+    }
+    const h0 = knots[i]! - knots[i - 1]!;
+    const h1 = knots[i + 1]! - knots[i]!;
+    const w1 = 2 * h1 + h0;
+    const w2 = h1 + 2 * h0;
+    tangents.push((w1 + w2) / (w1 / before + w2 / after));
+  }
+  tangents.push(slope(n - 2));
+  return tangents;
+}
+
+export function arrowElevationProfile(points: readonly Pt[], heights: readonly number[]): (east: number, north: number) => number {
+  const keep: number[] = [];
+  points.forEach((point, i) => {
+    const last = keep[keep.length - 1];
+    if (last === undefined || dist(points[last]!, point) > PATH_EPS) keep.push(i);
+  });
+  const clean = keep.map((i) => points[i]!);
+  const levels = keep.map((i) => heights[i] ?? 0);
+  if (clean.length < 2) {
+    const only = levels[0] ?? 0;
+    return () => only;
+  }
+  const samples = 14;
+  const path = smoothArrowPath(clean, samples);
+  const along: number[] = [0];
+  for (let i = 1; i < path.length; i += 1) along.push(along[i - 1]! + dist(path[i - 1]!, path[i]!));
+  const stride = clean.length === 2 ? 1 : samples;
+  const knots = clean.map((_, j) => along[Math.min(j * stride, along.length - 1)]!);
+  const tangents = hermiteTangents(knots, levels);
+
+  const elevationAt = (s: number): number => {
+    if (s <= knots[0]!) return levels[0]!;
+    const last = knots.length - 1;
+    if (s >= knots[last]!) return levels[last]!;
+    let k = 0;
+    while (k < last - 1 && s > knots[k + 1]!) k += 1;
+    const h = knots[k + 1]! - knots[k]!;
+    const t = (s - knots[k]!) / h;
+    const t2 = t * t;
+    const t3 = t2 * t;
+    return (
+      (2 * t3 - 3 * t2 + 1) * levels[k]! +
+      (t3 - 2 * t2 + t) * h * tangents[k]! +
+      (-2 * t3 + 3 * t2) * levels[k + 1]! +
+      (t3 - t2) * h * tangents[k + 1]!
+    );
+  };
+
+  return (east, north) => {
+    let best = Infinity;
+    let bestS = 0;
+    for (let i = 1; i < path.length; i += 1) {
+      const a = path[i - 1]!;
+      const b = path[i]!;
+      const abx = b[0] - a[0];
+      const aby = b[1] - a[1];
+      const len2 = abx * abx + aby * aby;
+      const u = len2 > PATH_EPS ? Math.min(1, Math.max(0, ((east - a[0]) * abx + (north - a[1]) * aby) / len2)) : 0;
+      const d = Math.hypot(east - (a[0] + abx * u), north - (a[1] + aby * u));
+      if (d < best) {
+        best = d;
+        bestS = along[i - 1]! + u * Math.sqrt(len2);
+      }
+    }
+    return elevationAt(bestS);
+  };
+}

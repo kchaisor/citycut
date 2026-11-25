@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   ARROW_STYLES,
   DEFAULT_ARROW,
+  flattenArrowHeights,
+  smoothArrowHeights,
   arrowsForCut,
   hitArrow,
   parseDiagramArrow,
@@ -153,5 +155,48 @@ describe("parse and store", () => {
     const storage = memoryStorage();
     storage.setItem(DIAGRAM_ARROWS_STORAGE_KEY, JSON.stringify({ version: 1, byCut: { c: [ARROW, { id: "bad" }] } }));
     expect(arrowsForCut(readDiagramArrowsStore(storage), "c")).toEqual([ARROW]);
+  });
+});
+
+describe("per-node heights", () => {
+  const raw = { id: "a", points: [[0, 0], [10, 0], [20, 0]] };
+
+  it("keeps valid pointHeights and ignores malformed ones", () => {
+    expect(parseDiagramArrow({ ...raw, pointHeights: [1, 2.5, -3] })!.pointHeights).toEqual([1, 2.5, -3]);
+    expect(parseDiagramArrow(raw)!.pointHeights).toBeUndefined();
+    expect("pointHeights" in parseDiagramArrow(raw)!).toBe(false);
+    for (const bad of [[1, 2], [1, 2, 3, 4], [1, "2", 3], [1, null, 3], [1, Number.NaN, 3], "1,2,3", {}]) {
+      expect(parseDiagramArrow({ ...raw, pointHeights: bad })!.pointHeights).toBeUndefined();
+    }
+  });
+
+  it("flattens to the rounded average", () => {
+    expect(flattenArrowHeights([0, 10, 5])).toEqual([5, 5, 5]);
+    expect(flattenArrowHeights([1, 1, 2])).toEqual([1.33, 1.33, 1.33]);
+    expect(flattenArrowHeights([])).toEqual([]);
+  });
+
+  it("smooths interior bumps and keeps both ends fixed", () => {
+    const points: [number, number][] = [[0, 0], [10, 0], [20, 0], [30, 0], [40, 0]];
+    const bases = [0, 0, 20, 0, 0];
+    const smoothed = smoothArrowHeights(points, bases);
+    expect(smoothed[0]).toBe(0);
+    expect(smoothed[4]).toBe(0);
+    expect(smoothed[2]).toBeLessThan(20);
+    expect(smoothed[1]).toBeGreaterThan(0);
+    const range = (list: number[]) => Math.max(...list) - Math.min(...list);
+    expect(range(smoothed)).toBeLessThan(range(bases));
+    expect(points).toEqual([[0, 0], [10, 0], [20, 0], [30, 0], [40, 0]]);
+  });
+
+  it("leaves two-node arrows and straight ramps alone", () => {
+    expect(smoothArrowHeights([[0, 0], [10, 0]], [3, 9])).toEqual([3, 9]);
+    expect(smoothArrowHeights([[0, 0], [10, 0], [20, 0]], [0, 5, 10])).toEqual([0, 5, 10]);
+  });
+
+  it("weights neighbours by distance along the plan", () => {
+    const smoothed = smoothArrowHeights([[0, 0], [10, 0], [100, 0]], [0, 0, 90]);
+    expect(smoothed[1]).toBeGreaterThan(0);
+    expect(smoothed[2]).toBe(90);
   });
 });

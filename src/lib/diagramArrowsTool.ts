@@ -5,7 +5,9 @@ import {
   clampArrowHeight,
   clampArrowSpeed,
   clampArrowWidth,
+  flattenArrowHeights,
   newArrowId,
+  smoothArrowHeights,
   type ArrowDefaults,
   type DiagramArrow,
 } from "./diagramArrows";
@@ -19,7 +21,14 @@ export type ArrowToolState = {
   defaults: ArrowDefaults;
   selectedId: string | null;
   selectedPoint: number | null;
+  past: DiagramArrow[][];
 };
+
+export const MAX_ARROW_HISTORY = 30;
+export const MIN_NODE_ELEVATION_M = -100;
+export const MAX_NODE_ELEVATION_M = 2000;
+
+type BaseAt = (east: number, north: number) => number;
 
 export type ArrowToolAction =
   | { type: "setActive"; active: boolean }
@@ -32,10 +41,16 @@ export type ArrowToolAction =
   | { type: "escape" }
   | { type: "select"; id: string | null; point?: number | null }
   | { type: "movePoint"; id: string; index: number; point: Pt }
+  | { type: "moveArrow"; id: string; dx: number; dy: number }
+  | { type: "setPointHeight"; id: string; index: number; height: number; bases?: number[] }
+  | { type: "flatten"; groundAt?: BaseAt }
+  | { type: "smooth"; groundAt?: BaseAt }
+  | { type: "undo" }
+  | { type: "commitHistory"; before: DiagramArrow[] }
   | { type: "deleteSelectedPoint" }
   | { type: "deleteSelected" }
   | { type: "deleteArrow"; id: string }
-  | { type: "patch"; patch: Partial<ArrowDefaults> };
+  | { type: "patch"; patch: Partial<ArrowDefaults>; record?: boolean };
 
 export function initialArrowToolState(arrows: DiagramArrow[] = []): ArrowToolState {
   return {
@@ -46,6 +61,7 @@ export function initialArrowToolState(arrows: DiagramArrow[] = []): ArrowToolSta
     defaults: { ...DEFAULT_ARROW },
     selectedId: null,
     selectedPoint: null,
+    past: [],
   };
 }
 
@@ -61,11 +77,29 @@ function normalisePatch(patch: Partial<ArrowDefaults>): Partial<ArrowDefaults> {
   return next;
 }
 
+function pushHistory(past: DiagramArrow[][], before: DiagramArrow[]): DiagramArrow[][] {
+  return [...past, before].slice(-MAX_ARROW_HISTORY);
+}
+
+function recorded(state: ArrowToolState, arrows: DiagramArrow[]): ArrowToolState {
+  return { ...state, arrows, past: pushHistory(state.past, state.arrows) };
+}
+
+function nodeBases(arrow: DiagramArrow, groundAt: BaseAt = () => 0): number[] {
+  return arrow.pointHeights?.length === arrow.points.length
+    ? arrow.pointHeights
+    : arrow.points.map((point) => groundAt(point[0], point[1]));
+}
+
+function reshape(state: ArrowToolState, edit: (arrow: DiagramArrow) => DiagramArrow): DiagramArrow[] {
+  return state.arrows.map((arrow) => (arrow.id === state.selectedId ? edit(arrow) : arrow));
+}
+
 function finishDraft(state: ArrowToolState, id?: string): ArrowToolState {
   const points = dedupePoints(state.draft ?? [], 0.05);
   if (points.length < MIN_ARROW_POINTS) return state;
   const arrow: DiagramArrow = { id: id ?? newArrowId(), points, ...state.defaults };
-  return { ...state, arrows: [...state.arrows, arrow], draft: null, selectedId: arrow.id, selectedPoint: null };
+  return { ...recorded(state, [...state.arrows, arrow]), draft: null, selectedId: arrow.id, selectedPoint: null };
 }
 
 export function arrowToolReducer(state: ArrowToolState, action: ArrowToolAction): ArrowToolState {
@@ -86,6 +120,7 @@ export function arrowToolReducer(state: ArrowToolState, action: ArrowToolAction)
         draft: null,
         selectedId: null,
         selectedPoint: null,
+        past: [],
       };
     case "beginDraft":
       return { ...state, active: true, visible: true, draft: [], selectedId: null, selectedPoint: null };
@@ -116,31 +151,79 @@ export function arrowToolReducer(state: ArrowToolState, action: ArrowToolAction)
             : arrow,
         ),
       };
+    case "moveArrow":
+      return {
+        ...state,
+        arrows: state.arrows.map((arrow) =>
+          arrow.id === action.id
+            ? { ...arrow, points: arrow.points.map((point): Pt => [point[0] + action.dx, point[1] + action.dy]) }
+            : arrow,
+        ),
+      };
+    case "setPointHeight":
+      return {
+        ...state,
+        arrows: state.arrows.map((arrow) => {
+          if (arrow.id !== action.id || action.index < 0 || action.index >= arrow.points.length) return arrow;
+          const bases = arrow.pointHeights?.length === arrow.points.length ? arrow.pointHeights : action.bases;
+          if (!bases || bases.length !== arrow.points.length) return arrow;
+          const low = MIN_NODE_ELEVATION_M - arrow.heightM;
+          const high = MAX_NODE_ELEVATION_M - arrow.heightM;
+          const height = Math.round(Math.min(high, Math.max(low, action.height)) * 100) / 100;
+          return { ...arrow, pointHeights: bases.map((value, i) => (i === action.index ? height : value)) };
+        }),
+      };
+    case "flatten":
+    case "smooth": {
+      const arrow = selectedArrow(state);
+      if (!arrow) return state;
+      const bases = nodeBases(arrow, action.groundAt);
+      const pointHeights = action.type === "flatten" ? flattenArrowHeights(bases) : smoothArrowHeights(arrow.points, bases);
+      return recorded(state, reshape(state, (item) => ({ ...item, pointHeights })));
+    }
+    case "undo": {
+      const before = state.past[state.past.length - 1];
+      if (!before) return state;
+      const arrow = before.find((item) => item.id === state.selectedId);
+      return {
+        ...state,
+        arrows: before,
+        past: state.past.slice(0, -1),
+        selectedId: arrow ? state.selectedId : null,
+        selectedPoint: arrow && state.selectedPoint !== null && state.selectedPoint < arrow.points.length ? state.selectedPoint : null,
+      };
+    }
+    case "commitHistory":
+      return action.before === state.arrows ? state : { ...state, past: pushHistory(state.past, action.before) };
     case "deleteSelectedPoint": {
       const arrow = selectedArrow(state);
       if (!arrow || state.selectedPoint === null || arrow.points.length <= MIN_ARROW_POINTS) return state;
       const index = state.selectedPoint;
-      return {
-        ...state,
-        arrows: state.arrows.map((item) =>
-          item.id === arrow.id ? { ...item, points: item.points.filter((_, i) => i !== index) } : item,
-        ),
-        selectedPoint: null,
-      };
+      const without = <T>(list: T[]): T[] => list.filter((_, i) => i !== index);
+      const arrows = state.arrows.map((item) => {
+        if (item.id !== arrow.id) return item;
+        const next: DiagramArrow = { ...item, points: without(item.points) };
+        if (item.pointHeights) next.pointHeights = without(item.pointHeights);
+        return next;
+      });
+      return { ...recorded(state, arrows), selectedPoint: null };
     }
     case "deleteSelected":
       return state.selectedId ? arrowToolReducer(state, { type: "deleteArrow", id: state.selectedId }) : state;
     case "deleteArrow":
       return {
-        ...state,
-        arrows: state.arrows.filter((arrow) => arrow.id !== action.id),
+        ...recorded(
+          state,
+          state.arrows.filter((arrow) => arrow.id !== action.id),
+        ),
         selectedId: state.selectedId === action.id ? null : state.selectedId,
         selectedPoint: state.selectedId === action.id ? null : state.selectedPoint,
       };
     case "patch": {
       const patch = normalisePatch(action.patch);
       if (state.selectedId && !state.draft) {
-        return { ...state, arrows: state.arrows.map((arrow) => (arrow.id === state.selectedId ? { ...arrow, ...patch } : arrow)) };
+        const arrows = reshape(state, (arrow) => ({ ...arrow, ...patch }));
+        return action.record === false ? { ...state, arrows } : recorded(state, arrows);
       }
       return { ...state, defaults: { ...state.defaults, ...patch } };
     }
@@ -160,9 +243,19 @@ export function arrowKeyContext(target: EventTarget | null): ArrowKeyContext {
 
 const NO_CONTEXT: ArrowKeyContext = { editable: false, panel: false };
 
-export function arrowToolKeyAction(state: ArrowToolState, key: string, context: ArrowKeyContext = NO_CONTEXT): ArrowToolAction | null {
+export function arrowToolKeyAction(
+  state: ArrowToolState,
+  key: string,
+  context: ArrowKeyContext = NO_CONTEXT,
+  modifier = false,
+): ArrowToolAction | null {
   if (!state.active) return null;
-  if (context.editable && !(context.panel && (key === "Enter" || key === "Escape"))) return null;
+  const undoKey = modifier && key.toLowerCase() === "z";
+  if (context.editable && !(context.panel && (key === "Enter" || key === "Escape" || undoKey))) return null;
+  if (undoKey) {
+    if (state.draft) return { type: "undoPoint" };
+    return state.past.length > 0 ? { type: "undo" } : null;
+  }
   if (key === "Enter") return state.draft ? { type: "finishDraft" } : null;
   if (key === "Escape") return { type: "escape" };
   if (key === "Backspace") {
@@ -196,6 +289,7 @@ export function arrowToolClickActions(state: ArrowToolState, click: ArrowClick, 
   if (double && state.draft) return [{ type: "finishDraft" }];
   if (state.draft) return [{ type: "addPoint", point: click.ground }];
   if (click.hit) return [{ type: "select", id: click.hit.id, point: click.hit.point }];
+  if (state.selectedId && state.selectedPoint !== null) return [{ type: "select", id: state.selectedId, point: null }];
   if (state.selectedId) return [{ type: "select", id: null }];
   return [{ type: "beginDraft" }, { type: "addPoint", point: click.ground }];
 }
