@@ -1,4 +1,6 @@
 import { ChevronDown, Download, PanelRight, RotateCcw } from "lucide-react";
+import { useMemo } from "react";
+import { groundAtFor } from "../../lib/diagramArrows3d";
 import { StudioCompass } from "../StudioCompass";
 import { studioCompassVisible } from "../../lib/studioCompass";
 import { Sidebar } from "../Sidebar";
@@ -74,6 +76,7 @@ export function ModelPageSidebar({ vm }: { vm: import("./useModelPage").ModelPag
     view,
   } = vm;
   const { analysisCards, analysisCardOn, siteIntelFolded, setSiteIntelFolded, exploded, explodeModel, showIsometric } = vm;
+  const arrowGround = useMemo(() => groundAtFor(model), [model.terrain, model.sideM]);
   const explodeCardOn = tab === "3d" && exploded;
   const arrowsCardOn = vm.diagramArrows.state.active;
   const sunHoursLegendOn = sunHoursLegendCardOn({
@@ -123,7 +126,7 @@ export function ModelPageSidebar({ vm }: { vm: import("./useModelPage").ModelPag
               analysisCardOn || sunHoursLegendAlone || explodeCardOn || arrowsCardOn ? (
                 <>
                   {explodeCardOn ? <ExplodedAxoHudCard vm={vm} /> : null}
-                  {arrowsCardOn ? <ArrowsHudCard arrows={vm.diagramArrows} /> : null}
+                  {arrowsCardOn ? <ArrowsHudCard arrows={vm.diagramArrows} groundAt={arrowGround} /> : null}
                   {analysisCards.solar ? <SolarStudyHudCard vm={vm} /> : null}
                   {analysisCards.wind ? <WindRoseHudCard vm={vm} /> : null}
                   {analysisCards.view ? <ViewshedHudCard vm={vm} /> : null}

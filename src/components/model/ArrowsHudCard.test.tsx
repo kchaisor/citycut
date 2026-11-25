@@ -100,3 +100,60 @@ describe("ArrowsHudCard", () => {
     expect(sessionStorage.getItem("citycut.diagramArrows.paused.v1")).toBeNull();
   });
 });
+
+describe("ArrowsHudCard profile controls", () => {
+  const stored = () =>
+    parseDiagramArrows([{ id: "a", points: [[0, 0], [100, 0], [200, 0]] }]);
+  const mount = (over: Partial<ReturnType<typeof initialArrowToolState>> = {}, groundAt?: (east: number, north: number) => number) => {
+    const dispatch = vi.fn();
+    const arrows = stored();
+    render(
+      <ArrowsHudCard
+        arrows={{ state: { ...initialArrowToolState(arrows), active: true, selectedId: "a", ...over }, dispatch }}
+        groundAt={groundAt}
+      />,
+    );
+    return dispatch;
+  };
+
+  it("dispatches Flatten and Smooth with the ground", () => {
+    const ground = () => 4;
+    const dispatch = mount({}, ground);
+    fireEvent.click(screen.getByRole("button", { name: "Flatten" }));
+    expect(dispatch).toHaveBeenCalledWith({ type: "flatten", groundAt: ground });
+    fireEvent.click(screen.getByRole("button", { name: "Smooth" }));
+    expect(dispatch).toHaveBeenCalledWith({ type: "smooth", groundAt: ground });
+  });
+
+  it("falls back to a flat ground when none is passed", () => {
+    const dispatch = mount();
+    fireEvent.click(screen.getByRole("button", { name: "Flatten" }));
+    const action = dispatch.mock.calls[0]![0] as { groundAt: (east: number, north: number) => number };
+    expect(action.groundAt(10, 10)).toBe(0);
+  });
+
+  it("disables Flatten and Smooth with no arrow selected", () => {
+    mount({ selectedId: null });
+    expect((screen.getByRole("button", { name: "Flatten" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: "Smooth" }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("enables Undo only when there is history and dispatches undo", () => {
+    mount();
+    expect((screen.getByRole("button", { name: "Undo" }) as HTMLButtonElement).disabled).toBe(true);
+    cleanup();
+    const dispatch = mount({ past: [[]] });
+    const undo = screen.getByRole("button", { name: "Undo" }) as HTMLButtonElement;
+    expect(undo.disabled).toBe(false);
+    fireEvent.click(undo);
+    expect(dispatch).toHaveBeenCalledWith({ type: "undo" });
+  });
+
+  it("describes whole-arrow and node editing in the hint", () => {
+    mount();
+    expect(screen.getByText(/click a node to edit it/i)).toBeTruthy();
+    cleanup();
+    mount({ selectedPoint: 1 });
+    expect(screen.getByText(/Node selected/)).toBeTruthy();
+  });
+});

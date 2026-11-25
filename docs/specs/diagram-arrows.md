@@ -16,9 +16,18 @@ Controls:
 
 - Tool: button named "Arrows" in the left tool rail (`aria-label="Model tools"`), directly after Site (Site Intelligence). It is no longer in the bottom bar. A panel opens with: style group (`aria-label="Arrow style"`, eight buttons: Streak, Tapered flow, Bold, Line, Dashed, Dotted, Chevron run, Double, each with a drawn swatch), colour swatches (Ink, Red, Blue, Green, Amber), a Width slider (0.4x to 2.5x), a Height slider (0 to 500 m, 3D), animation picker (None, Streaks, Draw on, Dashes) with an Animation speed slider (0.25x to 3x), pause and play, "Show in 3D" and "Show in Drawing" checkboxes with a note saying whether they apply to "the selected arrow" or "the next arrow", list of arrows with select and delete, "New arrow", and "Done". There is no Label field.
 - Placing: click points on the ground, live preview of the curve. Double-click or Enter finishes (needs at least 2 points). Esc cancels the draft. Backspace removes the last placed point.
-- Editing: click an arrow to select it. Drag its points to move them. Select a point and press Delete or Backspace to remove it (an arrow keeps at least 2 points). Delete, or the panel button, removes the whole arrow. Click empty space to deselect.
+- Editing: click an arrow body to select the whole arrow. Click one of its node markers to edit that node. Click empty space while a node is selected to return to whole-arrow mode; click empty space again to deselect. Drag a node marker to slide it on its own height plane. Select a node and press Delete or Backspace to remove it (an arrow keeps at least 2 points). Delete, or the panel button, removes the whole arrow.
 - Panel edits apply to the selected arrow; with nothing selected they set the defaults for the next arrow.
-- Height gumball: with an arrow selected in a 3D projection (not Plan), a gumball stands at the arrow's midpoint: a stem to the ground, a ring and up and down cones. Dragging it changes the height on a camera-facing vertical plane, in sync with the Height slider. Hovering or dragging the gumball or a point handle locks OrbitControls so the camera never orbits during the drag, including on `pointercancel`. The gumball is screen-only and never appears in exports.
+- Gumball: a thin Rhino-style 3-axis gumball (small neutral origin marker, three thin shafts with sharp cone tips) on the selected arrow. X is red (`--arrow-red`, east), Y is green (`--arrow-green`, north), Z is blue (`--arrow-blue`, up). It keeps a constant size of about 60 px on screen at any zoom, and is screen-only: it never appears in exports. Clicking the origin marker does not grab an axis, so a node under the origin can still be dragged.
+  - Whole-arrow mode: the gumball sits at the arrow's midpoint. X moves every point east or west, Y moves every point north or south, Z changes the arrow's height (whole metres, 0 to 500, in sync with the Height slider).
+  - Node mode: the gumball sits on the selected node. X and Y move only that node. Z moves only that node's height (see Vertical profile).
+  - Each drag measures along the axis on a camera-facing plane that contains the axis. In Plan the gumball shows X and Y only.
+  - Hovering or dragging an axis or a node marker locks OrbitControls so the camera never orbits during the drag, including on `pointercancel`. Axes are tested before node markers.
+- Vertical profile: by default an arrow follows the ground under it plus its height. Once a node's height is edited, Flatten or Smooth is used, the arrow stores one base height per node (`pointHeights`) and rides a smooth curve through them, with no terrain bumps between nodes. The ribbon, head, dots, dashes and chevrons all follow it.
+  - Flatten: sets every node to one even height (the average of the current node bases), so the whole arrow runs level over bridges and water.
+  - Smooth: irons out vertical bumps by blending each interior node with its neighbours (two passes, weighted by distance along the plan). The first and last nodes stay fixed and the plan points do not move.
+  - Both act on the selected arrow and are disabled with none selected. They work whether or not the arrow already had node heights.
+- Undo: an Undo button in the panel and Ctrl+Z or Cmd+Z step back through the last 30 edits (placing, panel edits, flatten, smooth, deleting a node or arrow, and each whole gumball or node drag as one step). While drawing a draft, Ctrl+Z removes the last point instead.
 - Presets. No flat or blunt end on the arrow's head and tail tips (every head is a point, every tail tapers to a point or a V-notch). Dash segments are not tips: each is even width with square ends, laid out with a consistent gap along the curve, the last dash meeting the head base:
   - `streak`: three or four comets, each a pointed head with a tapering tail that fades out, and no solid body. They sit evenly spaced and static for `none`, paused, reduced motion, exports and swatches.
   - `tapered`: Tapered flow, grows smoothly from a point at the tail to the head base.
@@ -60,6 +69,7 @@ DiagramArrow {
   colour: ink | red | blue | green | amber,
   width: number 0.4..2.5 (default 1; legacy s, m, l read as 0.55, 1, 1.65),
   heightM (default 20, 0..500, 3D only),
+  pointHeights?: number[] (one base elevation per point; absent means follow the ground),
   animation: none | streaks | draw-on | dashes (default none),
   speed: number 0.25..3 (default 1, per arrow),
   showIn3d, showInDrawing (both default true)
@@ -74,7 +84,9 @@ Named views: the snapshot gains `arrows: { visible, items } | null`. Saving stor
 
 - [ ] The Arrows button sits right under Site in the left rail and opens the panel; the eight styles are in a group named "Arrow style".
 - [ ] Width, Height and Animation speed sliders change the selected arrow; there is no Label field.
-- [ ] Dragging the 3D gumball changes the height with the Height slider following, and the camera does not orbit.
+- [ ] The gumball shows red X, green Y and blue Z thin axes at constant screen size; with the whole arrow selected, X and Y move the arrow and Z changes the height with the Height slider following; the camera never orbits during a drag.
+- [ ] Selecting a node moves the gumball to it; its X, Y and Z move only that node; clicking empty space returns to whole-arrow mode.
+- [ ] Flatten makes the arrow level over a bridge or water, Smooth irons out bumps with the ends fixed, and Undo (button or Ctrl+Z) reverses each.
 - [ ] Show in 3D hides the arrow in 3D, Plan and the PNG; Show in Drawing hides it in Drawing, .svg, .ai and .3dm.
 - [ ] No style has a flat or blunt end; Streak shows three or four fading comets and no solid body.
 - [ ] Clicking 3+ points on the 3D ground and pressing Enter leaves a smooth arrow through those points at 20 m.

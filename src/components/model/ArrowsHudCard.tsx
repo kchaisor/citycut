@@ -17,6 +17,7 @@ import {
   MIN_ARROW_WIDTH,
   type ArrowDefaults,
 } from "../../lib/diagramArrows";
+import type { GroundAt } from "../../lib/diagramArrows3d";
 import { selectedArrow, type ArrowToolAction, type ArrowToolState } from "../../lib/diagramArrowsTool";
 import { setArrowAnimationPaused, useArrowAnimationPaused } from "../../lib/diagramArrowsMotion";
 import { ArrowStyleSwatch } from "../DiagramArrowsDrawing";
@@ -24,7 +25,9 @@ import { AnalysisHudCard } from "./AnalysisHudCard";
 
 export type ArrowsCardModel = { state: ArrowToolState; dispatch: (action: ArrowToolAction) => void };
 
-export function ArrowsHudCard({ arrows }: { arrows: ArrowsCardModel }) {
+const NO_GROUND: GroundAt = () => 0;
+
+export function ArrowsHudCard({ arrows, groundAt = NO_GROUND }: { arrows: ArrowsCardModel; groundAt?: GroundAt }) {
   const { state, dispatch } = arrows;
   const [collapsed, setCollapsed] = useState(false);
   const firstSection = useRef<HTMLDivElement | null>(null);
@@ -38,7 +41,9 @@ export function ArrowsHudCard({ arrows }: { arrows: ArrowsCardModel }) {
   const hint = state.draft
     ? `${state.draft.length} point${state.draft.length === 1 ? "" : "s"}: Enter or double-click to finish, Esc to cancel`
     : selected
-      ? "Drag points to move. Delete removes the arrow."
+      ? state.selectedPoint !== null
+        ? "Node selected: drag a gumball axis to move it. Click empty space for the whole arrow, Delete removes the node."
+        : "Drag a gumball axis to move the arrow, or click a node to edit it. Delete removes the arrow."
       : "Click the ground to start an arrow";
 
   return (
@@ -195,6 +200,17 @@ export function ArrowsHudCard({ arrows }: { arrows: ArrowsCardModel }) {
         </ul>
       </div>
       <p className="ac-note">{hint}</p>
+      <div className="ac-seg ac-seg-3" role="group" aria-label="Arrow profile">
+        <button type="button" className="ac-seg-btn" disabled={!selected} onClick={() => dispatch({ type: "flatten", groundAt })}>
+          Flatten
+        </button>
+        <button type="button" className="ac-seg-btn" disabled={!selected} onClick={() => dispatch({ type: "smooth", groundAt })}>
+          Smooth
+        </button>
+        <button type="button" className="ac-seg-btn" disabled={state.past.length === 0} onClick={() => dispatch({ type: "undo" })}>
+          Undo
+        </button>
+      </div>
       <div className="ac-seg ac-seg-2" role="group" aria-label="Arrow actions">
         <button type="button" className="ac-seg-btn" onClick={() => dispatch({ type: "beginDraft" })}>
           New arrow
