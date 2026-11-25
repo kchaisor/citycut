@@ -4,21 +4,29 @@ import * as THREE from "three";
 import type { Pt, CityModel } from "../types";
 import { getColour } from "../lib/colours";
 import { ARROW_COLOUR_TOKENS, clampArrowHeight, visibleIn3d, type DiagramArrow } from "../lib/diagramArrows";
-import { arrowMidpoint, distanceToPath, nearestPointIndex, smoothArrowPath } from "../lib/diagramArrowsPath";
+import { distanceToPath, nearestPointIndex, smoothArrowPath } from "../lib/diagramArrowsPath";
 import { buildArrowShape, emptyArrowShape } from "../lib/diagramArrowsShape";
 import {
   ARROW_GUMBALL,
+  GUMBALL_AXES,
+  arrowBaseAt,
   arrowGumball,
+  arrowGumballOrigin,
+  arrowNodeBases,
   arrowShapeGeometry,
   arrowWorldPoint,
   disposeGumball,
   groundAtFor,
-  gumballHit,
-  gumballPlane,
-  gumballWorldY,
+  gumballAxisDelta,
+  gumballAxisHit,
+  gumballAxisPlane,
+  gumballLengthM,
+  gumballPlaneHit,
   intersectArrowPlane,
   markArrowEditor,
   projectGroundPoint,
+  type GroundAt,
+  type GumballAxis,
 } from "../lib/diagramArrows3d";
 import {
   arrowToolClickActions,
@@ -43,12 +51,12 @@ import { useColourRevision } from "../lib/useColourRevision";
 const HANDLE_HIT_PX = 12;
 const BODY_HIT_PX = 9;
 const CLICK_MAX_PX = 5;
-const HANDLE_SIDE_FRAC = 0.008;
+const HANDLE_SIDE_FRAC = 0.0055;
 const STREAK_LIFT_M = 0.05;
-const GUMBALL_HIT_PX = 14;
-const GUMBALL_RADIUS_FRAC = HANDLE_SIDE_FRAC * 1.6;
+const GUMBALL_HIT_PX = 9;
+const GUMBALL_LENGTH_PX = 60;
 
-type LiveArrow = { arrow: DiagramArrow; body: THREE.Mesh; comets: THREE.Mesh };
+type LiveArrow = { arrow: DiagramArrow; base: GroundAt; body: THREE.Mesh; comets: THREE.Mesh };
 
 const EMPTY_GEOMETRY = new THREE.BufferGeometry();
 
@@ -57,13 +65,13 @@ function setGeometry(mesh: THREE.Mesh, geometry: THREE.BufferGeometry | null): v
   mesh.geometry = geometry ?? EMPTY_GEOMETRY;
 }
 
-function updateLive(item: LiveArrow, model: CityModel, groundAt: ReturnType<typeof groundAtFor>, seconds: number): void {
+function updateLive(item: LiveArrow, model: CityModel, seconds: number): void {
   const live = liveArrowShape(item.arrow, model.sideM, 0, seconds);
-  setGeometry(item.body, arrowShapeGeometry(live.body, groundAt, item.arrow.heightM));
-  setGeometry(item.comets, arrowShapeGeometry({ ...emptyArrowShape(), ribbons: live.comets }, groundAt, item.arrow.heightM, STREAK_LIFT_M));
+  setGeometry(item.body, arrowShapeGeometry(live.body, item.base, item.arrow.heightM));
+  setGeometry(item.comets, arrowShapeGeometry({ ...emptyArrowShape(), ribbons: live.comets }, item.base, item.arrow.heightM, STREAK_LIFT_M));
 }
 
-function liveMeshes(arrow: DiagramArrow, model: CityModel, groundAt: ReturnType<typeof groundAtFor>, seconds: number): LiveArrow {
+function liveMeshes(arrow: DiagramArrow, model: CityModel, groundAt: GroundAt, seconds: number): LiveArrow {
   const base = getColour(ARROW_COLOUR_TOKENS[arrow.colour]);
   const body = new THREE.Mesh(
     EMPTY_GEOMETRY,
@@ -91,8 +99,8 @@ function liveMeshes(arrow: DiagramArrow, model: CityModel, groundAt: ReturnType<
     markScreenOnly(mesh);
     markArrowEditor(mesh);
   }
-  const item = { arrow, body, comets };
-  updateLive(item, model, groundAt, seconds);
+  const item = { arrow, base: arrowBaseAt(arrow, groundAt), body, comets };
+  updateLive(item, model, seconds);
   return item;
 }
 
@@ -109,12 +117,16 @@ function disposeGroup(group: THREE.Group): void {
 }
 
 function arrowMesh(
-  arrow: Pick<DiagramArrow, "points" | "style" | "width" | "colour" | "heightM">,
+  arrow: Pick<DiagramArrow, "points" | "pointHeights" | "style" | "width" | "colour" | "heightM">,
   model: CityModel,
-  groundAt: ReturnType<typeof groundAtFor>,
+  groundAt: GroundAt,
   opacity: number,
 ): THREE.Mesh | null {
-  const geometry = arrowShapeGeometry(buildArrowShape(arrow.points, arrow.style, arrow.width, model.sideM), groundAt, arrow.heightM);
+  const geometry = arrowShapeGeometry(
+    buildArrowShape(arrow.points, arrow.style, arrow.width, model.sideM),
+    arrowBaseAt(arrow, groundAt),
+    arrow.heightM,
+  );
   if (!geometry) return null;
   const faded = geometry.userData.faded === true;
   const material = new THREE.MeshBasicMaterial({
@@ -148,8 +160,25 @@ function handleMesh(at: THREE.Vector3, radius: number, selected: boolean): THREE
 }
 
 type DragState =
-  | { kind: "point"; id: string; index: number; heightM: number }
-  | { kind: "height"; id: string; plane: THREE.Plane; startY: number; startHeightM: number };
+  | { kind: "point"; id: string; index: number; heightM: number; base: GroundAt; before: DiagramArrow[] }
+  | {
+      kind: "axis";
+      axis: GumballAxis;
+      id: string;
+      index: number | null;
+      plane: THREE.Plane;
+      startHit: THREE.Vector3;
+      applied: number;
+      startPoint: Pt | null;
+      startHeightM: number;
+      startNodeHeight: number;
+      bases: number[];
+      before: DiagramArrow[];
+    };
+
+function gumballAxes(flat: boolean): GumballAxis[] {
+  return flat ? GUMBALL_AXES.filter((axis) => axis !== "z") : [...GUMBALL_AXES];
+}
 
 export function DiagramArrows3D({
   model,
@@ -239,24 +268,22 @@ export function DiagramArrows3D({
     }
     const selected = showing && state.active ? selectedArrow(state) : null;
     if (selected?.showIn3d) {
-      selected.points.forEach((point, index) =>
-        root.add(handleMesh(arrowWorldPoint(point, groundAt, selected.heightM), handleRadius, index === state.selectedPoint)),
+      selected.points.forEach((_, index) =>
+        root.add(handleMesh(arrowGumballOrigin(selected, index, groundAt), handleRadius, index === state.selectedPoint)),
       );
-      if (!flat) {
-        const middle = arrowMidpoint(selected.points);
-        const gumball = arrowGumball(
-          arrowWorldPoint(middle, groundAt, selected.heightM),
-          groundAt(middle[0], middle[1]),
-          model.sideM * GUMBALL_RADIUS_FRAC,
-          getColour("--arrow-handle"),
-        );
-        markScreenOnly(gumball);
-        markArrowEditor(gumball);
-        root.add(gumball);
-      }
+      const origin = arrowGumballOrigin(selected, state.selectedPoint, groundAt);
+      const gumball = arrowGumball(
+        origin,
+        { origin: getColour("--arrow-ink"), x: getColour("--arrow-red"), y: getColour("--arrow-green"), z: getColour("--arrow-blue") },
+        gumballAxes(flat),
+      );
+      gumball.scale.setScalar(gumballLengthM(camera, origin, gl.domElement.clientHeight, GUMBALL_LENGTH_PX));
+      markScreenOnly(gumball);
+      markArrowEditor(gumball);
+      root.add(gumball);
     }
     invalidate();
-  }, [root, arrows, state.draft, state.defaults, state.active, state.selectedId, state.selectedPoint, hover, showing, flat, model, groundAt, handleRadius, colourRevision, reducedMotion, invalidate]);
+  }, [root, arrows, state.draft, state.defaults, state.active, state.selectedId, state.selectedPoint, hover, showing, flat, model, groundAt, handleRadius, camera, gl, colourRevision, reducedMotion, invalidate]);
 
   useEffect(() => {
     if (!active || !state.active) {
@@ -283,21 +310,24 @@ export function DiagramArrows3D({
       return raycaster.ray;
     };
 
-    const screenPath = (arrow: Pick<DiagramArrow, "points" | "heightM">, rect: DOMRect): Pt[] =>
-      smoothArrowPath(arrow.points).flatMap((point) => {
-        const at = projectGroundPoint(camera, arrowWorldPoint(point, groundRef.current, arrow.heightM), rect);
+    const screenPath = (arrow: DiagramArrow, rect: DOMRect): Pt[] => {
+      const base = arrowBaseAt(arrow, groundRef.current);
+      return smoothArrowPath(arrow.points).flatMap((point) => {
+        const at = projectGroundPoint(camera, arrowWorldPoint(point, base, arrow.heightM), rect);
         return at ? [at] : [];
       });
+    };
 
-    const gumballWorld = (arrow: DiagramArrow): THREE.Vector3 =>
-      arrowWorldPoint(arrowMidpoint(arrow.points), groundRef.current, arrow.heightM);
-
-    const gumballAt = (event: PointerEvent): DiagramArrow | null => {
-      const selected = selectedArrow(stateRef.current);
-      if (!selected?.showIn3d || flatRef.current) return null;
+    const gumballAt = (event: PointerEvent): { arrow: DiagramArrow; axis: GumballAxis; origin: THREE.Vector3 } | null => {
+      const current = stateRef.current;
+      const selected = selectedArrow(current);
+      if (!selected?.showIn3d) return null;
       const rect = canvas.getBoundingClientRect();
       const local: Pt = [event.clientX - rect.left, event.clientY - rect.top];
-      return gumballHit(camera, gumballWorld(selected), model.sideM * GUMBALL_RADIUS_FRAC, local, rect, GUMBALL_HIT_PX) ? selected : null;
+      const origin = arrowGumballOrigin(selected, current.selectedPoint, groundRef.current);
+      const length = gumballLengthM(camera, origin, rect.height, GUMBALL_LENGTH_PX);
+      const axis = gumballAxisHit(camera, origin, length, local, rect, GUMBALL_HIT_PX, gumballAxes(flatRef.current));
+      return axis ? { arrow: selected, axis, origin } : null;
     };
 
     const hitAt = (event: PointerEvent): { id: string; point: number | null } | null => {
@@ -307,7 +337,7 @@ export function DiagramArrows3D({
       const current = stateRef.current;
       const selected = selectedArrow(current);
       if (selected?.showIn3d) {
-        const handles = selected.points.map((point) => projectGroundPoint(camera, arrowWorldPoint(point, groundRef.current, selected.heightM), rect) ?? [-1e6, -1e6]);
+        const handles = selected.points.map((_, index) => projectGroundPoint(camera, arrowGumballOrigin(selected, index, groundRef.current), rect) ?? [-1e6, -1e6]);
         const index = nearestPointIndex(handles as Pt[], local, HANDLE_HIT_PX);
         if (index !== null) return { id: selected.id, point: index };
       }
@@ -335,36 +365,78 @@ export function DiagramArrows3D({
       down = { x: event.clientX, y: event.clientY };
       const current = stateRef.current;
       if (current.draft) return;
+      const grabbed = gumballAt(event);
+      if (grabbed) {
+        const { arrow, axis, origin } = grabbed;
+        const plane = gumballAxisPlane(origin, axis, camera);
+        const startHit = plane ? gumballPlaneHit(rayAt(event), plane) : null;
+        if (!plane || !startHit) return;
+        const index = current.selectedPoint;
+        const bases = arrowNodeBases(arrow, groundRef.current);
+        beginDrag(event, {
+          kind: "axis",
+          axis,
+          id: arrow.id,
+          index,
+          plane,
+          startHit,
+          applied: 0,
+          startPoint: index === null ? null : arrow.points[index]!,
+          startHeightM: arrow.heightM,
+          startNodeHeight: index === null ? 0 : bases[index]!,
+          bases,
+          before: current.arrows,
+        });
+        return;
+      }
       const hit = hitAt(event);
       const selected = selectedArrow(current);
       if (hit && hit.point !== null && selected && hit.id === selected.id) {
         dispatch({ type: "select", id: hit.id, point: hit.point });
-        beginDrag(event, { kind: "point", id: hit.id, index: hit.point, heightM: selected.heightM });
+        const level = selected.pointHeights?.[hit.point];
+        const base: GroundAt = level === undefined ? groundRef.current : () => level;
+        beginDrag(event, { kind: "point", id: hit.id, index: hit.point, heightM: selected.heightM, base, before: current.arrows });
+      }
+    };
+
+    const dragAxis = (drag: Extract<DragState, { kind: "axis" }>, event: PointerEvent): void => {
+      const hit = gumballPlaneHit(rayAt(event), drag.plane);
+      if (!hit) return;
+      const delta = gumballAxisDelta(hit, drag.startHit, drag.axis);
+      if (drag.index === null) {
+        if (drag.axis === "z") {
+          dispatch({ type: "patch", patch: { heightM: clampArrowHeight(drag.startHeightM + delta) }, record: false });
+          return;
+        }
+        const step = delta - drag.applied;
+        drag.applied = delta;
+        dispatch({ type: "moveArrow", id: drag.id, dx: drag.axis === "x" ? step : 0, dy: drag.axis === "y" ? step : 0 });
         return;
       }
-      const grabbed = gumballAt(event);
-      if (!grabbed) return;
-      const plane = gumballPlane(gumballWorld(grabbed), camera);
-      const startY = plane ? gumballWorldY(rayAt(event), plane) : null;
-      if (plane && startY !== null) beginDrag(event, { kind: "height", id: grabbed.id, plane, startY, startHeightM: grabbed.heightM });
+      if (drag.axis === "z") {
+        dispatch({ type: "setPointHeight", id: drag.id, index: drag.index, height: drag.startNodeHeight + delta, bases: drag.bases });
+        return;
+      }
+      const start = drag.startPoint!;
+      const point: Pt = drag.axis === "x" ? [start[0] + delta, start[1]] : [start[0], start[1] + delta];
+      dispatch({ type: "movePoint", id: drag.id, index: drag.index, point });
     };
 
     const onMove = (event: PointerEvent) => {
       const current = stateRef.current;
       if (dragging?.kind === "point") {
-        const ground = intersectArrowPlane(rayAt(event), groundRef.current, dragging.heightM);
+        const ground = intersectArrowPlane(rayAt(event), dragging.base, dragging.heightM);
         if (ground) dispatch({ type: "movePoint", id: dragging.id, index: dragging.index, point: ground });
         return;
       }
-      if (dragging?.kind === "height") {
-        const y = gumballWorldY(rayAt(event), dragging.plane);
-        if (y !== null) dispatch({ type: "patch", patch: { heightM: clampArrowHeight(dragging.startHeightM + y - dragging.startY) } });
+      if (dragging?.kind === "axis") {
+        dragAxis(dragging, event);
         return;
       }
-      const overGumball = !current.draft && gumballAt(event) !== null;
+      const overGumball = !current.draft ? gumballAt(event) : null;
       const overPoint = !current.draft && hitAt(event)?.point != null;
-      canvas.style.cursor = overGumball ? "ns-resize" : "";
-      setLock(overGumball || overPoint);
+      canvas.style.cursor = overGumball ? (overGumball.axis === "z" ? "ns-resize" : "grab") : "";
+      setLock(overGumball !== null || overPoint);
       if (current.draft && current.draft.length > 0) {
         setHover(intersectArrowPlane(rayAt(event), groundRef.current, current.defaults.heightM));
       } else {
@@ -377,6 +449,7 @@ export function DiagramArrows3D({
       const start = down;
       down = null;
       if (dragging) {
+        dispatch({ type: "commitHistory", before: dragging.before });
         dragging = null;
         setLock(false);
         canvas.releasePointerCapture?.(event.pointerId);
@@ -396,6 +469,7 @@ export function DiagramArrows3D({
 
     const onCancel = (event: PointerEvent) => {
       down = null;
+      if (dragging) dispatch({ type: "commitHistory", before: dragging.before });
       dragging = null;
       setLock(false);
       canvas.releasePointerCapture?.(event.pointerId);
@@ -416,10 +490,14 @@ export function DiagramArrows3D({
   }, [active, state.active, gl, camera, dispatch, model.sideM]);
 
   useFrame(() => {
+    const gumball = root.children.find((child) => child.userData[ARROW_GUMBALL]);
+    if (gumball) {
+      gumball.scale.setScalar(gumballLengthM(camera, gumball.position, gl.domElement.clientHeight, GUMBALL_LENGTH_PX));
+    }
     const live = liveRef.current;
     if (live.length === 0) return;
     const seconds = arrowClockSeconds();
-    for (const item of live) updateLive(item, model, groundRef.current, seconds);
+    for (const item of live) updateLive(item, model, seconds);
     invalidate();
   });
 

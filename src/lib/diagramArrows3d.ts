@@ -1,8 +1,10 @@
 import * as THREE from "three";
 import type { Pt } from "../types";
+import type { DiagramArrow } from "./diagramArrows";
 import type { ArrowShape } from "./diagramArrowsShape";
-import { distanceToPath } from "./diagramArrowsPath";
+import { arrowElevationProfile, arrowMidpoint, distanceToPath } from "./diagramArrowsPath";
 import { CITYCUT_EXPORT_ONLY } from "./screenOnly";
+import { screenConstantHitRadiusM } from "./sectionKnife/gizmoHit";
 import { sampleTerrain } from "./terrain";
 import type { CityModel } from "../types";
 
@@ -101,38 +103,69 @@ export function projectGroundPoint(camera: THREE.Camera, world: THREE.Vector3, r
   return [(ndc.x * 0.5 + 0.5) * rect.width, (-ndc.y * 0.5 + 0.5) * rect.height];
 }
 
+export function arrowBaseAt(arrow: Pick<DiagramArrow, "points" | "pointHeights">, groundAt: GroundAt): GroundAt {
+  const heights = arrow.pointHeights;
+  return heights && heights.length === arrow.points.length ? arrowElevationProfile(arrow.points, heights) : groundAt;
+}
+
+export function arrowNodeBases(arrow: Pick<DiagramArrow, "points" | "pointHeights">, groundAt: GroundAt): number[] {
+  const heights = arrow.pointHeights;
+  return heights && heights.length === arrow.points.length ? [...heights] : arrow.points.map((point) => groundAt(point[0], point[1]));
+}
+
+export type GumballAxis = "x" | "y" | "z";
+
+export const GUMBALL_AXES: readonly GumballAxis[] = ["x", "y", "z"];
+
+export const GUMBALL_DIRECTIONS: Record<GumballAxis, THREE.Vector3> = {
+  x: new THREE.Vector3(1, 0, 0),
+  y: new THREE.Vector3(0, 0, -1),
+  z: new THREE.Vector3(0, 1, 0),
+};
+
 export const ARROW_GUMBALL = "citycutArrowGumball";
 
-const GUMBALL_STEM_FRAC = 0.14;
-const GUMBALL_CONE_FRAC = 0.6;
+export type GumballColours = { origin: string; x: string; y: string; z: string };
 
-export function arrowGumball(at: THREE.Vector3, groundY: number, radius: number, colour: string): THREE.Group {
+const GUMBALL_SHAFT_RADIUS = 0.014;
+const GUMBALL_TIP_RADIUS = 0.055;
+const GUMBALL_TIP_LENGTH = 0.2;
+const GUMBALL_ORIGIN_RADIUS = 0.06;
+const GUMBALL_SPAN_FRAC = 1.1;
+
+export function arrowGumball(at: THREE.Vector3, colours: GumballColours, axes: readonly GumballAxis[] = GUMBALL_AXES): THREE.Group {
   const group = new THREE.Group();
   group.name = "ArrowGumball";
   group.userData[ARROW_GUMBALL] = true;
   group.position.copy(at);
-  const material = new THREE.MeshBasicMaterial({ color: colour, depthTest: false, toneMapped: false });
-  const part = (geometry: THREE.BufferGeometry): THREE.Mesh => {
+  const part = (geometry: THREE.BufferGeometry, colour: string): THREE.Mesh => {
+    const material = new THREE.MeshBasicMaterial({ color: colour, depthTest: false, toneMapped: false });
     const mesh = new THREE.Mesh(geometry, material);
     mesh.renderOrder = 61;
     mesh.userData.noScenePick = true;
     group.add(mesh);
     return mesh;
   };
-  const stemLength = at.y - groundY;
-  if (stemLength > radius * 0.1) {
-    const stem = part(new THREE.CylinderGeometry(radius * GUMBALL_STEM_FRAC, radius * GUMBALL_STEM_FRAC, stemLength, 8));
-    stem.position.y = -stemLength / 2;
+  part(new THREE.SphereGeometry(GUMBALL_ORIGIN_RADIUS, 12, 8), colours.origin).name = "origin";
+  for (const axis of axes) {
+    const direction = GUMBALL_DIRECTIONS[axis];
+    const orient = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), direction);
+    const shaftLength = 1 - GUMBALL_TIP_LENGTH;
+    const shaft = part(new THREE.CylinderGeometry(GUMBALL_SHAFT_RADIUS, GUMBALL_SHAFT_RADIUS, shaftLength, 6), colours[axis]);
+    shaft.quaternion.copy(orient);
+    shaft.position.copy(direction).multiplyScalar(shaftLength / 2);
+    shaft.name = `${axis}-shaft`;
+    const tip = part(new THREE.ConeGeometry(GUMBALL_TIP_RADIUS, GUMBALL_TIP_LENGTH, 12), colours[axis]);
+    tip.quaternion.copy(orient);
+    tip.position.copy(direction).multiplyScalar(1 - GUMBALL_TIP_LENGTH / 2);
+    tip.name = `${axis}-tip`;
   }
-  const ring = part(new THREE.TorusGeometry(radius, radius * GUMBALL_STEM_FRAC * 1.4, 8, 28));
-  ring.rotation.x = Math.PI / 2;
-  const coneHeight = radius * GUMBALL_CONE_FRAC * 2;
-  const up = part(new THREE.ConeGeometry(radius * GUMBALL_CONE_FRAC, coneHeight, 14));
-  up.position.y = radius * 1.4 + coneHeight / 2;
-  const down = part(new THREE.ConeGeometry(radius * GUMBALL_CONE_FRAC, coneHeight, 14));
-  down.rotation.x = Math.PI;
-  down.position.y = -(radius * 1.4 + coneHeight / 2);
   return group;
+}
+
+export function gumballLengthM(camera: THREE.Camera, at: THREE.Vector3, canvasHeightPx: number, pixelLength: number): number {
+  camera.updateMatrixWorld();
+  return screenConstantHitRadiusM(camera, at, pixelLength, canvasHeightPx);
 }
 
 export function disposeGumball(group: THREE.Group): void {
@@ -146,30 +179,60 @@ export function disposeGumball(group: THREE.Group): void {
   for (const material of materials) material.dispose();
 }
 
-export function gumballPlane(at: THREE.Vector3, camera: THREE.Camera): THREE.Plane | null {
-  const forward = camera.getWorldDirection(new THREE.Vector3());
-  const horizontal = new THREE.Vector3(forward.x, 0, forward.z);
-  if (horizontal.lengthSq() < 1e-6) return null;
-  return new THREE.Plane().setFromNormalAndCoplanarPoint(horizontal.normalize(), at);
+export function arrowGumballOrigin(arrow: DiagramArrow, selectedPoint: number | null, groundAt: GroundAt): THREE.Vector3 {
+  const base = arrowBaseAt(arrow, groundAt);
+  if (selectedPoint !== null && arrow.points[selectedPoint]) {
+    const point = arrow.points[selectedPoint]!;
+    return new THREE.Vector3(point[0], (arrow.pointHeights?.[selectedPoint] ?? groundAt(point[0], point[1])) + arrow.heightM + ARROW_LIFT_EPSILON_M, -point[1]);
+  }
+  return arrowWorldPoint(arrowMidpoint(arrow.points), base, arrow.heightM);
 }
 
-export function gumballWorldY(ray: THREE.Ray, plane: THREE.Plane): number | null {
-  const hit = ray.intersectPlane(plane, new THREE.Vector3());
-  return hit ? hit.y : null;
-}
-
-export function gumballHit(
+export function gumballAxisHit(
   camera: THREE.Camera,
   at: THREE.Vector3,
-  radius: number,
+  lengthM: number,
   local: Pt,
   rect: { width: number; height: number },
   tolerancePx: number,
-): boolean {
+  axes: readonly GumballAxis[] = GUMBALL_AXES,
+  deadZonePx = 7,
+): GumballAxis | null {
   camera.updateMatrixWorld();
-  const reach = radius * 3.2;
-  const top = projectGroundPoint(camera, at.clone().setY(at.y + reach), rect);
-  const bottom = projectGroundPoint(camera, at.clone().setY(at.y - reach), rect);
-  if (!top || !bottom) return false;
-  return distanceToPath([top, bottom], local) <= tolerancePx;
+  const start = projectGroundPoint(camera, at, rect);
+  if (!start) return null;
+  let best: GumballAxis | null = null;
+  let bestDist = tolerancePx;
+  for (const axis of axes) {
+    const end = projectGroundPoint(camera, at.clone().addScaledVector(GUMBALL_DIRECTIONS[axis], lengthM * GUMBALL_SPAN_FRAC), rect);
+    if (!end) continue;
+    const dx = end[0] - start[0];
+    const dy = end[1] - start[1];
+    const len = Math.hypot(dx, dy);
+    if (len < 1e-6) continue;
+    const along = ((local[0] - start[0]) * dx + (local[1] - start[1]) * dy) / len;
+    if (along < deadZonePx) continue;
+    const d = distanceToPath([start, end], local);
+    if (d <= bestDist) {
+      bestDist = d;
+      best = axis;
+    }
+  }
+  return best;
+}
+
+export function gumballAxisPlane(at: THREE.Vector3, axis: GumballAxis, camera: THREE.Camera): THREE.Plane | null {
+  const direction = GUMBALL_DIRECTIONS[axis];
+  const forward = camera.getWorldDirection(new THREE.Vector3());
+  const normal = forward.addScaledVector(direction, -forward.dot(direction));
+  if (normal.lengthSq() < 1e-6) return null;
+  return new THREE.Plane().setFromNormalAndCoplanarPoint(normal.normalize(), at);
+}
+
+export function gumballPlaneHit(ray: THREE.Ray, plane: THREE.Plane): THREE.Vector3 | null {
+  return ray.intersectPlane(plane, new THREE.Vector3());
+}
+
+export function gumballAxisDelta(hit: THREE.Vector3, startHit: THREE.Vector3, axis: GumballAxis): number {
+  return hit.clone().sub(startHit).dot(GUMBALL_DIRECTIONS[axis]);
 }
