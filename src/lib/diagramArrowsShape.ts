@@ -59,7 +59,6 @@ const COMET_FADE_FRAC = 0.08;
 const COMET_FADE_POWER = 1.4;
 const COMET_FEED_UNITS_PER_S = 9;
 const COMET_LONG_BODY_UNITS = 70;
-const DASH_SPINDLE_SEGMENTS = 8;
 
 export const RIBBON_BANDS = 12;
 
@@ -149,15 +148,21 @@ function addContinuousBody(shape: ArrowShape, m: ArrowMetrics, progress: number)
 function addDashes(shape: ArrowShape, m: ArrowMetrics, progress: number, motion: ArrowMotion | null): void {
   const dash = m.preset.dash ?? MARCH_DASH;
   const limit = m.bodyLen * progress;
-  const on = m.unit * dash.onFrac;
-  const period = on + m.unit * dash.offFrac;
-  const shift = motion?.kind === "dashes" ? (((motion.phase % 1) + 1) % 1) * period : 0;
+  let on = m.unit * dash.onFrac;
+  let off = m.unit * dash.offFrac;
+  const count = Math.max(1, Math.round((m.bodyLen + off) / (on + off)));
+  const fit = m.preset.dash ? m.bodyLen / (count * on + (count - 1) * off) : 1;
+  on *= fit;
+  off *= fit;
+  const shift = motion?.kind === "dashes" ? (((motion.phase % 1) + 1) % 1) * (on + off) : 0;
+  const period = on + off;
+  const minLength = m.half;
   for (let at = shift - period; at < limit - PATH_EPS; at += period) {
     const from = Math.max(0, at);
     const to = Math.min(at + on, limit);
-    if (to - from < PATH_EPS) continue;
-    const run = resamplePath(subPath(m.body, from, to), DASH_SPINDLE_SEGMENTS);
-    const ribbon = ribbonAlong(run, (f) => m.half * Math.sin(f * Math.PI));
+    if (to - from < minLength) continue;
+    const segments = Math.max(1, Math.round((to - from) / (m.unit * SAMPLE_STEP_UNITS)));
+    const ribbon = ribbonAlong(resamplePath(subPath(m.body, from, to), segments), () => m.half);
     if (ribbon) shape.ribbons.push(ribbon);
   }
 }
@@ -176,7 +181,8 @@ function edgeScale(at: number, length: number, reach: number): number {
 function addDots(shape: ArrowShape, m: ArrowMetrics, progress: number, motion: ArrowMotion | null): void {
   const marching = motion?.kind === "dashes";
   const phase = marching ? (((motion.phase % 1) + 1) % 1) : 0;
-  const spacing = m.unit * DOT_SPACING_UNITS;
+  const count = Math.max(1, Math.round(m.bodyLen / (m.unit * DOT_SPACING_UNITS)));
+  const spacing = marching ? m.unit * DOT_SPACING_UNITS : m.bodyLen / count;
   const limit = m.bodyLen * progress;
   for (let k = 0; ; k += 1) {
     const at = m.half + (k + phase) * spacing;

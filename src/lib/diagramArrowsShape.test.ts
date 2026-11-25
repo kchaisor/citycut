@@ -98,21 +98,36 @@ describe("arrow heads and bodies", () => {
     for (let i = 1; i < widths.length; i += 1) expect(widths[i]!).toBeGreaterThanOrEqual(widths[i - 1]! - 1e-9);
   });
 
-  it("makes dashes spindles that are pointed at both ends", () => {
-    const shape = buildArrowShape([[0, 0], [300, 0]], "dashed", 1, 500);
-    expect(shape.ribbons.length).toBeGreaterThan(3);
-    for (const ribbon of shape.ribbons) {
-      const last = ribbon.left.length - 1;
-      expect(Math.abs(ribbon.left[0]![1] - ribbon.right[0]![1])).toBeLessThan(1e-9);
-      expect(Math.abs(ribbon.left[last]![1] - ribbon.right[last]![1])).toBeLessThan(1e-9);
-    }
+  it("makes dashes of even width with square ends, a consistent gap and a pointed head", () => {
+    const widthsOf = (ribbon: ArrowShape["ribbons"][number]) => ribbon.left.map((l, i) => Math.hypot(l[0] - ribbon.right[i]![0], l[1] - ribbon.right[i]![1]));
+    const check = (shape: ArrowShape, even: boolean) => {
+      expect(shape.ribbons.length).toBeGreaterThan(3);
+      for (const ribbon of shape.ribbons) {
+        const widths = widthsOf(ribbon);
+        const mid = widths[Math.floor(widths.length / 2)]!;
+        expect(widths[0]!).toBeGreaterThan(0.99 * mid);
+        expect(widths[widths.length - 1]!).toBeGreaterThan(0.99 * mid);
+        for (const w of widths) expect(Math.abs(w - mid)).toBeLessThan(1e-6);
+      }
+      if (!even) return;
+      const spans = shape.ribbons.map((r) => [Math.min(...r.left.map((p) => p[0])), Math.max(...r.left.map((p) => p[0]))] as const);
+      const lengths = spans.map(([from, to]) => to - from);
+      const gaps = spans.slice(1).map(([from], i) => from - spans[i]![1]);
+      for (const length of lengths) expect(length).toBeCloseTo(lengths[0]!, 6);
+      for (const gap of gaps) expect(gap).toBeCloseTo(gaps[0]!, 6);
+      expect(gaps[0]!).toBeGreaterThan(0);
+    };
+    const dashed = buildArrowShape([[0, 0], [300, 0]], "dashed", 1, 500);
+    check(dashed, true);
+    expect(dashed.heads).toHaveLength(1);
+    expect(dashed.heads[0]![0]).toEqual([300, 0]);
+    const lastRibbon = dashed.ribbons[dashed.ribbons.length - 1]!;
+    const headBaseX = dashed.heads[0]![1][0];
+    expect(Math.max(...lastRibbon.left.map((p) => p[0]))).toBeCloseTo(headBaseX, 6);
+    expect(Math.min(...dashed.ribbons[0]!.left.map((p) => p[0]))).toBeCloseTo(0, 6);
     const marching = buildArrowShape([[0, 0], [300, 0]], "bold", 1, 500, 0, { kind: "dashes", phase: 0.37 });
-    expect(marching.ribbons.length).toBeGreaterThan(3);
-    for (const ribbon of marching.ribbons) {
-      const last = ribbon.left.length - 1;
-      expect(Math.abs(ribbon.left[0]![1] - ribbon.right[0]![1])).toBeLessThan(1e-9);
-      expect(Math.abs(ribbon.left[last]![1] - ribbon.right[last]![1])).toBeLessThan(1e-9);
-    }
+    check(marching, false);
+    expect(marching.heads).toHaveLength(1);
   });
 
   it("draws dots as 14-sided discs spread along the path with a pointed head", () => {
@@ -121,6 +136,13 @@ describe("arrow heads and bodies", () => {
     expect(shape.heads).toHaveLength(1);
     expect(shape.polygons.length).toBeGreaterThan(5);
     for (const dot of shape.polygons) expect(dot).toHaveLength(14);
+    const centres = shape.polygons.map((dot) => dot.reduce((sum, p) => sum + p[0], 0) / dot.length);
+    const radii = shape.polygons.map((dot) => Math.max(...dot.map((p) => p[0])) - Math.min(...dot.map((p) => p[0])));
+    const steps = centres.slice(1).map((c, i) => c - centres[i]!);
+    for (const step of steps) expect(step).toBeCloseTo(steps[0]!, 6);
+    for (const r of radii) expect(r).toBeCloseTo(radii[0]!, 6);
+    const headBaseX = shape.heads[0]![1][0];
+    expect(headBaseX - (centres[centres.length - 1]! + radii[0]! / 2)).toBeCloseTo(steps[0]! - radii[0]!, 6);
   });
 
   it("draws chevrons with a sharp tip, a sharp notch and pointed wings, ending in a larger lead", () => {
@@ -225,10 +247,10 @@ describe("comets", () => {
     expect(shapeFills(buildArrowShape(path, "bold", 1, 500)).every((fill) => fill.alpha === 1)).toBe(true);
   });
 
-  it("never leaves a blunt tail on any body, dash or comet", () => {
+  it("never leaves a blunt tail on any body or comet; dash segments keep square ends", () => {
     for (const style of ARROW_STYLES) {
       const shape = buildArrowShape(path, style, 1, 500);
-      if (shape.ribbons.length === 0 || ARROW_PRESETS[style].tailHead) continue;
+      if (shape.ribbons.length === 0 || ARROW_PRESETS[style].tailHead || ARROW_PRESETS[style].dash) continue;
       expect(smallestHalfWidth(shape)).toBeLessThan(1e-9);
     }
   });

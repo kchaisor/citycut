@@ -19,13 +19,13 @@ Controls:
 - Editing: click an arrow to select it. Drag its points to move them. Select a point and press Delete or Backspace to remove it (an arrow keeps at least 2 points). Delete, or the panel button, removes the whole arrow. Click empty space to deselect.
 - Panel edits apply to the selected arrow; with nothing selected they set the defaults for the next arrow.
 - Height gumball: with an arrow selected in a 3D projection (not Plan), a gumball stands at the arrow's midpoint: a stem to the ground, a ring and up and down cones. Dragging it changes the height on a camera-facing vertical plane, in sync with the Height slider. Hovering or dragging the gumball or a point handle locks OrbitControls so the camera never orbits during the drag, including on `pointercancel`. The gumball is screen-only and never appears in exports.
-- Presets, all with no flat or blunt end anywhere (every head is a point, every tail tapers to a point or a V-notch, every dash is a spindle pointed at both ends):
+- Presets. No flat or blunt end on the arrow's head and tail tips (every head is a point, every tail tapers to a point or a V-notch). Dash segments are not tips: each is even width with square ends, laid out with a consistent gap along the curve, the last dash meeting the head base:
   - `streak`: three or four comets, each a pointed head with a tapering tail that fades out, and no solid body. They sit evenly spaced and static for `none`, paused, reduced motion, exports and swatches.
   - `tapered`: Tapered flow, grows smoothly from a point at the tail to the head base.
   - `bold`: solid body, filled pointed head, tail tapers to a point.
   - `line`: thin line, simple pointed head.
-  - `dashed`: pointed spindle dashes, pointed head.
-  - `dotted`: round dots, pointed head.
+  - `dashed`: even-width square-ended dashes with a consistent gap, pointed head.
+  - `dotted`: round dots of one size at even spacing, with a gap before the pointed head equal to the gap between dots.
   - `chevron`: Chevron run, a row of chevrons with sharp tips and notches, ending in a larger lead chevron.
   - `double`: heads at both ends.
 - Width scales the arrow with the site size; Height and Width are per arrow.
