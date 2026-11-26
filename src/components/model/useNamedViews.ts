@@ -19,6 +19,7 @@ import {
   type NamedViewsStore,
 } from "../../lib/namedViews";
 import { HQ_DEFAULT_SCALE as HQ_EXPORT_SCALE } from "../../lib/captureViewportPng";
+import { composeWindSheet, isWindSheetView, windSheetCropOption, windSheetInput, type WindSheetSource } from "../../lib/windSheet";
 import { zipStore, type ZipEntry } from "../../lib/zip";
 import type { CityModel } from "../../types";
 import type { SceneExporter } from "../Scene3D";
@@ -33,6 +34,7 @@ type Args = {
   applySnapshot: (snapshot: NamedViewSnapshot) => Promise<void>;
   getExporter: () => SceneExporter | null;
   waitUntilReady?: (snapshot: NamedViewSnapshot) => Promise<void>;
+  getWindSheetSource?: () => WindSheetSource;
 };
 
 function nextFrame(): Promise<void> {
@@ -55,7 +57,7 @@ async function settle(snapshot: NamedViewSnapshot, waitUntilReady?: (snapshot: N
   await nextFrame();
 }
 
-export function useNamedViews({ model, getSnapshot, applySnapshot, getExporter, waitUntilReady }: Args) {
+export function useNamedViews({ model, getSnapshot, applySnapshot, getExporter, waitUntilReady, getWindSheetSource }: Args) {
   const cutId = modelCutSiteId(model.center, model.sideM);
   const [store, setStore] = useState<NamedViewsStore>(() => readNamedViewsStore(window.localStorage));
   const [busy, setBusy] = useState<NamedViewsBusy>(null);
@@ -109,8 +111,18 @@ export function useNamedViews({ model, getSnapshot, applySnapshot, getExporter, 
           await settle(snapshot, waitUntilReady);
           const exporter = getExporter();
           if (!exporter) throw new Error("The 3D view is not ready.");
-          const blob = await exporter.viewportPng(highQuality ? { transparent: true, scale: HQ_EXPORT_SCALE } : undefined);
-          entries.push({ name: names[index]!, bytes: new Uint8Array(await blob.arrayBuffer()) });
+          const sheet =
+            getWindSheetSource && isWindSheetView(snapshot)
+              ? windSheetInput(getWindSheetSource(), snapshot, model.placeLabel, view.name)
+              : null;
+          const crop = sheet ? windSheetCropOption(highQuality) : null;
+          const base = highQuality ? { transparent: true, scale: HQ_EXPORT_SCALE } : undefined;
+          const blob = await exporter.viewportPng(crop ? { ...base, crop } : base);
+          const bytes =
+            sheet && crop
+              ? await composeWindSheet(blob, sheet, { highQuality, frame: exporter.sheetFrame(crop) })
+              : new Uint8Array(await blob.arrayBuffer());
+          entries.push({ name: names[index]!, bytes });
         }
         if (entries.length === 1) downloadBytes(entries[0]!.name, entries[0]!.bytes, "image/png");
         else downloadBytes(viewsZipName(fileStem(model)), zipStore(entries), "application/zip");
@@ -125,7 +137,7 @@ export function useNamedViews({ model, getSnapshot, applySnapshot, getExporter, 
         setBusy(null);
       }
     },
-    [applySnapshot, getExporter, getSnapshot, model, waitUntilReady],
+    [applySnapshot, getExporter, getSnapshot, getWindSheetSource, model, waitUntilReady],
   );
 
   const exportSelected = useCallback(

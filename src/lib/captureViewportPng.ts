@@ -36,7 +36,9 @@ export type ViewportCapture = {
   overlays?: readonly ViewportOverlayCanvas[];
 };
 
-export type ViewportPngOptions = { transparent?: boolean; scale?: number };
+export type ViewportPngCrop = "free" | { aspect: number; minWidthPx: number };
+
+export type ViewportPngOptions = { transparent?: boolean; scale?: number; crop?: ViewportPngCrop };
 
 export const VIEWPORT_CROP_OBSTACLES = [
   ".model .hud-card",
@@ -98,6 +100,14 @@ export function visibleViewportRect(canvas: HTMLCanvasElement, obstacles: readon
   const height = free.bottom - free.top;
   if (width < 16 || height < 16) return { x: 0, y: 0, width: rect.width, height: rect.height };
   return { x: free.left - rect.left, y: free.top - rect.top, width, height };
+}
+
+export function sheetCropRect(canvas: { width: number; height: number }, free: ViewportRect, aspect: number): ViewportRect {
+  const width = Math.min(canvas.width, canvas.height * aspect);
+  const height = width / aspect;
+  const x = Math.min(Math.max(free.x + free.width / 2 - width / 2, 0), canvas.width - width);
+  const y = Math.min(Math.max(free.y + free.height / 2 - height / 2, 0), canvas.height - height);
+  return { x, y, width, height };
 }
 
 export function opaqueColour(colour: string): string {
@@ -235,22 +245,30 @@ export async function captureViewportPng(
   const source = gl.domElement;
   if (source.width < 2 || source.height < 2) throw new Error("The 3D view is not on screen.");
   const hq = options.transparent === true;
+  const sheet = typeof options.crop === "object" ? options.crop : null;
   const cssWidth = source.clientWidth || source.width;
   const cssHeight = source.clientHeight || source.height;
+  const fullRect = { x: 0, y: 0, width: cssWidth, height: cssHeight };
+  const crop = sheet
+    ? sheetCropRect({ width: cssWidth, height: cssHeight }, capture.crop ?? fullRect, sheet.aspect)
+    : (capture.crop ?? fullRect);
   const previousRatio = typeof gl.getPixelRatio === "function" ? gl.getPixelRatio() : 1;
   const previousBackground = scene.background;
   const previousAlpha = typeof gl.getClearAlpha === "function" ? gl.getClearAlpha() : 1;
   let ratio = source.width / cssWidth;
-  if (hq) {
-    ratio = hqPixelRatio(cssWidth, cssHeight, Math.max(2, options.scale ?? HQ_DEFAULT_SCALE), maxTextureSize(gl));
+  const resize = hq || sheet !== null;
+  if (resize) {
+    const requested = sheet ? sheet.minWidthPx / Math.max(crop.width, 1) : Math.max(2, options.scale ?? HQ_DEFAULT_SCALE);
+    ratio = hqPixelRatio(cssWidth, cssHeight, requested, maxTextureSize(gl));
     gl.setPixelRatio(ratio);
+  }
+  if (hq) {
     scene.background = null;
     gl.setClearAlpha(0);
   }
   try {
     renderViewportWithOverlays(gl, scene, camera);
     const bufferRatio = source.width / cssWidth;
-    const crop = capture.crop ?? { x: 0, y: 0, width: cssWidth, height: cssHeight };
     const sx = Math.max(0, Math.round(crop.x * bufferRatio));
     const sy = Math.max(0, Math.round(crop.y * bufferRatio));
     const sw = Math.max(1, Math.min(source.width - sx, Math.round(crop.width * bufferRatio)));
@@ -291,6 +309,8 @@ export async function captureViewportPng(
     if (hq) {
       scene.background = previousBackground;
       gl.setClearAlpha(previousAlpha);
+    }
+    if (resize) {
       gl.setPixelRatio(previousRatio);
       renderViewportWithOverlays(gl, scene, camera);
     }

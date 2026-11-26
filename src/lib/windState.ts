@@ -42,7 +42,7 @@ export function readStoredWindSettings(storage: Storage): WindViewSettings {
   }
 }
 
-function isWindPeriod(value: string | null): value is WindPeriodId {
+export function isWindPeriod(value: string | null): value is WindPeriodId {
   if (!value) return false;
   if (value === "annual" || value === "summer" || value === "autumn" || value === "winter" || value === "spring") {
     return true;

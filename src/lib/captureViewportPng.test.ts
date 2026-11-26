@@ -7,6 +7,7 @@ import {
   hqPixelRatio,
   opaqueColour,
   readViewportCapture,
+  sheetCropRect,
   visibleViewportRect,
 } from "./captureViewportPng";
 import { POST_OVERLAY_LAYER, moveToPostOverlay, setPostOverlayDeferred } from "./postOverlay";
@@ -330,6 +331,45 @@ describe("high quality capture", () => {
     expect(hqPixelRatio(400, 300, 3, 8192)).toBe(3);
     expect(hqPixelRatio(4000, 3000, 3, 8192)).toBeCloseTo(2.048);
     expect(hqPixelRatio(4000, 3000, 3, 4096)).toBeCloseTo(1.024);
+  });
+
+  it("crops the sheet to the main area's aspect, as large as fits, centred on the free rect", () => {
+    const canvas = { width: 1200, height: 800 };
+    const free = { x: 300, y: 80, width: 700, height: 640 };
+    const crop = sheetCropRect(canvas, free, 1.5);
+    expect(crop.width / crop.height).toBeCloseTo(1.5, 6);
+    expect(crop.width).toBeCloseTo(1200, 6);
+    expect(crop.x).toBeCloseTo(0, 6);
+    expect(crop.y).toBeCloseTo(0, 6);
+    const tall = sheetCropRect(canvas, { x: 0, y: 0, width: 1200, height: 800 }, 1);
+    expect(tall).toEqual({ x: 200, y: 0, width: 800, height: 800 });
+    const shifted = sheetCropRect(canvas, { x: 600, y: 0, width: 600, height: 800 }, 1);
+    expect(shifted).toEqual({ x: 400, y: 0, width: 800, height: 800 });
+  });
+
+  it("renders a sheet capture at a ratio that reaches the requested pixel width and restores the ratio", async () => {
+    stubCanvas();
+    const { gl, raw } = hqRenderer();
+    const free = { x: 100, y: 0, width: 300, height: 300 };
+    await captureViewportPng(gl, new THREE.Scene(), new THREE.PerspectiveCamera(), { background: null, labels: [], crop: free }, { crop: { aspect: 1, minWidthPx: 900 } });
+    expect(raw.setPixelRatio).toHaveBeenCalledWith(3);
+    expect(raw.setPixelRatio).toHaveBeenLastCalledWith(1);
+    expect(raw.setClearAlpha).not.toHaveBeenCalled();
+  });
+
+  it("caps a sheet capture at the texture limit", async () => {
+    stubCanvas();
+    const { gl, raw } = hqRenderer();
+    await captureViewportPng(gl, new THREE.Scene(), new THREE.PerspectiveCamera(), { background: null, labels: [] }, { crop: { aspect: 1, minWidthPx: 100000 } });
+    const ratio = (raw.setPixelRatio as unknown as ReturnType<typeof vi.fn>).mock.calls[0]![0] as number;
+    expect(ratio * 400).toBeLessThanOrEqual(8192);
+  });
+
+  it("keeps the existing crop and pixel ratio when no sheet crop is asked for", async () => {
+    stubCanvas();
+    const { gl, raw } = hqRenderer();
+    await captureViewportPng(gl, new THREE.Scene(), new THREE.PerspectiveCamera(), { background: null, labels: [] }, { crop: "free" });
+    expect(raw.setPixelRatio).not.toHaveBeenCalled();
   });
 
   it("paints label colours at full opacity", () => {
