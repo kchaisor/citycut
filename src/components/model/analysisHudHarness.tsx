@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useReducer, useState } from "react";
+import { arrowToolReducer, initialArrowToolState } from "../../lib/diagramArrowsTool";
 import {
   analysisCardsOn,
   initialAnalysisCardFocus,
@@ -75,6 +76,7 @@ export function AnalysisHudHarness({
   const [radiusM, setRadiusM] = useState(200);
   const [speed, setSpeed] = useState(1);
   const [drawingPath, setDrawingPath] = useState(false);
+  const [arrowState, dispatchArrows] = useReducer(arrowToolReducer, undefined, () => initialArrowToolState());
   const range = sunDomeRange({ sideM, widthM: cut?.widthM, heightM: cut?.heightM });
   const cards = analysisCardsOn(tab, analyses);
   const sunHoursStudy = {
@@ -87,6 +89,7 @@ export function AnalysisHudHarness({
     analysisCards: cards,
     analysisCardOpen: focus.open,
     toggleAnalysisCard: (kind: SiteAnalysisKind) => setFocus((current) => toggleAnalysisCard(current, kind)),
+    diagramArrows: { state: arrowState, dispatch: dispatchArrows },
     commitRenderQuality: setRenderQuality,
     renderQuality,
     commitSolar: (next: SolarViewSettings) => {

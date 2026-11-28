@@ -5151,6 +5151,7 @@ body,
 }
 .landmark-label.is-visible { opacity: 1; pointer-events: auto; }
 .landmark-label:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.landmark-label.arrow-label.is-visible { pointer-events: none; cursor: default; }
 
 .explode-label-layer {
   position: fixed;
@@ -5665,3 +5666,33 @@ body,
   font-weight: 500;
   color: var(--ink-2);
 }
+
+.arrow-style-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.arrow-style-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 4px;
+  border: 1px solid var(--float-tile-line);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+.arrow-style-btn.is-on { border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
+.arrow-colour-row { display: flex; gap: 8px; }
+.arrow-colour-btn { width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--float-tile-line); cursor: pointer; padding: 0; }
+.arrow-colour-btn.is-on { border-color: var(--ink); box-shadow: 0 0 0 2px var(--on-ink); }
+.arrow-pause { display: inline-flex; align-items: center; justify-content: center; gap: 6px; width: 100%; margin-top: 6px; }
+.arrow-field { width: 100%; box-sizing: border-box; padding: 4px 6px; font: inherit; border: 1px solid var(--float-tile-line); border-radius: 4px; background: transparent; color: var(--ink); }
+.arrow-check { display: flex; flex-direction: row-reverse; align-items: center; justify-content: space-between; gap: 8px; min-height: 28px; font-size: 12px; cursor: pointer; }
+.arrow-check input { flex: none; width: 14px; height: 14px; margin: 0; accent-color: var(--ink); cursor: pointer; }
+.arrows-card input[type="range"] { width: 100%; box-sizing: border-box; }
+.arrow-list { list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 2px; }
+.arrow-list li { display: flex; justify-content: space-between; gap: 6px; }
+.arrow-list li.is-on .arrow-list-select { font-weight: 600; }
+.arrow-list button { background: transparent; border: 0; color: var(--ink); font: inherit; font-size: 12px; cursor: pointer; padding: 2px 0; }
+.arrow-swatch { display: block; }

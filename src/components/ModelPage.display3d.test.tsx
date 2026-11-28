@@ -828,13 +828,7 @@ describe("Display panel controls by view tab", () => {
     }
     expect(within(envConsole).queryByRole("button", { name: "Walk Ripple" })).toBeNull();
     expect(within(envConsole).getByRole("group", { name: "Render quality" })).toBeTruthy();
-    expect(within(envConsole).getAllByRole("button").map((button) => button.textContent)).toEqual([
-      "Solar Study",
-      "Wind Rose",
-      "Viewshed Walk",
-      "High",
-      "Fast",
-    ]);
+    expect(within(envConsole).getAllByRole("button").map((button) => button.textContent)).toEqual(["Solar Study", "Wind Rose", "Viewshed Walk", "High", "Fast"]);
     expect(document.querySelector(".analysis-hud-card")).toBeNull();
     expect(screen.queryByLabelText("Live solar telemetry")).toBeNull();
     expect(screen.queryByRole("region", { name: "Solar and camera controls" })).toBeNull();

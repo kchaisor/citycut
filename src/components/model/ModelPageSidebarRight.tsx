@@ -271,6 +271,17 @@ export function ModelPageSidebarRight({ vm }: { vm: import("./useModelPage").Mod
                   </label>
                   <p className="landmark-helper">{wikidataHelper}</p>
                 </section>
+                <section className="sidebar-group arrows-group">
+                  <label className="landmark-toggle">
+                    <span className="landmark-toggle-label">Arrows</span>
+                    <input
+                      type="checkbox"
+                      role="switch"
+                      checked={vm.diagramArrows.state.visible}
+                      onChange={(event) => vm.diagramArrows.dispatch({ type: "setVisible", visible: event.target.checked })}
+                    />
+                  </label>
+                </section>
                 <section className="sidebar-group">
                   <div className="sidebar-gh">
                     <h3>Use</h3>

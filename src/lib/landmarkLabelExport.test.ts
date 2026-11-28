@@ -44,6 +44,6 @@ describe("landmark labels in Drawing exports", () => {
     const projector = readFileSync(`${srcRoot}/components/LandmarkLabelProjector.tsx`, "utf8");
     expect(projector).toMatch(/if \(!enabled \|\| sources\.length === 0\) \{\s*exportRef\.current = null;/);
     const scene = readFileSync(`${srcRoot}/components/Scene3D.tsx`, "utf8");
-    expect(scene).toMatch(/captureViewPng\([\s\S]{0,200}landmarkLabelsRef\?\.current \?\? null\)/);
+    expect(scene).toMatch(/captureViewPng\([\s\S]{0,200}landmarkLabelsRef\?\.current \?\? null(?:, arrowLabelsRef\?\.current \?\? null)?\)/);
   });
 });

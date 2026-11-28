@@ -43,6 +43,7 @@ function snapshot(tab: NamedViewSnapshot["tab"], corner: NamedViewSnapshot["view
     lineStyles: null,
     exploded: false,
     explodeGapM: null,
+    arrows: null,
   };
 }
 

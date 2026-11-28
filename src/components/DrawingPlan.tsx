@@ -1,4 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type Dispatch } from "react";
+import type { Pt } from "../types";
+import { initialArrowToolState, type ArrowToolAction, type ArrowToolState } from "../lib/diagramArrowsTool";
+import { DiagramArrowsDrawing, useDrawingArrowClicks } from "./DiagramArrowsDrawing";
 import {
   haloMm,
   footpathEdgeSvgAttrs,
@@ -74,6 +77,9 @@ function CasedLine({ d, stroke, paper }: { d: string; stroke: StrokeStyle; paper
   );
 }
 
+const NO_ARROW_STATE = initialArrowToolState();
+const noopArrowDispatch = () => undefined;
+
 export function DrawingPlan({
   model,
   kind = "site",
@@ -100,6 +106,7 @@ export function DrawingPlan({
   sunHoursGroundScaleMax = 0,
   sunHoursRoofPlanRaster = null,
   landmarkLabels = NO_LANDMARKS,
+  diagramArrows = null,
 }: {
   model: CityModel;
   kind?: DrawingKind;
@@ -126,8 +133,10 @@ export function DrawingPlan({
   sunHoursGroundScaleMax?: number;
   sunHoursRoofPlanRaster?: SunHoursGroundRaster | null;
   landmarkLabels?: readonly LandmarkLabelSource[];
+  diagramArrows?: { state: ArrowToolState; dispatch: Dispatch<ArrowToolAction> } | null;
 }) {
   const svgRef = useRef<SVGSVGElement>(null);
+  const [arrowHover, setArrowHover] = useState<Pt | null>(null);
   const drag = useRef<{ px: number; py: number; view: PlanViewport } | null>(null);
   const figure = kind === "figure-ground";
   const colourTick = useColourRevision();
@@ -177,6 +186,13 @@ export function DrawingPlan({
   );
   const [internalView, setInternalView] = useState<PlanViewport>(fitted);
   const view = viewport ?? internalView;
+  const arrowClick = useDrawingArrowClicks({
+    state: diagramArrows?.state ?? NO_ARROW_STATE,
+    dispatch: diagramArrows?.dispatch ?? noopArrowDispatch,
+    svgRef,
+    viewWidthM: view.w,
+  });
+  const arrowToolOn = Boolean(diagramArrows?.state.active);
   const applyView = (next: PlanViewport | ((current: PlanViewport) => PlanViewport)) => {
     const resolved = typeof next === "function" ? next(viewport ?? internalView) : next;
     if (onViewportChange) onViewportChange(resolved);
@@ -385,7 +401,9 @@ export function DrawingPlan({
       role="img"
       aria-label={figure ? "Figure-ground plan" : "Vector site plan"}
       style={{ userSelect: "none", WebkitUserSelect: "none" }}
-      onDoubleClick={() => applyView(fitted)}
+      onDoubleClick={() => {
+        if (!arrowToolOn) applyView(fitted);
+      }}
       onMouseDown={(event) => {
         event.preventDefault();
         window.getSelection?.()?.removeAllRanges?.();
@@ -399,6 +417,13 @@ export function DrawingPlan({
       onPointerMove={(event) => {
         const start = drag.current;
         const svg = svgRef.current;
+        if (arrowToolOn && svg && !start) {
+          const ctm = svg.getScreenCTM?.();
+          if (ctm) {
+            const local = new DOMPoint(event.clientX, event.clientY).matrixTransform(ctm.inverse());
+            setArrowHover([local.x, -local.y]);
+          }
+        }
         if (!start || !svg) return;
         event.preventDefault();
         window.getSelection?.()?.removeAllRanges?.();
@@ -414,6 +439,12 @@ export function DrawingPlan({
         drag.current = null;
         const svg = svgRef.current;
         if (!start || !svg) return;
+        if (arrowToolOn && isClick(event.clientX - start.px, event.clientY - start.py)) {
+          if (onViewportChange) onViewportChange(start.view);
+          else setInternalView(start.view);
+          arrowClick(event.clientX, event.clientY);
+          return;
+        }
         const pickSunStudy = study && onSunStudyPick;
         if (!pickSunStudy && !onImportedPick) return;
         if (!isClick(event.clientX - start.px, event.clientY - start.py)) return;
@@ -671,6 +702,17 @@ export function DrawingPlan({
       )}
       {figure && heliodon && (
         <HeliodonPlanOverlay input={heliodon} planScale={planScale} sideM={model.sideM} />
+      )}
+      {diagramArrows && (
+        <DiagramArrowsDrawing
+          model={model}
+          state={diagramArrows.state}
+          dispatch={diagramArrows.dispatch}
+          svgRef={svgRef}
+          viewWidthM={view.w}
+          viewHeightM={view.h}
+          hover={arrowHover}
+        />
       )}
       {landmarkLabels.length > 0 && <DrawingLandmarkLabels labels={landmarkLabels} view={view} svgRef={svgRef} />}
       {empty && (

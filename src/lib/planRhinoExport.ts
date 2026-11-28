@@ -6,6 +6,7 @@ import {
   type SitePlanExportOptions,
 } from "./aiPlan";
 import { colourRgb } from "./colours";
+import { DIAGRAM_ARROWS_LAYER } from "./diagramArrowsDrawingExport";
 import { mgaCrs, projectLocal } from "./crs";
 import { readDrawingStyle, type LineStyles } from "./drawingStyle";
 import { layoutSheet, type SheetLayout } from "./figureGround";
@@ -129,6 +130,7 @@ function addMgaPolyline(
   ring: number[][],
   close: boolean,
   objectName: string,
+  objectColor?: ByteRgb,
 ) {
   if (ring.length < 2) return;
   const points: number[][] = [];
@@ -145,6 +147,12 @@ function addMgaPolyline(
   attributes.name = objectName;
   attributes.layerIndex = layerIndex;
   applyByLayerAttributes(rhino, attributes);
+  if (objectColor) {
+    attributes.colorSource = rhino.ObjectColorSource.ColorFromObject;
+    attributes.plotColorSource = rhino.ObjectPlotColorSource.PlotColorFromObject;
+    attributes.objectColor = displayColor(objectColor);
+    attributes.plotColor = displayColor(objectColor);
+  }
   doc.objects().addPolyline(points, attributes);
   release(attributes);
 }
@@ -160,8 +168,9 @@ function addPath(
   layerName: string,
 ) {
   const close = path.close ?? false;
+  const objectColor = layerName === DIAGRAM_ARROWS_LAYER && path.fill ? unitRgbToByte(path.fill) : undefined;
   for (const ring of path.rings) {
-    addMgaPolyline(rhino, doc, layerIndex, model, zone, layout, ring, close && ring.length >= 3, layerName);
+    addMgaPolyline(rhino, doc, layerIndex, model, zone, layout, ring, close && ring.length >= 3, layerName, objectColor);
   }
 }
 

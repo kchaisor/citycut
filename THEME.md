@@ -390,6 +390,12 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--section-knife-poche` | `#000000` | Section Knife: solid poché on clipped cap faces. |
 | `--section-knife-floor-line` | `#FFFFFF` | Section Knife: floor-slab lines on cap faces. |
 | `--section-knife-plane` | `#FFFFFF` | Section Knife: translucent cutting plane gizmo. |
+| `--arrow-ink` | `#1F1F1D` | Diagram arrows: ink swatch (default arrow colour), 3D and Drawing. |
+| `--arrow-red` | `#D7263D` | Diagram arrows: red swatch (same red as `--site-boundary`). |
+| `--arrow-blue` | `#2B6CB0` | Diagram arrows: blue swatch (same blue as `--wind-streak`). |
+| `--arrow-green` | `#3F8F5F` | Diagram arrows: green swatch. |
+| `--arrow-amber` | `#D9A300` | Diagram arrows: amber swatch. |
+| `--arrow-handle` | `#FFF500` | Diagram arrows: handles on the selected arrow's points (same yellow as `--accent`). |
 | `--section-knife-elevation-fill` | `#C8C8C8` | Section Knife: terrain fill in the live section panel. |
 | `--section-knife-elevation-sky` | `#F5F5F2` | Section Knife: background of the live section panel chart. |
 | `--section-knife-elevation-ground` | `#1E1D1B` | Section Knife: ground poché in the live section panel. |

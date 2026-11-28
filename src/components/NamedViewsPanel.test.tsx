@@ -29,6 +29,7 @@ const SNAPSHOT: NamedViewSnapshot = {
   lineStyles: null,
   exploded: false,
   explodeGapM: null,
+  arrows: null,
 };
 
 function makeViews(): NamedView[] {
