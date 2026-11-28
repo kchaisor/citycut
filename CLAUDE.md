@@ -39,6 +39,7 @@ CityCut (github.com/kchaisor/citycut) cuts a square out of a city and exports a 
 
 - One feature per PR.
 - Never merge without Kelvin's explicit go.
+- Merge with `gh api -X PUT repos/kchaisor/citycut/pulls/<n>/merge -f merge_method=squash` (`gh pr merge` needs GraphQL, which cloud sessions block). Mark a draft ready first with `gh api -X POST repos/kchaisor/citycut/pulls/<n>/ccr/ready_for_review`.
 - Only one tool, Cursor or Claude Code, works on a branch at a time. Do not commit, push, or switch branches in a checkout another agent is using.
 - On handoff, fill in `.github/HANDOFF.md` in the PR description.
 
@@ -52,6 +53,9 @@ Approved by Kelvin on 15 Nov 2026 to cut usage.
 4. One desktop-size visual check per draft. Multi-width checks only right before merge. No checker-then-recode loops.
 
 5. Before starting any new draft, check which screens and features it will touch against every open draft. If nothing overlaps, go ahead. If something overlaps, stop and send Kelvin one plain-English line naming the clashing screen or feature and the draft (e.g. "This touches the same sun panel as #231. Finish #231 first, or go anyway?"), suggest which to do first, and wait for his call. Use no file names.
+
+6. All UI work follows DESIGN-SYSTEM.md: tokens only, and list deviations in the PR body under "Design-system deviations:".
+7. Spec before code: every new feature starts with a short spec from docs/specs/TEMPLATE.md; stop and get Kelvin's OK on the spec before writing any code.
 
 ## Secrets
 

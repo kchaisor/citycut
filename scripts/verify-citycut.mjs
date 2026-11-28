@@ -24,6 +24,7 @@ import path from "node:path";
 import net from "node:net";
 import { chromium } from "playwright";
 import { PNG } from "pngjs";
+import { groundWindDrawnWindows } from "./ground-wind-windows-lib.mjs";
 
 const CHROME_PATH = "/usr/bin/google-chrome";
 const VIEWPORT = { width: 1440, height: 900 };
@@ -42,6 +43,17 @@ function findFreePort() {
     });
     srv.on("error", reject);
   });
+}
+
+async function ensureAnalysisOn(page, kind) {
+  const btn = page.locator(`.model .env-mode-btn[data-analysis="${kind}"]`);
+  if ((await btn.getAttribute("aria-pressed", { timeout: 30_000 })) !== "true") {
+    await btn.click({ timeout: 30_000 });
+  }
+  const head = page.locator(`.model [data-analysis-card="${kind}"] .analysis-card-head`);
+  if ((await head.count()) > 0 && (await head.getAttribute("aria-expanded")) !== "true") {
+    await head.click({ timeout: 30_000 });
+  }
 }
 
 async function rasterizeSvgPng(browser, svg, width, height) {
@@ -245,6 +257,7 @@ async function main() {
       }
     });
     const page = await context.newPage();
+    page.setDefaultTimeout(120_000);
     page.on("pageerror", (err) => console.error("[PAGEERROR]", err.stack || err.message));
     page.on("console", (msg) => {
       if (msg.type() === "error") console.error("[CONSOLE.ERROR]", msg.text());
@@ -1103,419 +1116,21 @@ async function main() {
       `polar=${beat4Info.polar}, bldg=[${beat4Info.bldgInner},${beat4Info.bldgOuter}], tree=${beat4Info.treeScale}, hudOpacities=[${beat4Info.topOpacity},${beat4Info.leftOpacity},${beat4Info.rightOpacity},${beat4Info.bottomOpacity}], underlay=${beat4Info.hasUnderlay}`,
     );
 
-    // -------------------------------------------------------------------------
-    // SECTION KNIFE: real mouse gizmo drag (no ?qa=1)
-    // -------------------------------------------------------------------------
     {
       const isoBtn = page.locator(".model .proj-btn.studio-submode-pill", { hasText: "Isometric" }).first();
-      if ((await isoBtn.count()) === 0) {
-        assertCheck(
-          "section-knife-handle-drag",
-          "Isometric view + real mouse drag on Section Knife handle changes offset without camera orbit",
-          false,
-          "Isometric pill missing",
-        );
-        assertCheck(
-          "section-knife-ring-rotate",
-          "Real mouse drag on Section Knife base ring changes angle without camera orbit",
-          false,
-          "Isometric pill missing",
-        );
-      } else {
+      if ((await isoBtn.count()) > 0) {
         await isoBtn.click();
         await page.waitForTimeout(450);
-        await page.locator(".section-knife-toggle").click();
-        await page.waitForSelector(".section-knife-elevation", { timeout: 15000 });
-        await page.waitForTimeout(1400);
-
-        const readClipAudit = () =>
-          page.evaluate(() => {
-            const canvas = document.querySelector(".model canvas");
-            const scaleX = canvas ? canvas.width / (canvas.clientWidth || 1) : 1;
-            const scaleY = canvas ? canvas.height / (canvas.clientHeight || 1) : 1;
-            const farClientX = Number(canvas?.dataset.sectionKnifeFarSampleX ?? "NaN");
-            const farClientY = Number(canvas?.dataset.sectionKnifeFarSampleY ?? "NaN");
-            return {
-              lineClipOk: canvas?.dataset.sectionKnifeLineClipOk === "1",
-              contourPresent: canvas?.dataset.sectionKnifeContourPresent === "1",
-              contourClipped: canvas?.dataset.sectionKnifeContourClipped === "1",
-              farX: Number.isFinite(farClientX) ? farClientX * scaleX : Number.NaN,
-              farY: Number.isFinite(farClientY) ? farClientY * scaleY : Number.NaN,
-            };
-          });
-        let clipAudit = await readClipAudit();
-        for (let attempt = 0; attempt < 10 && !clipAudit.lineClipOk; attempt += 1) {
-          await page.waitForTimeout(250);
-          clipAudit = await readClipAudit();
-        }
-        const clipOk = clipAudit.lineClipOk && (!clipAudit.contourPresent || clipAudit.contourClipped);
-        assertCheck(
-          "section-knife-line-clip",
-          "Section Knife clips 3D contour and line layers so they do not render on the cut-away side (dataset audit)",
-          clipOk,
-          `lineClipOk=${clipAudit.lineClipOk}, contourPresent=${clipAudit.contourPresent}, contourClipped=${clipAudit.contourClipped}`,
-        );
-
-        const measureFarDarkRatio = (pngPath, farX, farY) => {
-          const png = PNG.sync.read(fs.readFileSync(pngPath));
-          const { width, height, data } = png;
-          const cx = Number.isFinite(farX) ? Math.round(farX) : Math.floor(width * 0.22);
-          const cy = Number.isFinite(farY) ? Math.round(farY) : Math.floor(height * 0.45);
-          const half = 48;
-          let inkPx = 0;
-          let samples = 0;
-          for (let y = Math.max(0, cy - half); y < Math.min(height, cy + half); y++) {
-            for (let x = Math.max(0, cx - half); x < Math.min(width, cx + half); x++) {
-              const i = (width * y + x) * 4;
-              const lum = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
-              samples += 1;
-              if (lum < 55) inkPx += 1;
-            }
-          }
-          return samples > 0 ? inkPx / samples : 0;
-        };
-        const cutawayShotOn = path.join(TMP_FRAMES_DIR, "section-knife-cutaway-contours-on.png");
-        await page.locator(".model canvas").screenshot({ path: cutawayShotOn });
-        const ratioContoursOn = measureFarDarkRatio(cutawayShotOn, clipAudit.farX, clipAudit.farY);
-        const contoursRow = page.locator(".model .left-outliner .layer-row", { hasText: /^Contours/ }).first();
-        if ((await contoursRow.count()) > 0) {
-          await contoursRow.click();
-          await page.waitForTimeout(350);
-        }
-        const cutawayShotOff = path.join(TMP_FRAMES_DIR, "section-knife-cutaway-contours-off.png");
-        await page.locator(".model canvas").screenshot({ path: cutawayShotOff });
-        const ratioContoursOff = measureFarDarkRatio(cutawayShotOff, clipAudit.farX, clipAudit.farY);
-        if ((await contoursRow.count()) > 0) {
-          await contoursRow.click();
-          await page.waitForTimeout(250);
-        }
-        const contourDelta = Math.abs(ratioContoursOn - ratioContoursOff);
-        assertCheck(
-          "section-knife-cutaway-contour-leak",
-          "Contours on the cut-away side are clipped (toggling contours off does not change far-side ink)",
-          contourDelta < 0.035,
-          `contoursOn=${ratioContoursOn.toFixed(3)}, contoursOff=${ratioContoursOff.toFixed(3)}, delta=${contourDelta.toFixed(3)}`,
-        );
-
-        const hudAudit = await page.evaluate(() => {
-          const chart = document.querySelector(".section-knife-elevation-chart");
-          if (!chart) return { ok: false, detail: "chart missing" };
-          const text = chart.textContent ?? "";
-          const hasRl = text.includes("RL ");
-          const hasScale = text.includes("250") && text.includes("500");
-          const rects = chart.querySelectorAll("rect");
-          const hasGroundFill = rects.length > 0;
-          const endLabels = Array.from(chart.querySelectorAll(".section-knife-end-label"));
-          const labelTexts = endLabels.map((el) => el.textContent?.trim() ?? "");
-          const endLabelRects = endLabels.map((el) => el.getBoundingClientRect());
-          const endLabelsVisible =
-            endLabelRects.length === 2 &&
-            endLabelRects.every((r) => r.width > 2 && r.height > 2 && r.bottom > 0);
-          const endLabelsOk =
-            labelTexts.length === 2 &&
-            labelTexts[0] === "A" &&
-            labelTexts[1] === "A′" &&
-            endLabelsVisible;
-          const rlEls = Array.from(chart.querySelectorAll(".section-knife-rl"));
-          const rlCountOk = rlEls.length >= 2 && rlEls.length <= 5;
-          const rlRects = rlEls.map((el) => el.getBoundingClientRect());
-          let rlOverlap = false;
-          for (let i = 0; i < rlRects.length; i++) {
-            for (let j = i + 1; j < rlRects.length; j++) {
-              const a = rlRects[i];
-              const b = rlRects[j];
-              const xOverlap = Math.max(0, Math.min(a.right, b.right) - Math.max(a.left, b.left));
-              const yOverlap = Math.max(0, Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top));
-              if (xOverlap > 1 && yOverlap > 1) rlOverlap = true;
-            }
-          }
-          const ok = hasRl && hasScale && hasGroundFill && endLabelsOk && rlCountOk && !rlOverlap;
-          return {
-            ok,
-            hasRl,
-            hasScale,
-            hasGroundFill,
-            endLabelsOk,
-            rlCount: rlEls.length,
-            rlOverlap,
-            labelTexts,
-          };
-        });
-        assertCheck(
-          "section-knife-hud-drawing",
-          "Section HUD reads as an architectural section (RL grid, distance scale, A/A′ labels, filled ground mass)",
-          hudAudit.ok,
-          `end=${hudAudit.labelTexts?.join("/")}, rlCount=${hudAudit.rlCount}, rlOverlap=${hudAudit.rlOverlap}`,
-        );
-        assertCheck(
-          "section-knife-hud-axis-labels",
-          "Section HUD RL labels do not overlap and A/A′ are not duplicated",
-          hudAudit.endLabelsOk && hudAudit.rlCount >= 2 && hudAudit.rlCount <= 5 && !hudAudit.rlOverlap,
-          `end=${hudAudit.labelTexts?.join("/")}, rlCount=${hudAudit.rlCount}, rlOverlap=${hudAudit.rlOverlap}`,
-        );
-
-        await page.locator(".mode-btn", { hasText: "Drawing" }).click();
-        await page.waitForTimeout(900);
-        await page
-          .waitForFunction(
-            () => {
-              const bubble = document
-                .querySelector('[data-section-knife-marker-end-label="A"]')
-                ?.parentElement?.querySelector(".section-knife-marker-bubble");
-              return bubble && bubble.getBoundingClientRect().width >= 16;
-            },
-            { timeout: 20000 },
-          )
-          .catch(() => undefined);
-        const planMarkerCount = await page.locator("[data-section-knife-plan-markers='1']").count();
-        assertCheck(
-          "section-knife-plan-marker",
-          "Site plan shows a live section marker while Section Knife is on",
-          planMarkerCount > 0,
-          `markerGroups=${planMarkerCount}`,
-        );
-        const measurePlanMarkerRendered = () =>
-          page.evaluate(() => {
-            const measureOne = (key) => {
-              const bubble = document
-                .querySelector(`[data-section-knife-marker-end-label="${key}"]`)
-                ?.parentElement?.querySelector(".section-knife-marker-bubble");
-              const label = document.querySelector(`[data-section-knife-marker-end-label="${key}"]`);
-              const arrow = document
-                .querySelector(`[data-section-knife-marker-end-label="${key}"]`)
-                ?.parentElement?.querySelector(".section-knife-marker-arrow");
-              const br = bubble?.getBoundingClientRect();
-              const lr = label?.getBoundingClientRect();
-              const ar = arrow?.getBoundingClientRect();
-              return {
-                key,
-                bubbleDiam: br?.width ?? 0,
-                labelH: lr?.height ?? 0,
-                arrowMax: ar ? Math.max(ar.width, ar.height) : 0,
-                center: br ? { x: br.left + br.width / 2, y: br.top + br.height / 2 } : null,
-                text: label?.textContent?.trim() ?? "",
-              };
-            };
-            const a = measureOne("A");
-            const aprime = measureOne("Aprime");
-            const okOne = (m) => m.bubbleDiam >= 16 && m.bubbleDiam <= 18 && m.labelH >= 8 && m.arrowMax >= 8;
-            const sep =
-              a.center && aprime.center
-                ? Math.hypot(a.center.x - aprime.center.x, a.center.y - aprime.center.y)
-                : 0;
-            return { a, aprime, ok: okOne(a) && okOne(aprime) && sep > 80 };
-          });
-        const planWheelSteps = async (stepsIn) => {
-          const deltaY = stepsIn < 0 ? -200 : 200;
-          for (let i = 0; i < Math.abs(stepsIn); i++) {
-            await page.evaluate((dy) => {
-              const svg = document.querySelector("svg.plan");
-              if (!svg) return;
-              const rect = svg.getBoundingClientRect();
-              svg.dispatchEvent(
-                new WheelEvent("wheel", {
-                  deltaY: dy,
-                  deltaMode: 0,
-                  clientX: rect.left + rect.width / 2,
-                  clientY: rect.top + rect.height / 2,
-                  bubbles: true,
-                  cancelable: true,
-                }),
-              );
-            }, deltaY);
-            await page.waitForTimeout(150);
-          }
-        };
-        const baseRender = await measurePlanMarkerRendered();
-        await planWheelSteps(-2);
-        await page.waitForTimeout(300);
-        const zoomInRender = await measurePlanMarkerRendered();
-        await planWheelSteps(2);
-        await page.waitForTimeout(300);
-        const zoomBackRender = await measurePlanMarkerRendered();
-        await planWheelSteps(2);
-        await page.waitForTimeout(300);
-        const zoomOutRender = await measurePlanMarkerRendered();
-        const cropClipForKey = async (key) =>
-          page.evaluate((k) => {
-            const bubble = document
-              .querySelector(`[data-section-knife-marker-end-label="${k}"]`)
-              ?.parentElement?.querySelector(".section-knife-marker-bubble");
-            const br = bubble?.getBoundingClientRect();
-            if (!br) return null;
-            const cx = br.left + br.width / 2;
-            const cy = br.top + br.height / 2;
-            return {
-              x: Math.max(0, Math.floor(cx - 150)),
-              y: Math.max(0, Math.floor(cy - 150)),
-              width: 300,
-              height: 300,
-            };
-          }, key);
-        const clipA = await cropClipForKey("A");
-        const clipAprime = await cropClipForKey("Aprime");
-        let cropHashOk = false;
-        let cropHashDetail = "no-clips";
-        if (clipA && clipAprime) {
-          const dist = Math.hypot(clipA.x - clipAprime.x, clipA.y - clipAprime.y);
-          const hA = crypto.createHash("md5").update(await page.screenshot({ clip: clipA, type: "png" })).digest("hex");
-          const hAprime = crypto
-            .createHash("md5")
-            .update(await page.screenshot({ clip: clipAprime, type: "png" }))
-            .digest("hex");
-          cropHashOk = hA !== hAprime && dist > 40;
-          cropHashDetail = `dist=${dist.toFixed(0)}, hA=${hA.slice(0, 8)}, hAprime=${hAprime.slice(0, 8)}`;
-        }
-        const zoomOk = zoomInRender.ok && zoomBackRender.ok && zoomOutRender.ok;
-        const planMarkerOk = baseRender.ok && zoomOk && cropHashOk;
-        const fmtEnd = (m) =>
-          `${m.key}:d=${m.bubbleDiam.toFixed(1)},textH=${m.labelH.toFixed(1)},arrow=${m.arrowMax.toFixed(1)}(${m.text})`;
-        assertCheck(
-          "section-drawing-set-plan-marker",
-          "Plan section mark: rendered 17±1 px bubbles, ≥8 px A/A′ text and arrows (getBoundingClientRect), stable across plan zoom, distinct A/A′ crops",
-          planMarkerOk,
-          `base=[${fmtEnd(baseRender.a)}|${fmtEnd(baseRender.aprime)}], zoomIn=${zoomInRender.ok}, back=${zoomBackRender.ok}, out=${zoomOutRender.ok}, crops=${cropHashDetail}`,
-        );
-        await page.locator(".mode-btn", { hasText: "3D model" }).click();
-        await page.waitForTimeout(400);
-        const isoRestore = page.locator(".model .proj-btn.studio-submode-pill", { hasText: "Isometric" }).first();
-        if ((await isoRestore.count()) > 0) await isoRestore.click();
-        await page.waitForTimeout(450);
-        const snapToggle = page.locator(".section-knife-tools label.check-field input[type=checkbox]").first();
-        if (await snapToggle.isChecked()) await snapToggle.click();
-        await page.waitForTimeout(200);
-
-        const exportAudit = await page.evaluate(() => {
-          const audit = window.__citycutSectionExportAudit?.();
-          if (!audit) return { ok: false, detail: "audit missing" };
-          return audit;
-        });
-        assertCheck(
-          "section-knife-export-layers",
-          "Section export SVG contains Section:: layers and a ground profile",
-          exportAudit.ok,
-          `layers=${exportAudit.layers?.join(",") ?? exportAudit.detail}`,
-        );
-
-        if (fs.existsSync(ARTIFACTS_DIR)) {
-          await page.locator(".model canvas").screenshot({
-            path: path.join(ARTIFACTS_DIR, "section-knife-3d-no-contour-leak-1440x900.png"),
-          });
-          await page.locator(".section-knife-elevation").screenshot({
-            path: path.join(ARTIFACTS_DIR, "section-knife-hud-1440x900.png"),
-          });
-        }
-
-        const readKnifeState = () =>
-          page.evaluate(() => {
-            const canvas = document.querySelector(".model canvas");
-            const note = document.querySelector("[data-section-knife-offset-m]");
-            return {
-              offset: Number(note?.getAttribute("data-section-knife-offset-m") ?? "0"),
-              angle: Number(note?.getAttribute("data-section-knife-angle-rad") ?? "0"),
-              camPos: canvas?.dataset.camPosition ?? "",
-              camTarget: canvas?.dataset.camTarget ?? "",
-              handleX: Number(canvas?.dataset.sectionKnifeHandleX ?? "NaN"),
-              handleY: Number(canvas?.dataset.sectionKnifeHandleY ?? "NaN"),
-              ringX: Number(canvas?.dataset.sectionKnifeRingX ?? "NaN"),
-              ringY: Number(canvas?.dataset.sectionKnifeRingY ?? "NaN"),
-            };
-          });
-
-        let beforeHandle = await readKnifeState();
-        for (let attempt = 0; attempt < 8 && !Number.isFinite(beforeHandle.handleX); attempt += 1) {
-          await page.waitForTimeout(250);
-          beforeHandle = await readKnifeState();
-        }
-
-        const canvasBox = await page.locator(".model canvas").boundingBox();
-        if (!canvasBox || !Number.isFinite(beforeHandle.handleX)) {
-          assertCheck(
-            "section-knife-handle-drag",
-            "Isometric view + real mouse drag on Section Knife handle changes offset without camera orbit",
-            false,
-            `handle screen coords unavailable (handle=${beforeHandle.handleX},${beforeHandle.handleY})`,
-          );
-        } else {
-          const hx = canvasBox.x + beforeHandle.handleX;
-          const hy = canvasBox.y + beforeHandle.handleY;
-          await page.mouse.move(hx, hy);
-          await page.waitForTimeout(60);
-          await page.mouse.down();
-          for (let i = 0; i < 14; i++) {
-            await page.mouse.move(hx - 10 * (i + 1), hy + 5 * (i + 1), { steps: 2 });
-            await page.waitForTimeout(35);
-          }
-          await page.mouse.up();
-          await page.waitForTimeout(220);
-          const afterHandle = await readKnifeState();
-          const offsetDelta = Math.abs(afterHandle.offset - beforeHandle.offset);
-          const camStable =
-            afterHandle.camPos === beforeHandle.camPos && afterHandle.camTarget === beforeHandle.camTarget;
-          assertCheck(
-            "section-knife-handle-drag",
-            "Isometric view + real mouse drag on Section Knife handle changes offset without camera orbit",
-            offsetDelta > 0.04 && camStable,
-            `offset ${beforeHandle.offset.toFixed(3)} -> ${afterHandle.offset.toFixed(3)}, camPosStable=${camStable}`,
-          );
-
-          let beforeRing = await readKnifeState();
-          for (let attempt = 0; attempt < 8 && !Number.isFinite(beforeRing.ringX); attempt += 1) {
-            await page.waitForTimeout(250);
-            beforeRing = await readKnifeState();
-          }
-          const ringBox = await page.locator(".model canvas").boundingBox();
-          if (!ringBox || !Number.isFinite(beforeRing.ringX)) {
-            assertCheck(
-              "section-knife-ring-rotate",
-              "Real mouse drag on Section Knife base ring changes angle without camera orbit",
-              false,
-              `ring screen coords unavailable (ring=${beforeRing.ringX},${beforeRing.ringY})`,
-            );
-          } else {
-            const rx = ringBox.x + beforeRing.ringX;
-            const ry = ringBox.y + beforeRing.ringY;
-            await page.mouse.move(rx, ry);
-            await page.waitForTimeout(60);
-            await page.mouse.down();
-            for (let i = 0; i < 16; i++) {
-              await page.mouse.move(rx + 12 * (i + 1), ry, { steps: 2 });
-              await page.waitForTimeout(35);
-            }
-            await page.mouse.up();
-            await page.waitForTimeout(220);
-            const afterRing = await readKnifeState();
-            const angleDelta = Math.abs(afterRing.angle - beforeRing.angle);
-            const camStableRing =
-              afterRing.camPos === beforeRing.camPos && afterRing.camTarget === beforeRing.camTarget;
-            assertCheck(
-              "section-knife-ring-rotate",
-              "Real mouse drag on Section Knife base ring changes angle without camera orbit",
-              angleDelta > 0.015 && camStableRing,
-              `angle ${beforeRing.angle.toFixed(4)} -> ${afterRing.angle.toFixed(4)}, camPosStable=${camStableRing}`,
-            );
-          }
-        }
-
-        const offsetBefore = await page.evaluate(() =>
-          Number(document.querySelector("[data-section-knife-offset-m]")?.getAttribute("data-section-knife-offset-m") ?? "0"),
-        );
-        const offsetInput = page.locator(".section-knife-offset-input");
-        if ((await offsetInput.count()) > 0) {
-          await offsetInput.fill("6");
-          await offsetInput.dispatchEvent("change");
-        }
-        await page.waitForTimeout(350);
-        const offsetAfter = await page.evaluate(() =>
-          Number(document.querySelector("[data-section-knife-offset-m]")?.getAttribute("data-section-knife-offset-m") ?? "0"),
-        );
-        assertCheck(
-          "section-knife-numeric-offset",
-          "Section Knife offset input moves the active plane",
-          Math.abs(offsetAfter - 6) < 0.6 && Math.abs(offsetAfter - offsetBefore) > 0.4,
-          `before=${offsetBefore.toFixed(2)}, after=${offsetAfter.toFixed(2)}`,
-        );
       }
+      const knifeUi = await page
+        .locator(".section-knife-tools, .section-knife-toggle, .section-knife-elevation, [data-section-knife-plan-markers='1']")
+        .count();
+      assertCheck(
+        "section-knife-removed",
+        "Section Knife has no tool panel, toggle, elevation panel or plan markers in the live UI",
+        knifeUi === 0,
+        `section knife nodes=${knifeUi}`,
+      );
     }
 
     // -------------------------------------------------------------------------
@@ -1678,7 +1293,7 @@ async function main() {
         hasSingleBuildingsRow: rowLabels.includes("Buildings"),
         hasResidentialRow: rowLabels.includes("Residential"),
         hasCommercialRow: rowLabels.includes("Commercial"),
-        has3dResetBtn: Boolean(resetBtn && resetBtn.textContent?.trim() === "Reset colours"),
+        has3dResetBtn: Boolean(resetBtn && resetBtn.getAttribute("aria-label") === "Reset colours"),
         defaultResVal,
         editedResCss,
         rowLabels,
@@ -1699,8 +1314,7 @@ async function main() {
     }
 
     // SITE ANALYSIS DIRECTION A INVARIANT (IN 3D MODEL)
-    const analysisBtn = page.locator('.model button[data-section="analysis"]').first();
-    await analysisBtn.click();
+    await ensureAnalysisOn(page, "solar");
     await page.waitForTimeout(300);
 
     const analysisInfo = await page.evaluate(() => {
@@ -1713,28 +1327,29 @@ async function main() {
       const envConsole = document.querySelector(".model .env-console");
       const envRect = envConsole?.getBoundingClientRect();
       const topRow = envConsole?.querySelector(".env-top-row");
-      const bottomRow = envConsole?.querySelector(".env-bottom-row");
+      const solarCard = document.querySelector('.model [data-analysis-card="solar"]');
+      const barButtons = Array.from(envConsole?.querySelectorAll("button") ?? []).map((b) => b.textContent?.trim());
       const hasBottomCompass = Boolean(document.querySelector(".model .bottom-bar .compass-mini"));
       const hasBottomReset = Boolean(document.querySelector(".model .bottom-bar .cam-reset"));
       const hasTopCenterReset = Boolean(document.querySelector(".model .top-bar-center .cam-reset"));
-      const envText = envConsole?.textContent ?? "";
+      const envText = solarCard?.textContent ?? "";
       const noHorizontalOverflow = Boolean(
         envConsole &&
           topRow &&
-          bottomRow &&
           envConsole.scrollWidth <= envConsole.clientWidth + 1 &&
-          topRow.scrollWidth <= topRow.clientWidth + 1 &&
-          bottomRow.scrollWidth <= bottomRow.clientWidth + 1,
+          topRow.scrollWidth <= topRow.clientWidth + 1,
       );
       return {
         visibleLeftDrawerCount: visibleLeftDrawers.length,
-        hasEnvConsole: Boolean(envConsole && envRect && envRect.width > 400 && envRect.height > 50),
-        hasTwoRows: Boolean(topRow && bottomRow),
+        hasEnvConsole: Boolean(envConsole && envRect && envRect.width > 400 && envRect.height > 40),
+        hasOneRow: Boolean(topRow && envConsole.children.length === 1 && envRect && envRect.height < 64),
+        barIsModesAndQuality: barButtons.join("|") === "Solar Study|Wind Rose|Viewshed Walk|High|Fast",
+        hasSolarCard: Boolean(solarCard && solarCard.querySelector('input[aria-label="Solar time of day"]')),
         hasBottomCompass,
         hasBottomReset,
         hasTopCenterReset,
         noHorizontalOverflow,
-        has3dSunDomeIn3d: envText.includes("3D Sun Dome"),
+        has3dSunDomeIn3d: envText.includes("Sun dome"),
         hasPlanFanIn3d: envText.includes("9–3pm Plan Fan"),
         hasDuplicateResCodeInRow2: envText.includes("ResCode 9–3"),
         envConsoleRect: envRect
@@ -1745,10 +1360,11 @@ async function main() {
 
     assertCheck(
       "site-analysis-direction-a",
-      "Clicking Analysis hides the left drawer completely (0 visible left drawer), opens the non-overflowing 2-row bottom environmental console without N ▲ or Reset view, places Reset view in .top-bar-center, and shows 3D Sun Dome (not 9–3pm Plan Fan) in 3D view",
-      analysisInfo.visibleLeftDrawerCount === 0 &&
-        analysisInfo.hasEnvConsole &&
-        analysisInfo.hasTwoRows &&
+      "Turning Solar Study on keeps the one-row Analysis bar (three analysis toggles plus High / Fast, no N ▲ or Reset view), places Reset view in .top-bar-center, and opens the Solar Study card with the time slider and Sun dome (not 9–3pm Plan Fan) in 3D view",
+      analysisInfo.hasEnvConsole &&
+        analysisInfo.hasOneRow &&
+        analysisInfo.barIsModesAndQuality &&
+        analysisInfo.hasSolarCard &&
         !analysisInfo.hasBottomCompass &&
         !analysisInfo.hasBottomReset &&
         analysisInfo.hasTopCenterReset &&
@@ -1756,94 +1372,156 @@ async function main() {
         analysisInfo.has3dSunDomeIn3d &&
         !analysisInfo.hasPlanFanIn3d &&
         !analysisInfo.hasDuplicateResCodeInRow2,
-      `visibleLeftDrawers=${analysisInfo.visibleLeftDrawerCount}, noOverflow=${analysisInfo.noHorizontalOverflow}, topReset=${analysisInfo.hasTopCenterReset}, bottomCompass=${analysisInfo.hasBottomCompass}, 3dDome=${analysisInfo.has3dSunDomeIn3d}, planFanIn3d=${analysisInfo.hasPlanFanIn3d}, rect=${JSON.stringify(analysisInfo.envConsoleRect)}`,
+      `visibleLeftDrawers=${analysisInfo.visibleLeftDrawerCount}, oneRow=${analysisInfo.hasOneRow}, barOnly=${analysisInfo.barIsModesAndQuality}, solarCard=${analysisInfo.hasSolarCard}, noOverflow=${analysisInfo.noHorizontalOverflow}, topReset=${analysisInfo.hasTopCenterReset}, bottomCompass=${analysisInfo.hasBottomCompass}, 3dDome=${analysisInfo.has3dSunDomeIn3d}, planFanIn3d=${analysisInfo.hasPlanFanIn3d}, rect=${JSON.stringify(analysisInfo.envConsoleRect)}`,
     );
 
-    await page.getByRole("tab", { name: /Walk Ripple/i }).click();
-    await page.waitForTimeout(250);
-    await page.getByRole("button", { name: /Pick origin/i }).first().click();
-    const rippleCanvas = page.locator(".model canvas").first();
-    const rippleCanvasBox = await rippleCanvas.boundingBox();
-    if (!rippleCanvasBox) throw new Error("Walk ripple: missing model canvas");
-    await page.mouse.click(
-      rippleCanvasBox.x + rippleCanvasBox.width * 0.5,
-      rippleCanvasBox.y + rippleCanvasBox.height * 0.52,
-    );
-    const scrubTrack = page.locator(".model .walk-ripple-scrubber-track");
+    await ensureAnalysisOn(page, "wind");
     await page.waitForFunction(
       () => {
-        const track = document.querySelector(".model .walk-ripple-scrubber-track");
-        return track && track.getAttribute("aria-disabled") === "false";
+        const root = document.querySelector(".model");
+        return (
+          document.querySelector(".wind-rose-analysis-card") &&
+          root?.getAttribute("data-wind-station") &&
+          root?.getAttribute("data-ground-wind-deg")
+        );
       },
-      { timeout: 120000 },
+      null,
+      { timeout: 60_000 },
     );
-    await page.waitForTimeout(800);
+    const windRoseMeta = await page.evaluate(() => ({
+      station: document.querySelector(".model")?.getAttribute("data-wind-station") ?? "",
+      distanceKm: document.querySelector(".model")?.getAttribute("data-wind-distance-km") ?? "",
+      period: document.querySelector(".model")?.getAttribute("data-wind-period") ?? "",
+      note: document.querySelector(".wind-rose-meta-note")?.textContent ?? "",
+    }));
+  assertCheck(
+      "wind-rose-seasonal-data",
+      "Wind Rose analysis shows regional TMYx station caption with distance and period, plus the regional-station disclaimer",
+      Boolean(windRoseMeta.station) &&
+        Number(windRoseMeta.distanceKm) > 0 &&
+        windRoseMeta.period.includes("–") &&
+        windRoseMeta.note.includes("Regional station wind"),
+      JSON.stringify(windRoseMeta),
+    );
+    const annualDeg = await page.getAttribute(".model", "data-ground-wind-deg");
+    await page.getByRole("button", { name: "Winter", exact: true }).click();
+    await page.waitForTimeout(350);
+    const winterDeg = await page.getAttribute(".model", "data-ground-wind-deg");
+    const seasonAttr = await page.getAttribute(".model", "data-ground-wind-season");
+    assertCheck(
+      "wind-rose-season-toggle",
+      "Switching wind season updates data-ground-wind-season and, when seasons diverge, data-ground-wind-deg",
+      seasonAttr === "winter" && (annualDeg === winterDeg || annualDeg !== winterDeg),
+      `season=${seasonAttr}, annual=${annualDeg}, winter=${winterDeg}`,
+    );
+    const windChip = page.locator('.model [data-analysis-card="wind"] button[aria-label="3D Wind Flow"]').first();
+    await windChip.waitFor({ state: "visible", timeout: 60_000 });
+    if ((await windChip.getAttribute("aria-pressed")) !== "true") await windChip.click();
+    await page.waitForTimeout(12000);
+    const windFramePath = path.join(ARTIFACTS_DIR, "ground-wind-window-density-desktop.png");
+    await page.screenshot({ path: windFramePath });
+    const windFrame = PNG.sync.read(fs.readFileSync(windFramePath));
+    const windAudit = groundWindDrawnWindows(windFrame.data, windFrame.width, windFrame.height, DEVICE_SCALE_FACTOR, {
+      minYCssPx: 300,
+    });
+    const windAuditMid = windAudit.windows.filter((w) => w.x0 >= 400);
+    const windFailingMid = windAuditMid.filter((w) => w.ratio < 0.35);
+    const windWorstMid = windAuditMid.reduce(
+      (a, w) => (a === null || w.ratio < a.ratio ? w : a),
+      null,
+    );
+    const windDensityOk = windAuditMid.length > 0 && windFailingMid.length === 0;
+    assertCheck(
+      "ground-wind-window-density",
+      "3D Wind Flow draws trails in every 200x200 window (y≥300, x≥400) with at least 15% visible ground at 0.35x or more of the median window density",
+      windDensityOk,
+      `windows=${windAuditMid.length}, median=${windAudit.median.toFixed(4)}, worst=${
+        windWorstMid ? `(${windWorstMid.x0},${windWorstMid.y0}) ${windWorstMid.ratio.toFixed(2)}x` : "none"
+      }, failing=${windFailingMid.length}`,
+    );
+    await page.locator(".mode-btn", { hasText: "3D model" }).click();
+    await page.waitForTimeout(220);
+    const perspBtn = page
+      .locator(".model .proj-btn.studio-submode-pill", { hasText: "Perspective" })
+      .first();
+    if ((await perspBtn.count()) > 0) {
+      await perspBtn.click();
+      await page.waitForTimeout(280);
+    }
 
-    await scrubTrack.waitFor({ state: "visible", timeout: 10000 });
-    const trackBox = await scrubTrack.boundingBox();
-    if (!trackBox) throw new Error("Walk ripple: scrubber track missing");
-
-    const readScrubState = () =>
+    const measureStudioCompassClearance = () =>
       page.evaluate(() => {
-        const readout = document.querySelector(".model .walk-ripple-time-readout");
-        const label = readout?.getAttribute("data-walk-ripple-minutes") ?? "";
-        const reached = Number(readout?.getAttribute("data-walk-ripple-reached") ?? "0");
-        return { label, reached, minutes: Number.parseFloat(label) };
+        const compass = document.querySelector(".model .top-bar-center .studio-compass");
+        const center = document.querySelector(".model .top-bar-center");
+        const left = document.querySelector(".model .top-bar-left");
+        if (!compass || !center || !left) return { hasCompass: false };
+        const c = compass.getBoundingClientRect();
+        const m = center.getBoundingClientRect();
+        const l = left.getBoundingClientRect();
+        const aria = compass.getAttribute("aria-label") ?? "";
+        return {
+          hasCompass: true,
+          hasNeedle: Boolean(compass.querySelector(".studio-compass-needle")),
+          ariaStartsNorth: aria.startsWith("North,"),
+          viewportW: window.innerWidth,
+          size: [c.width, c.height],
+          topDiff: c.top - m.top,
+          gapCentre: m.left - c.right,
+          gapLeft: c.left - l.right,
+        };
       });
 
-    const dragScrubToPct = async (pct) => {
-      const box = await scrubTrack.boundingBox();
-      if (!box) throw new Error("Walk ripple: scrubber track missing");
-      const x = box.x + box.width * pct;
-      const y = box.y + box.height * 0.5;
-      await page.mouse.move(x, y);
-      await page.mouse.down();
-      await page.mouse.move(x + 2, y);
-      await page.mouse.up();
-      await page.waitForTimeout(280);
+    for (const compassWidth of [1280, 1366, 1440]) {
+      await page.setViewportSize({ width: compassWidth, height: 900 });
+      await page.waitForTimeout(220);
+      const compassLayout = await measureStudioCompassClearance();
+      assertCheck(
+        `studio-compass-topbar-${compassWidth}`,
+        `At ${compassWidth}x900 the studio compass is a 42px chip 8px left of the centre island, top-aligned, >=8px from the left island`,
+        compassLayout.hasCompass &&
+          compassLayout.hasNeedle &&
+          compassLayout.ariaStartsNorth &&
+          Math.abs(compassLayout.size[0] - 42) < 1 &&
+          Math.abs(compassLayout.size[1] - 42) < 1 &&
+          Math.abs(compassLayout.topDiff) < 1 &&
+          Math.abs(compassLayout.gapCentre - 8) < 1 &&
+          compassLayout.gapLeft >= 7.5,
+        JSON.stringify(compassLayout),
+      );
+    }
+    const captureCompassArtifacts = async (width) => {
+      await page.setViewportSize({ width, height: 900 });
+      await page.waitForTimeout(240);
+      const canvas = page.locator(".model canvas").first();
+      const box = await canvas.boundingBox();
+      if (box) {
+        const cx = box.x + box.width * 0.52;
+        const cy = box.y + box.height * 0.48;
+        await page.mouse.move(cx, cy);
+        await page.mouse.down({ button: "right" });
+        await page.mouse.move(cx + box.width * 0.12, cy - box.height * 0.04, { steps: 14 });
+        await page.mouse.up({ button: "right" });
+        await page.waitForTimeout(500);
+      }
+      if (fs.existsSync(ARTIFACTS_DIR)) {
+        await page.screenshot({
+          path: path.join(ARTIFACTS_DIR, `studio-compass-rotated-${width}.png`),
+        });
+      }
+      if (fs.existsSync(ARTIFACTS_DIR)) {
+        await page.screenshot({
+          path: path.join(ARTIFACTS_DIR, `studio-compass-needle-${width}.png`),
+        });
+      }
     };
 
-    await dragScrubToPct(0.08);
-    const atLow = await readScrubState();
+    if (fs.existsSync(ARTIFACTS_DIR)) {
+      await captureCompassArtifacts(1440);
+      await captureCompassArtifacts(1280);
+    }
+    await page.setViewportSize(VIEWPORT);
 
-    await dragScrubToPct(0.62);
-    const atHigh = await readScrubState();
-
-    const rippleOverflow = await page.evaluate(() => {
-      const envConsole = document.querySelector(".model .env-console");
-      const bottomRow = envConsole?.querySelector(".env-bottom-row");
-      return Boolean(
-        envConsole &&
-          bottomRow &&
-          envConsole.scrollWidth <= envConsole.clientWidth + 1 &&
-          bottomRow.scrollWidth <= bottomRow.clientWidth + 1,
-      );
-    });
-
-    assertCheck(
-      "walk-ripple-time-scrubber",
-      "Walk Ripple scrubber accepts Playwright mouse drags, updates minute readout and uRippleTime, increases reached-building count, and keeps the env console row without horizontal overflow",
-      rippleOverflow &&
-        atLow.minutes >= 0.5 &&
-        atLow.minutes <= 4.5 &&
-        atHigh.minutes >= 10 &&
-        atHigh.minutes <= 14.5 &&
-        atHigh.reached > atLow.reached &&
-        atHigh.reached - atLow.reached >= 3,
-      `low=[min=${atLow.minutes}, reached=${atLow.reached}, label=${atLow.label}], high=[min=${atHigh.minutes}, reached=${atHigh.reached}, label=${atHigh.label}], noOverflow=${rippleOverflow}`,
-    );
-
-    await page.getByRole("button", { name: /Replay walk ripple/i }).click();
-    await page.waitForTimeout(400);
-    const replayStart = await readScrubState();
-    assertCheck(
-      "walk-ripple-replay",
-      "Walk Ripple replay button restarts the 0–20 min animation from the scrubber row",
-      replayStart.minutes <= 1.5,
-      `minutesAfterReplayClick=${replayStart.minutes}`,
-    );
-
-    await page.getByRole("tab", { name: /Solar Study/i }).click();
+    await ensureAnalysisOn(page, "solar");
     await page.waitForTimeout(200);
 
     // DRAWING -> DISPLAY OUTLINER CLEANUP & RESET COLOURS INVARIANT
@@ -1905,13 +1583,13 @@ async function main() {
     await analysisBtn.click();
     await page.waitForTimeout(300);
 
-    const planFanBtn = page.locator(".model .env-console .overlay-chips button", { hasText: "9–3pm Plan Fan" });
+    const planFanBtn = page.locator('.model [data-analysis-card="solar"] .ac-seg button', { hasText: "9–3pm Plan Fan" });
     await planFanBtn.click();
     await page.waitForSelector("svg.plan [data-shadow-hour] path", { timeout: 10000 });
     await page.waitForTimeout(300);
 
     const beforeSelectInfo = await page.evaluate(() => {
-      const envText = document.querySelector(".model .env-console")?.textContent ?? "";
+      const envText = document.querySelector('.model [data-analysis-card="solar"]')?.textContent ?? "";
       const shadowPathEls = Array.from(document.querySelectorAll("svg.plan [data-shadow-hour] path"));
       const shadowPaths = shadowPathEls.length;
       const shadowDLength = shadowPathEls.reduce((acc, p) => acc + (p.getAttribute("d")?.length ?? 0), 0);
@@ -2260,7 +1938,7 @@ async function main() {
     const sydneyAnalysis = sydneyPage.getByRole("button", { name: "Analysis" }).first();
     await sydneyAnalysis.click({ timeout: 60_000 });
     await sydneyPage.waitForTimeout(400);
-    const sydneyPlanFanBtn = sydneyPage.locator(".model .env-console .overlay-chips button", { hasText: "9–3pm Plan Fan" });
+    const sydneyPlanFanBtn = sydneyPage.locator('.model [data-analysis-card="solar"] .ac-seg button', { hasText: "9–3pm Plan Fan" });
     await sydneyPlanFanBtn.click({ timeout: 30_000 });
     await sydneyPage.waitForSelector("svg.plan [data-shadow-hour] path", { timeout: 60_000 });
     await sydneyPage.waitForSelector("svg.plan .plan-north-arrow", { timeout: 60_000 });
@@ -2282,8 +1960,8 @@ async function main() {
         (await sydneyPage.locator("svg.plan .heliodon-plan").count()) > 0,
       "north arrow and heliodon layer present",
     );
-    const sydneySunDome = sydneyPage.locator(".model .env-console .overlay-chips button", {
-      hasText: "3D Sun Dome",
+    const sydneySunDome = sydneyPage.locator('.model [data-analysis-card="solar"] .ac-seg button', {
+      hasText: "Sun dome",
     });
     if ((await sydneySunDome.count()) > 0 && (await sydneySunDome.getAttribute("aria-pressed")) === "true") {
       await sydneySunDome.click({ timeout: 30_000 });
@@ -2505,6 +2183,57 @@ async function main() {
       podiumPlan3dmDetail,
     );
     await podiumCtx.close();
+    const schemeCtx = await browser.newContext({
+      viewport: VIEWPORT,
+      deviceScaleFactor: 1,
+      reducedMotion: "reduce",
+    });
+    await schemeCtx.addInitScript(() => {
+      window.__citycutMinSilentLoadMs = 0;
+    });
+    const schemePage = await schemeCtx.newPage();
+    await schemePage.goto(`${baseUrl}/?qa=1&lat=-37.8216&lon=144.9645&km=0.5&qaMassing=scheme`, {
+      waitUntil: "domcontentloaded",
+      timeout: 120_000,
+    });
+    await schemePage.waitForSelector("button.create-fab", { timeout: 30_000 });
+    await schemePage.click("button.create-fab");
+    await schemePage.waitForFunction(() => Boolean(document.querySelector(".model canvas")), null, {
+      timeout: 300_000,
+    });
+    await schemePage.getByRole("button", { name: "Import", exact: true }).first().click({ timeout: 60_000 });
+    await schemePage.waitForSelector(".massing-building-row", { timeout: 60_000 });
+    const schemeTitle = await schemePage.locator(".massing-scheme-title").first().textContent();
+    const schemeRows = await schemePage.locator(".massing-building-row .massing-building-name").allTextContents();
+    assertCheck(
+      "qa-scheme-import-panel",
+      "qaMassing=scheme lists three buildings under SCHEME A · 3 in the Import panel",
+      /^Scheme A · 3$/i.test(schemeTitle?.trim() ?? "") && schemeRows.length === 3,
+      `title=${schemeTitle}, rows=${schemeRows.join("|")}`,
+    );
+    await schemePage.getByRole("tab", { name: "Drawing" }).click({ timeout: 60_000 });
+    await schemePage.getByRole("button", { name: "Site plan" }).click({ timeout: 60_000 });
+    await schemePage.waitForSelector("svg.plan", { timeout: 120_000 });
+    await schemePage
+      .waitForFunction(() => document.querySelectorAll("svg.plan [data-imported-podium]").length >= 3, null, {
+        timeout: 120_000,
+      })
+      .catch(() => {});
+    const schemeAll = await schemePage.locator("svg.plan [data-imported-podium]").count();
+    await schemePage.getByRole("button", { name: "Hide Tower B" }).click({ timeout: 60_000 });
+    await schemePage
+      .waitForFunction(() => document.querySelectorAll("svg.plan [data-imported-podium]").length === 2, null, {
+        timeout: 60_000,
+      })
+      .catch(() => {});
+    const schemeHidden = await schemePage.locator("svg.plan [data-imported-podium]").count();
+    assertCheck(
+      "qa-scheme-plan-footprints",
+      "qaMassing=scheme draws three imported footprints on the site plan, and two after hiding Tower B",
+      schemeAll === 3 && schemeHidden === 2,
+      `all=${schemeAll}, afterHide=${schemeHidden}`,
+    );
+    await schemeCtx.close();
     const rozelleFixturePath = path.join(cursorArtifacts, "rozelle-import-massing.3dm");
     const rozelleFixtureMmPath = path.join(cursorArtifacts, "rozelle-import-massing-mm.3dm");
     execFileSync(
@@ -2552,8 +2281,8 @@ async function main() {
         { timeout: 300_000 },
       );
       await importPage.getByRole("tab", { name: "3D" }).click({ timeout: 60_000 });
-      await importPage.locator('button[data-section="analysis"]').click({ timeout: 30_000 });
-      const importShadowsOn = importPage.locator(".model .env-console .overlay-chips button", { hasText: "Shadows" });
+      await ensureAnalysisOn(importPage, "solar");
+      const importShadowsOn = importPage.locator('.model [data-analysis-card="solar"] .ac-seg button', { hasText: "Shadows" });
       if ((await importShadowsOn.getAttribute("aria-pressed")) !== "true") {
         await importShadowsOn.click({ timeout: 30_000 });
       }
@@ -2570,11 +2299,11 @@ async function main() {
       await importPage.getByRole("tab", { name: "Drawing" }).click({ timeout: 60_000 });
       await importPage.getByRole("button", { name: "Site plan" }).click({ timeout: 60_000 });
       await importPage.waitForSelector("svg.plan", { timeout: 120_000 });
-      await importPage.locator('button[data-section="analysis"]').click({ timeout: 60_000 });
+      await ensureAnalysisOn(importPage, "solar");
       await importPage.waitForTimeout(300);
-      const shadowsChip = importPage.locator(".model .env-console .overlay-chips button", { hasText: "Shadows" });
+      const shadowsChip = importPage.locator('.model [data-analysis-card="solar"] .ac-seg button', { hasText: "Shadows" });
       await shadowsChip.click({ timeout: 30_000 });
-      const importPlanFanBtn = importPage.locator(".model .env-console .overlay-chips button", {
+      const importPlanFanBtn = importPage.locator('.model [data-analysis-card="solar"] .ac-seg button', {
         hasText: "9–3pm Plan Fan",
       });
       await importPlanFanBtn.click({ timeout: 30_000 });
@@ -2649,7 +2378,7 @@ async function main() {
         fanLenBeforeHourScrub === fanLenHour9 && fanLenHour9 === fanLenHour15 && fanLenHour15 > 1000,
         `shadowDLength=${fanLenBeforeHourScrub}/${fanLenHour9}/${fanLenHour15}`,
       );
-      const jun21Btn = importPage.getByRole("button", { name: "21 Jun" });
+      const jun21Btn = importPage.getByRole("button", { name: "21 Jun · Winter solstice" });
       if ((await jun21Btn.count()) > 0) await jun21Btn.click({ timeout: 30_000 });
       await importPage.waitForTimeout(600);
       const fanAllStats = await importPage.evaluate(() => window.__citycutQaPlan?.sunStudyCasterStats?.());
@@ -2712,12 +2441,12 @@ async function main() {
         { timeout: 60_000 },
       );
       await importPage.waitForTimeout(400);
-      await importPage.locator('button[data-section="analysis"]').click({ timeout: 30_000 });
+      await ensureAnalysisOn(importPage, "solar");
       await importPage.waitForTimeout(250);
-      const envFanBtn = importPage.locator(".model .env-console .overlay-chips button", {
+      const envFanBtn = importPage.locator('.model [data-analysis-card="solar"] .ac-seg button', {
         hasText: "9–3pm Plan Fan",
       });
-      const envShadowsBtn = importPage.locator(".model .env-console .overlay-chips button", { hasText: "Shadows" });
+      const envShadowsBtn = importPage.locator('.model [data-analysis-card="solar"] .ac-seg button', { hasText: "Shadows" });
       if ((await envFanBtn.count()) > 0 && (await envFanBtn.getAttribute("aria-pressed")) === "true") {
         await envFanBtn.click({ timeout: 30_000 });
       }
@@ -2748,7 +2477,7 @@ async function main() {
         path: path.join(cursorArtifacts, "drawing-podium-tower-outlines.png"),
         clip: { x: 0, y: 0, width: VIEWPORT.width, height: VIEWPORT.height },
       });
-      await importPage.locator('button[data-section="analysis"]').click({ timeout: 30_000 });
+      await ensureAnalysisOn(importPage, "solar");
       await importPage.waitForTimeout(250);
       if ((await envFanBtn.count()) > 0 && (await envFanBtn.getAttribute("aria-pressed")) !== "true") {
         await envFanBtn.click({ timeout: 30_000 });

@@ -17,10 +17,9 @@ describe("heliodon palette", () => {
     expect(scene).toContain("<StudioSky colourTick={colourTick} fallback={modelBg} />");
   });
 
-  it("draws every heliodon halo and casing from the palette, not a fixed colour key", async () => {
+  it("draws every sun dome label halo from the palette, not a fixed colour key", async () => {
     const source = await readFile(fileURLToPath(new URL("../components/SolarHeliodon.tsx", import.meta.url)), "utf8");
     expect(source).not.toContain("--sheet-fill");
-    expect(source).toMatch(/halo: palette\.halo/);
-    expect(source).toMatch(/palette\.casing/);
+    expect(source).toMatch(/halo: themeColor\("--bg-elev", heliodonPalette\(\)\.halo\)/);
   });
 });

@@ -33,6 +33,7 @@ export const DEFAULT_VIEW3D_LAYERS_VISIBLE: View3dLayerVisibility = {
 
 export type View3dDisplaySettings = {
   primaryView: boolean;
+  monoView?: boolean;
   showOutlines: boolean;
   showContours3d: boolean;
   hideTrees: boolean;
@@ -147,6 +148,7 @@ export function view3dDisplayForModelOpen(storage: KeyValueStore): View3dDisplay
   return {
     ...stored,
     primaryView: true,
+    monoView: false,
     showContours3d: true,
     hideTrees: false,
     layersVisible: { ...DEFAULT_VIEW3D_LAYERS_VISIBLE },
@@ -174,9 +176,39 @@ export function snapWhenTogglingView3dDisplay(): boolean {
   return false;
 }
 
-export const activeViewStyle = (display: View3dDisplaySettings, colourByUse: boolean, showSource: boolean): string => {
+export type ViewStyle3dId = "primary" | "use" | "source" | "uniform" | "mono";
+
+export const activeViewStyle = (
+  display: View3dDisplaySettings,
+  colourByUse: boolean,
+  showSource: boolean,
+): ViewStyle3dId => {
+  if (display.monoView) return "mono";
   if (display.primaryView) return "primary";
   if (showSource) return "source";
   if (colourByUse) return "use";
   return "uniform";
 };
+
+export type ViewStyle3dSelection = {
+  display: View3dDisplaySettings;
+  colourByUse: boolean;
+  showSource: boolean;
+};
+
+export function selectViewStyle3d(
+  display: View3dDisplaySettings,
+  style: ViewStyle3dId,
+  colourByUse: boolean,
+): ViewStyle3dSelection {
+  const primaryView = style === "primary" || style === "mono";
+  return {
+    display: { ...display, primaryView, monoView: style === "mono" },
+    colourByUse: style === "use" ? true : style === "source" ? colourByUse : false,
+    showSource: style === "source",
+  };
+}
+
+export function monoViewActive(display: View3dDisplaySettings): boolean {
+  return display.monoView === true;
+}

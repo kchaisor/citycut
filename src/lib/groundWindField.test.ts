@@ -1,9 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
-  buildGroundWindParticles,
-  groundWindBaseVector,
-  groundWindGlyphScaleM,
-  GROUND_WIND_PARTICLE_COUNT,
+  buildGroundWindGrid,
+  createGroundWindGridBuilder,
+  groundWindCellIndex,
+  groundWindFieldCache,
+  groundWindIsSolid,
+  groundWindSector,
+  rasterGroundWindObstacles,
+  sampleGroundWindFlow,
+  type GroundWindFlowGrid,
 } from "./groundWindField";
 import type { CityModel, Pt } from "../types";
 
@@ -15,13 +20,13 @@ const ring = (x0: number, y0: number, x1: number, y1: number): Pt[] => [
   [x0, y0],
 ];
 
-function tinyModel(): CityModel {
+function modelWith(buildings: Array<{ ring: Pt[]; height: number }>, sideM = 240): CityModel {
   return {
     placeLabel: "Test",
     center: { lon: 145, lat: -38 },
-    sideM: 200,
+    sideM,
     layers: { buildings: true, roads: true, waterGreen: true, trees: true },
-    buildings: [{ id: 1, ring: ring(-20, -20, 20, 20), holes: [], height: 10, use: "residential", source: "osm_tag" }],
+    buildings: buildings.map((b, i) => ({ id: i + 1, ring: b.ring, holes: [], height: b.height, use: "residential", source: "osm_tag" })),
     roads: [],
     areas: [],
     trees: [],
@@ -31,43 +36,161 @@ function tinyModel(): CityModel {
   };
 }
 
+const WEST_SECTOR = 12;
+
+function at(grid: GroundWindFlowGrid, east: number, north: number) {
+  return sampleGroundWindFlow(grid, east, north, { east: 0, north: 0, speed: 0 });
+}
+
 describe("groundWindField", () => {
-  it("uses prevailing sector when stats are present", () => {
-    const withStats = groundWindBaseVector({
-      period: "annual",
-      totalHours: 1,
-      calmHours: 0,
-      calmPercent: 0,
-      sectorFrequency: [],
-      prevailingSector: 6,
-      prevailingLabel: "E",
-      prevailingMedianKmh: 18,
-    });
-    const fallback = groundWindBaseVector(null);
-    expect(Math.hypot(withStats.east, withStats.north)).toBeCloseTo(1, 5);
-    expect(Math.hypot(fallback.east, fallback.north)).toBeCloseTo(1, 5);
+  it("wraps sectors and falls back to north", () => {
+    expect(groundWindSector(undefined)).toBe(0);
+    expect(groundWindSector(16)).toBe(0);
+    expect(groundWindSector(-1)).toBe(15);
   });
 
-  it("scales glyphs for kilometre cuts", () => {
-    const km = groundWindGlyphScaleM(1000);
-    expect(km.length).toBeGreaterThanOrEqual(20);
-    expect(km.width).toBeGreaterThanOrEqual(3);
+  it("rasterises footprints, not bounding boxes", () => {
+    const lShape: Pt[] = [
+      [-40, -40],
+      [40, -40],
+      [40, -20],
+      [-20, -20],
+      [-20, 40],
+      [-40, 40],
+      [-40, -40],
+    ];
+    const obs = rasterGroundWindObstacles(modelWith([{ ring: lShape, height: 12 }]));
+    expect(groundWindIsSolid(obs, 0, -30)).toBe(true);
+    expect(groundWindIsSolid(obs, -30, 0)).toBe(true);
+    expect(groundWindIsSolid(obs, 20, 20)).toBe(false);
+    expect(groundWindCellIndex(obs, 1000, 0)).toBe(-1);
+    for (let k = 0; k < obs.fluidCells.length; k++) expect(obs.solid[obs.fluidCells[k]!]).toBe(0);
   });
 
-  it("builds a dense particle field", () => {
-    const particles = buildGroundWindParticles(tinyModel(), null);
-    expect(particles).toHaveLength(GROUND_WIND_PARTICLE_COUNT);
+  it("flips the flow between 0 and 180 degree headings", () => {
+    const model = modelWith([{ ring: ring(-20, -30, 20, 30), height: 20 }]);
+    const north = buildGroundWindGrid(model, 0);
+    const south = buildGroundWindGrid(model, 8);
+    for (const [e, n] of [
+      [-80, 80],
+      [80, -80],
+      [-80, 0],
+    ] as const) {
+      expect(at(north, e, n).north).toBeLessThan(-0.5);
+      expect(at(south, e, n).north).toBeGreaterThan(0.5);
+    }
   });
 
-  it("assigns lower speed factors in built-up samples", () => {
-    const model = tinyModel();
-    const particles = buildGroundWindParticles(model, null);
-    const center = particles.filter((p) => Math.abs(p.east) < 25 && Math.abs(p.north) < 25);
-    const edge = particles.filter((p) => Math.abs(p.east) > 70 || Math.abs(p.north) > 70);
-    expect(center.length).toBeGreaterThan(0);
-    expect(edge.length).toBeGreaterThan(0);
-    const centerAvg = center.reduce((s, p) => s + p.speed, 0) / center.length;
-    const edgeAvg = edge.reduce((s, p) => s + p.speed, 0) / edge.length;
-    expect(centerAvg).toBeLessThan(edgeAvg);
+  it("bends the flow around a building instead of into it", () => {
+    const model = modelWith([{ ring: ring(-20, -30, 20, 30), height: 20 }]);
+    const grid = buildGroundWindGrid(model, WEST_SECTOR);
+    const above = at(grid, -24, 24);
+    const below = at(grid, -24, -24);
+    expect(above.east).toBeGreaterThan(0);
+    expect(above.north).toBeGreaterThan(0.1);
+    expect(below.north).toBeLessThan(-0.1);
+    expect(at(grid, 0, 0).speed).toBe(0);
+  });
+
+  it("speeds up through the gap between two buildings", () => {
+    const model = modelWith([
+      { ring: ring(-30, 12, 30, 70), height: 15 },
+      { ring: ring(-30, -70, 30, -12), height: 15 },
+    ]);
+    const grid = buildGroundWindGrid(model, WEST_SECTOR);
+    const gap = at(grid, 0, 0).speed;
+    const free = at(grid, -100, 100).speed;
+    expect(free).toBeCloseTo(1, 1);
+    expect(gap).toBeGreaterThan(free * 1.15);
+  });
+
+  it("shelters the wake behind a building", () => {
+    const model = modelWith([{ ring: ring(-20, -30, 20, 30), height: 20 }]);
+    const grid = buildGroundWindGrid(model, WEST_SECTOR);
+    const wake = at(grid, 32, 0).speed;
+    expect(wake).toBeLessThan(at(grid, -100, -100).speed * 0.6);
+    expect(wake).toBeLessThan(at(grid, 0, 48).speed);
+    expect(at(grid, 110, 0).speed).toBeGreaterThan(wake);
+  });
+
+  it("keeps the lee slower than the windward side out to about 3H, easing off downwind", () => {
+    const height = 20;
+    const model = modelWith([{ ring: ring(-20, -30, 20, 30), height }], 400);
+    const grid = buildGroundWindGrid(model, WEST_SECTOR);
+    const open = at(grid, -150, 150).speed;
+    const windward = at(grid, -20 - height, 0).speed;
+    const lee = [1, 2, 3].map((k) => at(grid, 20 + k * height, 0).speed);
+    expect(lee[0]!).toBeLessThan(windward * 0.6);
+    expect(lee[2]!).toBeLessThan(windward * 0.8);
+    expect(lee[2]!).toBeLessThan(open * 0.8);
+    expect(lee[0]!).toBeLessThan(lee[1]!);
+    expect(lee[1]!).toBeLessThan(lee[2]!);
+    expect(at(grid, 20 + 5 * height, 0).speed).toBeCloseTo(open, 1);
+  });
+
+  it("reaches 3H behind a 60 m tower instead of stopping at 90 m", () => {
+    const model = modelWith([{ ring: ring(-20, -20, 20, 20), height: 60 }], 600);
+    const grid = buildGroundWindGrid(model, WEST_SECTOR);
+    expect(at(grid, 20 + 3 * 60, 0).speed).toBeLessThan(at(grid, -250, 250).speed * 0.8);
+  });
+
+  it("spreads the wake sideways into a tapered streak", () => {
+    const model = modelWith([{ ring: ring(-4, -4, 4, 4), height: 20 }], 400);
+    const grid = buildGroundWindGrid(model, WEST_SECTOR);
+    const centre = at(grid, 60, 0).speed;
+    const flank = at(grid, 60, 8).speed;
+    expect(flank).toBeLessThan(0.95);
+    expect(centre).toBeLessThan(flank);
+  });
+
+  it("speeds up the windward corners beyond open ground and the rest of the side", () => {
+    const model = modelWith([{ ring: ring(-20, -30, 20, 30), height: 20 }], 400);
+    const grid = buildGroundWindGrid(model, WEST_SECTOR);
+    const open = at(grid, -150, 150).speed;
+    for (const n of [36, -36]) {
+      const corner = at(grid, -10, n).speed;
+      expect(corner).toBeGreaterThan(open * 1.2);
+      expect(corner).toBeGreaterThan(at(grid, 14, n).speed);
+    }
+  });
+
+  it("funnels wind along a street aligned with it", () => {
+    const model = modelWith(
+      [
+        { ring: ring(-100, 8, 100, 60), height: 18 },
+        { ring: ring(-100, -60, 100, -8), height: 18 },
+      ],
+      400,
+    );
+    const along = buildGroundWindGrid(model, WEST_SECTOR);
+    const open = at(along, -170, 170).speed;
+    for (const e of [-60, 0, 60]) expect(at(along, e, 0).speed).toBeGreaterThan(open * 1.25);
+    const across = buildGroundWindGrid(model, 0);
+    expect(at(across, 0, 0).speed).toBeLessThan(at(along, 0, 0).speed);
+  });
+
+  it("caches each heading so a season swap does not rebuild", () => {
+    const model = modelWith([{ ring: ring(-30, -30, 30, 30), height: 12 }]);
+    const cache = groundWindFieldCache(model);
+    const summer = createGroundWindGridBuilder(cache, 8).finish();
+    const winter = createGroundWindGridBuilder(cache, 0).finish();
+    expect(cache.builds).toBe(2);
+    const obstacles = cache.obstacles;
+    const builder = createGroundWindGridBuilder(cache, 8);
+    expect(builder.step(0)).toBe(true);
+    expect(builder.finish()).toBe(summer);
+    expect(createGroundWindGridBuilder(cache, 0).finish()).toBe(winter);
+    expect(cache.builds).toBe(2);
+    expect(cache.obstacles).toBe(obstacles);
+    expect(summer.obstacles).toBe(winter.obstacles);
+  });
+
+  it("builds in bounded steps", () => {
+    const model = modelWith([{ ring: ring(-30, -30, 30, 30), height: 12 }], 900);
+    const builder = createGroundWindGridBuilder(groundWindFieldCache(model), WEST_SECTOR);
+    let steps = 0;
+    while (!builder.step(0.01)) steps++;
+    expect(steps).toBeGreaterThan(3);
+    expect(at(builder.finish(), 300, 300).east).toBeGreaterThan(0.5);
   });
 });

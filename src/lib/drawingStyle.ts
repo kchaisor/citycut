@@ -187,7 +187,7 @@ export const DEFAULT_LINE_STYLES: LineStyles = {
   pathEdgeOn: false,
   contourIndexMm: 0.18,
   contourIndexEvery: 5,
-  contourCoarseIntervalM: 5,
+  contourCoarseIntervalM: 1,
   contourCoarseFromScale: 2500,
 };
 

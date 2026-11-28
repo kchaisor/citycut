@@ -145,7 +145,7 @@ export function normalizeMultiPolygonByParity(polygons: MultiPolygon): MultiPoly
   return normalizeFromRings(flattenRings(polygons));
 }
 
-function offsetSingleRing(open: Ring, deltaM: number, allowEmpty: boolean): Ring[] {
+function offsetSingleRing(open: Ring, deltaM: number, isHole: boolean): Ring[] {
   if (open.length < 3 || !(Math.abs(deltaM) > 1e-9)) {
     const closed = openRing(open);
     return closed.length >= 3 ? [closeRing(closed)] : [];
@@ -153,11 +153,12 @@ function offsetSingleRing(open: Ring, deltaM: number, allowEmpty: boolean): Ring
   const delta = Math.round(deltaM * CLIPPER_SCALE);
   const arcTol = Math.max(1, CLIPPER_ARC_TOLERANCE_M * CLIPPER_SCALE);
   const co = new ClipperLib.ClipperOffset(2, arcTol);
-  co.AddPath(toClipperPath(open), ClipperLib.JoinType.jtRound, ClipperLib.EndType.etClosedPolygon);
+  const path = toClipperPath(open);
+  co.AddPath(path, ClipperLib.JoinType.jtRound, ClipperLib.EndType.etClosedPolygon);
   const solution: ClipperLib.Paths = [];
   co.Execute(solution, delta);
   if (solution.length === 0) {
-    if (allowEmpty) return [];
+    if (isHole || deltaM < 0 || ClipperLib.Clipper.Area(path) === 0) return [];
     throw new Error(`Clipper offset returned no paths (delta=${deltaM} m)`);
   }
   return solution.map(fromClipperPath);
@@ -180,9 +181,6 @@ function offsetNormalizedByParity(normalized: MultiPolygon, deltaM: number): Mul
   for (const { ring, depth } of tagged) {
     const sign = depth % 2 === 0 ? deltaM : -deltaM;
     expanded.push(...offsetSingleRing(openRing(ring), sign, depth % 2 === 1));
-  }
-  if (expanded.length === 0) {
-    throw new Error(`Clipper offset produced no rings (delta=${deltaM} m)`);
   }
   return normalizeFromRings(expanded);
 }

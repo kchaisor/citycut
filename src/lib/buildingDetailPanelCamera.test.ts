@@ -25,7 +25,7 @@ describe("building detail panel camera unchanged", () => {
 
   it("renders the inspect HUD as a floating panel positioned with inspectHudLayout", () => {
     const page = readModelPageSource();
-    expect(page).toContain("clampInspectHudPosition");
+    expect(page).toContain("inspectHudPlacement");
     expect(page).toContain("InspectHudProjector");
     const css = readFileSync(`${srcRoot}/index.css`, "utf8");
     expect(css).toMatch(/\.building-detail-panel\.is-floating/);

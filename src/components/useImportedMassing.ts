@@ -1,17 +1,26 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { mgaCrs } from "../lib/crsZone";
 import { disposeObject } from "../lib/buildCity";
-import { normaliseMassingColour, type ImportedMassing, type MassingPlacement } from "../lib/massingImport";
+import {
+  normaliseMassingColour,
+  type ImportedMassing,
+  type ImportedMassingBuilding,
+  type MassingPlacement,
+} from "../lib/massingImport";
+import { massingExportParts, visibleMassingBuildings } from "../lib/massingBuildings";
 import {
   deleteStoredMassing,
+  importedMassingFromStored,
   loadStoredMassing,
   massingCutKey,
   saveStoredMassing,
+  storedBuildingState,
   updateStoredMassing,
 } from "../lib/massingStore";
 import { sampleTerrain } from "../lib/terrain";
 import { qaMassingFromSearch } from "../lib/qaCameraBridge";
 import { qaPodiumTowerMassing } from "../lib/qaMassingFixture";
+import { qaSchemeMassing } from "../lib/qaSchemeFixture";
 import type { CityModel } from "../types";
 
 type Runtime = typeof import("../lib/massingRuntime");
@@ -23,9 +32,9 @@ function loadRuntime(): Promise<Runtime> {
 
 const MAX_FILE_BYTES = 50 * 1024 * 1024;
 
-async function parseBytes(bytes: Uint8Array) {
+async function parseBytes(bytes: Uint8Array, fileName: string) {
   const runtime = await loadRuntime();
-  return runtime.parseMassing3dm(await runtime.loadRhino(), bytes);
+  return runtime.parseMassing3dm(await runtime.loadRhino(), bytes, fileName);
 }
 
 export function useImportedMassing(model: Pick<CityModel, "center" | "sideM" | "terrain">) {
@@ -50,13 +59,17 @@ export function useImportedMassing(model: Pick<CityModel, "center" | "sideM" | "
     typeof window !== "undefined" ? qaMassingFromSearch(window.location.search) : null;
 
   useEffect(() => {
-    if (qaMassing === "podium") {
+    if (qaMassing === "podium" || qaMassing === "scheme") {
       let cancelled = false;
       void loadRuntime().then((runtime) => {
         if (cancelled) return;
         setRt(runtime);
         const base = model.terrain ? groundAt(0, 0) : 0;
-        setImported([qaPodiumTowerMassing(model.center, zone, base)]);
+        setImported([
+          qaMassing === "scheme"
+            ? qaSchemeMassing(base)
+            : qaPodiumTowerMassing(model.center, zone, base),
+        ]);
       });
       return () => {
         cancelled = true;
@@ -68,8 +81,8 @@ export function useImportedMassing(model: Pick<CityModel, "center" | "sideM" | "
       const out: ImportedMassing[] = [];
       for (const row of rows) {
         try {
-          const parsed = await parseBytes(new Uint8Array(row.bytes));
-          out.push({ ...parsed, id: row.id, name: row.name, fileBytes: row.bytes.byteLength, mode: row.mode, placement: row.placement, visible: row.visible, ...(normaliseMassingColour(row.colour) ? { colour: normaliseMassingColour(row.colour)! } : {}) });
+          const parsed = await parseBytes(new Uint8Array(row.bytes), row.name);
+          out.push(importedMassingFromStored(parsed, row));
         } catch {
         }
       }
@@ -94,21 +107,20 @@ export function useImportedMassing(model: Pick<CityModel, "center" | "sideM" | "
       setBusy(true);
       try {
         const buffer = await file.arrayBuffer();
-        const parsed = await parseBytes(new Uint8Array(buffer));
+        const parsed = await parseBytes(new Uint8Array(buffer), file.name);
         const runtime = await loadRuntime();
         setRt(runtime);
         const limit = runtime.canAddMassing(imported, parsed.triangles);
         if (limit) throw new runtime.MassingImportError(limit);
         const local = runtime.looksLocal(parsed);
-        const item: ImportedMassing = {
-          ...parsed,
+        const item = runtime.toImportedMassing(parsed, {
           id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
           name: file.name,
           fileBytes: file.size,
           mode: local ? "click" : "mga",
           placement: local ? runtime.cutCentrePlacement(model, zone, groundAt(0, 0)) : runtime.mgaPlacement(parsed),
           visible: true,
-        };
+        });
         setImported((prev) => [...prev, item]);
         if (local) setPlacingId(item.id);
         await saveStoredMassing({
@@ -119,6 +131,7 @@ export function useImportedMassing(model: Pick<CityModel, "center" | "sideM" | "
           mode: item.mode,
           placement: item.placement,
           visible: true,
+          buildings: storedBuildingState(item.buildings),
           addedAt: new Date().toISOString(),
         });
       } catch (err) {
@@ -177,11 +190,41 @@ export function useImportedMassing(model: Pick<CityModel, "center" | "sideM" | "
   );
 
   const setColour = useCallback(
-    (id: string, colour: string) => {
+    (id: string, colour: string | null) => {
+      if (colour == null) {
+        patch(id, { colour: undefined });
+        return;
+      }
       const next = normaliseMassingColour(colour);
       if (next) patch(id, { colour: next });
     },
     [patch],
+  );
+
+  const patchBuildings = useCallback(
+    (id: string, update: (building: ImportedMassingBuilding) => ImportedMassingBuilding) => {
+      const item = imported.find((entry) => entry.id === id);
+      if (!item) return;
+      const buildings = item.buildings.map(update);
+      setImported((prev) => prev.map((entry) => (entry.id === id ? { ...entry, buildings } : entry)));
+      void updateStoredMassing(id, { buildings: storedBuildingState(buildings) });
+    },
+    [imported],
+  );
+
+  const setBuildingsVisible = useCallback(
+    (id: string, buildingIds: string[], visible: boolean) => {
+      const ids = new Set(buildingIds);
+      patchBuildings(id, (building) => (ids.has(building.id) ? { ...building, visible } : building));
+    },
+    [patchBuildings],
+  );
+
+  const setAllVisible = useCallback(
+    (visible: boolean) => {
+      for (const item of imported) if (item.visible !== visible) patch(item.id, { visible });
+    },
+    [imported, patch],
   );
 
   const remove = useCallback((id: string) => {
@@ -218,9 +261,11 @@ export function useImportedMassing(model: Pick<CityModel, "center" | "sideM" | "
     return out;
   }, [rt, imported, model, zone]);
 
+  const visible = useMemo(() => visibleMassingBuildings(imported), [imported]);
+
   const drawingBuildings = useMemo(
     () => {
-      if (!rt || !imported.some((item) => item.visible)) return [];
+      if (!rt || visible.length === 0) return [];
       try {
         return rt.massingDrawingBuildings(imported, model.center, zone, model.terrain ? groundAt : undefined);
       } catch (err) {
@@ -228,24 +273,20 @@ export function useImportedMassing(model: Pick<CityModel, "center" | "sideM" | "
         return [];
       }
     },
-    [rt, imported, model.center, zone, model.terrain, groundAt],
+    [rt, visible, imported, model.center, zone, model.terrain, groundAt],
   );
 
   const drawingUpperLevels = useMemo(() => {
-    if (!rt || !imported.some((item) => item.visible)) return [];
+    if (!rt || visible.length === 0) return [];
     try {
-      return rt.massingUpperLevelPlanLines(
-        imported.filter((item) => item.visible),
-        model.center,
-        zone,
-      );
+      return rt.massingUpperLevelPlanLines(imported, model.center, zone);
     } catch (err) {
       console.warn("[CityCut] imported massing upper levels failed", err);
       return [];
     }
-  }, [rt, imported, model.center, zone]);
+  }, [rt, visible, imported, model.center, zone]);
 
-  const forExport = useMemo(() => imported.filter((item) => item.visible), [imported]);
+  const forExport = useMemo(() => massingExportParts(imported), [imported]);
 
   return {
     imported,
@@ -263,6 +304,8 @@ export function useImportedMassing(model: Pick<CityModel, "center" | "sideM" | "
     snapToGround,
     resetToMga,
     toggleVisible,
+    setAllVisible,
+    setBuildingsVisible,
     setColour,
     remove,
     onScenePoint,

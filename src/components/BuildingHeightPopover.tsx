@@ -1,5 +1,9 @@
 import type { HiddenBuilding } from "../lib/hiddenBuildings";
 import { useEffect, useRef, useState } from "react";
+import { X } from "lucide-react";
+import { INSPECT_HUD_MARGIN } from "../lib/inspectHudLayout";
+import { landmarkRows, wikidataItemUrl } from "../lib/landmarkLabels";
+import type { WikidataLandmark } from "../lib/wikidataLandmarks";
 import { buildingHeightSourceLabelForBuilding } from "../lib/heightOverrides";
 import {
   emptyBuildingPopupDetails,
@@ -12,9 +16,16 @@ import { fromLocal } from "../lib/geo";
 import type { DamFloorRecord } from "../lib/comDevelopmentFloors";
 import { footprintArea } from "../lib/useCascade";
 import type { BuildingFeat, LonLat } from "../types";
+import type { ImportedMassingBuilding } from "../lib/massingImport";
+import {
+  formatMassingHeight,
+  massingLayerDisplay,
+  massingSourceLine,
+} from "../lib/massingBuildings";
 
 type Props = {
   building: BuildingFeat;
+  landmark?: WikidataLandmark | null;
   center: LonLat;
   allBuildings?: BuildingFeat[];
   damRecords?: DamFloorRecord[];
@@ -42,8 +53,35 @@ function Field({ label, value }: { label: string; value: string }) {
   );
 }
 
+export function LandmarkBlock({
+  landmark,
+  buildingName,
+  modelHeightM,
+}: {
+  landmark: WikidataLandmark;
+  buildingName: string;
+  modelHeightM: number;
+}) {
+  const rows = landmarkRows(landmark, buildingName, modelHeightM);
+  return (
+    <section className="landmark-block" aria-label="Landmark">
+      <h4 className="landmark-head">Landmark</h4>
+      {rows.map((row) => (
+        <p key={row.label} className="landmark-row">
+          <span className="landmark-row-label">{row.label}</span>
+          <span className={row.numeric ? "landmark-row-value is-numeric" : "landmark-row-value"}>{row.value}</span>
+        </p>
+      ))}
+      <a className="landmark-source" href={wikidataItemUrl(landmark.qid)} target="_blank" rel="noopener noreferrer">
+        Wikidata ↗
+      </a>
+    </section>
+  );
+}
+
 export function BuildingHeightPopover({
   building,
+  landmark = null,
   center,
   allBuildings,
   damRecords,
@@ -60,6 +98,7 @@ export function BuildingHeightPopover({
   const [details, setDetails] = useState<BuildingPopupDetails>(() => emptyBuildingPopupDetails(building));
   const [minimised, setMinimised] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const bodyRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setValue(formatHeightM(building.height));
@@ -86,8 +125,9 @@ export function BuildingHeightPopover({
 
   useEffect(() => {
     if (minimised) return;
-    inputRef.current?.focus();
+    inputRef.current?.focus({ preventScroll: true });
     inputRef.current?.select();
+    if (bodyRef.current) bodyRef.current.scrollTop = 0;
   }, [building.id, minimised]);
 
   useEffect(() => {
@@ -111,6 +151,7 @@ export function BuildingHeightPopover({
   const footprintM2 = footprintArea(building.ring, building.holes);
   const footprintValue = footprintM2 >= 4 ? `${Math.round(footprintM2)} m²` : "";
   const heightReadout = `${building.height.toFixed(1)} m`;
+  const nameLine = details.nameLine !== "—" ? details.nameLine : building.overtureName ?? "";
 
   function commit() {
     const parsed = Number(value.replace(/,/g, "").trim());
@@ -133,7 +174,13 @@ export function BuildingHeightPopover({
       aria-label="Building details"
       style={
         floatingScreen
-          ? { left: floatingScreen.left, top: floatingScreen.top, right: "auto", bottom: "auto" }
+          ? {
+              left: floatingScreen.left,
+              top: floatingScreen.top,
+              right: "auto",
+              bottom: "auto",
+              maxHeight: `min(72vh, 460px, calc(100vh - ${floatingScreen.top + INSPECT_HUD_MARGIN}px))`,
+            }
           : undefined
       }
     >
@@ -153,15 +200,30 @@ export function BuildingHeightPopover({
           >
             {minimised ? "▴" : "▾"}
           </button>
-          <button type="button" className="icon-close" aria-label="Close" onClick={onClose}>
-            ×
+          <button type="button" className="icon-close" aria-label="Close" title="Close" onClick={onClose}>
+            <X size={16} strokeWidth={1.75} aria-hidden="true" />
           </button>
         </div>
       </header>
       {!minimised && (
-        <div className="building-detail-panel-body">
+        <div className="building-detail-panel-body" ref={bodyRef}>
+          {onHideSelected && (
+            <div className="hide-buildings-block">
+              <p className="hide-buildings-hint">
+                Hold Shift and click to add more buildings, then press Hide selected.
+              </p>
+              <div className="popover-actions">
+                <button type="button" className="is-accent" onClick={onHideSelected}>
+                  Hide selected ({selectedCount})
+                </button>
+                <button type="button" onClick={onShowAll} disabled={hiddenCount === 0}>
+                  Show all
+                </button>
+              </div>
+            </div>
+          )}
           <Field label="Use" value={details.useLine !== "—" ? details.useLine : building.use.replace(/_/g, " ")} />
-          <Field label="Name / address" value={details.nameLine !== "—" ? details.nameLine : building.overtureName ?? ""} />
+          <Field label="Name / address" value={nameLine} />
           <Field label="Height" value={heightReadout} />
           <Field
             label="Levels"
@@ -174,6 +236,7 @@ export function BuildingHeightPopover({
           <Field label="Zone & overlays" value={details.zoneLine !== "—" ? details.zoneLine : building.zoneCode ?? ""} />
           {showCom && details.yearLine !== "—" ? <Field label="Year built" value={details.yearLine} /> : null}
           {showCom && details.developmentLine !== "—" ? <Field label="Development" value={details.developmentLine} /> : null}
+          {landmark && <LandmarkBlock landmark={landmark} buildingName={nameLine} modelHeightM={building.height} />}
           <div className="height-editor-block">
             <p className="meta">
               Height editor · Current: {building.height.toFixed(1)} m · {source}
@@ -204,24 +267,82 @@ export function BuildingHeightPopover({
               </button>
             </div>
           </div>
-          {onHideSelected && (
-            <div className="hide-buildings-block">
-              <p className="meta">Visibility · shift-click to add buildings</p>
-              <div className="popover-actions">
-                <button type="button" className="is-accent" onClick={onHideSelected}>
-                  Hide selected ({selectedCount})
-                </button>
-                <button type="button" onClick={onShowAll} disabled={hiddenCount === 0}>
-                  Show all
-                </button>
-              </div>
-            </div>
-          )}
           {details.credits.length > 0 && (
             <p className="legend-note popup-credits">{details.credits.join(" ")}</p>
           )}
         </div>
       )}
+    </aside>
+  );
+}
+
+function floatingStyle(floatingScreen: { left: number; top: number } | null) {
+  return floatingScreen
+    ? {
+        left: floatingScreen.left,
+        top: floatingScreen.top,
+        right: "auto",
+        bottom: "auto",
+        maxHeight: `min(72vh, 460px, calc(100vh - ${floatingScreen.top + INSPECT_HUD_MARGIN}px))`,
+      }
+    : undefined;
+}
+
+export function ImportedBuildingPopover({
+  building,
+  fileName,
+  onClose,
+  floatingScreen = null,
+}: {
+  building: ImportedMassingBuilding;
+  fileName: string;
+  onClose: () => void;
+  floatingScreen?: { left: number; top: number } | null;
+}) {
+  useEffect(() => {
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  const layer = massingLayerDisplay(building);
+  return (
+    <aside
+      className={["building-detail-panel", "is-imported", floatingScreen ? "is-floating inspect-hud" : ""]
+        .filter(Boolean)
+        .join(" ")}
+      role="dialog"
+      aria-label={`${building.name} details`}
+      style={floatingStyle(floatingScreen)}
+    >
+      <header>
+        <strong className="imported-popover-title">{building.name}</strong>
+        <button type="button" className="icon-close" aria-label="Close" title="Close" onClick={onClose}>
+          <X size={16} strokeWidth={1.75} aria-hidden="true" />
+        </button>
+      </header>
+      <div className="building-detail-panel-body">
+        <div className="imported-popover-row">
+          <span className="imported-popover-label">Height</span>
+          <span className="imported-popover-value is-numeric">{formatMassingHeight(building.height)}</span>
+        </div>
+        <div className="imported-popover-row">
+          <span className="imported-popover-label">Levels</span>
+          <span className={building.levels != null ? "imported-popover-value is-numeric" : "imported-popover-value is-numeric is-empty"}>
+            {building.levels != null ? building.levels : "—"}
+          </span>
+        </div>
+        {building.levels == null && <p className="imported-popover-aside imported-popover-caption">Not in model</p>}
+        {layer && (
+          <div className="imported-popover-row">
+            <span className="imported-popover-label">Layer</span>
+            <span className="imported-popover-value">{layer}</span>
+          </div>
+        )}
+        <p className="imported-popover-source">{massingSourceLine(fileName)}</p>
+      </div>
     </aside>
   );
 }

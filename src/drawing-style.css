@@ -45,7 +45,7 @@
   --contour-dash: 1.5 0.75;
   --contour-index-mm: 0.18;
   --contour-index-every: 5;
-  --contour-coarse-interval-m: 5;
+  --contour-coarse-interval-m: 1;
   --contour-coarse-from-scale: 2500;
 
   --frame-stroke-mm: 0.35;
@@ -83,4 +83,18 @@
   --nsw-heritage-dash: none;
   --nsw-hatch-m: 4;
   --nsw-zoning-opacity: 0.5;
+
+  --wind-plan-contour-stroke: #5A5A5A;
+  --wind-plan-contour-opacity: 0.3;
+  --wind-plan-contour-px: 0.75;
+  --wind-plan-building-edge: #1A1A1A;
+  --wind-plan-building-edge-opacity: 0.4;
+  --wind-plan-building-edge-px: 1;
+  --wind-plan-vector-stroke: #FFFFFF;
+  --wind-plan-vector-opacity: 0.9;
+  --wind-plan-vector-px: 1;
+  --wind-plan-vector-head-px: 2;
+  --wind-plan-vector-max-px: 18;
+  --wind-plan-swatch-edge: #1A1A1A;
+  --wind-plan-swatch-edge-opacity: 0.2;
 }

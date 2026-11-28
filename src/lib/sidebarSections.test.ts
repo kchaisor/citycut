@@ -7,7 +7,6 @@ import {
   RIGHT_SIDEBAR_SECTION_IDS,
   SIDEBAR_SECTION_LABELS,
   SITE_ANALYSIS_KINDS,
-  SITE_ANALYSIS_LABELS,
   availableSidebarSections,
   initialSidebarState,
   isLeftSidebarSection,
@@ -16,6 +15,11 @@ import {
   resolveLeftSidebarSection,
   resolveRightSidebarSection,
   resolveSidebarSection,
+  toggleAnalysis,
+  NO_ANALYSES,
+  activeAnalysisKinds,
+  analysesOf,
+  withAnalysisOn,
 } from "./sidebarSections";
 
 describe("sidebar sections", () => {
@@ -26,14 +30,14 @@ describe("sidebar sections", () => {
     expect(initialSidebarState()).toEqual({ section: "drawing", rightSection: "summary" });
   });
 
-  it("always lists all three right-hand tabs (Model details, Buildings, Trees) and combines Sun/Wind/View into Site Analysis, even when buildings or trees are empty", () => {
+  it("always lists all three right-hand tabs (Model details, Buildings, Trees) with no left-rail Site Analysis item, even when buildings or trees are empty", () => {
     expect(availableSidebarSections({ buildings: true, trees: false })).toEqual([
       "summary",
       "buildings",
       "trees",
       "drawing",
-      "analysis",
       "import",
+      "views",
       "exports",
     ]);
     expect(availableSidebarSections({ buildings: false, trees: false })).toEqual([
@@ -41,28 +45,25 @@ describe("sidebar sections", () => {
       "buildings",
       "trees",
       "drawing",
-      "analysis",
       "import",
+      "views",
       "exports",
     ]);
     expect(availableSidebarSections({ buildings: false, trees: true })).toContain("trees");
-    expect(SIDEBAR_SECTION_LABELS.analysis).toBe("Site Analysis");
-    expect(SITE_ANALYSIS_KINDS).toEqual(["solar", "wind", "view", "walkRipple"]);
-    expect(SITE_ANALYSIS_LABELS).toEqual({ solar: "Sun", wind: "Wind", view: "View", walkRipple: "Walk" });
+    expect(Object.values(SIDEBAR_SECTION_LABELS)).not.toContain("Site Analysis");
+    expect(SITE_ANALYSIS_KINDS).toEqual(["solar", "wind", "view"]);
   });
 
-  it("falls back to Display on the left and Model details on the right when a section is not available, and maps legacy solar/wind/view to analysis", () => {
+  it("falls back to Display on the left and Model details on the right when a section is not available", () => {
     expect(resolveSidebarSection("trees", ["summary", "drawing"])).toBe("drawing");
     expect(resolveSidebarSection("drawing", ["summary", "drawing"])).toBe("drawing");
-    expect(resolveSidebarSection("solar", ["summary", "analysis"])).toBe("analysis");
-    expect(resolveSidebarSection("wind", ["summary", "analysis"])).toBe("analysis");
-    expect(resolveSidebarSection("view", ["summary", "analysis"])).toBe("analysis");
+    expect(resolveSidebarSection("solar", ["summary", "drawing"])).toBe("drawing");
     expect(resolveSidebarSection(null, ["summary", "drawing"])).toBe("drawing");
     expect(resolveSidebarSection(null, ["summary"])).toBe("summary");
 
-    expect(resolveLeftSidebarSection("analysis", ["summary", "drawing", "analysis"])).toBe("analysis");
-    expect(resolveLeftSidebarSection("solar", ["summary", "drawing", "analysis"])).toBe("analysis");
-    expect(resolveLeftSidebarSection("buildings", ["summary", "drawing", "analysis"])).toBe("drawing");
+    expect(resolveLeftSidebarSection("analysis", ["summary", "drawing", "import"])).toBe("drawing");
+    expect(resolveLeftSidebarSection("solar", ["summary", "drawing", "import"])).toBe("drawing");
+    expect(resolveLeftSidebarSection("buildings", ["summary", "drawing", "import"])).toBe("drawing");
     expect(resolveRightSidebarSection("buildings", ["summary", "buildings", "drawing"])).toBe("buildings");
     expect(resolveRightSidebarSection("trees", ["summary", "drawing"])).toBe("summary");
     expect(resolveRightSidebarSection("drawing", ["summary", "drawing"])).toBe("summary");
@@ -74,12 +75,12 @@ describe("sidebar sections", () => {
     expect(state).toEqual({ section: "drawing", rightSection: "buildings" });
     state = reduceSidebar(state, { type: "select", id: "buildings" });
     expect(state).toEqual({ section: "drawing", rightSection: "buildings" });
-    state = reduceSidebar(state, { type: "select", id: "analysis" });
-    expect(state).toEqual({ section: "analysis", rightSection: "buildings" });
-    state = reduceSidebar(state, { type: "select", id: "analysis" });
-    expect(state).toEqual({ section: "analysis", rightSection: "buildings" });
+    state = reduceSidebar(state, { type: "select", id: "import" });
+    expect(state).toEqual({ section: "import", rightSection: "buildings" });
+    state = reduceSidebar(state, { type: "select", id: "import" });
+    expect(state).toEqual({ section: "import", rightSection: "buildings" });
     state = reduceSidebar(state, { type: "select", id: "summary" });
-    expect(state).toEqual({ section: "analysis", rightSection: "summary" });
+    expect(state).toEqual({ section: "import", rightSection: "summary" });
   });
 
   it("returns to Display on the left and Model details on the right for a new model", () => {
@@ -98,20 +99,43 @@ describe("Display section label", () => {
 });
 
 describe("left vs right sidebar panels", () => {
-  it("splits left-hand tools (Display, Site Analysis, Import, Export) from right-hand panels (Model details, Buildings, Trees)", () => {
-    expect(LEFT_SIDEBAR_SECTION_IDS).toEqual(["drawing", "analysis", "import", "exports"]);
+  it("splits left-hand tools (Display, Import, Export) from right-hand panels (Model details, Buildings, Trees)", () => {
+    expect(LEFT_SIDEBAR_SECTION_IDS).toEqual(["drawing", "import", "views", "exports"]);
     expect(RIGHT_SIDEBAR_SECTION_IDS).toEqual(["summary", "buildings", "trees"]);
     expect(isRightSidebarSection("summary")).toBe(true);
     expect(isRightSidebarSection("buildings")).toBe(true);
     expect(isRightSidebarSection("trees")).toBe(true);
     expect(isRightSidebarSection("drawing")).toBe(false);
-    expect(isRightSidebarSection("analysis")).toBe(false);
     expect(isRightSidebarSection("import")).toBe(false);
     expect(isRightSidebarSection("exports")).toBe(false);
     expect(isLeftSidebarSection("drawing")).toBe(true);
-    expect(isLeftSidebarSection("analysis")).toBe(true);
+    expect(isLeftSidebarSection("analysis")).toBe(false);
     expect(isLeftSidebarSection("import")).toBe(true);
+    expect(isLeftSidebarSection("views")).toBe(true);
+    expect(isRightSidebarSection("views")).toBe(false);
+    expect(SIDEBAR_SECTION_LABELS.views).toBe("Views");
     expect(isLeftSidebarSection("exports")).toBe(true);
     expect(isLeftSidebarSection("summary")).toBe(false);
+  });
+});
+
+describe("analysis toggles", () => {
+  it("turns each analysis on and off on its own, without touching the others", () => {
+    const solar = toggleAnalysis(NO_ANALYSES, "solar");
+    expect(solar).toEqual({ solar: true, wind: false, view: false });
+    const solarWind = toggleAnalysis(solar, "wind");
+    expect(solarWind).toEqual({ solar: true, wind: true, view: false });
+    expect(toggleAnalysis(solarWind, "view")).toEqual({ solar: true, wind: true, view: true });
+    expect(toggleAnalysis(solarWind, "solar")).toEqual({ solar: false, wind: true, view: false });
+    expect(toggleAnalysis(toggleAnalysis(solarWind, "solar"), "wind")).toEqual(NO_ANALYSES);
+    expect(NO_ANALYSES).toEqual({ solar: false, wind: false, view: false });
+  });
+
+  it("lists what is on in bar order and turns one on without turning it off again", () => {
+    expect(activeAnalysisKinds(NO_ANALYSES)).toEqual([]);
+    expect(activeAnalysisKinds(analysesOf("view", "solar"))).toEqual(["solar", "view"]);
+    const wind = analysesOf("wind");
+    expect(withAnalysisOn(wind, "wind")).toBe(wind);
+    expect(withAnalysisOn(wind, "solar")).toEqual({ solar: true, wind: true, view: false });
   });
 });

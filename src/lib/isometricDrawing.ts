@@ -28,10 +28,10 @@ import {
   altitudeOnInterval,
   DEFAULT_COARSE_FROM_SCALE,
   DEFAULT_COARSE_INTERVAL_M,
-  demContourLayer,
   drawContours,
   drawnContourInterval,
 } from "./vicmapContours";
+import { drawnContourLayer } from "./drawnContours";
 import {
   DEFAULT_VIEW3D_DISPLAY,
   isLayer3dVisible,
@@ -377,7 +377,7 @@ function buildBuildingSolids(
   const items: IsoSolidItem[] = [];
 
   for (const building of model.buildings) {
-    if (building.meshDrawnBy != null) continue;
+    if (building.meshDrawnBy != null || building.importedMassingShadowCaster) continue;
     const terrainBase = model.terrain
       ? footprintBase(model.terrain, building.ring, model.sideM) - baseElevation
       : 0;
@@ -688,11 +688,7 @@ export function buildIsometricDrawing(
 
   const contourLines: { d: string; index: boolean }[] = [];
   if (layersVisible.contours && model.contours !== false) {
-    const layer = model.contourLayer
-      ? model.contourLayer
-      : model.contours && model.terrain
-        ? demContourLayer(model.terrain, model.sideM)
-        : null;
+    const layer = drawnContourLayer(model);
     if (layer) {
       const minZ = layer.lines.reduce((m, l) => Math.min(m, l.z), model.terrain?.min ?? Infinity);
       const contourBaseZ = Number.isFinite(minZ) ? minZ : baseElevation;
@@ -704,7 +700,6 @@ export function buildIsometricDrawing(
       );
       const drawnInterval = drawnContourInterval(
         layer.source,
-        layer.interval,
         planScale,
         DEFAULT_COARSE_INTERVAL_M,
         DEFAULT_COARSE_FROM_SCALE,

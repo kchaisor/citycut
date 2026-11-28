@@ -1,4 +1,7 @@
 import * as THREE from "three";
+import { LineMaterial } from "three/examples/jsm/lines/LineMaterial.js";
+import { LineSegments2 } from "three/examples/jsm/lines/LineSegments2.js";
+import { LineSegmentsGeometry } from "three/examples/jsm/lines/LineSegmentsGeometry.js";
 import { getColour } from "./colours";
 import { readDrawingStyle } from "./drawingStyle";
 import { planPaths } from "./svgPlan";
@@ -9,8 +12,15 @@ import type { CityModel, Pt } from "../types";
 const CONTOUR_LIFT = 0.35;
 export const CONTOUR_3D_DASH_M = 6;
 export const CONTOUR_3D_GAP_M = 3;
+export const CONTOUR_3D_INDEX_WIDTH_PX = 1.5;
+
+export const CONTOUR_3D_INDEX_NAME = "Contours3dIndex";
 
 export function contourPolylinesForModel(model: CityModel, planScale = 1000): Pt[][] {
+  return contourPolylinesWithIndex(model, planScale).lines;
+}
+
+export function contourPolylinesWithIndex(model: CityModel, planScale = 1000): { lines: Pt[][]; index: boolean[] } {
   const style = readDrawingStyle();
   const plan = planPaths(
     model,
@@ -20,7 +30,7 @@ export function contourPolylinesForModel(model: CityModel, planScale = 1000): Pt
     style.contourCoarseIntervalM,
     style.contourCoarseFromScale,
   );
-  return plan.contours;
+  return { lines: plan.contours, index: plan.contourIndex };
 }
 
 export function drapeContourSegmentsWithDistances(
@@ -72,31 +82,58 @@ export function contourDrapeStepM(model: CityModel): number {
   return model.terrain ? model.terrain.spacingM / 2 : Infinity;
 }
 
+function contourSample(model: CityModel): (east: number, north: number) => number {
+  return model.terrain != null
+    ? (east: number, north: number) => sampleTerrain(model.terrain!, east, north, model.sideM)
+    : () => 0;
+}
+
+type DrapedSegments = { positions: number[]; lineDistances: number[] };
+
+function drapedSegments(model: CityModel, lines: Pt[][]): DrapedSegments | null {
+  if (lines.length === 0) return null;
+  const draped = drapeContourSegmentsWithDistances(
+    lines,
+    contourSample(model),
+    contourDrapeStepM(model),
+    CONTOUR_LIFT + SURFACE.building.lift,
+  );
+  return draped.positions.length < 6 ? null : draped;
+}
+
+function dashedGeometry(draped: DrapedSegments | null): THREE.BufferGeometry | null {
+  if (!draped) return null;
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute(draped.positions, 3));
+  geometry.setAttribute("lineDistance", new THREE.Float32BufferAttribute(draped.lineDistances, 1));
+  return geometry;
+}
+
+function wideDashedGeometry(draped: DrapedSegments): LineSegmentsGeometry {
+  const geometry = new LineSegmentsGeometry();
+  geometry.setPositions(draped.positions);
+  const distances = new THREE.InstancedInterleavedBuffer(new Float32Array(draped.lineDistances), 2, 1);
+  geometry.setAttribute("instanceDistanceStart", new THREE.InterleavedBufferAttribute(distances, 1, 0));
+  geometry.setAttribute("instanceDistanceEnd", new THREE.InterleavedBufferAttribute(distances, 1, 1));
+  return geometry;
+}
+
 export function buildContourLineGeometry(
   model: CityModel,
   planScale = 1000,
 ): THREE.BufferGeometry | null {
-  const lines = contourPolylinesForModel(model, planScale);
-  if (lines.length === 0) return null;
-  const sample =
-    model.terrain != null
-      ? (east: number, north: number) => sampleTerrain(model.terrain!, east, north, model.sideM)
-      : () => 0;
-  const { positions, lineDistances } = drapeContourSegmentsWithDistances(
-    lines,
-    sample,
-    contourDrapeStepM(model),
-    CONTOUR_LIFT + SURFACE.building.lift,
-  );
-  if (positions.length < 6) return null;
-  const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
-  geometry.setAttribute("lineDistance", new THREE.Float32BufferAttribute(lineDistances, 1));
-  return geometry;
+  return dashedGeometry(drapedSegments(model, contourPolylinesForModel(model, planScale)));
+}
+
+export function contourLineMaterials(object: THREE.Object3D): (THREE.LineDashedMaterial | LineMaterial)[] {
+  const index = object.getObjectByName(CONTOUR_3D_INDEX_NAME) as LineSegments2 | undefined;
+  const base = (object as THREE.LineSegments).material as THREE.LineDashedMaterial | undefined;
+  return [base, index?.material].filter((material) => material != null);
 }
 
 export function buildContourLineObject(model: CityModel, planScale = 1000): THREE.LineSegments | null {
-  const geometry = buildContourLineGeometry(model, planScale);
+  const { lines, index } = contourPolylinesWithIndex(model, planScale);
+  const geometry = dashedGeometry(drapedSegments(model, lines));
   if (!geometry) return null;
   const material = new THREE.LineDashedMaterial({
     color: getColour("--outline-contour"),
@@ -107,8 +144,35 @@ export function buildContourLineObject(model: CityModel, planScale = 1000): THRE
     depthTest: true,
   });
   material.name = "Contours3d";
-  const lines = new THREE.LineSegments(geometry, material);
-  lines.name = "Contours3d";
-  lines.renderOrder = SURFACE.building.renderOrder + 2;
-  return lines;
+  const object = new THREE.LineSegments(geometry, material);
+  object.name = "Contours3d";
+  object.renderOrder = SURFACE.building.renderOrder + 2;
+  const indexDraped = drapedSegments(
+    model,
+    lines.filter((_, i) => index[i]),
+  );
+  if (indexDraped) {
+    const indexMaterial = new LineMaterial({
+      color: getColour("--outline-contour"),
+      linewidth: CONTOUR_3D_INDEX_WIDTH_PX,
+      dashed: true,
+      dashSize: CONTOUR_3D_DASH_M,
+      gapSize: CONTOUR_3D_GAP_M,
+      dashScale: 1,
+      toneMapped: false,
+      depthTest: true,
+    });
+    indexMaterial.name = CONTOUR_3D_INDEX_NAME;
+    const indexLines = new LineSegments2(wideDashedGeometry(indexDraped), indexMaterial);
+    indexLines.name = CONTOUR_3D_INDEX_NAME;
+    indexLines.renderOrder = object.renderOrder;
+    indexLines.userData.noScenePick = true;
+    const rendererSize = new THREE.Vector2();
+    indexLines.onBeforeRender = (renderer) => {
+      renderer.getSize(rendererSize);
+      indexMaterial.resolution.set(rendererSize.x, rendererSize.y);
+    };
+    object.add(indexLines);
+  }
+  return object;
 }

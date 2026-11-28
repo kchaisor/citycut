@@ -62,6 +62,8 @@ export type BuildingExtrusionPart = {
   base?: number;
 };
 
+export type ImportedBuildingRef = { fileId: string; buildingId: string };
+
 export type BuildingFeat = {
   id: number;
   ring: Ring;
@@ -79,6 +81,7 @@ export type BuildingFeat = {
   importedMassingSkipShadow?: true;
   importedTopZ?: number;
   importedColour?: string;
+  importedBuilding?: ImportedBuildingRef;
   heightManual?: true;
   use: BuildingUse;
   source: TypologySource;

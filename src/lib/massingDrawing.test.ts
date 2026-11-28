@@ -9,6 +9,7 @@ import {
   massingUpperLevelOutlines,
 } from "./massingFootprint";
 import type { ImportedMassing } from "./massingImport";
+import { wholeFileBuildings } from "./massingBuildings";
 import { sitePlanAi } from "./aiPlan";
 import { explodedAxoChunks } from "./explodedAxoExport";
 import { defaultExplodedAxoSettings } from "./explodedAxo";
@@ -89,16 +90,19 @@ function podiumTowerMassing(): ImportedMassing {
   ({ next: vtx } = meshBox(positions, indices, -15, -10, 15, 10, 0, 12, vtx));
   ({ next: vtx } = meshBox(positions, indices, -8, 2, -2, 8, 12, 38, vtx));
   ({ next: vtx } = meshBox(positions, indices, 4, -6, 10, 0, 12, 28, vtx));
+  const packed = new Float32Array(positions);
+  const triangles = indices.length / 3;
   return {
     id: "podium",
     name: "podium-towers.3dm",
     fileBytes: 1,
     mode: "mga",
     visible: true,
-    positions: new Float32Array(positions),
+    positions: packed,
     indices: new Uint32Array(indices),
-    triangles: indices.length / 3,
-    partTriangleStarts: [0, indices.length / 3],
+    triangles,
+    partTriangleStarts: [0, triangles],
+    buildings: wholeFileBuildings({ positions: packed, triangles }, "podium-towers.3dm"),
     anchor: { e, n, z: 30 },
     halfExtent: { x: 15, y: 10 },
     sourceUnits: "Meters",
@@ -117,9 +121,11 @@ function boxMassing(rotDeg = 0): ImportedMassing {
   const quads = [[0, 3, 2, 1], [4, 5, 6, 7], [0, 1, 5, 4], [1, 2, 6, 5], [2, 3, 7, 6], [3, 0, 4, 7]];
   const idx: number[] = [];
   for (const [a, b, c, d] of quads) idx.push(a!, b!, c!, a!, c!, d!);
+  const positions = new Float32Array(p);
   return {
     id: "m", name: "massing.3dm", fileBytes: 1, mode: "mga", visible: true,
-    positions: new Float32Array(p), indices: new Uint32Array(idx), triangles: 12, partTriangleStarts: [0, 12],
+    buildings: wholeFileBuildings({ positions, triangles: 12 }, "massing.3dm"),
+    positions, indices: new Uint32Array(idx), triangles: 12, partTriangleStarts: [0, 12],
     anchor: { e, n, z: 30 }, halfExtent: { x: 10, y: 15 }, sourceUnits: "Meters", unitScale: 1,
     fileZone: 55, rejectedSurfaces: 0, notes: [],
     placement: { e, n, base: 30, rotDeg },

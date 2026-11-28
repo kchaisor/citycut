@@ -17,4 +17,6 @@ pipeline/out/
 .trees-work/
 public/trees.pmtiles
 public/trees-manifest.json
+public/wikidata-landmarks.json
+public/wikidata-landmarks-manifest.json
 match-ref-out/

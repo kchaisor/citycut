@@ -132,6 +132,9 @@ export type WindPeriodStats = {
   prevailingSector: number;
   prevailingLabel: string;
   prevailingMedianKmh: number;
+  prevailingMeanSpeedMs?: number;
+  sectorSpeedBins?: number[][];
+  speedBinEdgesMs?: number[];
 };
 
 export const SECTOR_LABELS = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"];
@@ -188,6 +191,17 @@ export function analyzeWindPeriod(table: WindRoseTable, period: WindPeriodId): W
         : (prevailingSpeeds[prevailingSpeeds.length / 2 - 1]! + prevailingSpeeds[prevailingSpeeds.length / 2]!) / 2;
 
   const sectorFrequency = sectorTotals.map((count) => (windyHours > 0 ? count / windyHours : 0));
+  const sectorSpeedBins: number[][] = [];
+  for (let sector = 0; sector < WIND_SECTOR_COUNT; sector++) {
+    const bandTotals = new Array(WIND_SPEED_BAND_COUNT).fill(0);
+    for (const month of months) {
+      const bands = table.counts[month]![sector]!;
+      for (let band = 0; band < WIND_SPEED_BAND_COUNT; band++) {
+        bandTotals[band]! += bands[band]!;
+      }
+    }
+    sectorSpeedBins.push(totalHours > 0 ? bandTotals.map((c) => c / totalHours) : bandTotals.map(() => 0));
+  }
 
   return {
     period,
@@ -198,6 +212,7 @@ export function analyzeWindPeriod(table: WindRoseTable, period: WindPeriodId): W
     prevailingSector,
     prevailingLabel: sectorLabel(prevailingSector, true),
     prevailingMedianKmh,
+    sectorSpeedBins,
   };
 }
 

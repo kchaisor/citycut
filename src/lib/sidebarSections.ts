@@ -1,17 +1,34 @@
-export const SIDEBAR_SECTION_IDS = ["summary", "buildings", "trees", "drawing", "analysis", "import", "exports"] as const;
+export const SIDEBAR_SECTION_IDS = ["summary", "buildings", "trees", "drawing", "import", "views", "exports"] as const;
 
 export type SidebarSectionId = (typeof SIDEBAR_SECTION_IDS)[number];
 
-export const SITE_ANALYSIS_KINDS = ["solar", "wind", "view", "walkRipple"] as const;
+export const SITE_ANALYSIS_KINDS = ["solar", "wind", "view"] as const;
 export type SiteAnalysisKind = (typeof SITE_ANALYSIS_KINDS)[number];
-export const SITE_ANALYSIS_LABELS: Record<SiteAnalysisKind, string> = {
-  solar: "Sun",
-  wind: "Wind",
-  view: "View",
-  walkRipple: "Walk",
-};
+export type ActiveAnalyses = Readonly<Record<SiteAnalysisKind, boolean>>;
 
-export const LEFT_SIDEBAR_SECTION_IDS = ["drawing", "analysis", "import", "exports"] as const;
+export const NO_ANALYSES: ActiveAnalyses = { solar: false, wind: false, view: false };
+
+export function isSiteAnalysisKind(id: string | null | undefined): id is SiteAnalysisKind {
+  return Boolean(id && (SITE_ANALYSIS_KINDS as readonly string[]).includes(id));
+}
+
+export function analysesOf(...kinds: SiteAnalysisKind[]): ActiveAnalyses {
+  return kinds.reduce<ActiveAnalyses>((set, kind) => ({ ...set, [kind]: true }), NO_ANALYSES);
+}
+
+export function toggleAnalysis(current: ActiveAnalyses, clicked: SiteAnalysisKind): ActiveAnalyses {
+  return { ...current, [clicked]: !current[clicked] };
+}
+
+export function withAnalysisOn(current: ActiveAnalyses, kind: SiteAnalysisKind): ActiveAnalyses {
+  return current[kind] ? current : { ...current, [kind]: true };
+}
+
+export function activeAnalysisKinds(current: ActiveAnalyses): SiteAnalysisKind[] {
+  return SITE_ANALYSIS_KINDS.filter((kind) => current[kind]);
+}
+
+export const LEFT_SIDEBAR_SECTION_IDS = ["drawing", "import", "views", "exports"] as const;
 
 export type LeftSidebarSectionId = (typeof LEFT_SIDEBAR_SECTION_IDS)[number];
 
@@ -36,8 +53,8 @@ export const SIDEBAR_SECTION_LABELS: Record<SidebarSectionId, string> = {
   buildings: "Buildings",
   trees: "Trees",
   drawing: "Display",
-  analysis: "Site Analysis",
   import: "Import",
+  views: "Views",
   exports: "Export",
 };
 
@@ -54,9 +71,6 @@ export function resolveLeftSidebarSection(
     const first = available.find((id) => (LEFT_SIDEBAR_SECTION_IDS as readonly string[]).includes(id));
     return (first as LeftSidebarSectionId | undefined) ?? INITIAL_LEFT_SIDEBAR_SECTION;
   };
-  if (chosen === "solar" || chosen === "wind" || chosen === "view" || chosen === "walkRipple") {
-    return available.includes("analysis") ? "analysis" : fallback();
-  }
   if (chosen && available.includes(chosen) && isLeftSidebarSection(chosen)) {
     return chosen;
   }
@@ -87,9 +101,6 @@ export function resolveSidebarSection(
     const first = available.find((id) => (SIDEBAR_SECTION_IDS as readonly string[]).includes(id));
     return (first as SidebarSectionId | undefined) ?? INITIAL_SIDEBAR_SECTION;
   };
-  if (chosen === "solar" || chosen === "wind" || chosen === "view" || chosen === "walkRipple") {
-    return available.includes("analysis") ? "analysis" : fallback();
-  }
   if (chosen && available.includes(chosen) && (SIDEBAR_SECTION_IDS as readonly string[]).includes(chosen)) {
     return chosen as SidebarSectionId;
   }

@@ -1,4 +1,6 @@
-import { Download, RotateCcw } from "lucide-react";
+import { ChevronDown, Download, PanelRight, RotateCcw } from "lucide-react";
+import { StudioCompass } from "../StudioCompass";
+import { studioCompassVisible } from "../../lib/studioCompass";
 import { Sidebar } from "../Sidebar";
 import { type DrawingKind } from "../DrawingPlan";
 import { mgaCrs } from "../../lib/crsZone";
@@ -14,6 +16,13 @@ import { SIDEBAR_SECTION_LABELS } from "../../lib/sidebarSections";
 import { ModelPageSidebarLeftA } from "./ModelPageSidebarLeftA";
 import { ModelPageSidebarLeftB } from "./ModelPageSidebarLeftB";
 import { ModelPageSidebarRight } from "./ModelPageSidebarRight";
+import { ExplodedAxoHudCard } from "./ExplodedAxoHudCard";
+import { SolarStudyHudCard } from "./SolarStudyHudCard";
+import { ViewshedHudCard } from "./ViewshedHudCard";
+import { WindRoseHudCard } from "./WindRoseHudCard";
+import { SunHoursLegendDock } from "./SunHoursLegendDock";
+import { solarSettingsForActiveAnalysis } from "../../lib/solarStudyView";
+import { sunHoursLegendCardOn } from "./sunHoursLegendCard";
 
 export function ModelPageSidebar({ vm }: { vm: import("./useModelPage").ModelPageViewModel }) {
   const {
@@ -21,7 +30,6 @@ export function ModelPageSidebar({ vm }: { vm: import("./useModelPage").ModelPag
     busy,
     comMeasuredHeightCount,
     commitView,
-    cutDimLabel,
     displayModel,
     drawing,
     items,
@@ -54,12 +62,26 @@ export function ModelPageSidebar({ vm }: { vm: import("./useModelPage").ModelPag
     setTab,
     setTopbarExportOpen,
     sidebarCollapsed,
+    siteIntelOpen,
+    setSiteIntelOpen,
     sourcesLoaded,
+    compassHeadingDeg,
     tab,
     topbarExportOpen,
     topbarExportRef,
+    topbarExportTriggerRef,
     view,
   } = vm;
+  const { analysisCards, analysisCardOn, siteIntelFolded, setSiteIntelFolded, exploded, explodeModel, showIsometric } = vm;
+  const explodeCardOn = tab === "3d" && exploded;
+  const sunHoursLegendOn = sunHoursLegendCardOn({
+    tab,
+    drawing,
+    sunHours: Boolean(solarSettingsForActiveAnalysis(vm.solar, vm.analyses).sunHours),
+    hasResult: vm.sunHoursGround.grid != null,
+    pending: vm.sunHoursGround.pending || vm.sunHoursGround.pendingSurfaces,
+  });
+  const sunHoursLegendAlone = sunHoursLegendOn && !analysisCards.solar;
 
   return (
         <div className="sidebar-host">
@@ -78,18 +100,43 @@ export function ModelPageSidebar({ vm }: { vm: import("./useModelPage").ModelPag
             showNewCut
             onSelect={selectSection}
             onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
+            siteIntel={{
+              open: siteIntelOpen,
+              onToggle: () => setSiteIntelOpen(!siteIntelOpen),
+              icon: <PanelRight size={16} strokeWidth={1.75} aria-hidden="true" />,
+              fold: analysisCardOn
+                ? {
+                    folded: siteIntelFolded,
+                    onToggle: () => setSiteIntelFolded(!siteIntelFolded),
+                    chevron: <ChevronDown className="insp-head-chevron" size={16} strokeWidth={1.75} aria-hidden="true" />,
+                  }
+                : undefined,
+            }}
             rightMeta={`MGA${mgaCrs(model.center.lon).zone}`}
+            rightBelow={
+              analysisCardOn || sunHoursLegendAlone || explodeCardOn ? (
+                <>
+                  {explodeCardOn ? <ExplodedAxoHudCard vm={vm} /> : null}
+                  {analysisCards.solar ? <SolarStudyHudCard vm={vm} /> : null}
+                  {analysisCards.wind ? <WindRoseHudCard vm={vm} /> : null}
+                  {analysisCards.view ? <ViewshedHudCard vm={vm} /> : null}
+                  {sunHoursLegendAlone ? <SunHoursLegendDock sunHoursGround={vm.sunHoursGround} /> : null}
+                </>
+              ) : undefined
+            }
             brandMeta={
               <>
                 <span className="v-sep hud-sep" aria-hidden="true" />
                 <span className="place-chip studio-breadcrumb-place" title={model.placeLabel}>
                   {model.placeLabel}
                 </span>
-                <span className="dim-chip studio-cut-pill mono">{cutDimLabel}</span>
               </>
             }
             headerCenter={
               <div className="header-center-cluster">
+                {tab === "3d" && studioCompassVisible(view.projection, view.freeRotate) && (
+                  <StudioCompass headingDeg={compassHeadingDeg} />
+                )}
                 <select
                   className="topbar-view-select"
                   aria-label="Model view"
@@ -146,10 +193,14 @@ export function ModelPageSidebar({ vm }: { vm: import("./useModelPage").ModelPag
                     <select
                       className="topbar-3d-select"
                       aria-label="3D projection"
-                      value={view.projection}
+                      value={exploded ? "exploded" : view.projection}
                       onChange={(event) => {
-                        const projection = event.target.value as "perspective" | "iso" | "plan";
-                        if (projection === "plan") {
+                        const projection = event.target.value as "perspective" | "iso" | "exploded" | "plan";
+                        if (projection === "exploded") {
+                          explodeModel();
+                        } else if (projection === "iso") {
+                          showIsometric();
+                        } else if (projection === "plan") {
                           commitView({ projection: "plan", corner: view.corner, freeRotate: false }, true);
                         } else {
                           commitView({ ...view, projection }, false);
@@ -158,6 +209,7 @@ export function ModelPageSidebar({ vm }: { vm: import("./useModelPage").ModelPag
                     >
                       <option value="perspective">Perspective</option>
                       <option value="iso">Iso</option>
+                      <option value="exploded">Exploded</option>
                       <option value="plan">Plan</option>
                     </select>
                     <div className="proj-group studio-submode-pills topbar-3d-modes" role="group" aria-label="3D projection">
@@ -171,11 +223,19 @@ export function ModelPageSidebar({ vm }: { vm: import("./useModelPage").ModelPag
                       </button>
                       <button
                         type="button"
-                        className={view.projection === "iso" ? "proj-btn active studio-submode-pill is-active" : "proj-btn studio-submode-pill"}
-                        aria-pressed={view.projection === "iso"}
-                        onClick={() => commitView({ ...view, projection: "iso" }, false)}
+                        className={view.projection === "iso" && !exploded ? "proj-btn active studio-submode-pill is-active" : "proj-btn studio-submode-pill"}
+                        aria-pressed={view.projection === "iso" && !exploded}
+                        onClick={showIsometric}
                       >
                         Isometric
+                      </button>
+                      <button
+                        type="button"
+                        className={exploded ? "proj-btn active studio-submode-pill is-active" : "proj-btn studio-submode-pill"}
+                        aria-pressed={exploded}
+                        onClick={explodeModel}
+                      >
+                        Exploded axo
                       </button>
                       <button
                         type="button"
@@ -255,7 +315,6 @@ export function ModelPageSidebar({ vm }: { vm: import("./useModelPage").ModelPag
                   }}
                 >
                   <RotateCcw size={15} strokeWidth={2.1} className="topbar-compact-icon" aria-hidden="true" />
-                  <span className="topbar-compact-label">Reset view</span>
                 </button>
               </div>
             }
@@ -341,6 +400,7 @@ export function ModelPageSidebar({ vm }: { vm: import("./useModelPage").ModelPag
                 </div>
                 <div className="topbar-export-compact" ref={topbarExportRef}>
                   <button
+                    ref={topbarExportTriggerRef}
                     type="button"
                     className="topbar-export-trigger studio-export-btn"
                     aria-label="Export"
@@ -387,7 +447,7 @@ export function ModelPageSidebar({ vm }: { vm: import("./useModelPage").ModelPag
                             else void saveSiteSvg();
                           }}
                         >
-                          SVG
+                          SVG (.svg)
                         </button>
                         <button
                           type="button"
@@ -441,6 +501,10 @@ export function ModelPageSidebar({ vm }: { vm: import("./useModelPage").ModelPag
               leftOpen === "import" ? (
                 <span className="sidebar-status">
                   {massing.imported.length} model{massing.imported.length === 1 ? "" : "s"}
+                </span>
+              ) : leftOpen === "views" ? (
+                <span className="sidebar-status">
+                  {vm.namedViews.views.length} saved
                 </span>
               ) : null
             }

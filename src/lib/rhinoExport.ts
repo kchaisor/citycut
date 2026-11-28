@@ -13,10 +13,15 @@ import { planShadowRings, type PlanShadowInput } from "./buildingShadows";
 import { buildHeliodonGroundOverlay, type HeliodonGroundExportOptions } from "./heliodonDiagram";
 import { comBuildingHeightCreditLine } from "./comBuildingHeightCredit";
 import { comTreesCreditLine } from "./comTreesCredit";
-import { contourIsIndex, demContourLayer } from "./vicmapContours";
-import { analyzeWindPeriod, sectorCenterDeg, type WindPeriodId, type WindRoseTable } from "./windRose";
+import { contourIsIndex } from "./vicmapContours";
+import { drawnContourLayer } from "./drawnContours";
+import { sectorCenterDeg, type WindPeriodId } from "./windRose";
+import type { SiteWindSelection } from "./windRoseData";
+import { analyzeSiteWind, stackedSectorArmLength } from "./windRoseStats";
 import { plainDataCredit } from "./dataCredits";
 import { windFlowArrowPolylines } from "./windArrowGeometry";
+import { layoutStreamFans, streamPlaneY, streamSite } from "./windDiagramStreams";
+import type { PrevailingStream } from "./windPrevailingStreams";
 import { dashSegments } from "./drawingStyle";
 import { stableExportModel } from "./exportStableOrder";
 import { modelFrameSize } from "./modelFrame";
@@ -51,6 +56,8 @@ const BUILDING_LAYER_KEYS: Record<string, ColourKey> = {
   Unclassified: "--use-unclassified",
 };
 
+export const WIND_STREAKS_LAYER = "Wind streaks";
+
 export function rhinoLayerColourKeys(): Record<string, ColourKey | "contour"> {
   const keys: Record<string, ColourKey | "contour"> = {
     Buildings: "--building-uniform",
@@ -71,6 +78,10 @@ export function rhinoLayerColourKeys(): Record<string, ColourKey | "contour"> {
     "Sun path": "--sun-compass-label",
     Shadows: "--shadow-fill",
     Wind: "--wind-rose",
+    [WIND_STREAKS_LAYER]: "--wind-stream-1",
+    [`${WIND_STREAKS_LAYER}::Stream 1`]: "--wind-stream-1",
+    [`${WIND_STREAKS_LAYER}::Stream 2`]: "--wind-stream-2",
+    [`${WIND_STREAKS_LAYER}::Stream 3`]: "--wind-stream-3",
   };
   for (const use of BUILDING_USES) {
     const layer = BUILDING_USE_META[use].layer;
@@ -672,22 +683,24 @@ function addWindRose(
   materials: Map<string, number>,
   model: CityModel,
   zone: number,
-  table: WindRoseTable,
+  selection: SiteWindSelection,
   period: WindPeriodId,
 ) {
-  const stats = analyzeWindPeriod(table, period);
+  const stats = analyzeSiteWind(selection, period);
+  if (!stats) return;
   const z = (model.terrain ? model.terrain.min : 0) + 0.2;
   const layerIndex = ensureLayer(rhino, doc, layers, materials, "Wind", layerColors().Wind);
   const half = model.sideM / 2;
   const radius = model.sideM * 0.08;
   const cx = half * 0.72;
   const cy = -half * 0.72;
-  const maxFreq = Math.max(...stats.sectorFrequency, 0.001);
+  const arms = stats.sectorSpeedBins?.map((_, s) => stackedSectorArmLength(stats, s)) ?? stats.sectorFrequency;
+  const maxArm = Math.max(...arms, 0.001);
 
-  for (let sector = 0; sector < stats.sectorFrequency.length; sector++) {
-    const freq = stats.sectorFrequency[sector] ?? 0;
+  for (let sector = 0; sector < arms.length; sector++) {
+    const freq = arms[sector] ?? 0;
     if (freq <= 0) continue;
-    const r = (freq / maxFreq) * radius;
+    const r = (freq / maxArm) * radius;
     const centre = sectorCenterDeg(sector);
     const halfAngle = 22.5 / 2;
     const points: number[][] = [[cx, cy, z]];
@@ -757,6 +770,57 @@ function addWindRose(
   }
 }
 
+export type WindStreakStillArrow = { layer: string; name: string; vertices: [number, number, number][]; faces: [number, number, number][] };
+
+export function windStreakStillArrows(
+  model: CityModel,
+  streams: readonly PrevailingStream[],
+  spreadRadiusM: number | null = null,
+): WindStreakStillArrow[] {
+  const z = streamPlaneY(model);
+  return layoutStreamFans(streams, { ...streamSite(model), spreadRadiusM }).flatMap((fan) =>
+    fan.arrows.map((arrow) => {
+      const vertices: [number, number, number][] = [];
+      for (let i = 0; i < arrow.positions.length; i += 2) vertices.push([arrow.positions[i]!, arrow.positions[i + 1]!, z]);
+      const faces: [number, number, number][] = [];
+      for (let i = 0; i < arrow.indices.length; i += 3) faces.push([arrow.indices[i]!, arrow.indices[i + 1]!, arrow.indices[i + 2]!]);
+      return { layer: `${WIND_STREAKS_LAYER}::Stream ${fan.rank + 1}`, name: "Wind streak", vertices, faces };
+    }),
+  );
+}
+
+function addWindStreaks(
+  rhino: Rhino,
+  doc: InstanceType<Rhino["File3dm"]>,
+  layers: Map<string, number>,
+  materials: Map<string, number>,
+  model: CityModel,
+  zone: number,
+  streams: readonly PrevailingStream[],
+  spreadRadiusM: number | null,
+) {
+  const palette = layerColors();
+  for (const arrow of windStreakStillArrows(model, streams, spreadRadiusM)) {
+    const mesh = new rhino.Mesh();
+    const vertices = mesh.vertices();
+    vertices.useDoublePrecisionVertices = true;
+    for (const [east, north, z] of arrow.vertices) {
+      const [easting, northing] = projectLocal([east, north], model.center, zone);
+      (vertices as unknown as { addPoint3d(x: number, y: number, z: number): number }).addPoint3d(easting, northing, z);
+    }
+    const faces = mesh.faces();
+    for (const [a, b, c] of arrow.faces) faces.addTriFace(a, b, c);
+    mesh.normals().computeNormals();
+    const attributes = new rhino.ObjectAttributes();
+    attributes.name = arrow.name;
+    attributes.layerIndex = ensureLayer(rhino, doc, layers, materials, arrow.layer, palette[arrow.layer] ?? palette[WIND_STREAKS_LAYER]!);
+    applyByLayerAttributes(rhino, attributes);
+    doc.objects().addMesh(mesh, attributes);
+    release(mesh);
+    release(attributes);
+  }
+}
+
 function addContours(
   rhino: Rhino,
   doc: InstanceType<Rhino["File3dm"]>,
@@ -766,7 +830,7 @@ function addContours(
   zone: number,
 ) {
   if (model.contours === false) return;
-  const layer = model.contourLayer ?? (model.contours && model.terrain ? demContourLayer(model.terrain, model.sideM) : null);
+  const layer = drawnContourLayer(model);
   if (!layer || layer.lines.length === 0) return;
   const every = readDrawingStyle().contourIndexEvery;
   const layerIndex = ensureLayer(rhino, doc, layers, materials, "Contours", layerColors().Contours);
@@ -864,7 +928,9 @@ export type CityModelTo3dmOptions = {
   castShadows?: boolean;
   uniformBuildings?: boolean;
   colourBySource?: boolean;
-  wind?: { table: WindRoseTable; period: WindPeriodId } | null;
+  wind?: { selection: SiteWindSelection; period: WindPeriodId } | null;
+  windStreaks?: readonly PrevailingStream[] | null;
+  windStreaksSpreadRadiusM?: number | null;
   hideTrees?: boolean;
   importedMassing?: ImportedMassingExport[] | null;
   /**
@@ -931,6 +997,7 @@ function normalize3dmOptions(
     "shadows" in options ||
     "uniformBuildings" in options ||
     "wind" in options ||
+    "windStreaks" in options ||
     "hideTrees" in options ||
     "importedMassing" in options ||
     "buildingsAsMesh" in options ||
@@ -997,6 +1064,8 @@ export async function cityModelTo3dm(
     uniformBuildings,
     colourBySource,
     wind,
+    windStreaks,
+    windStreaksSpreadRadiusM = null,
     hideTrees,
     importedMassing,
     buildingsAsMesh,
@@ -1014,7 +1083,7 @@ export async function cityModelTo3dm(
   const doc = new rhino.File3dm();
   try {
     group.updateMatrixWorld(true);
-    const { zone: crsZone } = applyRhinoMgaDocumentSettings(rhino, doc, model, { windOn: Boolean(wind?.table) });
+    const { zone: crsZone } = applyRhinoMgaDocumentSettings(rhino, doc, model, { windOn: Boolean(wind?.selection) });
 
     const layers = new Map<string, number>();
     const materials = new Map<string, number>();
@@ -1031,7 +1100,8 @@ export async function cityModelTo3dm(
     addContours(rhino, doc, layers, materials, model, crsZone);
     if (heliodon) addHeliodonPlan(rhino, doc, layers, materials, model, crsZone, heliodon);
     if (shadows) addPlanShadows(rhino, doc, layers, materials, model, crsZone, shadows, Boolean(castShadows));
-    if (wind?.table) addWindRose(rhino, doc, layers, materials, model, crsZone, wind.table, wind.period);
+    if (wind?.selection) addWindRose(rhino, doc, layers, materials, model, crsZone, wind.selection, wind.period);
+    if (windStreaks?.length) addWindStreaks(rhino, doc, layers, materials, model, crsZone, windStreaks, windStreaksSpreadRadiusM);
     if (importedMassing?.length) addImportedMassing(rhino, doc, layers, materials, importedMassing);
 
     return doc.toByteArray();

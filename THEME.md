@@ -34,19 +34,24 @@ The name is `--background`. The value is `#EBEBEB`.
 | `--panel-border` | The line around panels, cards, and inputs. | `#C8C8C8` |
 | `--text` | Main text, icons, and the Create model button. | `#1A1916` |
 | `--muted-text` | Notes, credits, and other secondary text. | `#6E685E` |
-| `--font-sans` | The font for buttons, labels, and ordinary text. | `"Outfit", "Avenir Next", "Segoe UI", sans-serif` |
-| `--font-serif` | The font for the large “Your model is ready” title. | `"Fraunces", "Iowan Old Style", Georgia, serif` |
+| `--sun-hours-direct-dock-footnote` | Compact Direct Sun Hours dock legend footnote. | `#5F5F5F` |
+| `--font-sans` | The font for buttons, labels, and ordinary text. | `"Geist", -apple-system, BlinkMacSystemFont, sans-serif` |
+| `--font-mono` | The font for numbers and data, such as stats and coordinates. | `"Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace` |
+| `--font-serif` | The font for the large “Your model is ready” title. Despite the name, it is Geist; a later change renames it `--sans`. | `"Geist", "Iowan Old Style", Georgia, serif` |
 | `--font-size` | The size of ordinary text. | `15px` |
 | `--font-size-brand` | The size of the CityCut name in the sidebar brand bar. | `18px` |
 | `--font-size-drawer` | The size of a drawer title, such as Exports. | `15px` |
 | `--font-size-card` | The size of an export card title, such as Site plan. | `16px` |
 | `--font-size-stat` | The size of the big numbers in the model summary. | `22px` |
 | `--font-size-title` | The size of the large title in the model summary. | `28px` |
-| `--wind-rose-size` | Diameter of the on-screen wind rose diagram in the 3D view; caption text scales from this. | `168px` |
+| `--wind-rose-size` | Smallest width of the wind rose in the Wind Rose card; the rose never shrinks below it (Kelvin, 23 Nov 2026; was 168px). | `176px` |
+| `--wind-rose-size-tight` | Width of the wind rose when another analysis card shares the right-hand column, or the window is under 860 tall, so Flow / Streaks / Density stay in view (Kelvin, 23 Nov 2026). | `124px` |
+| `--analysis-label-col` | Width of the left-aligned label column on the analysis cards (ALT / AZ / Daylight, Eye height / Radius), so values and pills start on one x. | `80px` |
 | `--shape-toggle-on-bg` | Fill of the selected Square / Circle pill on the landing map. | `#1A1916` |
 | `--shape-toggle-on-text` | Label on the selected Square / Circle pill. | `#FFFCF8` |
 | `--accent` | The one accent colour in the model sidebar. Only ever a fill, with `--accent-ink` on top and a 1 px `--accent-edge` outline: the selected rail icon, a switch that is on, the selected segment (such as Colour by), and the Ready dot. Never used for text or thin lines. It is its own setting, separate from `--site-building`, so changing one does not change the other. | `#FFF500` |
 | `--accent-ink` | Text and icons on an `--accent` fill, and the knob of a switch that is on. | `#1A1916` |
+| `--on-ink` | Text on an `--ink` fill, such as the selected date and season pills on the analysis cards (Kelvin, 23 Nov 2026). | `#FFFFFF` |
 | `--accent-edge` | The 1 px outline around every `--accent` fill, so the yellow still reads on the near-white sidebar. | `#1A1916` |
 | `--accent-hover` | An `--accent` control under the pointer. | `#FFF9A6` |
 | `--sidebar-bg` | The model sidebar and its icon rail. | `#FFFCF8` |
@@ -65,6 +70,35 @@ The name is `--background`. The value is `#EBEBEB`.
 | `--height-manual` | Manual height edits in that bar and key. | `#D4A017` |
 | `--sidebar-rail-w` | Width of the icon rail. The model view starts to its right when the sidebar is collapsed. | `56px` |
 | `--sidebar-panel-w` | Width of the sidebar panel next to the rail. | `320px` |
+| `--z-studio-inspector` | Stacking order of the fixed Site Intelligence panel. | `30` |
+| `--z-studio-topbar` | Stacking order of the floating top-bar HUD (menus paint above the inspector). | `40` |
+| `--fs-micro` / `--lh-micro` | Micro caps type: the ANALYSIS header in the Analysis bar and the kickers and ALT / AZ / DAYLIGHT labels on the analysis cards; the IMPORT, scheme and COLOUR headers in Buildings › Import. | `10px` / `12px` |
+| `--fs-body` | Body type: rows in the imported building popover. | `13px` |
+| `--control-sm` | 28 px control: the Set use select in the imported building popover. | `28px` |
+| `--control-md` | 32 px control: eye toggles in Buildings › Import, the imported-building checkbox row. | `32px` |
+| `--row-imported-building` | Height of one imported building row in Buildings › Import. | `48px` |
+| `--hud-card-head` | Height of the header row on every right-hand analysis card (Solar Study, Wind Rose, Viewshed Walk) and of folded Site Intelligence; the row is also the card's fold toggle (Kelvin's yes to Designbot, 22 Nov 2026; all three cards since 23 Nov 2026). | `48px` |
+| `--fs-title` / `--lh-title` | Title step of the type scale: Site Intelligence Overview KPI values (mono 600; Designbot asked for 15, the scale has 16). | `16px` / `20px` |
+| `--radius-xs` / `--radius-sm` / `--radius-md` | Swatches and checkboxes / rows and segments / segment tracks and selects, in Buildings › Import and the imported building popover. | `4px` / `6px` / `8px` |
+| `--space-0-5` … `--space-3` | 4 pt spacing steps (2, 4, 6, 8, 12 px) used by Buildings › Import and the imported building popover. | `2px` … `12px` |
+| `--fs-caption` / `--lh-caption` | Caption type: landmark label pills, the LANDMARK header, the Wikidata link and Buildings helper captions. | `11px` / `16px` |
+| `--fs-sm` / `--lh-sm` | Small type: Landmark block rows in the building popover and the Landmark labels toggle row. | `12px` / `16px` |
+| `--bg-elev` | Raised white surface: landmark label pills and selected sub-options. | `#FFFFFF` |
+| `--ink` | Primary text: landmark label pills and Landmark block values. | `#141413` |
+| `--ink-2` | Secondary text: Landmark block row labels. | `#4A4945` |
+| `--ink-3` | Muted text: section headers, meta, counts, the LANDMARK header, the Wikidata link, Buildings helper captions. Darkened from `#787670` for contrast (DESIGN-SYSTEM.md). | `#6B6963` |
+| `--border-outer` | 1 px edge of HUD islands and landmark label pills. | `rgb(20 20 19 / 13%)` |
+| `--shadow-raised` | Small lift under landmark label pills and the analysis-card slider thumbs (Density, Sun dome size, walk position). | `0 1px 2px rgb(20 20 19 / 8%)` |
+| `--slider-track` | Unfilled part of the 4 px analysis-card slider tracks (Density, Sun dome size, walk position; ink at 15%); the filled part is `--ink`. | `rgb(20 20 19 / 15%)` |
+| `--space-0-5` / `--space-1` / `--space-1-5` | 2 / 4 / 6 px gaps inside controls: the High / Fast track and the gaps between chips, icons and segmented buttons on the Analysis bar and cards. | `2px` / `4px` / `6px` |
+| `--space-2` / `--space-3` / `--space-4` | 8 / 12 / 16 px layout spacing: Analysis bar padding, row and group gaps, divider height. | `8px` / `12px` / `16px` |
+| `--radius-sm` / `--radius-md` / `--radius-lg` | Corner radius of chips and card buttons (6), the High / Fast track (8) and the Analysis bar and card islands (12). | `6px` / `8px` / `12px` |
+| `--control-xs` / `--control-sm` | Control heights: date options and the time readout (24), mode and overlay chips and the play button (28). | `24px` / `28px` |
+| `--z-hud` | Stacking band of the HUD islands. | `30` |
+| `--z-landmark-labels` | Landmark label pills in 3D and plan, just below `--z-hud`. | `29` |
+| `--dur-fast` | Landmark label fade in and out. | `120ms` |
+| `--studio-intelligence-meta` | MGA / cut-size line in the Site Intelligence header (`~6.3:1` on `--bg-card`). | `#5F5E5A` |
+| `--studio-submode-select-edge` | 1 px outline on the collapsed Perspective / Site plan submode `<select>` below 1280. | `#D9D8D3` |
 
 `var(--background)` means “use whatever `--background` is set to”. That is why one edit recolours the page, the model, and the drawing together.
 
@@ -91,14 +125,17 @@ Use capital or lowercase letters. `#ebebeb` and `#EBEBEB` are the same colour.
 
 The safest choices are fonts the app already loads, or a common font that is already on the computer:
 
-- Outfit, for ordinary text. The app loads this.
-- Fraunces, for the large title. The app loads this.
-- Avenir Next, Segoe UI, Georgia, and the words `sans-serif` or `serif`. These are fallbacks. The browser uses the first one it can find.
+- Geist, for buttons, labels and ordinary text. The app loads this.
+- Geist Mono, for numbers and data. The app loads this.
+- Outfit at weight 700, only for the CityCut wordmark and the Create model button. Use it nowhere else.
+- -apple-system, BlinkMacSystemFont, ui-monospace and the words `sans-serif` or `monospace`. These are fallbacks. The browser uses the first one it can find.
+
+Fraunces is no longer used.
 
 Keep the quotes around a name that has a space, and keep the commas. A good ordinary-text line is:
 
 ```css
---font-sans: "Outfit", "Avenir Next", "Segoe UI", sans-serif;
+--font-sans: "Geist", -apple-system, BlinkMacSystemFont, sans-serif;
 ```
 
 A name the app does not load, such as a font from your computer only, will show for you and not for other people.
@@ -126,11 +163,13 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--figure-fill` | `#000000` | Figure-ground buildings, the black frame, north mark, and scale bar on that drawing, on screen and in the Illustrator file, and the Rhino FigureGround layer. |
 | `--plan-empty` | `#6d675e` | The sentence shown when a plan has nothing in the frame. |
 | `--contour-label` | `#6A6A6A` | Elevation numbers on the site plan, on screen and in the Illustrator file. |
+| `--landmark-label` | `#141413` | Landmark label text in Drawing (site plan and figure-ground), the site-plan and figure-ground SVG, and the 3D 2× PNG. |
+| `--landmark-label-halo` | `#FFFFFF` | 2 px halo behind that text (SVG stroke with `paint-order`, and the PNG). |
 | `--building-uniform` | `#FFFFFF` | Buildings when colour-by-use is off, that legend swatch, and the Rhino Buildings layer. |
 | `--uniform-road` | `#555555` | Road fill in Drawing when the plan building style is uniform (3D Card view uses `--primary-surface` on canvas instead). |
 | `--building-manual` | `#D4A017` | 3D viewport tint for buildings with a manual height override when “Show manual edits” is on. |
 | `--site-building` | `#F2C230` | Buildings on the searched property: site plan, 3D, Rhino `Buildings::Site`, and Illustrator Site buildings layer. Manual-height amber and uniform colour apply to non-site buildings only; site buildings stay yellow unless manual-height tint is on for that building (manual wins in 3D). |
-| `--imported-massing` | `#FFFFFF` | Default colour of imported .3dm massing in 3D, Drawing (site plan, figure-ground, exploded axo), .ai and .3dm. Each imported model can override it with the Colour picker in Import (stored with the model). |
+| `--imported-massing` | `#FFFFFF` | Fallback fill for imported .3dm massing in 3D, Drawing (site plan, figure-ground, exploded axo, isometric), .ai and .3dm, used only when a building has no colour set. Imported buildings normally take their use colour (`--use-unclassified` with no use), or the file colour from the Colour picker in Import (stored with the model). |
 | `--imported-massing-upper-stroke` | `#6E6E6E` | Solid linework for upper roof/setback outlines inside imported footprints. |
 | `--imported-massing-upper-tone` | `#E6E6E6` | Light plan fill behind upper-level outlines on screen. |
 | `--switch-knob` | `#000000` | Knob of every sidebar switch, on and off, so an off switch reads on its pale `--control-off` track. On = `--accent` track, knob right. |
@@ -160,9 +199,12 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--green-3d` | `#7f9a62` | Green mesh in the 3D view, the 3D-view Illustrator green, and the Rhino Green layer. |
 | `--water-fill` | `#9ec9d1` | Water on the site plan, on screen and in the Illustrator file. |
 | `--water-3d` | `#8ebfc8` | Water mesh in the 3D view, the 3D-view Illustrator water, and the Rhino Water layer. |
+| `--water-3d-mono` | `#D6D6D2` | Flat, unlit water in the 3D view while the View Style is B&W, and the Water swatch in Scene Layers while B&W is on. |
 | `--water-sunpath` | `#4A9FE8` | Water in the 3D viewport while the sun path diagram is on. |
 | `--sun-study-surface` | `#FFFFFF` | Ground, roads, and parks in the 3D viewport while the sun path is on. |
 | `--card-white` | `#FAFAF8` | Building and surface massing in white-card 3D display mode. |
+| `--card-road` | `#FFFFFF` | Road fill in 3D Card view (Primary, Use and Source off). Matches the white Card default until the Roads colour chip changes it. |
+| `--card-footpath` | `#FFFFFF` | Footpath fill in 3D Card view. Matches the white Card default until the Footpaths colour chip changes it. |
 | `--card-ground` | `#F2F2F0` | Ground and terrain in white-card 3D display mode. |
 | `--nsw-road-corridor` | `#E9E5DC` | NSW mode: cadastral road corridor fill under the carriageway on the site plan. |
 | `--nsw-lot-line` | `#5E5E5E` | NSW mode: cadastral lot boundaries on the site plan. |
@@ -205,9 +247,14 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--sun-arc-summer` | `#1a1916` | Dec 21 sun path in the 3D heliodon, solid line (screen only). Black or grey only. |
 | `--sun-arc-equinox` | `#1a1916` | Sep/Mar sun path in the 3D heliodon, dashed line (screen only). Black or grey only. |
 | `--sun-arc-winter` | `#1a1916` | Jun 21 sun path in the 3D heliodon, dash-dot line (screen only). Black or grey only. |
-| `--sun-marker` | `#ffcc1a` | Sun icon at the current time in the 3D heliodon (screen only). The only yellow in the heliodon. |
+| `--sun-marker` | `#ffcc1a` | 14 px sun at the current time in the 3D heliodon (screen only; was 10 px, Kelvin 22 Nov 2026). The only yellow in the heliodon. A 1 px `--ink` dashed line runs from the sun to the dome centre. |
 | `--sun-compass` | `#45423c` | Dark grey of the 3D heliodon dial: 10° altitude rings, azimuth radials, 1° ticks, degree numbers and hour lines (screen only). |
-| `--sun-compass-label` | `#1a1916` | Ink of the 3D heliodon dial: horizon ring, 5° and 10° ticks, cardinal ticks, dashed axes, N/E/S/W, hour labels, arc labels and hour-dot outlines (screen only). |
+| `--sun-compass-label` | `#1a1916` | Ink of the 3D heliodon dial: horizon ring, 5° and 10° ticks, cardinal ticks, dashed axes, N/E/S/W (20/700, twice the 10/700 bearing numbers; Kelvin 22 Nov 2026), hour labels, arc labels and hour-dot outlines (screen only). |
+| `--studio-compass-chip` | `#111111` | 3D view compass (Designbot C): dark disc behind the north/south needle. |
+| `--studio-compass-chip-ring` | `#000000` | 3D view compass: 1px outer ring on the chip. |
+| `--studio-compass-needle-north` | `#ffe500` | 3D view compass: north half of the needle. |
+| `--studio-compass-needle-south` | `#6b6b6b` | 3D view compass: south half of the needle. |
+| `--studio-compass-focus` | `#ffe500` | 3D view compass: keyboard focus ring. |
 | `--building-solar-neutral` | `#ffffff` | Single neutral building fill in the 3D viewport while the sun path and compass are on (screen only). |
 | `--heliodon-dial-disc` | `#e8e2d8` | Faint ground disc under the heliodon dial at about 35% opacity (screen only). |
 | `--shadow-fill` | `#4a5a70` | Site-plan building shadows on the site plan (20% opacity). |
@@ -221,6 +268,13 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--sun-study-path-edge` | `#d4d4d0` | Sun study muted base plan (on by default with the sun study; toggle off in the Sun panel): footpath edge. |
 | `--sun-study-building` | `#ffffff` | Sun study muted base plan (on by default with the sun study; toggle off in the Sun panel): buildings (the site building keeps its own colour). |
 | `--sun-study-tree` | `#b8e0b0` | Tree crowns in the sun study muted base plan, at 50% opacity. Pastel green so trees stay visible under the hourly shadows. |
+| `--sun-hours-direct-0` | `#313695` | Direct sun hours 0 h (blue). |
+| `--sun-hours-direct-15` | `#4575b4` | Direct sun hours low blue. |
+| `--sun-hours-direct-30` | `#a5006a` | Direct sun hours purple. |
+| `--sun-hours-direct-50` | `#d73027` | Direct sun hours red mid. |
+| `--sun-hours-direct-70` | `#f46d43` | Direct sun hours orange. |
+| `--sun-hours-direct-90` | `#fdae61` | Direct sun hours light orange. |
+| `--sun-hours-direct-max` | `#fee825` | Direct sun hours max (yellow). |
 | `--axo-water` | `#7eb8da` | Exploded axo floodplain / water layer. |
 | `--axo-road` | `#e8883a` | Exploded axo roads layer. |
 | `--axo-green` | `#8fbc8f` | Exploded axo green spaces layer. |
@@ -246,9 +300,9 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--axo-hydro-course` | `#3d8fbf` | Exploded axo Vicmap hydro watercourse stroke. |
 | `--axo-rail-line` | `#2d2d2d` | Exploded axo Vicmap rail centre line. |
 | `--axo-rail-station` | `#1a1a1a` | Exploded axo Vicmap rail station marker. |
-| `--axo-pt-train` | `#003366` | Exploded axo PTV train route. |
-| `--axo-pt-tram` | `#00854a` | Exploded axo PTV tram route. |
-| `--axo-pt-bus` | `#c45c00` | Exploded axo PTV bus route. |
+| `--axo-pt-train` | `#003366` | Exploded axo PTV train route, and the Train line sample in the Transport legend card and the export sheet legend. |
+| `--axo-pt-tram` | `#000000` | Exploded axo PTV tram route, and the Tram line sample in the Transport legend card and the export sheet legend. |
+| `--axo-pt-bus` | `#c45c00` | Exploded axo PTV bus route, and the Bus line sample in the Transport legend card and the export sheet legend. |
 | `--axo-contour` | `#8a8578` | Exploded axo Vicmap contour stroke. |
 | `--axo-cadastre` | `#e8a33c` | Exploded axo cadastre (Vicmap parcel) boundary, orange. |
 | `--axo-terrain-mesh` | `#4a4a4a` | Exploded axo terrain (DTM) mesh grid. |
@@ -287,7 +341,45 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--axo-tree-canopy-shade` | `#5e8f45` | Exploded axo tree canopy (shaded side). |
 | `--axo-tree-trunk` | `#7a6a55` | Exploded axo tree trunk. |
 | `--wind-streak` | `#2B6CB0` | Animated wind streaks in the 3D viewport (~70% opacity). |
+| `--wind-stream-1` | `#6D9BC7` | Wind streaks diagram arrows and legend swatch: the most frequent wind direction. Soft dusty blue, deeper than `--water-3d`. Stays in colour in the B&W View Style (Kelvin, 23 Nov 2026). |
+| `--wind-stream-2` | `#8FBEA3` | Wind streaks diagram arrows and legend swatch: the second direction. Soft sage. |
+| `--wind-stream-3` | `#C3A6CF` | Wind streaks diagram arrows and legend swatch: the third direction. Soft lilac. |
 | `--wind-rose` | `#3d5a73` | On-screen wind rose overlay and Wind export layer. |
+| `--wind-rose-card-surface` | `#fffcf8` | Wind analysis card background and rose hub disc. |
+| `--wind-rose-ring` | `#c9d2da` | Wind rose outer ring stroke. |
+| `--wind-rose-guide` | `#c9d2da` | Wind rose frequency guide rings. |
+| `--wind-rose-n-label` | `#111111` | Wind rose north label. |
+| `--wind-rose-h-label` | `#5f5f5f` | Wind rose E/S/W labels. |
+| `--wind-calm-caption` | `#1f2a33` | Calm caption under the on-card wind rose. |
+| `--ground-wind-sheltered` | `#24208a` | 3D ground-wind line velocity ramp: near-still air in a building wake (speed ≈ 0.15× open ground). |
+| `--ground-wind-calm` | `#1f4fd0` | 3D ground-wind line velocity ramp: well below open-ground speed (≈ 0.45×). |
+| `--ground-wind-easing` | `#008cc4` | 3D ground-wind line velocity ramp: a little below open-ground speed (≈ 0.8×). |
+| `--ground-wind-open` | `#009c78` | 3D ground-wind line velocity ramp: open-ground speed (1×). |
+| `--ground-wind-rising` | `#d9a300` | 3D ground-wind line velocity ramp: speeding up (≈ 1.12×). |
+| `--ground-wind-fast` | `#e8670f` | 3D ground-wind line velocity ramp: speeding up (≈ 1.25×). |
+| `--ground-wind-speeding` | `#cc1f1f` | 3D ground-wind line velocity ramp: strongest speed-up at corners and gaps (≥ 1.4×). |
+| `--wind-plan-speed-still` | `#2e42d4` | Plan Wind speed map (CFD-style ramp, linear between stops, stretched from 0 to each site's scale top, minimum 4 m/s): 0 m/s, deep royal blue for sheltered wakes. Plan only; the 3D streaks keep `--ground-wind-*`. |
+| `--wind-plan-speed-calm` | `#4f68de` | Plan Wind speed map: 1 m/s, mid blue (typical lee-side wakes). |
+| `--wind-plan-speed-breeze` | `#46d4e8` | Plan Wind speed map: 2 m/s, cyan (half scale). |
+| `--wind-plan-speed-brisk` | `#b5e35c` | Plan Wind speed map: 2.8 m/s, green-yellow. |
+| `--wind-plan-speed-strong` | `#f3dc3c` | Plan Wind speed map: 3.5 m/s, yellow. |
+| `--wind-plan-speed-fast` | `#ec6a2e` | Plan Wind speed map: top of the site scale and above, orange-red (top of the Velocity legend). |
+| `--wind-plan-sitting` | `#bdf8da` | Plan wind comfort map (Plan view, Wind Rose, Comfort): Lawson sitting band (4 m/s exceeded ≤ 5%), and its legend swatch. Sampled from Kelvin's Lawson reference, 19 Nov 2026. |
+| `--wind-plan-standing` | `#6adca0` | Plan wind comfort map: Lawson standing band (6 m/s). |
+| `--wind-plan-strolling` | `#f8d404` | Plan wind comfort map: Lawson strolling band (8 m/s). |
+| `--wind-plan-walking` | `#faa902` | Plan wind comfort map: Lawson walking band (10 m/s). |
+| `--wind-plan-uncomfortable` | `#f44333` | Plan wind comfort map: uncomfortable band. Unsafe has no fill or mark on the map; it is reported as a count in the card. |
+| `--wind-plan-building` | `#ffffff` | Plan Wind speed map: building footprints drawn over the wind diagram. |
+| `--wind-plan-comfort-building` | `#c5c5c5` | Plan Comfort map: light-grey building footprints, inside and outside the site. |
+| `--wind-plan-basemap` | `#f3f3f3` | Plan Comfort map: muted grey ground inside the cut and outside the site clip. |
+| `--wind-plan-road` | `#e3e3e3` | Plan Comfort map: roads on the muted base map. |
+| `--wind-plan-water` | `#7FBFFF` | Plan wind maps (Wind speed and Comfort): water, the same blue as `--water-fill`. |
+| `--wind-plan-green` | `#e8ebe6` | Plan Comfort map: green space on the muted base map. |
+| `--wind-band-0` | `#9ec5e8` | Wind console swatch: 2–10 km/h. |
+| `--wind-band-1` | `#5b9bd5` | Wind console swatch: 10–20 km/h. |
+| `--wind-band-2` | `#2f6fd6` | Wind console swatch: 20–30 km/h. |
+| `--wind-band-3` | `#1b4f9c` | Wind console swatch: 30–40 km/h. |
+| `--wind-band-4` | `#0b3d91` | Wind console swatch: 40+ km/h. |
 | `--view-visible` | `#FFF500` | View tab: ground visible from the walker right now (3D overlay, ~86% opacity) and its legend swatch. |
 | `--view-seen` | `#FFF9AA` | View tab: ground seen earlier on the walk (lighter tint, ~47% opacity). |
 | `--view-blocked` | `#28282E` | View tab: ground inside the radius that is not visible (~27% opacity). |
@@ -351,10 +443,10 @@ A dash is two lengths in millimetres: how long the mark is, then how long the ga
 | `--contour-stroke-mm` | Weight of a contour | `0.1` | mm |
 | `--contour-stroke` | Colour of a contour | `#B0B0B0` | colour |
 | `--contour-dash` | Dash of a contour | `1.5 0.75` | mm, on then off |
-| `--contour-index-mm` | Weight of every Nth contour. Same colour and dash as the other contours | `0.18` | mm |
-| `--contour-index-every` | How many drawn contours between index lines. `5` is every 5th line: 5 m on 1 m data, 25 m once that data is drawn at 5 m, and 50 m on 10 m data | `5` | count |
-| `--contour-coarse-interval-m` | Interval used for metro contours at small plan scales. Only altitudes on this step are drawn | `5` | m |
-| `--contour-coarse-from-scale` | Plan-scale denominator where that coarser interval starts. `2500` is 1:2500, 1:5000, and smaller. 1:500 and 1:1000 keep every metre | `2500` | scale denominator |
+| `--contour-index-mm` | Weight of every Nth contour on the site plan and in exports. Same colour and dash as the other contours. The exploded axo scales its contour strokes by the same ratio, and 3D draws index contours dashed like the 1 m lines, not solid, and slightly heavier (about 1.5 px) so they still read as index (Kelvin, 22 Nov 2026) | `0.18` | mm |
+| `--contour-index-every` | How many drawn contours between index lines. Contours are drawn every 1 m on every site (official lines plus interpolated ones), so `5` is an index line every 5 m | `5` | count |
+| `--contour-coarse-interval-m` | Interval used for metro and City of Sydney contours at small plan scales. `1` keeps 1 m at every scale (Kelvin, 22 Nov 2026). Set `5` to thin those sources to 5 m from `--contour-coarse-from-scale`; NSW 2 m and DEM sites stay at 1 m | `1` | m |
+| `--contour-coarse-from-scale` | Plan-scale denominator where a coarser interval would start if `--contour-coarse-interval-m` is above 1. `2500` is 1:2500, 1:5000, and smaller. 1:500 and 1:1000 always keep every metre | `2500` | scale denominator |
 | `--frame-stroke-mm` | Weight of the square frame | `0.35` | mm |
 | `--frame-stroke` | Colour of the frame | `#1C1B17` | colour |
 | `--frame-dash` | Dash of the frame | `none` | mm, on then off |
@@ -382,6 +474,18 @@ A dash is two lengths in millimetres: how long the mark is, then how long the ga
 | `--tram-dash` | Dash of a tram route | `1.2 0.6` | mm, on then off |
 | `--axo-guide-dash` | Dash of exploded axo vertical guides | `0.8 0.5` | mm, on then off |
 | `--building-edge` | Colour of the massing edge in the 3D view | `#000000` | colour |
+| `--wind-plan-contour-stroke` | Plan wind speed map: colour of the fine isolines every 0.25 m/s | `#5A5A5A` | colour |
+| `--wind-plan-contour-opacity` | Plan wind speed map: opacity of those isolines | `0.3` | 0–1 |
+| `--wind-plan-contour-px` | Plan wind speed map: isoline weight on screen | `0.75` | screen px |
+| `--wind-plan-building-edge` | Plan wind maps: building footprint edge colour | `#1A1A1A` | colour |
+| `--wind-plan-building-edge-opacity` | Plan wind maps: building edge opacity | `0.4` | 0–1 |
+| `--wind-plan-building-edge-px` | Plan wind maps: building edge weight | `1` | screen px |
+| `--wind-plan-vector-stroke` | Plan wind maps (Wind speed and Comfort): colour of the flow vector arrows | `#FFFFFF` | colour |
+| `--wind-plan-vector-opacity` | Plan wind maps: opacity of the flow vector arrows | `0.9` | 0–1 |
+| `--wind-plan-vector-px` | Plan wind maps: shaft and head weight of the flow vector arrows | `1` | screen px |
+| `--wind-plan-vector-head-px` | Plan wind maps: length of each arrowhead stroke | `2` | screen px |
+| `--wind-plan-vector-max-px` | Plan wind maps: longest arrow (the windiest cell); calm cells draw at 72% of it, and arrows never exceed 88% of the on-screen 22 m grid gap | `18` | screen px |
+| `--wind-plan-swatch-edge` / `--wind-plan-swatch-edge-opacity` | Plan wind card: 1px edge on the comfort legend swatches | `#1A1A1A` / `0.2` | colour / 0–1 |
 
 Green fills, water fills, tree fills, and the other fills are in the Fills table above. This list is the pens. The footpath fill stays named here because the Line styles panel still edits it, and the value itself is in `src/colours.css`.
 

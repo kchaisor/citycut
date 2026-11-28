@@ -30,7 +30,13 @@ import { planShadowRings, type PlanShadowInput } from "./buildingShadows";
 import { SINGLE_SHADOW_OPACITY, SUN_STUDY_SHADOW_OPACITY } from "./sunStudyPlan";
 import { planPaths } from "./svgPlan";
 import { regionCredit } from "./sources/registry";
-import { importedMassingStrokeStyle, importedMassingUpperStrokeStyle, planBuildingStrokeStyle } from "./planBuildingFill";
+import {
+  importedMassingStrokeStyle,
+  importedMassingUpperStrokeStyle,
+  planBuildingStrokeStyle,
+  planExportBuildingFill,
+  type PlanExportSunStudyOptions,
+} from "./planBuildingFill";
 import { windPlanPdfChunk } from "./windExport";
 import { comBuildingHeightCreditLine } from "./comBuildingHeightCredit";
 import { comTreesCreditLine } from "./comTreesCredit";
@@ -44,6 +50,12 @@ import {
 import { defaultExplodedAxoSettings, type ExplodedAxoSettings } from "./explodedAxo";
 import { stableExportModel } from "./exportStableOrder";
 import { sectionMarkerPlanChunk } from "./sectionKnife/sectionMarkerPlanChunk";
+import {
+  LANDMARK_FONT_PX,
+  LANDMARK_HALO_PX,
+  placeSheetLabels,
+  type LandmarkLabelSource,
+} from "./landmarkLabels";
 import type { CityModel, ContourSourceId, Pt, Ring } from "../types";
 
 export const SITE_LAYER_ORDER = [
@@ -259,11 +271,51 @@ export type SitePlanExportOptions = {
   uniformBuildings?: boolean;
   highlightManual?: boolean;
   colourBySource?: boolean;
-  wind?: { table: import("./windRose").WindRoseTable; period: import("./windRose").WindPeriodId } | null;
+  wind?: { selection: import("./windRoseData").SiteWindSelection; period: import("./windRose").WindPeriodId } | null;
   sunStudy?: { layers: { hour: number; rings: Ring[][] }[] } | null;
   sectionKnife?: import("./sectionKnife/state").SectionKnifeToolState | null;
   sunStudyDate?: SunStudyDate | null;
+  sunStudyMuted?: boolean;
+  sunStudySelected?: readonly number[];
+  landmarkLabels?: readonly LandmarkLabelSource[] | null;
 };
+
+export const LANDMARK_LABEL_LAYER = "Landmark labels";
+const MM_PER_CSS_PX = 25.4 / 96;
+
+export function landmarkLabelChunk(
+  model: CityModel,
+  layout: SheetLayout,
+  sources: readonly LandmarkLabelSource[] | null | undefined,
+): PdfChunk | null {
+  if (!sources || sources.length === 0) return null;
+  const sizeMm = LANDMARK_FONT_PX * MM_PER_CSS_PX;
+  const frameW = layout.frameWidthMm ?? layout.frameMm;
+  const frameH = layout.frameHeightMm ?? layout.frameMm;
+  const bottom = layout.pageHeightMm - layout.frameY - frameH;
+  const placed = placeSheetLabels(
+    sources,
+    (at) => sheetPoint(at[0], at[1], model.sideM, layout),
+    sizeMm,
+    { left: layout.frameX, right: layout.frameX + frameW, top: bottom, bottom: bottom + frameH },
+  );
+  if (placed.length === 0) return null;
+  const color = fillOf("--landmark-label");
+  const halo = { color: fillOf("--landmark-label-halo"), widthMm: LANDMARK_HALO_PX * MM_PER_CSS_PX };
+  return {
+    name: LANDMARK_LABEL_LAYER,
+    texts: placed.map((label) => ({
+      x: label.x,
+      y: label.y,
+      sizeMm,
+      text: label.text,
+      color,
+      anchor: "middle" as const,
+      weight: 500,
+      halo,
+    })),
+  };
+}
 
 export function sunStudyLayerName(hour: number): string {
   return `Shadow ${String(hour).padStart(2, "0")}:00`;
@@ -303,6 +355,7 @@ function resolveSitePlanExport(
     "heliodon" in exportOptions ||
     "wind" in exportOptions ||
     "sunStudy" in exportOptions ||
+    "landmarkLabels" in exportOptions ||
     "uniformBuildings" in exportOptions ||
     "sectionKnife" in exportOptions
   ) {
@@ -486,6 +539,13 @@ export function sitePlanChunks(
   }
   const buildingPen = pen(planBuildingStrokeStyle(style, uniformBuildings, false), "miter");
   const siteBuildingPen = pen(style.siteBuilding, "miter");
+  const sunStudyExport: PlanExportSunStudyOptions = {
+    sunStudyDate: resolved.sunStudyDate,
+    sunStudy: resolved.sunStudy,
+    sunStudyMuted: resolved.sunStudyMuted,
+    sunStudySelected: resolved.sunStudySelected,
+  };
+  const exportBuildingFill = (building: (typeof plan.buildings)[number]) => planExportBuildingFill(building, sunStudyExport);
   const siteBuildings = plan.buildings.filter((building) => building.site);
   const importedBuildings = plan.buildings.filter((building) => building.imported);
   const otherBuildings = plan.buildings.filter((building) => !building.site && !building.imported);
@@ -494,7 +554,7 @@ export function sitePlanChunks(
       name: "Buildings",
       paths: otherBuildings.map((building) => ({
         rings: mapRings(building.rings, model.sideM, layout),
-        fill: hexRgb(building.fill),
+        fill: exportBuildingFill(building),
         evenOdd: true,
         close: true,
         ...(buildingPen ?? {}),
@@ -506,7 +566,7 @@ export function sitePlanChunks(
       name: "Site buildings",
       paths: siteBuildings.map((building) => ({
         rings: mapRings(building.rings, model.sideM, layout),
-        fill: hexRgb(building.fill),
+        fill: exportBuildingFill(building),
         evenOdd: true,
         close: true,
         ...(siteBuildingPen ?? buildingPen ?? {}),
@@ -519,7 +579,7 @@ export function sitePlanChunks(
       name: "Imported massing",
       paths: importedBuildings.map((building) => ({
         rings: mapRings(building.rings, model.sideM, layout),
-        fill: hexRgb(building.fill),
+        fill: exportBuildingFill(building),
         evenOdd: true,
         close: true,
         ...(importedPen ?? buildingPen ?? {}),
@@ -562,7 +622,9 @@ export function sitePlanChunks(
       }),
     });
   }
-  if (resolved.wind?.table) chunks.push(windPlanPdfChunk(resolved.wind.table, resolved.wind.period, layout, model.sideM));
+  if (resolved.wind?.selection) {
+    chunks.push(windPlanPdfChunk(resolved.wind.selection, resolved.wind.period, layout, model.sideM));
+  }
   chunks.push(frameStroke(layout, style.frame));
   if (heliodon) {
     const studyDate =
@@ -586,7 +648,7 @@ export function sitePlanChunks(
       plan.contourInterval,
       style.annotation,
       plan.contourSource,
-      Boolean(resolved.wind?.table),
+      Boolean(resolved.wind?.selection),
     ),
   );
   return chunks;
@@ -679,6 +741,8 @@ export async function sitePlanSvg(
   const { buildLayeredSvg } = await import("./svgDocument");
   const layout = layoutForModel(model, scale);
   const chunks = sitePlanChunks(model, scale, style ?? readDrawingStyle(), exportOptions);
+  const labels = landmarkLabelChunk(model, layout, resolveSitePlanExport(exportOptions).landmarkLabels);
+  if (labels) chunks.push(labels);
   return buildLayeredSvg(layout.pageWidthMm, layout.pageHeightMm, chunks, sitePlanLayerOrder(chunks));
 }
 
@@ -709,15 +773,14 @@ export async function figureGroundSvg(
   scale: number,
   style?: LineStyles,
   heliodon?: HeliodonDiagramExportOptions | null,
+  landmarkLabels?: readonly LandmarkLabelSource[] | null,
 ): Promise<string> {
   const { buildLayeredSvg } = await import("./svgDocument");
   const layout = layoutForModel(model, scale);
-  return buildLayeredSvg(
-    layout.pageWidthMm,
-    layout.pageHeightMm,
-    figureGroundChunks(model, scale, style ?? readDrawingStyle(), heliodon),
-    FIGURE_LAYER_ORDER,
-  );
+  const chunks = figureGroundChunks(model, scale, style ?? readDrawingStyle(), heliodon);
+  const labels = landmarkLabelChunk(model, layout, landmarkLabels);
+  if (labels) chunks.push(labels);
+  return buildLayeredSvg(layout.pageWidthMm, layout.pageHeightMm, chunks, FIGURE_LAYER_ORDER);
 }
 
 export function sitePlanAi8(

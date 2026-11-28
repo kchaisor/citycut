@@ -21,10 +21,10 @@ import {
   DEFAULT_COARSE_FROM_SCALE,
   DEFAULT_COARSE_INTERVAL_M,
   altitudeOnInterval,
-  demContourLayer,
   drawContours,
   drawnContourInterval,
 } from "./vicmapContours";
+import { drawnContourLayer } from "./drawnContours";
 import { modelFrameSize } from "./modelFrame";
 import type { CityModel, Pt } from "../types";
 
@@ -55,7 +55,7 @@ export type PlanPaths = {
   pathUnionMs: number;
   rails: Pt[][];
   trams: Pt[][];
-  buildings: { rings: Pt[][]; fill: string; site: boolean; imported?: boolean }[];
+  buildings: { id: number; rings: Pt[][]; fill: string; site: boolean; imported?: boolean }[];
   trees: { east: number; north: number; r: number }[];
   contours: Pt[][];
   contourIndex: boolean[];
@@ -205,18 +205,24 @@ export function planPaths(
     colourBySource: false,
   };
   const highlightManual = Boolean(planOptions.highlightManual);
+  type PlanBuildingPath = { id: number; rings: Pt[][]; fill: string; site: boolean; imported?: boolean; topZ?: number };
   const buildings = model.buildings
-    .map((building) => {
+    .map((building): PlanBuildingPath | null => {
       if (building.importedMassingShadowCaster) return null;
       const rings = clipRings(building.ring, building.holes, model.sideM, frameShape, frameSize);
       if (!rings) return null;
       const site = isSiteBuilding(model, building.id);
       const fill = planBuildingFill(model, building, colourMode, highlightManual);
-      return building.importedMassing ? { rings, fill, site: false, imported: true } : { rings, fill, site };
+      return building.importedMassing
+        ? { id: building.id, rings, fill, site: false, imported: true, topZ: building.importedTopZ ?? 0 }
+        : { id: building.id, rings, fill, site };
     })
-    .filter(
-      (building): building is { rings: Pt[][]; fill: string; site: boolean; imported?: boolean } => building !== null,
-    );
+    .filter((building): building is PlanBuildingPath => building !== null);
+  const importedSlots = buildings.flatMap((building, index) => (building.imported ? [index] : []));
+  const tallestLast = importedSlots.map((index) => buildings[index]!).sort((a, b) => a.topZ! - b.topZ!);
+  importedSlots.forEach((slot, index) => {
+    buildings[slot] = tallestLast[index]!;
+  });
 
   let pathFill: MultiPolygon = footpaths.polygons;
   if (pathFilletM > 0 && carriageway.polygons.length > 0) {
@@ -254,21 +260,14 @@ export function planPaths(
       r: tree.crown_diameter_m / 2,
     }));
 
-  const layer =
-    model.contours === false
-      ? null
-      : model.contourLayer
-        ? model.contourLayer
-        : model.contours && model.terrain
-          ? demContourLayer(model.terrain, model.sideM)
-          : null;
+  const layer = drawnContourLayer(model);
   const clipped = layer
     ? layer.lines.flatMap((line) =>
         clipLines(line.points, model.sideM, frameShape, frameSize).map((points) => ({ points, z: line.z })),
       )
     : [];
   const drawnInterval = layer
-    ? drawnContourInterval(layer.source, layer.interval, planScale, coarseIntervalM, coarseFromScale)
+    ? drawnContourInterval(layer.source, planScale, coarseIntervalM, coarseFromScale)
     : 0;
   const visible =
     layer && drawnInterval > layer.interval

@@ -111,6 +111,8 @@ const RIBBON_FRAGMENT = `
   void main() {
     if (vMix < 0.04) discard;
     gl_FragColor = vec4(uAccent, vMix);
+    #include <tonemapping_fragment>
+    #include <colorspace_fragment>
   }
 `;
 
@@ -124,7 +126,6 @@ export function createRippleNetworkRibbonMaterial(uniforms: RippleShaderUniforms
     fragmentShader: RIBBON_FRAGMENT,
     transparent: true,
     depthWrite: false,
-    toneMapped: false,
     side: THREE.DoubleSide,
     polygonOffset: true,
     polygonOffsetFactor: -4,

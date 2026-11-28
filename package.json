@@ -14,8 +14,11 @@
     "test:visual:update": "playwright test --update-snapshots",
     "build:pt": "node scripts/build-pt-pmtiles.mjs",
     "build:enrichment": "node scripts/build-building-enrichment-pmtiles.mjs",
+    "build:wind": "node scripts/build-wind-roses.mjs",
+    "build:wikidata": "node scripts/build-wikidata-landmarks.mjs",
     "test:pipeline": "pytest pipeline/test_build_enrichment.py -q",
     "verify:ui": "node scripts/verify-citycut.mjs",
+    "verify:wind-rose": "node scripts/verify-wind-rose.mjs",
     "match:ref": "node scripts/match-reference.mjs"
   },
   "dependencies": {
@@ -40,7 +43,8 @@
     "react-dom": "^19.1.1",
     "rhino3dm": "^8.35.0",
     "suncalc": "^2.0.2",
-    "three": "^0.180.0"
+    "three": "^0.180.0",
+    "three-mesh-bvh": "^0.8.3"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -61,6 +65,7 @@
     "happy-dom": "^20.14.5",
     "playwright": "^1.63.0",
     "pngjs": "^7.0.0",
+    "stream-json": "^3.9.0",
     "typescript": "^5.9.2",
     "typescript-eslint": "^8.72.2",
     "vite": "^7.1.5",

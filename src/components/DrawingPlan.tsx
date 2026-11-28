@@ -20,7 +20,7 @@ import { planPaths, svgPolyline, svgRings } from "../lib/svgPlan";
 import { getColour } from "../lib/colours";
 import { themeColor } from "../lib/themeColor";
 import { useColourRevision } from "../lib/useColourRevision";
-import type { CityModel } from "../types";
+import type { CityModel, ImportedBuildingRef } from "../types";
 import type { SectionKnifeToolState } from "../lib/sectionKnife/state";
 import { SectionKnifePlanMarkers } from "./SectionKnifePlanMarkers";
 import { HeliodonPlanOverlay } from "./HeliodonPlanOverlay";
@@ -41,8 +41,15 @@ import {
 } from "../lib/sunStudyPlan";
 import { heliodonLabelFontMetres } from "../lib/heliodonDiagram";
 import { useSunStudyShadows } from "./useSunStudyShadows";
+import { SunHoursGroundPlanOverlay } from "./SunHoursGroundPlanOverlay";
+import { SunHoursRoofPlanOverlay } from "./SunHoursRoofPlanOverlay";
+import { DrawingLandmarkLabels } from "./DrawingLandmarkLabels";
+import type { LandmarkLabelSource } from "../lib/landmarkLabels";
+import type { SunHoursGroundRaster } from "../lib/sunHoursGroundRaster";
+import type { SunHoursGroundGrid } from "../lib/sunHoursGroundPlan";
 
 const NO_SELECTION: readonly number[] = [];
+const NO_LANDMARKS: readonly LandmarkLabelSource[] = [];
 
 export type DrawingKind = "site" | "figure-ground" | "exploded-axo" | "isometric";
 
@@ -87,7 +94,12 @@ export function DrawingPlan({
   sunStudyCasters = "all",
   sunStudySelected = NO_SELECTION,
   onSunStudyPick,
+  onImportedPick,
   sectionKnife,
+  sunHoursGroundGrid = null,
+  sunHoursGroundScaleMax = 0,
+  sunHoursRoofPlanRaster = null,
+  landmarkLabels = NO_LANDMARKS,
 }: {
   model: CityModel;
   kind?: DrawingKind;
@@ -108,7 +120,12 @@ export function DrawingPlan({
   sunStudyCasters?: SunStudyCasters;
   sunStudySelected?: readonly number[];
   onSunStudyPick?: (buildingId: number) => void;
+  onImportedPick?: (ref: ImportedBuildingRef, clientX: number, clientY: number) => void;
   sectionKnife?: SectionKnifeToolState | null;
+  sunHoursGroundGrid?: SunHoursGroundGrid | null;
+  sunHoursGroundScaleMax?: number;
+  sunHoursRoofPlanRaster?: SunHoursGroundRaster | null;
+  landmarkLabels?: readonly LandmarkLabelSource[];
 }) {
   const svgRef = useRef<SVGSVGElement>(null);
   const drag = useRef<{ px: number; py: number; view: PlanViewport } | null>(null);
@@ -396,7 +413,9 @@ export function DrawingPlan({
         const start = drag.current;
         drag.current = null;
         const svg = svgRef.current;
-        if (!start || !svg || !study || !onSunStudyPick) return;
+        if (!start || !svg) return;
+        const pickSunStudy = study && onSunStudyPick;
+        if (!pickSunStudy && !onImportedPick) return;
         if (!isClick(event.clientX - start.px, event.clientY - start.py)) return;
         const ctm = svg.getScreenCTM?.();
         let x: number;
@@ -412,6 +431,14 @@ export function DrawingPlan({
         }
         if (onViewportChange) onViewportChange(start.view);
         else setInternalView(start.view);
+        if (!pickSunStudy) {
+          const importedHit = pickBuilding(
+            model.buildings.filter((building) => building.importedBuilding && !building.importedMassingShadowCaster),
+            [x, -y],
+          );
+          if (importedHit?.importedBuilding) onImportedPick!(importedHit.importedBuilding, event.clientX, event.clientY);
+          return;
+        }
         const hit = pickBuilding(model.buildings, [x, -y]);
         if (hit) onSunStudyPick(hit.id);
       }}
@@ -532,12 +559,24 @@ export function DrawingPlan({
                 stroke="none"
               />
             ))}
+            {sunHoursGroundGrid && (
+              <SunHoursGroundPlanOverlay
+                grid={sunHoursGroundGrid}
+                scaleMaxHours={sunHoursGroundScaleMax || sunHoursGroundGrid.maxSunHours}
+              />
+            )}
             {plan.buildings.map((building, index) => (
               <path
                 key={`b${index}`}
                 {...(building.imported ? { "data-imported-podium": true } : {})}
                 d={svgRings(building.rings)}
-                fill={muted && !building.site ? getColour("--sun-study-building") : building.fill}
+                fill={
+                  sunHoursRoofPlanRaster
+                    ? "none"
+                    : muted && !building.site
+                      ? getColour("--sun-study-building")
+                      : building.fill
+                }
                 fillRule="evenodd"
                 {...screenPenAttrs(
                   building.imported
@@ -549,6 +588,7 @@ export function DrawingPlan({
                 )}
               />
             ))}
+            {sunHoursRoofPlanRaster ? <SunHoursRoofPlanOverlay raster={sunHoursRoofPlanRaster} /> : null}
             {plan.importedUpperLevels.map((level, levelIndex) => (
               <g key={`imu${levelIndex}`} data-upper-z={level.z} aria-hidden="true">
                 {level.lines.map((line, lineIndex) => (
@@ -632,6 +672,7 @@ export function DrawingPlan({
       {figure && heliodon && (
         <HeliodonPlanOverlay input={heliodon} planScale={planScale} sideM={model.sideM} />
       )}
+      {landmarkLabels.length > 0 && <DrawingLandmarkLabels labels={landmarkLabels} view={view} svgRef={svgRef} />}
       {empty && (
         <text x={0} y={0} textAnchor="middle" fontSize={model.sideM * 0.04} fill={planEmpty}>
           {figure ? "No building footprints in this frame" : "Nothing mapped in this frame"}

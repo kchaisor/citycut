@@ -162,13 +162,13 @@ export function ViewLegend() {
   return (
     <div className="view-legend" aria-label="View legend">
       <span>
-        <i style={{ background: "var(--view-visible)" }} /> Visible now
+        <i className="view-legend-visible" /> Visible now
       </span>
       <span>
-        <i style={{ background: "var(--view-seen)" }} /> Seen on walk
+        <i className="view-legend-seen" /> Seen on walk
       </span>
       <span>
-        <i style={{ background: "var(--view-blocked)" }} /> Not visible
+        <i className="view-legend-blocked" /> Not visible
       </span>
       <span>
         <i className="view-legend-path" /> Path

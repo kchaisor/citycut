@@ -1,4 +1,4 @@
-import { sunStudyCasterModel, sunStudyShadowCasters, SunStudyDate } from "../../lib/sunStudyPlan";
+import { sunStudyCasterModel, sunStudyMutedOn, sunStudyShadowCasters, SunStudyDate } from "../../lib/sunStudyPlan";
 
 import { sunStudyLayersFor } from "../useSunStudyShadows";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
@@ -8,7 +8,12 @@ import { viewportIsNarrow } from "../../lib/panelCollapse";
 import * as THREE from "three";import { BUILDING_USES, BUILDING_USE_META, countSourcesGrouped, countUses, uniformBuildingColor } from "../../lib/buildingUse";
 
 import { commitColour, getColour, resetStoredColours } from "../../lib/colours";
-import { viewStyleFootpathChipColor, viewStyleRoadChipColor } from "../../lib/viewStyle3d";
+import {
+  viewStyleFootpathChipColor,
+  viewStyleFootpathColourTokens,
+  viewStyleRoadChipColor,
+  viewStyleRoadColourTokens,
+} from "../../lib/viewStyle3d";
 import { useColourRevision } from "../../lib/useColourRevision";import { mgaCrs } from "../../lib/crsZone";
 
 import { planHeliodonForExport } from "../../lib/planHeliodonExport";
@@ -28,7 +33,6 @@ import {
   downloadSiteAi,
   downloadSite3dm,
   downloadSiteSvg,
-  downloadSectionDrawing,
   downloadFigureSvg,
   downloadSunStudyZip,
   pngFilename,
@@ -69,8 +73,16 @@ import {
 import { resolveBuildingHeightsAfterCom } from "../../lib/buildingHeightPipeline";import { formatLengthKm } from "../../lib/geo";
 
 import { useSidebarCollapsed } from "../../lib/sidebarCollapse";
-import { cutSizeLabel } from "../../lib/placeLabel";import { SIDEBAR_SECTION_LABELS, availableSidebarSections, initialSidebarState, isRightSidebarSection, reduceSidebar, resolveLeftSidebarSection, resolveRightSidebarSection, resolveSidebarSection, LeftSidebarSectionId, RightSidebarSectionId, SiteAnalysisKind } from "../../lib/sidebarSections";
+import { cutSizeLabel } from "../../lib/placeLabel";import { SIDEBAR_SECTION_LABELS, availableSidebarSections, initialSidebarState, isRightSidebarSection, reduceSidebar, resolveLeftSidebarSection, resolveRightSidebarSection, resolveSidebarSection, LeftSidebarSectionId, RightSidebarSectionId, NO_ANALYSES, isSiteAnalysisKind, withAnalysisOn, type ActiveAnalyses, type SiteAnalysisKind } from "../../lib/sidebarSections";
 import { buildDataSources, countLoaded } from "../../lib/dataSources";
+import { useWikidataLandmarks } from "../useWikidataLandmarks";
+import {
+  LANDMARK_LABELS_DEFAULT_ON,
+  landmarkLabelSources,
+  landmarksByBuilding,
+} from "../../lib/landmarkLabels";
+import type { WikidataLandmark } from "../../lib/wikidataLandmarks";
+import type { LandmarkScreenState } from "../LandmarkLabelProjector";
 
 import { countTreeCrowns } from "../../lib/treeMassing";
 import { capturePresetFromSearch } from "../../lib/captureQuery";import { qaModeFromSearch } from "../../lib/qaCameraBridge";
@@ -78,6 +90,9 @@ import { writeStoredView, writeViewSearch, ViewMemory } from "../../lib/viewMemo
 import { treeTierCounts } from "../../lib/trees";
 
 import { clearPlanShadowCache } from "../../lib/buildingShadows";
+import { useWindPlan } from "../useWindPlan";
+import { designWindsFor, findDesignWind } from "../../lib/windDesignWinds";
+import { windObstacleModel, withImportedOutlines } from "../../lib/windObstacleModel";
 import {
   appendManualHeightCredit,
   applyHeightOverrides,
@@ -104,11 +119,7 @@ import { openRing, toLocal } from "../../lib/geo";
 import { interiorPoint, pointInPolygon } from "../../lib/useCascade";
 import type { BuildingUse, CityModel } from "../../types";
 import type { InspectHudScreen } from "../InspectHudProjector";
-import {
-  clampInspectHudPosition,
-  INSPECT_HUD_DEFAULT_HEIGHT,
-  INSPECT_HUD_DEFAULT_WIDTH,
-} from "../../lib/inspectHudLayout";
+import { inspectHudPlacement, measureInspectHudDock } from "../../lib/inspectHudLayout";
 import {
   sceneSelectionBuildingId,
   type SceneInspectWorld,
@@ -124,38 +135,52 @@ import {
   writeStoredHiddenBuildings,
   type HiddenBuildingStore,
 } from "../../lib/hiddenBuildings";
+import { nextHideSelection } from "../../lib/hideSelection";
 import { useImportedMassing } from "../useImportedMassing";import { DrawingKind } from "../DrawingPlan";
 
 import { isometricDrawingBounds } from "../../lib/isometricDrawing";import { SidebarItem } from "../Sidebar";
 import { SceneExporter } from "../Scene3D";
 
 
-import type { CameraMemoryRef } from "../../lib/cameraMemory";import { ExportBusy } from "../../lib/exportTiles";
+import type { CameraMemoryRef, CameraRestoreRequest } from "../../lib/cameraMemory";
+import type { NamedViewSnapshot } from "../../lib/namedViews";
+import type { WindSheetSource } from "../../lib/windSheet";
+import { useNamedViews } from "./useNamedViews";
+import { explodeSettledOnCanvas, waitForExplodeSettled, waitForStudies, type StudyReadySignals } from "../../lib/studyReady";import { ExportBusy } from "../../lib/exportTiles";
 
-import { initialSectionKnifeToolState, type SectionKnifeToolState } from "../../lib/sectionKnife/state";
-import type { SectionKnifePose } from "../../lib/sectionKnife/plane";
-import { snapPoseToModel } from "../../lib/sectionKnife/snap";
-import { selectedKnife } from "../../lib/sectionKnife/state";
-import { buildSectionExportSvg, sectionExportLayerNames } from "../../lib/sectionKnife/sectionExport";
-import { useWalkRipple } from "../useWalkRipple";import { useWalkPlayback, useWalkViewshed } from "../useWalkViewshed";
+import { useWalkPlayback, useWalkViewshed } from "../useWalkViewshed";
 
-import { fetchWindRoseTable } from "../../lib/windFetch";import { analyzeWindPeriod, WindRoseTable } from "../../lib/windRose";
+import { loadSiteWind } from "../../lib/windLoad";
+import type { SiteWindSelection } from "../../lib/windRoseData";
+import { sectorCenterDeg, sectorIndex } from "../../lib/windRose";
+import { analyzeSiteWind, seasonRecord } from "../../lib/windRoseStats";
 
 import { daylightWindowMinutes, sunAtMelbourneLocal } from "../../lib/solar";
 import {
+  readStoredWindPlanView,
+  windPlanMapShown,
   windSettingsForModelOpen,
+  writeStoredWindPlanView,
   writeStoredWindSettings,
+  type WindPlanViewId,
   type WindViewSettings,
 } from "../../lib/windState";
 import { useWindStreakMotion } from "../../lib/windStreakMotion";
+import { prevailingStreams } from "../../lib/windPrevailingStreams";
+import { solarSettingsForActiveAnalysis, windDiagramActive } from "../../lib/solarStudyView";
+import { siteIntelAutoFolded } from "./windRoseCard";
+import {
+  analysisCardsOn,
+  anyAnalysisCardOn,
+  initialAnalysisCardFocus,
+  nextAnalysisCardFocus,
+  toggleAnalysisCard as focusAnalysisCard,
+} from "../../lib/analysisCards";
 import type { SitePlanExportOptions } from "../../lib/aiPlan";
 import type { PlanShadowInput } from "../../lib/buildingShadows";
 import type { HeliodonDiagramExportOptions, HeliodonGroundExportOptions } from "../../lib/heliodonDiagram";
-import {
-  readStoredHeliodonRadiusFactor,
-  resolveHeliodonRadiusFactor,
-  writeStoredHeliodonRadiusFactor,
-} from "../../lib/heliodonRadius";
+import { resolveSunDomeRadiusM, sunDomeRange, writeStoredHeliodonRadiusFactor } from "../../lib/heliodonRadius";
+import { explodeGapRange, resolveExplodeGapM } from "../../lib/modelExplode";
 import type { SolarViewSettings } from "../SolarHeliodon";
 import {
   isLayer3dVisible,
@@ -169,6 +194,11 @@ import { readStoredRenderQuality, writeStoredRenderQuality, type RenderQuality }
 
 import { shouldShowIntroBridgePill } from "./shouldShowIntroBridgePill";
 import { loadView } from "./loadModelView";
+import { initialAnalyses, initialSolarSettings } from "./initialSolarSettings";
+import { useSunHoursGround } from "../useSunHoursGround";
+import { sunHoursModel } from "../../lib/sunHoursBuildings";
+import { sunHoursPlanLayers } from "../../lib/sunHoursPlanLayers";
+import { SOLAR_SLIDER_END_MIN, SOLAR_SLIDER_START_MIN, clampSolarSliderMinutes } from "../../lib/solarSlider";
 import {
   SECTION_ICONS,
   iconProps,
@@ -182,6 +212,10 @@ export type ModelPageProps = {
   commandBarOpen?: boolean;
 };
 
+const SITE_INTEL_STORAGE_KEY = "citycut.siteIntelligence";
+
+const CAMERA_RESTORE_CAP_MS = 3000;
+
 export function useModelPage({
   model,
   onHome,
@@ -190,7 +224,7 @@ export function useModelPage({
 }: ModelPageProps) {
   const [tab, setTab] = useState<Tab>("3d");
   const [drawing, setDrawing] = useState<DrawingKind>("site");
-  const [analysisKind, setAnalysisKind] = useState<SiteAnalysisKind>("solar");
+  const [analyses, setAnalyses] = useState<ActiveAnalyses>(() => initialAnalyses(window.location.search));
   const [shortcutCheatsheetOpen, setShortcutCheatsheetOpen] = useState(false);
   const [lineStyles, setLineStyles] = useState<LineStyles>(() => readDrawingStyle());
   useColourRevision();
@@ -220,7 +254,9 @@ export function useModelPage({
   const [exportError, setExportError] = useState<string | null>(null);
   const [busy, setBusy] = useState<ExportBusy>(null);
   const [topbarExportOpen, setTopbarExportOpen] = useState(false);
+  const [topbarLayout, setTopbarLayout] = useState<"centered" | "flow">("flow");
   const topbarExportRef = useRef<HTMLDivElement>(null);
+  const topbarExportTriggerRef = useRef<HTMLButtonElement>(null);
   const cutDimLabel = useMemo(
     () =>
       cutSizeLabel(model.sideM, model.frameShape ?? "square", {
@@ -238,7 +274,9 @@ export function useModelPage({
       setTopbarExportOpen(false);
     };
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setTopbarExportOpen(false);
+      if (event.key !== "Escape") return;
+      setTopbarExportOpen(false);
+      topbarExportTriggerRef.current?.focus();
     };
     document.addEventListener("pointerdown", onPointer);
     document.addEventListener("keydown", onKey);
@@ -267,11 +305,34 @@ export function useModelPage({
   const [sidebar, dispatchSidebar] = useReducer(reduceSidebar, undefined, initialSidebarState);
   const [hiddenBuildingUses, setHiddenBuildingUses] = useState<Set<BuildingUse>>(() => new Set());
   const [sidebarCollapsed, setSidebarCollapsed] = useSidebarCollapsed();
+  const [siteIntelOpen, setSiteIntelOpen] = useState<boolean>(() => {
+    try {
+      return window.localStorage.getItem(SITE_INTEL_STORAGE_KEY) !== "off";
+    } catch {
+      return true;
+    }
+  });
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(SITE_INTEL_STORAGE_KEY, siteIntelOpen ? "on" : "off");
+    } catch {
+      return;
+    }
+  }, [siteIntelOpen]);
   const sidebarModelRef = useRef(model);
   useEffect(() => {
     if (sidebarModelRef.current === model) return;
     sidebarModelRef.current = model;
     dispatchSidebar({ type: "new-model" });
+    setExplodedOn(false);
+    setExplodeGapChoiceM(null);
+    setAnalyses(NO_ANALYSES);
+    setWindStreaksOn(false);
+    setWindSettings(() => {
+      const nextWind = windSettingsForModelOpen(window.localStorage);
+      writeStoredWindSettings(window.localStorage, nextWind);
+      return nextWind;
+    });
     setHiddenBuildingUses(new Set());
     const nextDisplay = view3dDisplayForModelOpen(window.localStorage);
     setView3dDisplay(nextDisplay);
@@ -292,6 +353,13 @@ export function useModelPage({
     planViewportExtent(model.sideM),
   );
   const [view, setView] = useState<ViewMemory>(loadView);
+  const [explodedOn, setExplodedOn] = useState(false);
+  const [explodeGapChoiceM, setExplodeGapChoiceM] = useState<number | null>(null);
+  const exploded = explodedOn && view.projection === "iso";
+  const explodeGap = useMemo(() => {
+    const range = explodeGapRange(model.sideM);
+    return { range, gapM: resolveExplodeGapM(range, explodeGapChoiceM) };
+  }, [model.sideM, explodeGapChoiceM]);
   const [isoDrawingViewport, setIsoDrawingViewport] = useState<PlanViewport>(() =>
     planViewportExtent(model.sideM),
   );
@@ -308,39 +376,12 @@ export function useModelPage({
   }, [tab, model]);
   const [snapId, setSnapId] = useState(0);
   const cameraMemory = useMemo<CameraMemoryRef>(() => ({ current: null }), [model]);
+  const introPlayed = useMemo<{ current: string | null }>(() => ({ current: null }), [model]);
   const [view3dDisplay, setView3dDisplay] = useState<View3dDisplaySettings>(() => {
     const next = view3dDisplayForModelOpen(window.localStorage);
     writeStoredView3dDisplay(window.localStorage, next);
     return next;
   });
-  const [sectionKnifeTool, setSectionKnifeTool] = useState<SectionKnifeToolState>(() =>
-    initialSectionKnifeToolState(model.sideM),
-  );
-  useEffect(() => {
-    setSectionKnifeTool(initialSectionKnifeToolState(model.sideM));
-  }, [model.center.lat, model.center.lon, model.sideM]);
-  const onSectionKnifePoseChange = useCallback(
-    (pose: SectionKnifePose, meta?: { shiftKey?: boolean; snapWhileDrag?: boolean }) => {
-      setSectionKnifeTool((tool) => {
-        let nextPose = pose;
-        let snapCue = tool.snapCue;
-        const shouldSnap = tool.snap && !meta?.shiftKey && meta?.snapWhileDrag;
-        if (shouldSnap) {
-          const snap = snapPoseToModel(model, nextPose);
-          nextPose = snap.pose;
-          if (snap.cue) {
-            snapCue = { kind: snap.cue.kind, east: snap.cue.east, north: snap.cue.north, untilMs: Date.now() + 2200 };
-          }
-        }
-        return {
-          ...tool,
-          snapCue,
-          knives: tool.knives.map((knife) => (knife.id === tool.selectedId ? { ...knife, pose: nextPose } : knife)),
-        };
-      });
-    },
-    [model],
-  );
   const [renderQuality, setRenderQuality] = useState<RenderQuality>(() => readStoredRenderQuality(window.localStorage));
   const commitRenderQuality = useCallback((next: RenderQuality) => {
     setRenderQuality(next);
@@ -351,22 +392,18 @@ export function useModelPage({
     writeStoredWindSettings(window.localStorage, next);
     return next;
   });
-  const [windTable, setWindTable] = useState<WindRoseTable | null>(null);
+  const [windPlanView, setWindPlanViewState] = useState<WindPlanViewId>(() => readStoredWindPlanView(window.localStorage));
+  const setWindPlanView = useCallback((next: WindPlanViewId) => {
+    writeStoredWindPlanView(window.localStorage, next);
+    setWindPlanViewState(next);
+  }, []);
+  const [siteWind, setSiteWind] = useState<SiteWindSelection | null>(null);
   const [windNote, setWindNote] = useState<string | null>(null);
   const windMotion = useWindStreakMotion();
-  const [solar, setSolar] = useState<SolarViewSettings>(() => ({
-    showPath: capturePresetFromSearch(window.location.search).solarPath,
-    castShadows: false,
-    radiusFactor: resolveHeliodonRadiusFactor(
-      readStoredHeliodonRadiusFactor(window.localStorage),
-      window.location.search,
-    ),
-    year: 2026,
-    month: 9,
-    day: 22,
-    hour: 15,
-    minute: 0,
-  }));
+  const [windStreaksOn, setWindStreaksOn] = useState(false);
+  const [solar, setSolar] = useState<SolarViewSettings>(() =>
+    initialSolarSettings(window.location.search, window.localStorage),
+  );
 
   function commitSolar(next: SolarViewSettings) {
     writeStoredHeliodonRadiusFactor(window.localStorage, next.radiusFactor);
@@ -397,14 +434,7 @@ export function useModelPage({
     };
   }
 
-  function heliodonDiagramExport(): HeliodonDiagramExportOptions | null {
-    if (!solar.showPath) return null;
-    return {
-      ...planShadowInput(),
-      sideM: model.sideM,
-      radiusFactor: solar.radiusFactor,
-    };
-  }
+  const sunDomeOn = solarSettingsForActiveAnalysis(solar, analyses).showPath;
 
   function heliodonPlanDiagramBase(): HeliodonDiagramExportOptions {
     return {
@@ -414,14 +444,12 @@ export function useModelPage({
     };
   }
 
+  function heliodonDiagramExport(): HeliodonDiagramExportOptions | null {
+    return planHeliodonForExport({ showPath: sunDomeOn, diagram: heliodonPlanDiagramBase() });
+  }
+
   function planHeliodonForSiteExport(): HeliodonDiagramExportOptions | null {
-    const direct = heliodonDiagramExport();
-    if (direct) return direct;
-    return planHeliodonForExport({
-      showPath: solar.showPath,
-      sunStudyDate,
-      diagram: heliodonPlanDiagramBase(),
-    });
+    return heliodonDiagramExport();
   }
 
   function sitePlanExportOptions(): SitePlanExportOptions {
@@ -433,10 +461,13 @@ export function useModelPage({
       colourBySource: showSource,
       highlightManual: showManualEdits && overrideResult.manualCount > 0,
       sunStudyDate: solar.sunStudy ? sunStudyDate : null,
+      sunStudyMuted: solar.sunStudy ? sunStudyMutedOn(solar.sunStudy, solar.sunStudyMuted) : undefined,
+      sunStudySelected: solar.sunStudy ? sunStudySelected : undefined,
       wind:
-        windSettings.enabled && windTable
-          ? { table: windTable, period: windSettings.period }
+        windSettings.enabled && siteWind
+          ? { selection: siteWind, period: windSettings.period }
           : null,
+      landmarkLabels: drawingLandmarkSources,
     };
   }
 
@@ -445,19 +476,19 @@ export function useModelPage({
     setWindSettings(next);
   }
 
-  const wantWindTable = windSettings.enabled || (sidebar.section === "analysis" && analysisKind === "wind");
+  const wantWindTable = windSettings.enabled || analyses.wind;
   useEffect(() => {
     if (!wantWindTable) return;
     let cancelled = false;
     const lat = model.siteAnchor?.lat ?? model.center.lat;
     const lon = model.siteAnchor?.lon ?? model.center.lon;
-    fetchWindRoseTable(lat, lon).then((result) => {
+    loadSiteWind(lat, lon).then((result) => {
       if (cancelled) return;
       if (result.ok) {
-        setWindTable(result.table);
+        setSiteWind(result.selection);
         setWindNote(null);
       } else {
-        setWindTable(null);
+        setSiteWind(null);
         setWindNote(result.quietNote);
       }
     });
@@ -467,8 +498,8 @@ export function useModelPage({
   }, [wantWindTable, model.center.lat, model.center.lon, model.siteAnchor?.lat, model.siteAnchor?.lon]);
 
   function heliodonRhinoExport(): HeliodonGroundExportOptions | null {
-    if (!solar.showPath) return null;
-    return { ...heliodonDiagramExport()!, radiusFactor: solar.radiusFactor };
+    const diagram = heliodonDiagramExport();
+    return diagram ? { ...diagram, radiusFactor: solar.radiusFactor } : null;
   }
   const exportRef = useRef<SceneExporter | null>(null);
   const onExportReady = useCallback((exporter: SceneExporter | null) => {
@@ -589,7 +620,7 @@ export function useModelPage({
   const [hideSelection, setHideSelection] = useState<number[]>([]);
   const [sceneSelection, setSceneSelection] = useState<SceneSelection | null>(null);
   const [inspectHudScreen, setInspectHudScreen] = useState<InspectHudScreen | null>(null);
-  const [compassNeedleDeg, setCompassNeedleDeg] = useState(0);
+  const [compassHeadingDeg, setCompassHeadingDeg] = useState(0);
 
   const massing = useImportedMassing(model);
 
@@ -874,45 +905,11 @@ export function useModelPage({
         for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]!);
         return btoa(binary);
       },
-      setSectionKnifeActive(active: boolean) {
-        setSectionKnifeTool((tool) => ({ ...tool, active }));
-      },
-      setSectionKnifePose(pose: SectionKnifePose) {
-        onSectionKnifePoseChange(pose);
-      },
-      auditSectionExport() {
-        const knife = selectedKnife(sectionKnifeTool);
-        const svg = buildSectionExportSvg(model, knife.pose, { applyVerticalExaggeration: false, knife });
-        const layers = sectionExportLayerNames(svg);
-        const hasGround = svg.includes("Section::Ground") && /polyline|path/i.test(svg);
-        return {
-          ok: layers.includes("Section::Ground") && layers.includes("Section::Annotations") && hasGround,
-          layers,
-          svg,
-        };
-      },
     };
     return () => {
       delete window.__citycutQaModel;
     };
-  }, [model, onSectionKnifePoseChange, sectionKnifeTool]);
-
-  useEffect(() => {
-    window.__citycutSectionExportAudit = () => {
-      const knife = selectedKnife(sectionKnifeTool);
-      const svg = buildSectionExportSvg(model, knife.pose, { applyVerticalExaggeration: false, knife });
-      const layers = sectionExportLayerNames(svg);
-      const hasGround = svg.includes("Section::Ground") && /polyline|path/i.test(svg);
-      return {
-        ok: layers.includes("Section::Ground") && layers.includes("Section::Annotations") && hasGround,
-        layers,
-        svg,
-      };
-    };
-    return () => {
-      delete window.__citycutSectionExportAudit;
-    };
-  }, [model, sectionKnifeTool]);
+  }, [model]);
 
   useEffect(() => {
     if (model.comBuildingHeightsApplied) {
@@ -1036,15 +1033,6 @@ export function useModelPage({
     [model, overrideResult, visibleBuildings, comHeightsMeasuredOn],
   );
   const walk = useWalkViewshed(model, displayModel);
-  const walkRipple = useWalkRipple(model, displayModel);
-  const [walkRippleToast, setWalkRippleToast] = useState<string | null>(null);
-  useEffect(() => {
-    if (walkRipple.status === "ready") {
-      setWalkRippleToast(walkRipple.modeLabel ?? "Analysis complete. Walk ripple generated.");
-    } else if (walkRipple.status === "idle") {
-      setWalkRippleToast(null);
-    }
-  }, [walkRipple.modeLabel, walkRipple.status]);
   const walkAt = useWalkPlayback(walk);
 
   const drawingModel = useMemo(() => {
@@ -1081,6 +1069,47 @@ export function useModelPage({
       contours: contoursVisible ? displayModel.contours : false,
     };
   }, [displayModel, massing.drawingBuildings, massing.drawingUpperLevels, view3dDisplay]);
+  const sunHoursAssessModel = useMemo(
+    () => sunHoursModel(tab === "drawing", displayModel, drawingModel, massing.drawingBuildings),
+    [tab, displayModel, drawingModel, massing.drawingBuildings],
+  );
+  const sunHoursGround = useSunHoursGround(
+    sunHoursAssessModel,
+    solar.year,
+    solar.month,
+    solar.day,
+    Boolean(solar.sunHours),
+    renderQuality,
+    solar.sunHoursWindow,
+  );
+  const sunHoursPickedIds = useMemo(() => {
+    if (hideSelection.length > 0) return hideSelection;
+    const inspected = sceneSelectionBuildingId(sceneSelection);
+    return inspected != null ? [inspected] : [];
+  }, [hideSelection, sceneSelection]);
+  const {
+    grid: sunHoursResultGrid,
+    overlay: sunHoursResultOverlay,
+    scaleMaxHours: sunHoursResultScaleMax,
+  } = sunHoursGround;
+  const sunHoursPlanPickedOnly = Boolean(solar.sunHoursPickedOnly) && tab === "drawing";
+  const sunHoursPlan = useMemo(
+    () =>
+      sunHoursPlanLayers(
+        sunHoursAssessModel,
+        { grid: sunHoursResultGrid, overlay: sunHoursResultOverlay, scaleMaxHours: sunHoursResultScaleMax },
+        sunHoursPlanPickedOnly,
+        sunHoursPickedIds,
+      ),
+    [
+      sunHoursAssessModel,
+      sunHoursResultGrid,
+      sunHoursResultOverlay,
+      sunHoursResultScaleMax,
+      sunHoursPlanPickedOnly,
+      sunHoursPickedIds,
+    ],
+  );
 
   useEffect(() => {
     qaDisplayBuildingsRef.current = displayModel.buildings;
@@ -1163,28 +1192,64 @@ export function useModelPage({
       ? (displayModel.trees.find((tree) => tree.id === sceneSelection.treeId) ?? null)
       : null;
 
+  const pickedImported = useMemo(() => {
+    if (sceneSelection?.kind !== "imported") return null;
+    const massingItem = massing.imported.find((item) => item.id === sceneSelection.fileId);
+    const building = massingItem?.buildings.find((item) => item.id === sceneSelection.buildingId);
+    return massingItem && building ? { massing: massingItem, building } : null;
+  }, [massing.imported, sceneSelection]);
+
+  function selectImportedBuilding(fileId: string, buildingId: string, clientX: number, clientY: number) {
+    const footprint = massing.drawingBuildings.find(
+      (building) =>
+        !building.importedMassingShadowCaster &&
+        building.importedBuilding?.fileId === fileId &&
+        building.importedBuilding.buildingId === buildingId,
+    );
+    const at = footprint ? interiorPoint(footprint.ring, footprint.holes) : null;
+    const top = footprint?.importedTopZ ?? 0;
+    setSceneSelection({
+      kind: "imported",
+      fileId,
+      buildingId,
+      clientX,
+      clientY,
+      world: at ? { east: at[0], north: at[1], up: top - (footprint?.height ?? 0) * 0.45 } : { east: 0, north: 0, up: 0 },
+    });
+    setInspectHudScreen({ clientX, clientY, inView: true });
+    setHideSelection([]);
+  }
+
+  function clearImportedSelection() {
+    if (sceneSelection?.kind !== "imported") return;
+    setSceneSelection(null);
+    setInspectHudScreen(null);
+  }
+
   const inspectAnchor = useMemo((): SceneInspectWorld | null => {
     if (!sceneSelection) return null;
+    if (sceneSelection.kind === "imported") return pickedImported?.building.visible && pickedImported.massing.visible ? sceneSelection.world : null;
     if (sceneSelection.kind === "terrain" || sceneSelection.kind === "tree") return sceneSelection.world;
-    const building = displayModel.buildings.find((item) => item.id === sceneSelection.buildingId);
-    if (!building) return sceneSelection.world;
-    const at = interiorPoint(building.ring, building.holes);
-    const base = sceneSelection.world.up;
-    return { east: at[0], north: at[1], up: base + building.height * 0.55 };
-  }, [displayModel.buildings, sceneSelection]);
+    return null;
+  }, [sceneSelection, pickedImported]);
 
-  const inspectHudPosition = useMemo(() => {
-    const anchor = inspectHudScreen;
-    if (!anchor || !anchor.inView) return null;
-    return clampInspectHudPosition({
-      anchorX: anchor.clientX,
-      anchorY: anchor.clientY,
-      hudWidth: INSPECT_HUD_DEFAULT_WIDTH,
-      hudHeight: INSPECT_HUD_DEFAULT_HEIGHT,
-      viewportWidth: typeof window !== "undefined" ? window.innerWidth : 1440,
-      viewportHeight: typeof window !== "undefined" ? window.innerHeight : 900,
-    });
-  }, [inspectHudScreen]);
+  const [inspectDockResize, setInspectDockResize] = useState(0);
+  useEffect(() => {
+    const onResize = () => setInspectDockResize((count) => count + 1);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+  const buildingCardOpen = sceneSelection?.kind === "building";
+  const inspectHudPosition = useMemo(
+    () =>
+      buildingCardOpen
+        ? measureInspectHudDock()
+        : inspectHudPlacement(inspectHudScreen, sceneSelection, {
+            width: typeof window !== "undefined" ? window.innerWidth : 1440,
+            height: typeof window !== "undefined" ? window.innerHeight : 900,
+          }),
+    [buildingCardOpen, inspectDockResize, inspectHudScreen, sceneSelection],
+  );
 
   function persistHidden(next: HiddenBuildingStore) {
     setHiddenStore(next);
@@ -1204,10 +1269,7 @@ export function useModelPage({
   }
 
   function selectForHide(buildingId: number, additive?: boolean) {
-    setHideSelection((prev) => {
-      if (!additive) return [buildingId];
-      return prev.includes(buildingId) ? prev.filter((id) => id !== buildingId) : [...prev, buildingId];
-    });
+    setHideSelection((prev) => nextHideSelection(prev, buildingId, Boolean(additive)));
   }
 
   function persistOverrides(next: HeightOverrideStore) {
@@ -1288,16 +1350,12 @@ export function useModelPage({
   });
   const leftOpen: LeftSidebarSectionId = resolveLeftSidebarSection(sidebar.section, sectionIds);
   const rightOpen: RightSidebarSectionId = resolveRightSidebarSection(sidebar.rightSection, sectionIds);
-  const viewAnalysisOpen = leftOpen === "analysis" && analysisKind === "view";
-  const rippleAnalysisOpen = leftOpen === "analysis" && analysisKind === "walkRipple";
+  const viewAnalysisOpen = analyses.view;
   const walkDrawing = viewAnalysisOpen && walk.drawing;
   const { drawing: walkDrawingOn, setDrawing: setWalkDrawing } = walk;
   useEffect(() => {
     if (!viewAnalysisOpen && walkDrawingOn) setWalkDrawing(false);
   }, [viewAnalysisOpen, walkDrawingOn, setWalkDrawing]);
-  useEffect(() => {
-    if (!rippleAnalysisOpen && walkRipple.placing) walkRipple.setPlacing(false);
-  }, [rippleAnalysisOpen, walkRipple]);
 
   const [consolePlaying, setConsolePlaying] = useState(false);
   const consoleDaylight = useMemo(
@@ -1325,22 +1383,97 @@ export function useModelPage({
     [model.center.lat, model.center.lon, solar.year, solar.month, solar.day, solar.hour, solar.minute],
   );
   const consoleWindStats = useMemo(
-    () => (windTable ? analyzeWindPeriod(windTable, windSettings.period) : null),
-    [windTable, windSettings.period],
+    () => (siteWind ? analyzeSiteWind(siteWind, windSettings.period, windSettings.daypart) : null),
+    [siteWind, windSettings.period, windSettings.daypart],
   );
+  const windModel = useMemo(
+    () => windObstacleModel(displayModel, massing.drawingBuildings),
+    [displayModel, massing.drawingBuildings],
+  );
+  const windPlanOutlineModel = useMemo(
+    () => withImportedOutlines(displayModel, massing.drawingBuildings),
+    [displayModel, massing.drawingBuildings],
+  );
+  const designWinds = useMemo(() => (siteWind ? designWindsFor(siteWind) : []), [siteWind]);
+  const designWind = findDesignWind(designWinds, windSettings.designWind);
+  const windStreams = useMemo(() => prevailingStreams(consoleWindStats, designWind), [consoleWindStats, designWind]);
+  const analysisCards = analysisCardsOn(tab, analyses);
+  const analysisCardOn = anyAnalysisCardOn(tab, analyses);
+  const [analysisCardFocus, setAnalysisCardFocus] = useState(() => initialAnalysisCardFocus(analyses));
+  if (analysisCardFocus.seen !== analyses) setAnalysisCardFocus(nextAnalysisCardFocus(analysisCardFocus, analyses));
+  const toggleAnalysisCard = (kind: SiteAnalysisKind) => setAnalysisCardFocus((focus) => focusAnalysisCard(focus, kind));
+  const [siteIntelFolded, setSiteIntelFolded] = useState(() => siteIntelAutoFolded(analysisCardOn));
+  useEffect(() => setSiteIntelFolded(siteIntelAutoFolded(analysisCardOn)), [analysisCardOn]);
+  const [sunDomeSizeM, setSunDomeSizeM] = useState<number | null>(null);
+  const sunDome = useMemo(() => {
+    const range = sunDomeRange(model);
+    return { range, chosenM: sunDomeSizeM, radiusM: resolveSunDomeRadiusM(range, sunDomeSizeM) };
+  }, [model, sunDomeSizeM]);
+  const windSpreadRadiusM = solarSettingsForActiveAnalysis(solar, analyses).showPath ? sunDome.radiusM : null;
+  const windPlan = useWindPlan({
+    model: windModel,
+    siteWind,
+    period: windSettings.period,
+    daypart: windSettings.daypart,
+    designWind,
+    designWinds,
+    clearDesignWind: () => commitWind({ ...windSettings, designWind: null }),
+    active: windPlanMapShown({
+      tab,
+      projection: view.projection,
+      windOn: analyses.wind,
+      hasSiteWind: siteWind != null,
+      planView: windPlanView,
+    }),
+    view: windPlanView,
+    setView: setWindPlanView,
+    scaleWanted: tab === "3d" && windSettings.enabled && analyses.wind,
+  });
+
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const root = document.querySelector(".model");
+    if (!root) return;
+    if (siteWind && consoleWindStats) {
+      root.setAttribute("data-wind-station", siteWind.station.name);
+      root.setAttribute("data-wind-distance-km", String(siteWind.station.distanceKm ?? ""));
+      root.setAttribute("data-wind-period", `${siteWind.station.periodStart}–${siteWind.station.periodEnd}`);
+      root.setAttribute("data-wind-years", String(siteWind.station.years ?? ""));
+      root.setAttribute("data-wind-reason", siteWind.station.reason);
+      const record = seasonRecord(siteWind, windSettings.period, windSettings.daypart);
+      root.setAttribute(
+        "data-ground-wind-deg",
+        String(
+          designWind?.headingDeg ??
+            (windPlan.sector != null && record && windPlan.sector !== sectorIndex(record.prevailingDirDeg)
+              ? sectorCenterDeg(windPlan.sector)
+              : (record?.prevailingDirDeg ?? sectorCenterDeg(consoleWindStats.prevailingSector))),
+        ),
+      );
+      root.setAttribute("data-ground-wind-season", designWind?.id ?? windSettings.period);
+      root.setAttribute("data-wind-daypart", windSettings.daypart);
+    } else {
+      root.removeAttribute("data-wind-station");
+      root.removeAttribute("data-wind-distance-km");
+      root.removeAttribute("data-wind-period");
+      root.removeAttribute("data-wind-years");
+      root.removeAttribute("data-wind-reason");
+      root.removeAttribute("data-ground-wind-deg");
+      root.removeAttribute("data-ground-wind-season");
+      root.removeAttribute("data-wind-daypart");
+    }
+  }, [siteWind, consoleWindStats, windSettings.period, windSettings.daypart, designWind, windPlan.sector]);
 
   useEffect(() => {
     if (!consolePlaying) return;
     let raf = 0;
     let last = performance.now();
-    let minutesFloat = solar.hour * 60 + solar.minute;
-    const minM = consoleDaylight.sunrise;
-    const maxM = consoleDaylight.sunset;
+    let minutesFloat = clampSolarSliderMinutes(solar.hour * 60 + solar.minute);
     const step = (now: number) => {
       const dt = Math.min(0.1, (now - last) / 1000);
       last = now;
       minutesFloat += dt * 72;
-      if (minutesFloat > maxM) minutesFloat = minM;
+      if (minutesFloat > SOLAR_SLIDER_END_MIN) minutesFloat = SOLAR_SLIDER_START_MIN;
       const rounded = Math.round(minutesFloat);
       const hour = Math.floor(rounded / 60);
       const minute = rounded % 60;
@@ -1349,10 +1482,11 @@ export function useModelPage({
     };
     raf = requestAnimationFrame(step);
     return () => cancelAnimationFrame(raf);
-  }, [consolePlaying, consoleDaylight.sunrise, consoleDaylight.sunset]);
+  }, [consolePlaying]);
 
   function selectSection(id: string) {
-    if (id === "solar" || id === "wind" || id === "view") setAnalysisKind(id);
+    if (id === "solar" || id === "wind" || id === "view") setAnalyses((current) => withAnalysisOn(current, id));
+    if (id === "wind") setWindStreaksOn(true);
     const resolved = isRightSidebarSection(id)
       ? resolveRightSidebarSection(id, sectionIds)
       : resolveSidebarSection(id, sectionIds);
@@ -1364,7 +1498,14 @@ export function useModelPage({
 
   const applyShortcut = useCallback(
     (action: ModelShortcutAction) => {
-      if (action.analysisKind) setAnalysisKind(action.analysisKind as SiteAnalysisKind);
+      if (action.section === "analysis") {
+        if (isSiteAnalysisKind(action.analysisKind)) {
+          const kind = action.analysisKind;
+          setAnalyses((current) => withAnalysisOn(current, kind));
+          if (kind === "wind") setWindStreaksOn(true);
+        }
+        return;
+      }
       selectSection(action.section);
     },
     [sectionIds, setSidebarCollapsed],
@@ -1437,6 +1578,7 @@ export function useModelPage({
   }
 
   function commitView(next: ViewMemory, snap: boolean) {
+    if (next.projection !== "iso") setExplodedOn(false);
     setView(next);
     writeStoredView(window.localStorage, next);
     const search = writeViewSearch(window.location.search, next);
@@ -1446,14 +1588,14 @@ export function useModelPage({
     if (snap) setSnapId((id) => id + 1);
   }
 
-  async function exportSectionDrawing(applyVerticalExaggeration: boolean) {
-    setExportError(null);
-    try {
-      const knife = selectedKnife(sectionKnifeTool);
-      await downloadSectionDrawing(displayModel, knife, applyVerticalExaggeration);
-    } catch {
-      setExportError("The section export could not be written.");
-    }
+  function explodeModel() {
+    commitView({ projection: "iso", corner: view.corner, freeRotate: false }, false);
+    setExplodedOn(true);
+  }
+
+  function showIsometric() {
+    setExplodedOn(false);
+    commitView({ ...view, projection: "iso" }, false);
   }
 
   async function save3dm() {
@@ -1467,9 +1609,11 @@ export function useModelPage({
         uniformBuildings: !colourByUse && !showSource,
         colourBySource: showSource,
         wind:
-          windSettings.enabled && windTable
-            ? { table: windTable, period: windSettings.period }
+          windSettings.enabled && siteWind
+            ? { selection: siteWind, period: windSettings.period }
             : null,
+        windStreaks: windDiagramActive(windStreaksOn, analyses) ? windStreams : null,
+        windStreaksSpreadRadiusM: windSpreadRadiusM,
         hideTrees: view3dDisplay.hideTrees,
         importedMassing: massing.forExport.length ? massing.forExport : null,
         buildingsAsMesh,
@@ -1640,7 +1784,7 @@ export function useModelPage({
     setExportError(null);
     setBusy("svg-figure");
     try {
-      await downloadFigureSvg(drawingModel, figureScale, lineStyles, heliodonDiagramExport());
+      await downloadFigureSvg(drawingModel, figureScale, lineStyles, heliodonDiagramExport(), drawingLandmarkSources);
     } catch {
       setExportError("The figure-ground SVG could not be written.");
     } finally {
@@ -1816,8 +1960,147 @@ export function useModelPage({
     { tier: "real_source_unmatched", label: heightTierLabel("real_source_unmatched") },
     { tier: "manual", label: heightTierLabel("manual") },
   ];
+  const wikidata = useWikidataLandmarks(model);
+  const [landmarkLabelsOn, setLandmarkLabelsOn] = useState(LANDMARK_LABELS_DEFAULT_ON);
+  const [landmarkScreens, setLandmarkScreens] = useState<LandmarkScreenState | null>(null);
+  const [cameraRestore, setCameraRestore] = useState<CameraRestoreRequest | null>(null);
+  const cameraRestoreSeq = useRef(0);
+  const cameraRestoreWaiters = useRef(new Map<number, () => void>());
+  const onCameraRestored = useCallback((id: number) => {
+    setCameraRestore((current) => (current?.id === id ? null : current));
+    for (const [waiting, resolve] of cameraRestoreWaiters.current) {
+      if (waiting <= id) {
+        cameraRestoreWaiters.current.delete(waiting);
+        resolve();
+      }
+    }
+  }, []);
+
+  function namedViewSnapshot(): NamedViewSnapshot {
+    const memory = cameraMemory.current;
+    const pose = memory ? (view.projection === "perspective" ? memory.persp : memory.ortho) : null;
+    return {
+      view,
+      pose,
+      tab,
+      drawing,
+      analyses,
+      solar,
+      wind: windSettings,
+      windStreaksOn,
+      windPlan: {
+        mode: windPlan.mode,
+        vectorsOn: windPlan.vectorsOn,
+        sector: designWind ? null : windPlan.sector,
+        view: windPlanView,
+      },
+      renderQuality,
+      sunDomeSizeM,
+      viewshed: { eyeM: walk.eyeM, radiusM: walk.radiusM },
+      sunStudySelected,
+      display: view3dDisplay,
+      colourByUse,
+      showSource,
+      hiddenUses: [...hiddenBuildingUses],
+      landmarkLabelsOn,
+      lineStyles,
+      exploded: tab === "3d" && exploded,
+      explodeGapM: tab === "3d" && exploded ? explodeGap.gapM : null,
+    };
+  }
+
+  async function applyNamedViewSnapshot(snapshot: NamedViewSnapshot): Promise<void> {
+    await restoreNamedViewSnapshot(snapshot);
+    if (snapshot.tab === "3d") await waitForExplodeSettled(snapshot.exploded);
+  }
+
+  function restoreNamedViewSnapshot(snapshot: NamedViewSnapshot): Promise<void> {
+    setTab(snapshot.tab);
+    if (snapshot.tab === "drawing") setDrawing(snapshot.drawing);
+    commitView(snapshot.view, true);
+    setExplodedOn(snapshot.exploded);
+    if (snapshot.exploded) setExplodeGapChoiceM(resolveExplodeGapM(explodeGap.range, snapshot.explodeGapM));
+    setAnalyses(snapshot.analyses);
+    commitSolar({ ...solar, ...snapshot.solar });
+    commitWind({ ...windSettings, ...snapshot.wind });
+    setWindStreaksOn(snapshot.windStreaksOn);
+    windPlan.setMode(snapshot.windPlan.mode);
+    setWindPlanView(snapshot.windPlan.view);
+    windPlan.setVectorsOn(snapshot.windPlan.vectorsOn);
+    windPlan.restoreSector(snapshot.wind.period, snapshot.windPlan.sector);
+    commitRenderQuality(snapshot.renderQuality);
+    setSunDomeSizeM(snapshot.sunDomeSizeM);
+    if (snapshot.viewshed.eyeM > 0) walk.setEyeM(snapshot.viewshed.eyeM);
+    if (snapshot.viewshed.radiusM > 0) walk.setRadiusM(snapshot.viewshed.radiusM);
+    setSunStudySelected(snapshot.sunStudySelected);
+    commitView3dDisplay({ ...view3dDisplay, ...snapshot.display });
+    setColourByUse(snapshot.colourByUse);
+    setShowSource(snapshot.showSource);
+    setHiddenBuildingUses(new Set(snapshot.hiddenUses));
+    setLandmarkLabelsOn(snapshot.landmarkLabelsOn);
+    const savedLines = snapshot.lineStyles;
+    if (savedLines) setLineStyles((current) => ({ ...current, ...savedLines }));
+    if (!snapshot.pose) return Promise.resolve();
+    cameraRestoreSeq.current += 1;
+    const id = cameraRestoreSeq.current;
+    setCameraRestore({ id, projection: snapshot.view.projection, pose: snapshot.pose });
+    if (snapshot.tab !== "3d") return Promise.resolve();
+    return new Promise<void>((resolve) => {
+      cameraRestoreWaiters.current.set(id, resolve);
+      window.setTimeout(() => {
+        cameraRestoreWaiters.current.delete(id);
+        resolve();
+      }, CAMERA_RESTORE_CAP_MS);
+    });
+  }
+
+  const windSheetSource = useRef<WindSheetSource>({ selection: null, scaleMaxMs: null, comfortShares: null });
+  useEffect(() => {
+    windSheetSource.current = { selection: siteWind, scaleMaxMs: windPlan.scaleMaxMs, comfortShares: windPlan.comfortShares };
+  });
+
+  const studySignals = useRef<StudyReadySignals>({
+    sunHoursPending: false,
+    sunHoursSurfacesPending: false,
+    windPlanApplicable: false,
+    windPlanReady: true,
+    explodeSettled: true,
+  });
+  useEffect(() => {
+    studySignals.current = {
+      sunHoursPending: sunHoursGround.pending,
+      sunHoursSurfacesPending: sunHoursGround.pendingSurfaces,
+      windPlanApplicable: siteWind != null && windPlan.hasData,
+      windPlanReady: windPlan.ready,
+      explodeSettled: true,
+    };
+  });
+
+  const namedViews = useNamedViews({
+    model,
+    getSnapshot: namedViewSnapshot,
+    applySnapshot: applyNamedViewSnapshot,
+    getExporter: () => exportRef.current,
+    getWindSheetSource: () => windSheetSource.current,
+    waitUntilReady: (snapshot) =>
+      waitForStudies(snapshot, () => ({ ...studySignals.current, explodeSettled: explodeSettledOnCanvas(snapshot.exploded) })),
+  });
+  const landmarkByBuilding = useMemo(
+    (): ReadonlyMap<number, WikidataLandmark> =>
+      wikidata.status === "ok" ? landmarksByBuilding(wikidata.matches, model.buildings) : new Map(),
+    [wikidata, model.buildings],
+  );
+  const landmarkSources = useMemo(
+    () => landmarkLabelSources(landmarkByBuilding, displayModel.buildings),
+    [landmarkByBuilding, displayModel.buildings],
+  );
+  const drawingLandmarkSources = useMemo(
+    () => (landmarkLabelsOn ? landmarkLabelSources(landmarkByBuilding, drawingModel.buildings) : []),
+    [landmarkLabelsOn, landmarkByBuilding, drawingModel.buildings],
+  );
   const dataSources = buildDataSources({
     model,
+    wikidata,
     comHeights: comHeightsStatus,
     comMeasuredCount: comMeasuredHeightCount,
     comError: comFootprintFetchError ?? (comHeightsApplyFailed ? "The height matcher failed." : null),
@@ -1878,11 +2161,11 @@ export function useModelPage({
         color: viewStyleRoadChipColor(view3dDisplay.primaryView, colourByUse, showSource),
         available: model.layers.roads && model.roads.some((r) => r.kind === "road" && r.grade !== "path"),
         onPick: (value: string) => {
-          commitColour("--road-local", value);
-          commitColour("--road-arterial", value);
-          commitColour("--road-fill", value);
-          if (view3dDisplay.primaryView || !isLayer3dVisible(view3dDisplay, "roads")) {
-            commitView3dDisplay(setLayer3dVisible({ ...view3dDisplay, primaryView: false }, "roads", true));
+          for (const token of viewStyleRoadColourTokens(view3dDisplay.primaryView, colourByUse, showSource)) {
+            commitColour(token, value);
+          }
+          if (!isLayer3dVisible(view3dDisplay, "roads")) {
+            commitView3dDisplay(setLayer3dVisible(view3dDisplay, "roads", true));
           }
           setLineStyles(readDrawingStyle());
         },
@@ -1894,10 +2177,11 @@ export function useModelPage({
         color: viewStyleFootpathChipColor(view3dDisplay.primaryView, colourByUse, showSource),
         available: model.layers.roads && model.roads.some((r) => r.kind === "road" && r.grade === "path"),
         onPick: (value: string) => {
-          commitColour("--road-path", value);
-          commitColour("--path-fill", value);
-          if (view3dDisplay.primaryView || !isLayer3dVisible(view3dDisplay, "footpaths")) {
-            commitView3dDisplay(setLayer3dVisible({ ...view3dDisplay, primaryView: false }, "footpaths", true));
+          for (const token of viewStyleFootpathColourTokens(view3dDisplay.primaryView, colourByUse, showSource)) {
+            commitColour(token, value);
+          }
+          if (!isLayer3dVisible(view3dDisplay, "footpaths")) {
+            commitView3dDisplay(setLayer3dVisible(view3dDisplay, "footpaths", true));
           }
           setLineStyles(readDrawingStyle());
         },
@@ -2052,8 +2336,43 @@ export function useModelPage({
     };
   }, [tab]);
 
+  useEffect(() => {
+    const root = modelRootRef.current;
+    if (!root) return;
+    const barGap = 16;
+    const measure = () => {
+      const left = root.querySelector(".top-bar-left");
+      const center = root.querySelector(".top-bar-center");
+      const right = root.querySelector(".top-bar-right");
+      if (!(left instanceof HTMLElement) || !(center instanceof HTMLElement) || !(right instanceof HTMLElement)) {
+        return;
+      }
+      const inner = window.innerWidth - 28;
+      const compass = center.querySelector(".studio-compass");
+      const compassSpan = compass instanceof HTMLElement ? compass.offsetWidth + 8 : 0;
+      const bundle = center.offsetWidth + 2 * (Math.max(left.offsetWidth, right.offsetWidth) + compassSpan) + barGap * 2;
+      setTopbarLayout(bundle <= inner + 0.5 ? "centered" : "flow");
+    };
+    measure();
+    const observer = new ResizeObserver(() => measure());
+    observer.observe(root);
+    window.addEventListener("resize", measure);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  }, [tab, drawing, view.projection, view.freeRotate, cutDimLabel, topbarExportOpen, busy, sourcesLoaded.loaded]);
+
   return {
-    analysisKind,
+    drawingLandmarkSources,
+    landmarkByBuilding,
+    landmarkLabelsOn,
+    landmarkScreens,
+    landmarkSources,
+    setLandmarkLabelsOn,
+    setLandmarkScreens,
+    wikidataStatus: wikidata.status,
+    analyses,
     annotatedAppliedBuildings,
     applyShortcut,
     axoSettings,
@@ -2061,6 +2380,10 @@ export function useModelPage({
     buildingsAsMesh,
     busy,
     cameraMemory,
+    cameraRestore,
+    namedViews,
+    onCameraRestored,
+    introPlayed,
     colourByUse,
     comFetchBounds,
     comFootprintFetchError,
@@ -2077,9 +2400,14 @@ export function useModelPage({
     commitRenderQuality,
     commitSolar,
     commitView,
+    explodeModel,
+    showIsometric,
+    exploded,
+    explodeGap,
+    setExplodeGapM: setExplodeGapChoiceM,
     commitView3dDisplay,
     commitWind,
-    compassNeedleDeg,
+    compassHeadingDeg,
     consoleDaylight,
     consolePlaying,
     consoleSun,
@@ -2091,6 +2419,8 @@ export function useModelPage({
     defaultExplodedAxoGapM,
     defaultExplodedAxoSettings,
     displayModel,
+    windModel,
+    windPlanOutlineModel,
     dragReorderAxoLayer,
     draggedAxoLayer,
     drawing,
@@ -2103,7 +2433,6 @@ export function useModelPage({
     exportError,
     exportHeightEdits,
     exportRef,
-    exportSectionDrawing,
     fallbackBuildings,
     figureFit,
     figureScale,
@@ -2145,7 +2474,6 @@ export function useModelPage({
     onHome,
     onNewCut,
     onScale,
-    onSectionKnifePoseChange,
     overrideResult,
     persistHidden,
     persistOverrides,
@@ -2156,6 +2484,9 @@ export function useModelPage({
     planViewport,
     pickedBuilding,
     pickedTree,
+    pickedImported,
+    selectImportedBuilding,
+    clearImportedSelection,
     planWidth,
     presentBuildingUses,
     qaDisplayBuildingsRef,
@@ -2170,7 +2501,6 @@ export function useModelPage({
     rightItems,
     rightOpen,
     rightSectionIds,
-    rippleAnalysisOpen,
     save3dm,
     saveBuildingHeight,
     saveExplodedAxoAi,
@@ -2186,10 +2516,10 @@ export function useModelPage({
     sceneLayerRows,
     sceneSelection,
     sectionIds,
-    sectionKnifeTool,
     selectForHide,
     selectSection,
-    setAnalysisKind,
+    setAnalyses,
+    setWindStreaksOn,
     setAxoLayerLift,
     setAxoSettings,
     setBuildingsAsMesh,
@@ -2201,7 +2531,7 @@ export function useModelPage({
     setComFootprints,
     setComHeightBuildings,
     setComHeightsApplyFailed,
-    setCompassNeedleDeg,
+    setCompassHeadingDeg,
     setConsolePlaying,
     setDrawing,
     setExplodedViewport,
@@ -2219,7 +2549,6 @@ export function useModelPage({
     setPlanWidth,
     setRenderQuality,
     setSceneSelection,
-    setSectionKnifeTool,
     setShortcutCheatsheetOpen,
     setShowManualEdits,
     setShowSource,
@@ -2233,10 +2562,8 @@ export function useModelPage({
     setUnmatchedEdits,
     setView,
     setView3dDisplay,
-    setWalkRippleToast,
     setWindNote,
     setWindSettings,
-    setWindTable,
     shortcutCheatsheetOpen,
     showAllInCut,
     showBuildings,
@@ -2246,12 +2573,26 @@ export function useModelPage({
     showTrees,
     sidebar,
     sidebarCollapsed,
+    siteIntelOpen,
+    setSiteIntelOpen,
+    siteIntelFolded,
+    analysisCards,
+    analysisCardOn,
+    analysisCardOpen: analysisCardFocus.open,
+    toggleAnalysisCard,
+    sunDome,
+    setSunDomeSizeM,
+    windSpreadRadiusM,
+    setSiteIntelFolded,
     sidebarModelRef,
     sitePlanExportOptions,
     snapId,
     solar,
     sourceCounts,
     sourcesLoaded,
+    sunHoursGround,
+    sunHoursPickedIds,
+    sunHoursPlan,
     sunStudyDate,
     sunStudyExportLayers,
     sunStudyProgress,
@@ -2260,6 +2601,8 @@ export function useModelPage({
     tierCounts,
     topbarExportOpen,
     topbarExportRef,
+    topbarExportTriggerRef,
+    topbarLayout,
     uniform,
     unmatchedEdits,
     useCounts,
@@ -2271,13 +2614,16 @@ export function useModelPage({
     walk,
     walkAt,
     walkDrawing,
-    walkRipple,
-    walkRippleToast,
     wantWindTable,
     windMotion,
+    windStreams,
+    windStreaksOn,
     windNote,
     windSettings,
-    windTable,
+    windPlan,
+    designWinds,
+    designWind,
+    siteWind,
     writeStoredShowManualHeights,
   };
 }

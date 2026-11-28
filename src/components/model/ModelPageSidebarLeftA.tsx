@@ -3,7 +3,9 @@ import { GripVertical } from "lucide-react";
 import type { AxoLayerId } from "../../lib/explodedAxo";
 import { ISO_CORNERS } from "../../lib/isoCamera";
 import { snapWhenTogglingIsoFreeRotate } from "../../lib/isoFreeRotate";
-import { SectionKnifeToolPanel } from "../SectionKnifeToolPanel";
+import { monoSwatchColour } from "../../lib/solarGreyscale";
+import { activeViewStyle, selectViewStyle3d } from "../../lib/view3dDisplay";
+import { VIEW_STYLE_SEG_OPTIONS } from "../../lib/viewStyleSegLayout";
 import { contourDrawerLabel } from "../../lib/vicmapContours";
 import { drawingMassingCount } from "../../lib/massingFootprint";
 import { CORNER_LABEL } from "./modelPageConstants";
@@ -24,7 +26,6 @@ export function ModelPageSidebarLeftA({ vm }: { vm: import("./useModelPage").Mod
     drawingModel,
     explodedAxoBounds,
     explodedAxoViewportExtent,
-    exportSectionDrawing,
     figureFit,
     figureScale,
     isometricDrawingBounds,
@@ -36,13 +37,11 @@ export function ModelPageSidebarLeftA({ vm }: { vm: import("./useModelPage").Mod
     referenceExplodedAxoSettings,
     resetSceneLayerColours,
     sceneLayerRows,
-    sectionKnifeTool,
     setAxoSettings,
     setColourByUse,
     setExplodedViewport,
     setFigureScale,
     setIsoDrawingViewport,
-    setSectionKnifeTool,
     setShowManualEdits,
     setShowSource,
     showManualEdits,
@@ -52,6 +51,8 @@ export function ModelPageSidebarLeftA({ vm }: { vm: import("./useModelPage").Mod
     view3dDisplay,
     writeStoredShowManualHeights,
   } = vm;
+  const viewStyle = activeViewStyle(view3dDisplay, colourByUse, showSource);
+  const monoOn = viewStyle === "mono";
 
   return (
     <>
@@ -66,75 +67,35 @@ export function ModelPageSidebarLeftA({ vm }: { vm: import("./useModelPage").Mod
                       </span>
                     </div>
                     <div className="style-seg seg-mini" role="group" aria-label="Building style">
-                      <button
-                        type="button"
-                        className={view3dDisplay.primaryView ? "style-btn active" : "style-btn"}
-                        aria-pressed={view3dDisplay.primaryView}
-                        onClick={() => {
-                          setShowSource(false);
-                          setColourByUse(false);
-                          commitView3dDisplay({ ...view3dDisplay, primaryView: true });
-                        }}
-                      >
-                        Primary
-                      </button>
-                      <button
-                        type="button"
-                        className={!view3dDisplay.primaryView && colourByUse && !showSource ? "style-btn active" : "style-btn"}
-                        aria-pressed={!view3dDisplay.primaryView && colourByUse && !showSource}
-                        onClick={() => {
-                          setShowSource(false);
-                          setColourByUse(true);
-                          if (view3dDisplay.primaryView) {
-                            commitView3dDisplay({ ...view3dDisplay, primaryView: false });
-                          }
-                        }}
-                      >
-                        Use
-                      </button>
-                      <button
-                        type="button"
-                        className={!view3dDisplay.primaryView && showSource ? "style-btn active" : "style-btn"}
-                        aria-pressed={!view3dDisplay.primaryView && showSource}
-                        onClick={() => {
-                          setShowSource(true);
-                          if (view3dDisplay.primaryView) {
-                            commitView3dDisplay({ ...view3dDisplay, primaryView: false });
-                          }
-                        }}
-                      >
-                        Source
-                      </button>
-                      <button
-                        type="button"
-                        className={!view3dDisplay.primaryView && !colourByUse && !showSource ? "style-btn active" : "style-btn"}
-                        aria-pressed={!view3dDisplay.primaryView && !colourByUse && !showSource}
-                        onClick={() => {
-                          setShowSource(false);
-                          setColourByUse(false);
-                          if (view3dDisplay.primaryView) {
-                            commitView3dDisplay({ ...view3dDisplay, primaryView: false });
-                          }
-                        }}
-                      >
-                        Card
-                      </button>
+                      {VIEW_STYLE_SEG_OPTIONS.map(({ id, label, name }) => (
+                        <button
+                          key={id}
+                          type="button"
+                          className={viewStyle === id ? "style-btn active" : "style-btn"}
+                          aria-pressed={viewStyle === id}
+                          aria-label={name}
+                          onClick={() => {
+                            const next = selectViewStyle3d(view3dDisplay, id, colourByUse);
+                            setShowSource(next.showSource);
+                            setColourByUse(next.colourByUse);
+                            commitView3dDisplay(next.display);
+                          }}
+                        >
+                          {label}
+                        </button>
+                      ))}
                     </div>
+                    {monoOn && <p className="style-seg-caption">Colours off in B&amp;W</p>}
                     <label className="check-field sr-only">
                       <input
                         type="checkbox"
                         checked={view3dDisplay.primaryView}
-                        onChange={(event) => commitView3dDisplay({ ...view3dDisplay, primaryView: event.target.checked })}
+                        onChange={(event) =>
+                          commitView3dDisplay({ ...view3dDisplay, primaryView: event.target.checked, monoView: false })
+                        }
                       />
                       Primary view
                     </label>
-                    <SectionKnifeToolPanel
-                      sideM={displayModel.sideM}
-                      model={displayModel}
-                      tool={sectionKnifeTool}
-                      onChange={setSectionKnifeTool}
-                      onExportSection={exportSectionDrawing}
-                    />
                     <div className="mini-flags sub-toggles display-switches" role="group" aria-label="View modes">
                       <label className={view3dDisplay.showOutlines ? "mini-flag is-on check-field" : "mini-flag check-field"}>
                         <input
@@ -183,8 +144,8 @@ export function ModelPageSidebarLeftA({ vm }: { vm: import("./useModelPage").Mod
                       </button>
                       <button
                         type="button"
-                        aria-pressed={view.projection === "iso"}
-                        onClick={() => commitView({ ...view, projection: "iso" }, false)}
+                        aria-pressed={view.projection === "iso" && !vm.exploded}
+                        onClick={vm.showIsometric}
                       >
                         Isometric
                       </button>
@@ -241,21 +202,20 @@ export function ModelPageSidebarLeftA({ vm }: { vm: import("./useModelPage").Mod
                     <>
                       <div className="outliner-divider" aria-hidden="true" />
                       <section className="sidebar-group outliner-section" aria-label="Layers">
-                        <div className="card-head sidebar-gh">
+                        <div className="card-head sidebar-gh scene-layers-head">
                           <h3 className="card-title">Scene Layers</h3>
-                          <div className="studio-layer-head-actions">
-                            <span className="card-meta mono">
-                              {sceneLayerRows.filter((row) => row.visible).length} visible
-                            </span>
-                            <button
-                              type="button"
-                              className="studio-reset-colours-btn"
-                              onClick={resetSceneLayerColours}
-                              title="Reset all layer and building use colours to default"
-                            >
-                              Reset colours
-                            </button>
-                          </div>
+                          <span className="card-meta mono scene-layers-count">
+                            {sceneLayerRows.filter((row) => row.visible).length} visible
+                          </span>
+                          <button
+                            type="button"
+                            className="studio-reset-colours-btn"
+                            onClick={resetSceneLayerColours}
+                            aria-label="Reset colours"
+                            title="Reset all layer and building use colours to default"
+                          >
+                            Reset
+                          </button>
                         </div>
                         <div className="outliner-rows display-switches" role="group" aria-label="3D layers">
                           {sceneLayerRows.map((layer) => (
@@ -278,7 +238,7 @@ export function ModelPageSidebarLeftA({ vm }: { vm: import("./useModelPage").Mod
                                 ) : null}
                                 <label
                                   className="o-swatch-wrap legend-swatch"
-                                  style={{ background: layer.color }}
+                                  style={{ background: monoOn ? monoSwatchColour(layer.id, layer.color) : layer.color }}
                                   title={`Change ${layer.label.toLowerCase()} colour`}
                                 >
                                   <input
@@ -556,21 +516,20 @@ export function ModelPageSidebarLeftA({ vm }: { vm: import("./useModelPage").Mod
                     <>
                       <div className="outliner-divider" aria-hidden="true" />
                       <section className="sidebar-group outliner-section" aria-label="Layers">
-                        <div className="card-head sidebar-gh">
+                        <div className="card-head sidebar-gh scene-layers-head">
                           <h3 className="card-title">Scene Layers</h3>
-                          <div className="studio-layer-head-actions">
-                            <span className="card-meta mono">
-                              {sceneLayerRows.filter((row) => row.visible).length} visible
-                            </span>
-                            <button
-                              type="button"
-                              className="studio-reset-colours-btn"
-                              onClick={resetSceneLayerColours}
-                              title="Reset all layer and building use colours to default"
-                            >
-                              Reset colours
-                            </button>
-                          </div>
+                          <span className="card-meta mono scene-layers-count">
+                            {sceneLayerRows.filter((row) => row.visible).length} visible
+                          </span>
+                          <button
+                            type="button"
+                            className="studio-reset-colours-btn"
+                            onClick={resetSceneLayerColours}
+                            aria-label="Reset colours"
+                            title="Reset all layer and building use colours to default"
+                          >
+                            Reset
+                          </button>
                         </div>
                         <div className="outliner-rows display-switches" role="group" aria-label="3D layers">
                           {sceneLayerRows.map((layer) => (

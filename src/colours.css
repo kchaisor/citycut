@@ -26,6 +26,9 @@
 
   --contour-label: #FFFFFF;
 
+  --landmark-label: #141413;
+  --landmark-label-halo: #FFFFFF;
+
   --building-uniform: #FFFFFF;
 
   --building-manual: #D4A017;
@@ -40,6 +43,9 @@
 
   --site-boundary: #D7263D;
   --wind-streak: #2B6CB0;
+  --wind-stream-1: #6D9BC7;
+  --wind-stream-2: #8FBEA3;
+  --wind-stream-3: #C3A6CF;
   --wind-rose: #3d5a73;
 
   --view-visible: #FFF500;
@@ -115,6 +121,8 @@
 
   --water-3d: #7FBFFF;
 
+  --water-3d-mono: #D6D6D2;
+
   --water-sunpath: #4A9FE8;
 
   --sun-study-surface: #FFFFFF;
@@ -170,11 +178,46 @@
   --primary-building: #ffffff;
   --primary-road: #525252;
   --primary-footpath: #b9b9b9;
+  --card-road: #ffffff;
+  --card-footpath: #ffffff;
   --primary-plinth-wall: #000000;
   --uniform-road: #555555;
   --plinth-wall: #ffffff;
-  --ground-wind-glyph: #525252;
-  --ground-wind-flow: #5c7f9c;
+  --ground-wind-sheltered: #24208a;
+  --ground-wind-calm: #1f4fd0;
+  --ground-wind-easing: #008cc4;
+  --ground-wind-open: #009c78;
+  --ground-wind-rising: #d9a300;
+  --ground-wind-fast: #e8670f;
+  --ground-wind-speeding: #cc1f1f;
+  --wind-plan-speed-still: #2e42d4;
+  --wind-plan-speed-calm: #4f68de;
+  --wind-plan-speed-breeze: #46d4e8;
+  --wind-plan-speed-brisk: #b5e35c;
+  --wind-plan-speed-strong: #f3dc3c;
+  --wind-plan-speed-fast: #ec6a2e;
+  --wind-plan-sitting: #bdf8da;
+  --wind-plan-standing: #6adca0;
+  --wind-plan-strolling: #f8d404;
+  --wind-plan-walking: #faa902;
+  --wind-plan-uncomfortable: #f44333;
+  --wind-plan-building: #ffffff;
+  --wind-plan-comfort-building: #c5c5c5;
+  --wind-plan-basemap: #f3f3f3;
+  --wind-plan-road: #e3e3e3;
+  --wind-plan-water: #7FBFFF;
+  --wind-plan-green: #e8ebe6;
+  --wind-band-0: #9ec5e8;
+  --wind-band-1: #5b9bd5;
+  --wind-band-2: #2f6fd6;
+  --wind-band-3: #1b4f9c;
+  --wind-band-4: #0b3d91;
+  --wind-rose-card-surface: #fffcf8;
+  --wind-rose-ring: #c9d2da;
+  --wind-rose-guide: #c9d2da;
+  --wind-rose-n-label: #111111;
+  --wind-rose-h-label: #5f5f5f;
+  --wind-calm-caption: #1f2a33;
   --plinth-shadow: #1a1916;
 
   --cut-line: #f7f4ee;
@@ -190,6 +233,12 @@
   --sun-compass: #45423c;
 
   --sun-compass-label: #1a1916;
+
+  --studio-compass-chip: #111111;
+  --studio-compass-chip-ring: #000000;
+  --studio-compass-needle-north: #ffe500;
+  --studio-compass-needle-south: #6b6b6b;
+  --studio-compass-focus: #ffe500;
 
   --building-solar-neutral: #ffffff;
 
@@ -208,6 +257,13 @@
   --sun-study-building: #ffffff;
 
   --sun-study-tree: #b8e0b0;
+  --sun-hours-direct-0: #313695;
+  --sun-hours-direct-15: #4575b4;
+  --sun-hours-direct-30: #a5006a;
+  --sun-hours-direct-50: #d73027;
+  --sun-hours-direct-70: #f46d43;
+  --sun-hours-direct-90: #fdae61;
+  --sun-hours-direct-max: #fee825;
 
   --sun-study-shadow: #4a5a70;
 

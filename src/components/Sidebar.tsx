@@ -1,4 +1,4 @@
-import { useEffect, useId, useState, type KeyboardEvent, type ReactNode } from "react";
+import { Fragment, useEffect, useId, useState, type KeyboardEvent, type ReactNode } from "react";
 import { Crop, PanelLeftClose, PanelLeftOpen, Plus } from "lucide-react";
 import { NARROW_PANEL_QUERY } from "../lib/panelCollapse";
 import { Mark } from "./Mark";
@@ -56,8 +56,10 @@ export function Sidebar({
   headerCenter,
   headerRight,
   rightMeta = "MGA55",
+  siteIntel,
   children,
   rightChildren,
+  rightBelow,
 }: {
   id: string;
   rightId?: string;
@@ -82,13 +84,23 @@ export function Sidebar({
   headerCenter?: ReactNode;
   headerRight?: ReactNode;
   rightMeta?: ReactNode;
+  siteIntel?: {
+    open: boolean;
+    onToggle: () => void;
+    icon: ReactNode;
+    fold?: { folded: boolean; onToggle: () => void; chevron: ReactNode };
+  };
   children: ReactNode;
   rightChildren?: ReactNode;
+  rightBelow?: ReactNode;
 }) {
   const narrow = useNarrow();
   const titleId = useId();
   const rightTitleId = useId();
   const resolvedRightId = rightId ?? `${id}-right`;
+  const inspectorFolded = siteIntel?.fold?.folded === true;
+  const inspectorOn =
+    (siteIntel?.open ?? true) && ((!narrow && rightItems && rightItems.length > 0) || rightChildren !== undefined);
 
   function onKeyDown(event: KeyboardEvent<HTMLElement>) {
     const buttons = [...event.currentTarget.querySelectorAll<HTMLButtonElement>("[data-rail-item]")];
@@ -188,7 +200,6 @@ export function Sidebar({
               onClick={onNewCut}
             >
               <Plus size={16} strokeWidth={2.25} className="topbar-compact-icon" aria-hidden="true" />
-              <span className="topbar-compact-label">+ New cut</span>
             </button>
           ) : null}
         </div>
@@ -224,7 +235,31 @@ export function Sidebar({
               <span className="sidebar-rail-sep rail-sep" aria-hidden="true" />
             </span>
           ) : null}
-          {items.map((item) => renderRailButton(item, false))}
+          {items.map((item) =>
+            item.id === "drawing" && siteIntel ? (
+              <Fragment key={item.id}>
+                {renderRailButton(item, false)}
+                <span className="sidebar-rail-slot">
+                  <button
+                    type="button"
+                    className={siteIntel.open ? "rail-btn site-intel-toggle active is-active" : "rail-btn site-intel-toggle"}
+                    data-rail-item=""
+                    aria-label="Site Intelligence"
+                    aria-pressed={siteIntel.open}
+                    title={siteIntel.open ? "Hide Site Intelligence" : "Show Site Intelligence"}
+                    onClick={siteIntel.onToggle}
+                  >
+                    {siteIntel.icon}
+                    <span className="rail-tip" aria-hidden="true">
+                      Site
+                    </span>
+                  </button>
+                </span>
+              </Fragment>
+            ) : (
+              renderRailButton(item, false)
+            ),
+          )}
           {narrow && rightItems && rightItems.length > 0
             ? rightItems.map((item) => renderRailButton(item, true))
             : null}
@@ -257,7 +292,7 @@ export function Sidebar({
           data-panel-side={panelSide}
           data-active-section={active}
           aria-labelledby={titleId}
-          hidden={collapsed || (panelSide !== "right" && active === "analysis")}
+          hidden={collapsed}
         >
           <header className={active === "drawing" || active === "display" ? "sidebar-head sr-only" : "sidebar-head"}>
             <h2 id={titleId}>{title}</h2>
@@ -266,39 +301,59 @@ export function Sidebar({
           <div className="sidebar-body">{children}</div>
           {footer && <div className="sidebar-foot">{footer}</div>}
         </section>
-        {(!narrow && rightItems && rightItems.length > 0) || rightChildren !== undefined ? (
-          <div className="right-inspector hud-card">
-            <div className="insp-head">
-              <span className="card-title">Site Intelligence</span>
-              <span className="card-meta mono">{rightMeta}</span>
-            </div>
-            {!narrow && rightItems && rightItems.length > 0 ? (
-              <nav
-                className="sidebar-rail icon-rail is-right-rail insp-tabs"
-                role="toolbar"
-                aria-label="Model info"
-                aria-orientation="horizontal"
-                onKeyDown={onKeyDown}
-              >
-                {rightItems.map((item) => renderRailButton(item, true))}
-              </nav>
+        {inspectorOn || rightBelow ? (
+          <div className="right-hud-stack">
+            {inspectorOn ? (
+              <div className={inspectorFolded ? "right-inspector hud-card is-folded" : "right-inspector hud-card"}>
+                {siteIntel?.fold ? (
+                  <button
+                    type="button"
+                    className="insp-head insp-head-toggle"
+                    aria-expanded={!inspectorFolded}
+                    onClick={siteIntel.fold.onToggle}
+                  >
+                    <span className="card-title">Site Intelligence</span>
+                    <span className="insp-head-end">
+                      <span className="card-meta mono">{rightMeta}</span>
+                      {siteIntel.fold.chevron}
+                    </span>
+                  </button>
+                ) : (
+                  <div className="insp-head">
+                    <span className="card-title">Site Intelligence</span>
+                    <span className="card-meta mono">{rightMeta}</span>
+                  </div>
+                )}
+                {!inspectorFolded && !narrow && rightItems && rightItems.length > 0 ? (
+                  <nav
+                    className="sidebar-rail icon-rail is-right-rail insp-tabs"
+                    role="toolbar"
+                    aria-label="Model info"
+                    aria-orientation="horizontal"
+                    onKeyDown={onKeyDown}
+                  >
+                    {rightItems.map((item) => renderRailButton(item, true))}
+                  </nav>
+                ) : null}
+                {!inspectorFolded && rightChildren !== undefined ? (
+                  <section
+                    id={resolvedRightId}
+                    className="sidebar-panel is-right"
+                    data-panel-side="right"
+                    aria-labelledby={rightTitleId}
+                    hidden={narrow ? collapsed : false}
+                  >
+                    <header className="sidebar-head sr-only">
+                      <h2 id={rightTitleId}>{rightTitle}</h2>
+                      {rightStatus}
+                    </header>
+                    <div className="sidebar-body">{rightChildren}</div>
+                    {rightFooter && <div className="sidebar-foot">{rightFooter}</div>}
+                  </section>
+                ) : null}
+              </div>
             ) : null}
-            {rightChildren !== undefined ? (
-              <section
-                id={resolvedRightId}
-                className="sidebar-panel is-right"
-                data-panel-side="right"
-                aria-labelledby={rightTitleId}
-                hidden={narrow ? collapsed : false}
-              >
-                <header className="sidebar-head sr-only">
-                  <h2 id={rightTitleId}>{rightTitle}</h2>
-                  {rightStatus}
-                </header>
-                <div className="sidebar-body">{rightChildren}</div>
-                {rightFooter && <div className="sidebar-foot">{rightFooter}</div>}
-              </section>
-            ) : null}
+            {rightBelow}
           </div>
         ) : null}
       </div>

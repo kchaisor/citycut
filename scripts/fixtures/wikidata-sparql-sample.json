@@ -1,0 +1,49 @@
+{
+  "head": { "vars": ["item", "label", "coord", "height", "floors", "inception", "opened", "article", "architect", "architectLabel", "style", "styleLabel", "heritage", "heritageLabel"] },
+  "results": {
+    "bindings": [
+      {
+        "item": { "type": "uri", "value": "http://www.wikidata.org/entity/Q900001" },
+        "label": { "xml:lang": "en", "type": "literal", "value": "Fixture Tower" },
+        "coord": { "datatype": "http://www.opengis.net/ont/geosparql#wktLiteral", "type": "literal", "value": "Point(144.9645305 -37.8215766)" },
+        "height": { "datatype": "http://www.w3.org/2001/XMLSchema#decimal", "type": "literal", "value": "297.3" },
+        "floors": { "datatype": "http://www.w3.org/2001/XMLSchema#decimal", "type": "literal", "value": "91" },
+        "inception": { "datatype": "http://www.w3.org/2001/XMLSchema#dateTime", "type": "literal", "value": "2002-01-01T00:00:00Z" },
+        "opened": { "datatype": "http://www.w3.org/2001/XMLSchema#dateTime", "type": "literal", "value": "2006-10-11T00:00:00Z" },
+        "article": { "type": "uri", "value": "https://en.wikipedia.org/wiki/Fixture_Tower" },
+        "architect": { "type": "uri", "value": "http://www.wikidata.org/entity/Q900101" },
+        "architectLabel": { "xml:lang": "en", "type": "literal", "value": "Fixture Architects" },
+        "style": { "type": "uri", "value": "http://www.wikidata.org/entity/Q900201" },
+        "styleLabel": { "xml:lang": "en", "type": "literal", "value": "Fixture modernism" }
+      },
+      {
+        "item": { "type": "uri", "value": "http://www.wikidata.org/entity/Q900001" },
+        "label": { "xml:lang": "en", "type": "literal", "value": "Fixture Tower" },
+        "coord": { "datatype": "http://www.opengis.net/ont/geosparql#wktLiteral", "type": "literal", "value": "Point(144.9645305 -37.8215766)" },
+        "height": { "datatype": "http://www.w3.org/2001/XMLSchema#decimal", "type": "literal", "value": "297.3" },
+        "osmWay": { "datatype": "http://www.w3.org/2001/XMLSchema#string", "type": "literal", "value": "700001" },
+        "architect": { "type": "uri", "value": "http://www.wikidata.org/entity/Q900102" },
+        "architectLabel": { "xml:lang": "en", "type": "literal", "value": "Second Fixture Studio" },
+        "style": { "type": "uri", "value": "http://www.wikidata.org/entity/Q900201" },
+        "styleLabel": { "xml:lang": "en", "type": "literal", "value": "Fixture modernism" }
+      },
+      {
+        "item": { "type": "uri", "value": "http://www.wikidata.org/entity/Q900002" },
+        "label": { "xml:lang": "en", "type": "literal", "value": "Fixture Hall" },
+        "coord": { "datatype": "http://www.opengis.net/ont/geosparql#wktLiteral", "type": "literal", "value": "Point(144.97 -37.81)" },
+        "inception": { "datatype": "http://www.w3.org/2001/XMLSchema#dateTime", "type": "literal", "value": "1880-01-01T00:00:00Z" },
+        "heritage": { "type": "uri", "value": "http://www.wikidata.org/entity/Q900301" },
+        "heritageLabel": { "xml:lang": "en", "type": "literal", "value": "Fixture heritage register" }
+      },
+      {
+        "item": { "type": "uri", "value": "http://www.wikidata.org/entity/Q900003" },
+        "coord": { "datatype": "http://www.opengis.net/ont/geosparql#wktLiteral", "type": "literal", "value": "Point(144.96 -37.80)" }
+      },
+      {
+        "item": { "type": "uri", "value": "http://www.wikidata.org/entity/Q900004" },
+        "label": { "xml:lang": "en", "type": "literal", "value": "Fixture Outside" },
+        "coord": { "datatype": "http://www.opengis.net/ont/geosparql#wktLiteral", "type": "literal", "value": "Point(151.2 -33.86)" }
+      }
+    ]
+  }
+}

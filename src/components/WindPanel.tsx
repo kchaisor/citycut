@@ -1,5 +1,5 @@
 import { useId } from "react";
-import { WIND_PERIOD_LABELS, monthPeriodLabel, type WindPeriodId } from "../lib/windRose";
+import { WIND_PERIOD_LABELS, type WindPeriodId } from "../lib/windRose";
 import type { WindViewSettings } from "../lib/windState";
 import { WindReducedMotionNote } from "./WindReducedMotionNote";
 
@@ -9,10 +9,6 @@ const PERIOD_OPTIONS: { id: WindPeriodId; label: string }[] = [
   { id: "autumn", label: WIND_PERIOD_LABELS.autumn },
   { id: "winter", label: WIND_PERIOD_LABELS.winter },
   { id: "spring", label: WIND_PERIOD_LABELS.spring },
-  ...([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] as const).map((m) => ({
-    id: `month-${m}` as WindPeriodId,
-    label: monthPeriodLabel(m),
-  })),
 ];
 
 export function WindPanel({
@@ -55,7 +51,7 @@ export function WindPanel({
           <select
             value={settings.period}
             disabled={!settings.enabled}
-            onChange={(event) => patch({ period: event.target.value as WindPeriodId })}
+            onChange={(event) => patch({ period: event.target.value as WindPeriodId, designWind: null })}
           >
             {PERIOD_OPTIONS.map((option) => (
               <option key={option.id} value={option.id}>
@@ -63,15 +59,6 @@ export function WindPanel({
               </option>
             ))}
           </select>
-        </label>
-        <label className="check-field">
-          <input
-            type="checkbox"
-            checked={settings.showRose}
-            disabled={!settings.enabled}
-            onChange={(event) => patch({ showRose: event.target.checked })}
-          />
-          Show rose
         </label>
         {settings.enabled && streaksPaused && onAnimateAnyway && (
           <WindReducedMotionNote

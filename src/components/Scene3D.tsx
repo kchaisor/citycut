@@ -17,8 +17,11 @@ import { addBuildingEdges } from "../lib/buildingEdges";
 import { attachScenePointPick } from "../lib/buildingPick";
 import { attachSceneInspectPick, type SceneInspectWorld, type SceneSelection } from "../lib/sceneInspectPick";
 import { buildCityGroup, disposeObject } from "../lib/buildCity";
-import { basePlinthBottomY } from "../lib/terrain";
+import { basePlinthBottomY, terrainTint } from "../lib/terrain";
+import { GROUND_ROADS_LAYER } from "../lib/groundRoads";
+import { hudSafeArea, type ScreenRect } from "../lib/heliodonSunDome";
 import { siteFrameFromModel } from "../lib/modelFrame";
+import { outline, type SiteFrame } from "../lib/siteFrame";
 import { auditBuildingSelection, mountSelectedBuildingsVisual } from "../lib/buildingSelectionVisual";
 import { CAMERA_FIT_INCLUDES_HELIODON } from "../lib/sceneCameraFit";
 import { shotFromCamera, type CameraShot } from "../lib/cameraShot";
@@ -32,13 +35,15 @@ import type { RenderQuality } from "../lib/renderQuality";
 import { markScreenOnly } from "../lib/screenOnly";
 import { cameraForExportFrame, exportFrameSize } from "../lib/exportFrame";
 import { flushControlInertia, holdControlPose, type HeldControl } from "../lib/controlInertia";
-import { shouldSkipViewportSizeRefit } from "../lib/viewportAutoFit";
+import { shouldKeepPresetPose, shouldSkipViewportSizeRefit } from "../lib/viewportAutoFit";
 import {
   applyPose,
   capturePose,
   usableCameraMemory,
   type CameraMemory,
+  type CameraPose,
   type CameraMemoryRef,
+  type CameraRestoreRequest,
 } from "../lib/cameraMemory";
 import {
   applyBuildingSolarNeutral,
@@ -53,7 +58,6 @@ import {
 } from "../lib/sunStudySurfaceViewport";
 import {
   eyeDistance,
-  fitOrthoZoom,
   frameCentre,
   ISO_CAMERA_UP,
   isoEye,
@@ -78,16 +82,15 @@ import {
 } from "../lib/sceneRenderLoop";
 import { WebGlContextWatch } from "./WebGlContextWatch";
 import type { ProjectionMode } from "../lib/viewMemory";
-import { isLayer3dVisible, treesVisibleIn3d, type View3dDisplaySettings } from "../lib/view3dDisplay";
-import { buildContourLineObject } from "../lib/contourLines3d";
+import { isLayer3dVisible, monoViewActive, treesVisibleIn3d, type View3dDisplaySettings } from "../lib/view3dDisplay";
+import { buildContourLineObject, contourLineMaterials } from "../lib/contourLines3d";
 import {
   applyPrimaryViewportTint,
   snapshotPrimaryViewportColors,
   applyCanvasRoadTint,
-  primaryViewportLighting,
 } from "../lib/primaryViewport";
 import { applyWhiteCardGroundTint, snapshotWhiteCardTerrainColors } from "../lib/whiteCardViewport";
-import { studioNorthNeedleDeg } from "../lib/studioCompass";
+import { studioCameraHeadingDeg } from "../lib/studioCompass";
 import {
   DEFAULT_PERSPECTIVE_OFFSET,
   heliodonSceneBounds,
@@ -99,8 +102,18 @@ import {
   perspectiveClipFar,
 } from "../lib/perspectiveViewportFit";
 import { heliodonRadiusM } from "../lib/heliodonRadius";
-import { sunStudyViewportLighting } from "../lib/sunStudyViewport";
+import { studioSceneLighting } from "../lib/sunStudyViewport";
+import { applySolarGreyscale, restoreFlatWater } from "../lib/solarGreyscale";
 import { SunHoursLayer } from "./SunHoursLayer";
+import { hidePickedMassingForSunHours, setSunHoursMassingFillVisible } from "../lib/sunHoursFaceTint";
+import {
+  sunHoursFacesReplaceMassing,
+  sunHoursSelectionVisualIds,
+  sunHoursGroundShown,
+  sunHoursOverlayForBuildings,
+} from "../lib/sunHoursPicked";
+import type { SunHoursDirectOverlay } from "../lib/sunHoursDirectAssess";
+import type { SunHoursGroundGrid } from "../lib/sunHoursGroundPlan";
 import { SectionKnifeScene } from "./SectionKnifeScene";
 import { selectedKnife, type SectionKnifeToolState } from "../lib/sectionKnife/state";
 import type { SectionKnifePose } from "../lib/sectionKnife/plane";
@@ -109,16 +122,68 @@ import {
   type SectionKnifeGizmoInteraction,
 } from "../lib/sectionKnife/gizmoHit";
 import type { WalkRippleBuildingTint } from "../lib/walkRippleBuildingTint";
-
-const SUN_HOURS_HEATMAP_ENABLED = false;
-import { SolarHeliodon, SolarLight, useMelbourneSunSample, type SolarViewSettings } from "./SolarHeliodon";
+import {
+  SolarHeliodon,
+  SolarLight,
+  canvasScreenRect,
+  liveHudRects,
+  useMelbourneSunSample,
+  type SolarViewSettings,
+} from "./SolarHeliodon";
+import { windSceneLayers } from "../lib/windState";
 import { GroundWindFlow } from "./GroundWindFlow";
+import { WindDiagramStreams } from "./WindDiagramStreams";
+import type { PrevailingStream } from "../lib/windPrevailingStreams";
+import { createWindPlanTransformStore, WindPlanOverlay, WindPlanProjector } from "./WindPlanOverlay";
+import type { WindPlanState } from "./useWindPlan";
 import { InspectHudProjector, type InspectHudScreen } from "./InspectHudProjector";
-import { analyzeWindPeriod, type WindPeriodId, type WindRoseTable } from "../lib/windRose";
-import type { CityModel } from "../types";
+import { captureViewportPng, readViewportCapture, sheetCropRect, type ViewportPngOptions } from "../lib/captureViewportPng";
+import { planSheetFrame, type SheetFrame } from "../lib/sheetScale";
+import { projectionCentre, WIND_SHEET_MARGIN, wholeSiteFraming } from "../lib/sheetFraming";
+import { LandmarkLabelProjector, type LandmarkExportLabels, type LandmarkScreenState } from "./LandmarkLabelProjector";
+import type { LandmarkLabelSource } from "../lib/landmarkLabels";
+import type { WindPeriodId } from "../lib/windRose";
+import type { SiteWindSelection } from "../lib/windRoseData";
+import { analyzeSiteWind } from "../lib/windRoseStats";
+import { headingPeriodStats, type DesignWind } from "../lib/windDesignWinds";
+import type { CityModel, TerrainField } from "../types";
+import { introAlreadyPlayedForCut, markIntroPlayedForCut, modelCutSiteId } from "../lib/introPlayed";
+import {
+  EXPLODE_LAYERS,
+  EXPLODE_LAYER_LABELS,
+  easeInOutCubic as explodeEase,
+  boundaryLabelAnchor,
+  explodeClockAt,
+  explodedBounds,
+  explodeFit,
+  explodeLabelOpacity,
+  explodeLayerOfObjectName,
+  explodeLayerOfSelectionKind,
+  explodeOffsets,
+  explodeCornerPoints,
+  explodeCornerSpan,
+  explodeOutlineSpecs,
+  EXPLODE_CORNER_DASH_PX,
+  EXPLODE_CORNER_GAP_PX,
+  type ExplodeCornerSpan,
+  explodeLabelSafeRect,
+  layoutExplodeLabels,
+  noExplodeBoxes,
+  noExplodeOffsets,
+  prefersReducedMotion,
+  type ExplodeFit,
+  type ExplodeLayerBoxes,
+  type ExplodeLayerId,
+  type ExplodeLayerOffsets,
+} from "../lib/modelExplode";
+
+const NO_LANDMARKS: readonly LandmarkLabelSource[] = [];
 
 export type SceneExporter = {
   png: () => Promise<Blob>;
+  viewportPng: (options?: ViewportPngOptions) => Promise<Blob>;
+  sheetFrame: (crop: { aspect: number; minWidthPx: number }) => SheetFrame | null;
+  frameWholeSite: (crop: { aspect: number; minWidthPx: number }) => (() => void) | null;
   shot: () => CameraShot;
 };
 
@@ -193,11 +258,11 @@ const scratch = new THREE.Vector3();
 
 const STUDIO_FILL_RATIO = 0.28;
 
-function measureCity(group: THREE.Object3D): Aabb {
-  const box = new THREE.Box3().setFromObject(group);
+function measureObjectBox(root: THREE.Object3D): THREE.Box3 {
+  const box = new THREE.Box3().setFromObject(root);
   const instanceBox = new THREE.Box3();
   const matrix = new THREE.Matrix4();
-  group.traverse((object) => {
+  root.traverse((object) => {
     const mesh = object as THREE.InstancedMesh;
     if (!mesh.isInstancedMesh || mesh.count === 0) return;
     const geometry = mesh.geometry;
@@ -209,11 +274,436 @@ function measureCity(group: THREE.Object3D): Aabb {
       box.union(instanceBox);
     }
   });
-  if (box.isEmpty()) return { min: [-1, 0, -1], max: [1, 1, 1] };
+  return box;
+}
+
+function aabbOfBox(box: THREE.Box3): Aabb {
   return {
     min: [box.min.x, box.min.y, box.min.z],
     max: [box.max.x, box.max.y, box.max.z],
   };
+}
+
+function measureCity(group: THREE.Object3D): Aabb {
+  const box = measureObjectBox(group);
+  if (box.isEmpty()) return { min: [-1, 0, -1], max: [1, 1, 1] };
+  return aabbOfBox(box);
+}
+
+export type ExplodeRuntime = {
+  clock: number;
+  progress: number;
+  offsets: ExplodeLayerOffsets;
+  boxes: ExplodeLayerBoxes;
+  bounds: Aabb | null;
+  fitToken: number;
+};
+
+export function createExplodeRuntime(): ExplodeRuntime {
+  return { clock: 0, progress: 0, offsets: noExplodeOffsets(), boxes: noExplodeBoxes(), bounds: null, fitToken: 0 };
+}
+
+const EXPLODE_GROUND_FILL_NAME = "ExplodeGroundFill";
+const EXPLODE_OUTLINES_NAME = "ExplodeOutlines";
+const EXPLODE_CORNERS_NAME = "ExplodeCorners";
+
+type ExplodeRun = { target: 0 | 1; from: number; startedAtMs: number };
+
+function explodeViewRect(canvas: HTMLCanvasElement, size: { width: number; height: number }): ScreenRect {
+  const shown = canvasScreenRect(canvas);
+  return { left: shown.right - size.width, top: shown.top, right: shown.right, bottom: shown.top + size.height };
+}
+
+function explodeSafeRect(view: ScreenRect): ScreenRect {
+  return hudSafeArea(view, liveHudRects(view));
+}
+
+function explodeFitIn(
+  canvas: HTMLCanvasElement,
+  size: { width: number; height: number },
+  bounds: Aabb,
+  corner: IsoCorner,
+  progress: number,
+): ExplodeFit {
+  const view = explodeViewRect(canvas, size);
+  return explodeFit(bounds, isoOffset(corner), view, progress > 0 ? explodeSafeRect(view) : view, progress);
+}
+
+export function buildExplodeGroundFill(
+  city: THREE.Object3D,
+  terrain: Pick<TerrainField, "min" | "max">,
+): THREE.Group | null {
+  const fill = new THREE.Group();
+  fill.name = EXPLODE_GROUND_FILL_NAME;
+  fill.userData.skipRhinoExport = true;
+  fill.userData.noScenePick = true;
+  const ground = city.children.find((child) => child.name === "Terrain");
+  for (const road of city.children) {
+    if (road.name !== "Roads" || road.userData.exportLayer !== GROUND_ROADS_LAYER || !(road instanceof THREE.Mesh)) continue;
+    const position = (road.geometry as THREE.BufferGeometry).getAttribute("position");
+    const colours = new Float32Array(position.count * 3);
+    for (let index = 0; index < position.count; index++) colours.set(terrainTint(terrain, position.getY(index)), index * 3);
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute("position", position);
+    geometry.setAttribute("color", new THREE.BufferAttribute(colours, 3));
+    const normal = (road.geometry as THREE.BufferGeometry).getAttribute("normal");
+    if (normal) geometry.setAttribute("normal", normal);
+    geometry.setIndex((road.geometry as THREE.BufferGeometry).getIndex());
+    const material = new THREE.MeshStandardMaterial({ vertexColors: true, side: THREE.DoubleSide, roughness: 1, metalness: 0 });
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.userData.source = road;
+    mesh.userData.skipRhinoExport = true;
+    mesh.userData.noScenePick = true;
+    mesh.receiveShadow = true;
+    mesh.renderOrder = ground?.renderOrder ?? 0;
+    fill.add(mesh);
+  }
+  return fill.children.length ? fill : null;
+}
+
+function disposeExplodeGroundFill(fill: THREE.Group) {
+  fill.removeFromParent();
+  for (const child of fill.children) {
+    const mesh = child as THREE.Mesh;
+    mesh.geometry.dispose();
+    (mesh.material as THREE.Material).dispose();
+  }
+}
+
+export function buildExplodeOutlines(frame: SiteFrame, boxes: ExplodeLayerBoxes): THREE.Group | null {
+  const ring = outline(frame)[0];
+  if (!ring || ring.length < 3) return null;
+  const group = new THREE.Group();
+  group.name = EXPLODE_OUTLINES_NAME;
+  group.userData.skipRhinoExport = true;
+  group.userData.noScenePick = true;
+  const points = (ring.at(-1)![0] === ring[0][0] && ring.at(-1)![1] === ring[0][1] ? ring.slice(0, -1) : ring).map(
+    ([east, north]) => new THREE.Vector3(east, 0, -north),
+  );
+  for (const layer of EXPLODE_LAYERS) {
+    if (!boxes[layer]) continue;
+    const line = new THREE.LineLoop(
+      new THREE.BufferGeometry().setFromPoints(points),
+      new THREE.LineBasicMaterial({ color: getColour("--ground-edge") }),
+    );
+    line.name = `${EXPLODE_OUTLINES_NAME}:${layer}`;
+    line.userData.explodeLayer = layer;
+    line.userData.skipRhinoExport = true;
+    line.userData.noScenePick = true;
+    line.raycast = () => {};
+    group.add(line);
+  }
+  const corners = explodeCornerPoints(ring);
+  if (corners.length && EXPLODE_LAYERS.filter((layer) => boxes[layer]).length > 1) {
+    const cornerGroup = new THREE.Group();
+    cornerGroup.name = EXPLODE_CORNERS_NAME;
+    cornerGroup.userData.skipRhinoExport = true;
+    cornerGroup.userData.noScenePick = true;
+    corners.forEach(([east, north], index) => {
+      const line = new THREE.Line(
+        new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(east, 0, -north), new THREE.Vector3(east, 0, -north)]),
+        new THREE.LineDashedMaterial({ color: getColour("--ground-edge"), dashSize: 1, gapSize: 1 }),
+      );
+      line.name = `${EXPLODE_CORNERS_NAME}:${index}`;
+      line.frustumCulled = false;
+      line.userData.skipRhinoExport = true;
+      line.userData.noScenePick = true;
+      line.raycast = () => {};
+      cornerGroup.add(line);
+    });
+    group.add(cornerGroup);
+  }
+  return group.children.length ? group : null;
+}
+
+export function updateExplodeCorners(group: THREE.Object3D, span: ExplodeCornerSpan | null, camera: THREE.Camera) {
+  const corners = group.getObjectByName(EXPLODE_CORNERS_NAME);
+  if (!corners) return;
+  corners.visible = span != null;
+  if (!span) return;
+  const zoom = (camera as THREE.OrthographicCamera).zoom || 1;
+  const verticalOnScreen = Math.max(0.1, Math.abs(camera.matrixWorld.elements[5]));
+  const worldPerPx = 1 / (zoom * verticalOnScreen);
+  for (const child of corners.children) {
+    const line = child as THREE.Line;
+    const material = line.material as THREE.LineDashedMaterial;
+    material.dashSize = EXPLODE_CORNER_DASH_PX * worldPerPx;
+    material.gapSize = EXPLODE_CORNER_GAP_PX * worldPerPx;
+    line.position.y = span.baseY;
+    const position = line.geometry.getAttribute("position") as THREE.BufferAttribute;
+    if (position.getY(1) !== span.heightM) {
+      position.setY(1, span.heightM);
+      position.needsUpdate = true;
+      line.computeLineDistances();
+    }
+  }
+}
+
+function disposeExplodeOutlines(group: THREE.Group) {
+  group.removeFromParent();
+  group.traverse((child) => {
+    if (!(child instanceof THREE.Line)) return;
+    child.geometry.dispose();
+    (child.material as THREE.Material).dispose();
+  });
+}
+
+type ExplodeLift = { restY: number; offset: number };
+
+export function measureExplodeLayers(
+  city: THREE.Object3D,
+  importedMassing: THREE.Object3D | null,
+  overlay: THREE.Object3D | null,
+  applied: WeakMap<THREE.Object3D, ExplodeLift>,
+): ExplodeLayerBoxes {
+  const merged = Object.fromEntries(EXPLODE_LAYERS.map((layer) => [layer, new THREE.Box3()])) as Record<
+    ExplodeLayerId,
+    THREE.Box3
+  >;
+  const settle = new THREE.Vector3();
+  const include = (object: THREE.Object3D, layer: ExplodeLayerId, liftedBy: number) => {
+    if (!object.visible) return;
+    const box = measureObjectBox(object);
+    if (box.isEmpty()) return;
+    merged[layer].union(box.translate(settle.set(0, -liftedBy, 0)));
+  };
+  for (const child of city.children) {
+    if (child.name === "IntroCutRing" || child.name === EXPLODE_OUTLINES_NAME) continue;
+    include(child, explodeLayerOfObjectName(child.name), applied.get(child)?.offset ?? 0);
+  }
+  if (importedMassing) include(importedMassing, "buildings", overlay?.position.y ?? 0);
+  const boxes = noExplodeBoxes();
+  for (const layer of EXPLODE_LAYERS) boxes[layer] = merged[layer].isEmpty() ? null : aabbOfBox(merged[layer]);
+  return boxes;
+}
+
+export function applyExplodeOffsets(
+  city: THREE.Object3D,
+  overlay: THREE.Object3D | null,
+  offsets: ExplodeLayerOffsets,
+  applied: WeakMap<THREE.Object3D, ExplodeLift>,
+): void {
+  const lift = (object: THREE.Object3D, offset: number) => {
+    const lifted = applied.get(object) ?? { restY: object.position.y, offset: 0 };
+    if (lifted.offset === offset) return;
+    lifted.offset = offset;
+    object.position.y = lifted.restY + offset;
+    applied.set(object, lifted);
+  };
+  for (const child of city.children) {
+    if (child.name !== EXPLODE_OUTLINES_NAME) lift(child, offsets[explodeLayerOfObjectName(child.name)]);
+  }
+  if (overlay) lift(overlay, offsets.buildings);
+}
+
+export function ExplodeLayers({
+  city,
+  overlayRef,
+  importedMassing,
+  runtime,
+  cityBoundsRef,
+  exploded,
+  gapM,
+  measureKey,
+  terrain,
+  frame,
+  snapKey = 0,
+  onCollapsed,
+  onTopLift,
+}: {
+  terrain?: Pick<TerrainField, "min" | "max"> | null;
+  frame?: SiteFrame | null;
+  snapKey?: number;
+  city: THREE.Group;
+  overlayRef: RefObject<THREE.Group | null>;
+  importedMassing: THREE.Object3D | null;
+  runtime: RefObject<ExplodeRuntime>;
+  cityBoundsRef: RefObject<Aabb | null>;
+  exploded: boolean;
+  gapM: number;
+  measureKey: string;
+  onCollapsed: () => void;
+  onTopLift: (liftM: number) => void;
+}) {
+  const invalidate = useThree((state) => state.invalidate);
+  const applied = useRef(new WeakMap<THREE.Object3D, ExplodeLift>());
+  const measured = useRef<{ city: THREE.Group; key: string } | null>(null);
+  const fittedGap = useRef(gapM);
+  const run = useRef<ExplodeRun | null>(null);
+  const seenSnapKey = useRef(snapKey);
+  const groundFill = useRef<{ city: THREE.Group; fill: THREE.Group | null } | null>(null);
+  const dropGroundFill = useCallback(() => {
+    if (groundFill.current?.fill) disposeExplodeGroundFill(groundFill.current.fill);
+    groundFill.current = null;
+  }, []);
+  useEffect(() => dropGroundFill, [city, terrain, dropGroundFill]);
+  const outlines = useRef<{ city: THREE.Group; frame: SiteFrame; boxes: ExplodeLayerBoxes; group: THREE.Group | null } | null>(null);
+  const dropOutlines = useCallback(() => {
+    if (outlines.current?.group) disposeExplodeOutlines(outlines.current.group);
+    outlines.current = null;
+  }, []);
+  useEffect(() => dropOutlines, [city, frame, dropOutlines]);
+  useEffect(() => {
+    invalidate();
+  }, [city, exploded, gapM, measureKey, invalidate]);
+  useFrame((state) => {
+    const rt = runtime.current;
+    const dataset = state.gl.domElement.dataset;
+    const introActive = state.scene.userData[INTRO_ACTIVE_KEY] === true;
+    const target = exploded && !introActive ? 1 : 0;
+    const nowMs = state.clock.elapsedTime * 1000;
+    const snapped = seenSnapKey.current !== snapKey;
+    seenSnapKey.current = snapKey;
+    if (introActive || (snapped && target === 0)) rt.clock = 0;
+    else if (snapped && snapKey !== 0 && target === 1) rt.clock = 1;
+    if (introActive || snapped || run.current?.target !== target) run.current = { target, from: rt.clock, startedAtMs: nowMs };
+    if (target === 0 && rt.clock === 0 && rt.progress === 0) {
+      dropGroundFill();
+      dropOutlines();
+      dataset.exploded = "0";
+      dataset.explodeProgress = "0.000";
+      if (!exploded) onCollapsed();
+      return;
+    }
+    const stale = measured.current?.city !== city || measured.current.key !== measureKey;
+    if (stale) {
+      rt.boxes = measureExplodeLayers(city, importedMassing, overlayRef.current, applied.current);
+      measured.current = { city, key: measureKey };
+    }
+    const before = rt.progress;
+    rt.clock = explodeClockAt(run.current.from, target, nowMs - run.current.startedAtMs, prefersReducedMotion());
+    rt.progress = explodeEase(rt.clock);
+    if (terrain && rt.progress > 0 && groundFill.current?.city !== city) {
+      const fill = buildExplodeGroundFill(city, terrain);
+      if (fill) city.add(fill);
+      groundFill.current = { city, fill };
+    }
+    if (rt.progress === 0) {
+      dropGroundFill();
+      dropOutlines();
+    }
+    for (const mesh of groundFill.current?.fill?.children ?? []) mesh.visible = (mesh.userData.source as THREE.Object3D).visible;
+    rt.offsets = explodeOffsets(rt.boxes, gapM, rt.progress);
+    applyExplodeOffsets(city, overlayRef.current, rt.offsets, applied.current);
+    if (frame && rt.progress > 0) {
+      const held = outlines.current;
+      if (!held || held.city !== city || held.frame !== frame || held.boxes !== rt.boxes) {
+        dropOutlines();
+        const group = buildExplodeOutlines(frame, rt.boxes);
+        if (group) city.add(group);
+        outlines.current = { city, frame, boxes: rt.boxes, group };
+      }
+      const group = outlines.current?.group;
+      if (group) {
+        const specs = explodeOutlineSpecs(rt.boxes, rt.offsets);
+        for (const spec of specs) {
+          const line = group.getObjectByName(`${EXPLODE_OUTLINES_NAME}:${spec.layer}`);
+          if (line) line.position.y = spec.baseY;
+        }
+        updateExplodeCorners(group, explodeCornerSpan(specs), state.camera);
+      }
+    }
+    if (stale || before !== rt.progress || fittedGap.current !== gapM) {
+      fittedGap.current = gapM;
+      const base = cityBoundsRef.current;
+      rt.bounds = explodedBounds(base, rt.boxes, rt.offsets);
+      if (!(snapped && target === 0)) rt.fitToken += 1;
+      const stacked = explodedBounds(base, rt.boxes, explodeOffsets(rt.boxes, gapM, 1));
+      onTopLift(stacked && base ? Math.max(0, Math.ceil(stacked.max[1] - base.max[1])) : 0);
+    }
+    dataset.exploded = rt.clock === 1 ? "1" : "0";
+    dataset.explodeProgress = rt.progress.toFixed(3);
+    if (rt.clock !== target) {
+      state.invalidate();
+    } else if (rt.clock === 0 && !exploded) {
+      onTopLift(0);
+      onCollapsed();
+    }
+  });
+  return null;
+}
+
+function ExplodeLabelProjector({
+  runtime,
+  exploding,
+  shown,
+  frame,
+  labelsRef,
+  leadersRef,
+}: {
+  runtime: RefObject<ExplodeRuntime>;
+  exploding: boolean;
+  shown: boolean;
+  frame: SiteFrame;
+  labelsRef: RefObject<Partial<Record<ExplodeLayerId, HTMLElement | null>>>;
+  leadersRef: RefObject<Partial<Record<ExplodeLayerId, SVGLineElement | null>>>;
+}) {
+  const gl = useThree((state) => state.gl);
+  const size = useThree((state) => state.size);
+  const invalidate = useThree((state) => state.invalidate);
+  const point = useMemo(() => new THREE.Vector3(), []);
+  const ring = useMemo(() => outline(frame)[0] ?? [], [frame]);
+  useEffect(() => {
+    invalidate();
+  }, [shown, exploding, invalidate]);
+  useFrame(({ camera }) => {
+    const rt = runtime.current;
+    const opacity = explodeLabelOpacity(rt.progress, exploding);
+    const rect = opacity > 0 ? gl.domElement.getBoundingClientRect() : null;
+    const view = rect ? explodeViewRect(gl.domElement, size) : null;
+    camera.updateMatrixWorld();
+    const right = camera.matrixWorld.elements;
+    const shownLayers: ExplodeLayerId[] = [];
+    const anchors: { x: number; y: number }[] = [];
+    for (const layer of EXPLODE_LAYERS) {
+      const box = rt.boxes[layer];
+      const world =
+        rect && view && box
+          ? boundaryLabelAnchor(ring, box.min[1] + rt.offsets[layer], [right[0], right[1], right[2]])
+          : null;
+      if (!rect || !world) {
+        const element = labelsRef.current[layer];
+        if (element) element.style.opacity = "0";
+        const leader = leadersRef.current[layer];
+        if (leader) leader.style.opacity = "0";
+        continue;
+      }
+      point.set(world[0], world[1], world[2]).project(camera);
+      shownLayers.push(layer);
+      anchors.push({
+        x: rect.left + (point.x * 0.5 + 0.5) * rect.width,
+        y: rect.top + (-point.y * 0.5 + 0.5) * rect.height,
+      });
+    }
+    if (!view || !shownLayers.length) return;
+    let width = 0;
+    let height = 0;
+    for (const layer of shownLayers) {
+      const element = labelsRef.current[layer];
+      if (!element) continue;
+      width = Math.max(width, element.offsetWidth);
+      height = Math.max(height, element.offsetHeight);
+    }
+    const safe = explodeLabelSafeRect(view, liveHudRects(view), width, anchors);
+    const layout = layoutExplodeLabels(anchors, width, height, safe);
+    shownLayers.forEach((layer, index) => {
+      const element = labelsRef.current[layer];
+      if (element) {
+        element.style.left = `${layout.rightX}px`;
+        element.style.top = `${layout.ys[index]}px`;
+        element.style.opacity = opacity.toFixed(3);
+      }
+      const leader = leadersRef.current[layer];
+      if (leader) {
+        leader.setAttribute("x1", String(layout.rightX));
+        leader.setAttribute("y1", String(layout.ys[index]));
+        leader.setAttribute("x2", String(anchors[index].x));
+        leader.setAttribute("y2", String(anchors[index].y));
+        leader.style.opacity = anchors[index].x - layout.rightX > 1 ? opacity.toFixed(3) : "0";
+      }
+    });
+  });
+  return null;
 }
 
 function publishCamera(camera: THREE.Camera, target: THREE.Vector3, element: HTMLCanvasElement) {
@@ -278,7 +768,7 @@ function SceneDemandBootstrap() {
   return null;
 }
 
-function SceneFrameloopGate() {
+function SceneFrameloopGate({ introSkip }: { introSkip: boolean }) {
   const set = useThree((state) => state.set);
   const invalidate = useThree((state) => state.invalidate);
   const frameloopMode = () =>
@@ -286,27 +776,52 @@ function SceneFrameloopGate() {
       ? "always"
       : "demand";
   useLayoutEffect(() => {
-    if (!shouldRunIntroTransition()) {
+    if (!shouldRunIntroTransition() || introSkip) {
       set({ frameloop: frameloopMode() });
       invalidate();
     }
-  }, [set, invalidate]);
+  }, [set, invalidate, introSkip]);
   useEffect(() => {
-    if (!shouldRunIntroTransition()) return;
+    if (!shouldRunIntroTransition() || introSkip) return;
     const onIntroDone = () => {
       set({ frameloop: frameloopMode() });
       invalidate();
     };
     window.addEventListener("citycut:intro-done", onIntroDone);
     return () => window.removeEventListener("citycut:intro-done", onIntroDone);
-  }, [set, invalidate]);
+  }, [set, invalidate, introSkip]);
   return null;
 }
 
-function StudioCompassTracker({ onNeedle }: { onNeedle: (deg: number) => void }) {
+type SceneFrameloop = "always" | "demand" | "never";
+
+function ScenePause({ active }: { active: boolean }) {
+  const set = useThree((state) => state.set);
+  const invalidate = useThree((state) => state.invalidate);
+  const frameloop = useThree((state) => state.frameloop) as SceneFrameloop;
+  const resumeTo = useRef<SceneFrameloop | null>(null);
+  useLayoutEffect(() => {
+    if (!active) {
+      if (frameloop !== "never") {
+        resumeTo.current = frameloop;
+        set({ frameloop: "never" });
+      }
+      return;
+    }
+    if (resumeTo.current) {
+      const next = resumeTo.current;
+      resumeTo.current = null;
+      set({ frameloop: next });
+    }
+    invalidate();
+  }, [active, frameloop, set, invalidate]);
+  return null;
+}
+
+function StudioCompassTracker({ onHeading }: { onHeading: (deg: number) => void }) {
   const camera = useThree((state) => state.camera);
   useFrame(() => {
-    onNeedle(studioNorthNeedleDeg(camera));
+    onHeading(studioCameraHeadingDeg(camera));
   });
   return null;
 }
@@ -340,6 +855,7 @@ function SceneInspectPickLayer({
   enabled,
   buildingsPickable,
   treesPickable,
+  importedMassing = null,
   onPick,
   onClear,
 }: {
@@ -348,13 +864,19 @@ function SceneInspectPickLayer({
   enabled: boolean;
   buildingsPickable: boolean;
   treesPickable: boolean;
+  importedMassing?: THREE.Object3D | null;
   onPick: (selection: SceneSelection) => void;
   onClear?: () => void;
 }) {
   const camera = useThree((state) => state.camera);
   const gl = useThree((state) => state.gl);
+  const get = useThree((state) => state.get);
   useLayoutEffect(() => {
     if (!enabled) return;
+    const onPressStart = () => {
+      const controls = get().controls as OrbitControlsImpl | null;
+      if (controls?.enabled) holdControlPose(controls);
+    };
     return attachSceneInspectPick(
       gl.domElement,
       camera,
@@ -365,10 +887,13 @@ function SceneInspectPickLayer({
         sideM: model.sideM,
         buildingsPickable,
         treesPickable,
+        extraRoots: importedMassing ? [importedMassing] : [],
       },
-      { onPick, onClear },
+      { onPick, onClear, onPressStart },
     );
   }, [
+    get,
+    importedMassing,
     buildingsPickable,
     camera,
     enabled,
@@ -503,7 +1028,11 @@ function City({
   colourBySource,
   highlightManual,
   solarDiagramOn,
+  directSunHoursOn,
+  sunHoursPickedOnly,
   solarNeutralFill,
+  solarGreyscale,
+  solarShadowsActive,
   heightEditBuildingId,
   selectedBuildingIds,
   display,
@@ -518,13 +1047,29 @@ function City({
   projection,
   walkRippleTint,
   walkRippleArrivals,
+  windFlowActive = false,
+  introSkip,
+  introPlayed,
+  importedMassing = null,
+  exploded,
+  explodeGapM,
+  explodeRuntime,
+  explodeOverlayRef,
+  cityBoundsRef,
+  onExplodeCollapsed,
+  onExplodeTopLift,
+  explodeSnapKey,
 }: {
   model: CityModel;
   uniformBuildings: boolean;
   colourBySource: boolean;
   highlightManual: boolean;
   solarDiagramOn: boolean;
+  directSunHoursOn: boolean;
+  sunHoursPickedOnly: boolean;
   solarNeutralFill: string;
+  solarGreyscale: boolean;
+  solarShadowsActive: boolean;
   heightEditBuildingId: number | null;
   selectedBuildingIds?: readonly number[];
   display: View3dDisplaySettings;
@@ -539,6 +1084,18 @@ function City({
   projection: ProjectionMode;
   walkRippleTint?: WalkRippleBuildingTint | null;
   walkRippleArrivals?: Map<number, number> | null;
+  windFlowActive?: boolean;
+  introSkip: boolean;
+  introPlayed?: { current: string | null };
+  importedMassing?: THREE.Object3D | null;
+  exploded: boolean;
+  explodeGapM: number;
+  explodeRuntime: RefObject<ExplodeRuntime>;
+  explodeOverlayRef: RefObject<THREE.Group | null>;
+  cityBoundsRef: RefObject<Aabb | null>;
+  onExplodeCollapsed: () => void;
+  onExplodeTopLift: (liftM: number) => void;
+  explodeSnapKey: number;
 }) {
   const onBoundsRef = useRef(onBounds);
   onBoundsRef.current = onBounds;
@@ -551,8 +1108,9 @@ function City({
     }),
     [uniformBuildings, colourBySource],
   );
+  const cutKey = modelCutSiteId(model.center, model.sideM);
   const group = useMemo(() => {
-    const introStagger = shouldRunIntroTransition();
+    const introStagger = shouldRunIntroTransition() && !introSkip;
     const city = buildCityGroup(model, { uniformBuildings, colourBySource, highlightManual, introStagger });
     const plinth = city.getObjectByName("BasePlinth");
     const ground = city.getObjectByName("Ground");
@@ -595,6 +1153,7 @@ function City({
     }
     return city;
   }, [
+    cutKey,
     model.center,
     model.sideM,
     model.frameShape,
@@ -615,6 +1174,7 @@ function City({
     uniformBuildings,
     colourBySource,
     highlightManual,
+    introSkip,
   ]);
   useLayoutEffect(() => {
     onBoundsRef.current(measureCity(group));
@@ -629,7 +1189,6 @@ function City({
     steadyFrames?: number;
     targets: Array<{ obj: THREE.Object3D; pivotY: number; kind: "building" | "tree"; bucket: number }>;
   } | null>(null);
-  const cutKey = `${model.center.lat.toFixed(5)},${model.center.lon.toFixed(5)},${model.sideM}`;
   const introScene = useThree((state) => state.scene);
   const invalidate = useThree((state) => state.invalidate);
   useLayoutEffect(() => {
@@ -670,7 +1229,7 @@ function City({
       targets.push({ obj: object, pivotY, kind: "building", bucket });
     }
     const cutRingObj = group.getObjectByName("IntroCutRing") as THREE.LineSegments | undefined;
-    if (!shouldRunIntroTransition() || targets.length === 0) {
+    if (!shouldRunIntroTransition() || introSkip || targets.length === 0) {
       for (const { obj } of targets) {
         obj.scale.y = 1;
         obj.position.y = 0;
@@ -724,7 +1283,7 @@ function City({
     introRef.current = { cutKey, elapsedSec: 0, frameCount: 0, done: false, webglReadyDispatched: false, targets };
     introScene.userData[INTRO_ACTIVE_KEY] = true;
     invalidate();
-  }, [group, cutKey, introScene, invalidate]);
+  }, [group, cutKey, introScene, invalidate, introSkip]);
   useFrame((state, delta) => {
     const intro = introRef.current;
     if (!intro || intro.done) return;
@@ -874,6 +1433,7 @@ function City({
     ds.introTreeScale = treeScale.toFixed(3);
     if (done) {
       intro.done = true;
+      if (introPlayed) markIntroPlayedForCut(introPlayed, intro.cutKey);
       state.scene.userData[INTRO_ACTIVE_KEY] = false;
       if (typeof window !== "undefined") {
         window.dispatchEvent(new CustomEvent("citycut:intro-done"));
@@ -883,13 +1443,14 @@ function City({
     }
   });
   useLayoutEffect(() => {
+    restoreFlatWater(group);
     refreshSceneSurfaceColors(group);
     snapshotBuildingViewportColors(group, colourMode);
     snapshotSunStudySurfaceColors(group);
     snapshotPrimaryViewportColors(group, colourMode);
     snapshotWhiteCardTerrainColors(group);
     applySunStudySurfaceTint(group, false);
-    applyBuildingSolarNeutral(group, false, solarNeutralFill);
+    applyBuildingSolarNeutral(group, solarDiagramOn || directSunHoursOn, solarNeutralFill);
     applyPrimaryViewportTint(group, display.primaryView);
     if (display.primaryView) {
       applyWhiteCardGroundTint(group, false);
@@ -903,8 +1464,21 @@ function City({
       applyCanvasRoadTint(group, "off");
       applyWhiteCardGroundTint(group, false);
     }
+    if (solarShadowsActive) applyCanvasRoadTint(group, "off");
+    applySolarGreyscale(group, solarGreyscale);
     invalidate();
-  }, [group, colourMode, solarDiagramOn, solarNeutralFill, colourTick, display.primaryView, invalidate]);
+  }, [
+    group,
+    colourMode,
+    solarDiagramOn,
+    directSunHoursOn,
+    solarNeutralFill,
+    solarGreyscale,
+    solarShadowsActive,
+    colourTick,
+    display.primaryView,
+    invalidate,
+  ]);
   const buildingsVisible = isLayer3dVisible(display, "buildings");
   const roadsVisible = isLayer3dVisible(display, "roads");
   const footpathsVisible = isLayer3dVisible(display, "footpaths");
@@ -914,20 +1488,23 @@ function City({
   const contoursVisible = isLayer3dVisible(display, "contours");
   const treesVisible = treesVisibleIn3d(model.layers, display);
   useLayoutEffect(() => {
+    setSunHoursMassingFillVisible(
+      group,
+      importedMassing,
+      buildingsVisible,
+      display.showOutlines,
+      sunHoursFacesReplaceMassing(directSunHoursOn, sunHoursPickedOnly),
+    );
     group.traverse((object) => {
       const name = object.name;
-      if (name === "BuildingEdges") {
-        object.visible = display.showOutlines && buildingsVisible;
-        return;
-      }
       if (
+        name === "BuildingEdges" ||
         name === "Buildings" ||
         name === "Buildings-manual" ||
         name === "Buildings-site" ||
         name.startsWith("Buildings::") ||
         name.startsWith("source:")
       ) {
-        object.visible = buildingsVisible;
         return;
       }
       if (name === "Roads") {
@@ -953,6 +1530,9 @@ function City({
     });
   }, [
     group,
+    importedMassing,
+    directSunHoursOn,
+    sunHoursPickedOnly,
     display.showOutlines,
     buildingsVisible,
     roadsVisible,
@@ -960,6 +1540,24 @@ function City({
     landscapeVisible,
     waterVisible,
     railVisible,
+  ]);
+  const pickedMassingKey = (selectedBuildingIds ?? []).join(",");
+  useLayoutEffect(() => {
+    if (!directSunHoursOn || !sunHoursPickedOnly || !buildingsVisible || pickedMassingKey === "") return;
+    const restore = hidePickedMassingForSunHours([group, importedMassing], pickedMassingKey.split(",").map(Number));
+    return () => {
+      restore();
+      invalidate();
+    };
+  }, [
+    group,
+    importedMassing,
+    directSunHoursOn,
+    sunHoursPickedOnly,
+    buildingsVisible,
+    pickedMassingKey,
+    display.showOutlines,
+    invalidate,
   ]);
   useLayoutEffect(() => {
     const trees = group.getObjectByName("Trees");
@@ -971,12 +1569,13 @@ function City({
   );
   useLayoutEffect(() => {
     if (!contours) return;
-    const mat = contours.material as THREE.LineDashedMaterial | undefined;
-    if (mat?.color) {
+    for (const mat of contourLineMaterials(contours)) {
       mat.color.setStyle(getColour("--outline-contour"));
-      invalidate();
+      mat.transparent = windFlowActive;
+      mat.opacity = windFlowActive ? 0.4 : 1;
     }
-  }, [contours, colourTick, invalidate]);
+    invalidate();
+  }, [contours, colourTick, invalidate, windFlowActive]);
   useLayoutEffect(() => {
     if (!contours) return;
     group.add(contours);
@@ -985,9 +1584,37 @@ function City({
     };
   }, [contours, group, invalidate]);
   useLayoutEffect(() => () => disposeObject(group), [group]);
+  const explodeFrame = useMemo(() => siteFrameFromModel(model), [model]);
+  const explodeMeasureKey = [
+    buildingsVisible,
+    roadsVisible,
+    footpathsVisible,
+    landscapeVisible,
+    waterVisible,
+    railVisible,
+    contoursVisible,
+    treesVisible,
+    display.showOutlines,
+    importedMassing ? `${importedMassing.uuid}:${importedMassing.visible}:${importedMassing.children.length}` : "",
+  ].join("|");
   return (
     <>
       <primitive object={group} />
+      <ExplodeLayers
+        city={group}
+        overlayRef={explodeOverlayRef}
+        importedMassing={importedMassing}
+        runtime={explodeRuntime}
+        cityBoundsRef={cityBoundsRef}
+        exploded={exploded}
+        gapM={explodeGapM}
+        measureKey={explodeMeasureKey}
+        terrain={model.terrain ?? null}
+        frame={explodeFrame}
+        snapKey={explodeSnapKey}
+        onCollapsed={onExplodeCollapsed}
+        onTopLift={onExplodeTopLift}
+      />
       <WalkRippleBuildingBinder
         city={group}
         tint={walkRippleTint ?? null}
@@ -1004,7 +1631,7 @@ function City({
         buildingIds={
           buildingsVisible
             ? selectedBuildingIds && selectedBuildingIds.length > 0
-              ? selectedBuildingIds
+              ? sunHoursSelectionVisualIds(sunHoursPickedOnly, selectedBuildingIds)
               : heightEditBuildingId != null
                 ? [heightEditBuildingId]
                 : []
@@ -1019,6 +1646,7 @@ function City({
         enabled={!sectionKnife?.active && !onScenePoint}
         buildingsPickable={pickBuildings && buildingsVisible}
         treesPickable={Boolean(model.layers.trees) && treesVisible}
+        importedMassing={importedMassing}
         onPick={onSceneInspectPick}
         onClear={onClearSceneInspect}
       />
@@ -1096,6 +1724,85 @@ function FrameCameras({
   return null;
 }
 
+export function useExplodeLive(exploded: boolean, restoreId: number) {
+  const [engaged, setEngaged] = useState(false);
+  const [seenRestoreId, setSeenRestoreId] = useState(restoreId);
+  if (restoreId !== seenRestoreId) {
+    setSeenRestoreId(restoreId);
+    if (!exploded && engaged) setEngaged(false);
+  } else if (exploded && !engaged) {
+    setEngaged(true);
+  }
+  const onExplodeCollapsed = useCallback(() => setEngaged(false), []);
+  return { explodeLive: exploded || engaged, onExplodeCollapsed };
+}
+
+function ExplodeHandoff({
+  explodeLive,
+  restoreId,
+  projection,
+  persp,
+  ortho,
+  perspControls,
+  orthoControls,
+  snapId,
+  fittedKeys,
+}: {
+  explodeLive: boolean;
+  restoreId: number;
+  projection: ProjectionMode;
+  persp: THREE.PerspectiveCamera;
+  ortho: THREE.OrthographicCamera;
+  perspControls: RefObject<OrbitControlsImpl | null>;
+  orthoControls: RefObject<OrbitControlsImpl | null>;
+  snapId: number;
+  fittedKeys: {
+    persp: MutableRefObject<string | null>;
+    iso: MutableRefObject<string | null>;
+    plan: MutableRefObject<string | null>;
+  };
+}) {
+  const size = useThree((state) => state.size);
+  const wasLive = useRef(explodeLive);
+  const seenRestoreId = useRef(restoreId);
+  useLayoutEffect(() => {
+    const left = wasLive.current && !explodeLive;
+    wasLive.current = explodeLive;
+    const restored = seenRestoreId.current !== restoreId;
+    seenRestoreId.current = restoreId;
+    if (!left || restored || projection === "iso" || size.width < 2 || size.height < 2) return;
+    const oc = orthoControls.current;
+    if (!oc) return;
+    const key = `${snapId}:${size.width}x${size.height}`;
+    const target = oc.target.clone();
+    const away = ortho.position.clone().sub(target);
+    const reach = Math.max(away.length(), 1);
+    if (projection === "plan") {
+      flushControlInertia(oc);
+      ortho.up.set(0, 0, -1);
+      ortho.position.set(target.x, target.y + reach, target.z + 0.01);
+      ortho.lookAt(target);
+      ortho.up.set(0, 0, -1);
+      ortho.updateProjectionMatrix();
+      oc.update();
+      fittedKeys.plan.current = key;
+      return;
+    }
+    const pc = perspControls.current;
+    if (!pc) return;
+    const visibleHeight = (ortho.top - ortho.bottom) / ortho.zoom;
+    const distance = visibleHeight / 2 / Math.tan(THREE.MathUtils.degToRad(persp.fov / 2));
+    flushControlInertia(pc);
+    persp.position.copy(target).addScaledVector(away.normalize(), distance);
+    pc.target.copy(target);
+    persp.lookAt(target);
+    persp.updateProjectionMatrix();
+    pc.update();
+    fittedKeys.persp.current = key;
+  }, [explodeLive, restoreId, projection, size.width, size.height, snapId, persp, ortho, perspControls, orthoControls, fittedKeys]);
+  return null;
+}
+
 function PerspectiveFit({
   camera,
   controlsRef,
@@ -1112,6 +1819,7 @@ function PerspectiveFit({
   touchedRef,
   fittedKey,
   introEnabled = false,
+  keepPresetPose = false,
 }: {
   camera: THREE.PerspectiveCamera;
   controlsRef: RefObject<OrbitControlsImpl | null>;
@@ -1128,6 +1836,7 @@ function PerspectiveFit({
   touchedRef: RefObject<boolean>;
   fittedKey: MutableRefObject<string | null>;
   introEnabled?: boolean;
+  keepPresetPose?: boolean;
 }) {
   const size = useThree((state) => state.size);
   const gl = useThree((state) => state.gl);
@@ -1179,6 +1888,10 @@ function PerspectiveFit({
       shouldSkipViewportSizeRefit(fittedKey.current, key, fitId, touchedRef.current) &&
       fittedKey.current !== null
     ) {
+      return;
+    }
+    if (shouldKeepPresetPose(keepPresetPose, fittedKey.current, touchedRef.current)) {
+      fittedKey.current = key;
       return;
     }
 
@@ -1248,6 +1961,7 @@ function PerspectiveFit({
   }, [
     applyIntroPose,
     introEnabled,
+    keepPresetPose,
     active,
     camera,
     controlsRef,
@@ -1352,6 +2066,86 @@ function PerspectiveClipPlanes({
   return null;
 }
 
+function placeIsoCamera(
+  camera: THREE.OrthographicCamera,
+  controls: OrbitControlsImpl,
+  fitBounds: Aabb,
+  clipBounds: Aabb,
+  corner: IsoCorner,
+  fit: ExplodeFit,
+) {
+  const centre = frameCentre(fitBounds);
+  const eye = isoEye(centre, corner, eyeDistance(fitBounds));
+  const planes = orthoNearFar(clipBounds, eye, centre);
+  flushControlInertia(controls);
+  camera.up.set(ISO_CAMERA_UP[0], ISO_CAMERA_UP[1], ISO_CAMERA_UP[2]);
+  camera.position.set(eye[0], eye[1], eye[2]);
+  camera.near = planes.near;
+  camera.far = planes.far;
+  camera.zoom = fit.zoom;
+  camera.updateProjectionMatrix();
+  controls.target.set(centre[0], centre[1], centre[2]);
+  camera.lookAt(controls.target);
+  camera.up.set(ISO_CAMERA_UP[0], ISO_CAMERA_UP[1], ISO_CAMERA_UP[2]);
+  if (fit.shiftXPx !== 0 || fit.shiftYPx !== 0) {
+    camera.updateMatrixWorld();
+    const shift = new THREE.Vector3()
+      .setFromMatrixColumn(camera.matrixWorld, 0)
+      .multiplyScalar(-fit.shiftXPx / fit.zoom)
+      .addScaledVector(new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 1), fit.shiftYPx / fit.zoom);
+    camera.position.add(shift);
+    controls.target.add(shift);
+  }
+  holdControlPose(controls as HeldControl<THREE.Vector3>);
+}
+
+function ExplodeFit({
+  camera,
+  controlsRef,
+  runtime,
+  corner,
+  snapId,
+  active,
+  touchedRef,
+  fittedKey,
+  otherOrthoFittedKey,
+  extraBounds,
+}: {
+  camera: THREE.OrthographicCamera;
+  controlsRef: RefObject<OrbitControlsImpl | null>;
+  runtime: RefObject<ExplodeRuntime>;
+  corner: IsoCorner;
+  snapId: number;
+  active: boolean;
+  touchedRef: RefObject<boolean>;
+  fittedKey: MutableRefObject<string | null>;
+  otherOrthoFittedKey: MutableRefObject<string | null>;
+  extraBounds?: Aabb | null;
+}) {
+  const size = useThree((state) => state.size);
+  const gl = useThree((state) => state.gl);
+  const fitted = useRef(0);
+  useFrame(() => {
+    const rt = runtime.current;
+    if (!active || rt.fitToken === fitted.current) return;
+    const controls = controlsRef.current;
+    if (!controls || !rt.bounds || size.width < 2 || size.height < 2) return;
+    fitted.current = rt.fitToken;
+    placeIsoCamera(
+      camera,
+      controls,
+      rt.bounds,
+      extraBounds ? unionAabb(rt.bounds, extraBounds) : rt.bounds,
+      corner,
+      explodeFitIn(gl.domElement, size, rt.bounds, corner, rt.progress),
+    );
+    fittedKey.current = `${snapId}:${size.width}x${size.height}`;
+    otherOrthoFittedKey.current = null;
+    touchedRef.current = false;
+  });
+  return null;
+}
+
 function IsoSnap({
   camera,
   controlsRef,
@@ -1370,6 +2164,7 @@ function IsoSnap({
   lat,
   lon,
   extraBounds,
+  explode,
 }: {
   camera: THREE.OrthographicCamera;
   controlsRef: RefObject<OrbitControlsImpl | null>;
@@ -1388,8 +2183,10 @@ function IsoSnap({
   lat: number;
   lon: number;
   extraBounds?: Aabb | null;
+  explode?: RefObject<ExplodeRuntime>;
 }) {
   const size = useThree((state) => state.size);
+  const gl = useThree((state) => state.gl);
   const place = useCallback(() => {
     if (!active) return;
     const controls = controlsRef.current;
@@ -1419,23 +2216,14 @@ function IsoSnap({
         }),
       );
     }
-    const centre = frameCentre(fitBounds);
-    const direction = isoOffset(corner);
-    const distance = eyeDistance(fitBounds);
-    const eye = isoEye(centre, corner, distance);
-    const clipBounds = extraBounds ? unionAabb(fitBounds, extraBounds) : fitBounds;
-    const planes = orthoNearFar(clipBounds, eye, centre);
-    flushControlInertia(controls);
-    camera.up.set(ISO_CAMERA_UP[0], ISO_CAMERA_UP[1], ISO_CAMERA_UP[2]);
-    camera.position.set(eye[0], eye[1], eye[2]);
-    camera.near = planes.near;
-    camera.far = planes.far;
-    camera.zoom = fitOrthoZoom(fitBounds, direction, size.width, size.height);
-    camera.updateProjectionMatrix();
-    controls.target.set(centre[0], centre[1], centre[2]);
-    camera.lookAt(controls.target);
-    camera.up.set(ISO_CAMERA_UP[0], ISO_CAMERA_UP[1], ISO_CAMERA_UP[2]);
-    holdControlPose(controls as HeldControl<THREE.Vector3>);
+    placeIsoCamera(
+      camera,
+      controls,
+      fitBounds,
+      extraBounds ? unionAabb(fitBounds, extraBounds) : fitBounds,
+      corner,
+      explodeFitIn(gl.domElement, size, fitBounds, corner, explode?.current.progress ?? 0),
+    );
     fittedKey.current = key;
     if (otherOrthoFittedKey) otherOrthoFittedKey.current = null;
     touchedRef.current = false;
@@ -1458,6 +2246,8 @@ function IsoSnap({
     size.height,
     touchedRef,
     extraBounds,
+    explode,
+    gl,
   ]);
   useLayoutEffect(() => {
     place();
@@ -1615,6 +2405,9 @@ function CameraReadout({
     const controls = orthoView ? orthoControls.current : perspControls.current;
     if (!controls) return;
     publishCamera(camera, controls.target, gl.domElement);
+    gl.domElement.dataset.camBearing = studioCameraHeadingDeg(camera).toFixed(4);
+    const dist = camera.position.distanceTo(controls.target);
+    gl.domElement.dataset.camDistance = dist.toFixed(4);
   });
   return null;
 }
@@ -1640,6 +2433,7 @@ function HoldPoseWhenInactive({
 function QaCameraBridgeRegister({
   persp,
   controlsRef,
+  touchedRef,
   active,
   side,
   lift,
@@ -1652,6 +2446,7 @@ function QaCameraBridgeRegister({
 }: {
   persp: THREE.PerspectiveCamera;
   controlsRef: RefObject<OrbitControlsImpl | null>;
+  touchedRef: MutableRefObject<boolean>;
   active: boolean;
   side: number;
   lift: number;
@@ -1701,6 +2496,7 @@ function QaCameraBridgeRegister({
         target[2] + DEFAULT_PERSPECTIVE_OFFSET[2] * distance,
       ] as const;
       flushControlInertia(controls);
+      touchedRef.current = true;
       persp.position.set(eye[0], eye[1], eye[2]);
       persp.near = Math.max(0.1, side / 400);
       persp.far = Math.max(side * 40, heliodonRadius * 28, distance * 2.5);
@@ -1714,6 +2510,7 @@ function QaCameraBridgeRegister({
       setCamera(pose: QaCameraPose) {
         const controls = controlsRef.current;
         if (!controls) return;
+        touchedRef.current = true;
         persp.position.set(pose.eye.x, pose.eye.y, pose.eye.z);
         controls.target.set(pose.target.x, pose.target.y, pose.target.z);
         controls.update();
@@ -1757,6 +2554,7 @@ function QaCameraBridgeRegister({
     size.height,
     size.width,
     solar,
+    touchedRef,
   ]);
   return null;
 }
@@ -1764,20 +2562,68 @@ function QaCameraBridgeRegister({
 function ExportBridge({
   onExportReady,
   solarDiagramOn,
+  landmarkLabelsRef,
+  ortho,
+  orthoControls,
+  siteBounds,
 }: {
   onExportReady: (exporter: SceneExporter | null) => void;
   solarDiagramOn: boolean;
+  landmarkLabelsRef?: RefObject<LandmarkExportLabels | null>;
+  ortho: THREE.OrthographicCamera;
+  orthoControls: RefObject<OrbitControlsImpl | null>;
+  siteBounds: Aabb;
 }) {
   const gl = useThree((state) => state.gl);
   const scene = useThree((state) => state.scene);
   const get = useThree((state) => state.get);
+  const invalidate = useThree((state) => state.invalidate);
   useLayoutEffect(() => {
     onExportReady({
       png: async () => {
         const city = scene.getObjectByName("CityCut");
-        const render = () => captureViewPng(gl, scene, get().camera, exportFrameSize(gl.domElement));
+        const render = () =>
+          captureViewPng(gl, scene, get().camera, exportFrameSize(gl.domElement), landmarkLabelsRef?.current ?? null);
         if (city && solarDiagramOn) return withBuildingExportColours(city, false, render);
         return render();
+      },
+      viewportPng: (options) => captureViewportPng(gl, scene, get().camera, readViewportCapture(gl.domElement), options),
+      sheetFrame: (crop) => {
+        const canvas = gl.domElement;
+        const cssWidth = canvas.clientWidth || canvas.width;
+        const cssHeight = canvas.clientHeight || canvas.height;
+        const free = readViewportCapture(canvas).crop ?? { x: 0, y: 0, width: cssWidth, height: cssHeight };
+        const rect = sheetCropRect({ width: cssWidth, height: cssHeight }, free, crop.aspect);
+        const frame = planSheetFrame(get().camera, cssHeight, rect.width);
+        return frame
+          ? { ...frame, cutM: { width: siteBounds.max[0] - siteBounds.min[0], height: siteBounds.max[2] - siteBounds.min[2] } }
+          : null;
+      },
+      frameWholeSite: (crop) => {
+        const controls = orthoControls.current;
+        if (!controls || get().camera !== ortho) return null;
+        const canvas = gl.domElement;
+        const cssWidth = canvas.clientWidth || canvas.width;
+        const cssHeight = canvas.clientHeight || canvas.height;
+        const free = readViewportCapture(canvas).crop ?? { x: 0, y: 0, width: cssWidth, height: cssHeight };
+        const rect = sheetCropRect({ width: cssWidth, height: cssHeight }, free, crop.aspect);
+        const saved = capturePose(ortho, controls);
+        const framing = wholeSiteFraming(siteBounds, projectionCentre({ width: cssWidth, height: cssHeight }, ortho.view), rect, WIND_SHEET_MARGIN);
+        const dx = framing.targetX - saved.target[0];
+        const dz = framing.targetZ - saved.target[2];
+        const hold = (pose: CameraPose) => {
+          flushControlInertia(controls);
+          applyPose(ortho, controls, pose);
+          holdControlPose(controls as HeldControl<THREE.Vector3>);
+          invalidate();
+        };
+        hold({
+          ...saved,
+          position: [saved.position[0] + dx, saved.position[1], saved.position[2] + dz],
+          target: [framing.targetX, saved.target[1], framing.targetZ],
+          zoom: framing.zoom,
+        });
+        return () => hold(saved);
       },
       shot: () => {
         const frame = exportFrameSize(gl.domElement);
@@ -1785,7 +2631,7 @@ function ExportBridge({
       },
     });
     return () => onExportReady(null);
-  }, [gl, scene, get, onExportReady, solarDiagramOn]);
+  }, [gl, scene, get, invalidate, onExportReady, solarDiagramOn, landmarkLabelsRef, ortho, orthoControls, siteBounds]);
   return null;
 }
 
@@ -1846,6 +2692,57 @@ function CameraMemoryBridge({
   return null;
 }
 
+function CameraRestoreBridge({
+  restore,
+  onRestored,
+  snapId,
+  projection,
+  persp,
+  ortho,
+  perspControls,
+  orthoControls,
+  fittedKeys,
+  touchedRef,
+}: {
+  restore: CameraRestoreRequest | null | undefined;
+  onRestored: ((id: number) => void) | undefined;
+  snapId: number;
+  projection: ProjectionMode;
+  persp: THREE.PerspectiveCamera;
+  ortho: THREE.OrthographicCamera;
+  perspControls: RefObject<OrbitControlsImpl | null>;
+  orthoControls: RefObject<OrbitControlsImpl | null>;
+  fittedKeys: {
+    persp: MutableRefObject<string | null>;
+    iso: MutableRefObject<string | null>;
+    plan: MutableRefObject<string | null>;
+  };
+  touchedRef: MutableRefObject<boolean>;
+}) {
+  const invalidate = useThree((state) => state.invalidate);
+  const handledId = useRef(0);
+  useFrame(() => {
+    if (!restore || !onRestored || handledId.current === restore.id) return;
+    if (restore.projection !== projection) {
+      handledId.current = restore.id;
+      onRestored(restore.id);
+      return;
+    }
+    const fitKey = projection === "perspective" ? fittedKeys.persp : projection === "iso" ? fittedKeys.iso : fittedKeys.plan;
+    if (!fitKey.current?.startsWith(`${snapId}:`)) return;
+    const controls = projection === "perspective" ? perspControls.current : orthoControls.current;
+    if (!controls) return;
+    flushControlInertia(controls);
+    applyPose(projection === "perspective" ? persp : ortho, controls, restore.pose);
+    holdControlPose(controls as HeldControl<THREE.Vector3>);
+    touchedRef.current = true;
+    handledId.current = restore.id;
+    invalidate();
+    onRestored(restore.id);
+  });
+  return null;
+}
+
 export function Cameras({
   side,
   lift,
@@ -1863,10 +2760,15 @@ export function Cameras({
   lat,
   lon,
   cameraMemory,
+  cameraRestore,
+  onCameraRestored,
   introEnabled = false,
   gizmoOrbitLock = false,
   frameWidthM,
   frameHeightM,
+  landmarkLabelsRef,
+  explode,
+  explodeLive = false,
 }: {
   side: number;
   lift: number;
@@ -1884,11 +2786,25 @@ export function Cameras({
   lat: number;
   lon: number;
   cameraMemory?: CameraMemoryRef;
+  cameraRestore?: CameraRestoreRequest | null;
+  onCameraRestored?: (id: number) => void;
   introEnabled?: boolean;
   gizmoOrbitLock?: boolean;
   frameWidthM: number;
   frameHeightM: number;
+  landmarkLabelsRef?: RefObject<LandmarkExportLabels | null>;
+  explode?: RefObject<ExplodeRuntime>;
+  explodeLive?: boolean;
 }) {
+  const orthoBoundsRef = useMemo<RefObject<Aabb | null>>(
+    () => ({
+      get current() {
+        const rt = explode?.current;
+        return rt && rt.progress > 0 && rt.bounds ? rt.bounds : boundsRef.current;
+      },
+    }),
+    [explode, boundsRef],
+  );
   const perspRef = useRef<THREE.PerspectiveCamera>(null);
   const orthoRef = useRef<THREE.OrthographicCamera>(null);
   const perspControls = useRef<OrbitControlsImpl | null>(null);
@@ -1910,6 +2826,10 @@ export function Cameras({
   const iso = projection === "iso";
   const plan = projection === "plan";
   const orthoView = iso || plan;
+  const cutBounds = useMemo(
+    () => sitePlanBounds(side, groundY, siteTopY, frameWidthM, frameHeightM),
+    [side, groundY, siteTopY, frameWidthM, frameHeightM],
+  );
   const heliodonClipBounds = useMemo(
     () =>
       orthoView && solar.showPath
@@ -1945,6 +2865,17 @@ export function Cameras({
         <>
           <BindCamera camera={orthoView ? ortho : persp} />
           <FrameCameras persp={persp} ortho={ortho} />
+          <ExplodeHandoff
+            explodeLive={explodeLive}
+            restoreId={cameraRestore?.id ?? 0}
+            projection={projection}
+            persp={persp}
+            ortho={ortho}
+            perspControls={perspControls}
+            orthoControls={orthoControls}
+            snapId={snapId}
+            fittedKeys={fittedKeys}
+          />
           <PerspectiveFit
             camera={persp}
             controlsRef={perspControls}
@@ -1957,10 +2888,11 @@ export function Cameras({
             lat={lat}
             lon={lon}
             fitId={snapId}
-            active={!orthoView && !qaMode}
+            active={!orthoView}
             touchedRef={touchedRef}
             fittedKey={perspFitKey}
             introEnabled={introEnabled}
+            keepPresetPose={qaMode}
           />
           <PerspectiveClipPlanes
             camera={persp}
@@ -1972,6 +2904,7 @@ export function Cameras({
           <QaCameraBridgeRegister
             persp={persp}
             controlsRef={perspControls}
+            touchedRef={touchedRef}
             active={!orthoView}
             side={side}
             lift={lift}
@@ -1987,7 +2920,7 @@ export function Cameras({
           <IsoSnap
             camera={ortho}
             controlsRef={orthoControls}
-            boundsRef={boundsRef}
+            boundsRef={orthoBoundsRef}
             corner={corner}
             snapId={snapId}
             active={iso}
@@ -2002,7 +2935,22 @@ export function Cameras({
             lat={lat}
             lon={lon}
             extraBounds={heliodonClipBounds}
+            explode={explode}
           />
+          {explode ? (
+            <ExplodeFit
+              camera={ortho}
+              controlsRef={orthoControls}
+              runtime={explode}
+              corner={corner}
+              snapId={snapId}
+              active={iso}
+              touchedRef={touchedRef}
+              fittedKey={isoFitKey}
+              otherOrthoFittedKey={planFitKey}
+              extraBounds={heliodonClipBounds}
+            />
+          ) : null}
           <PlanSnap
             camera={ortho}
             controlsRef={orthoControls}
@@ -2019,7 +2967,7 @@ export function Cameras({
             otherOrthoFittedKey={isoFitKey}
             extraBounds={heliodonClipBounds}
           />
-          <OrthoClip camera={ortho} controlsRef={orthoControls} boundsRef={boundsRef}
+          <OrthoClip camera={ortho} controlsRef={orthoControls} boundsRef={orthoBoundsRef}
             active={orthoView}
             extraBounds={heliodonClipBounds}
           />
@@ -2074,6 +3022,18 @@ export function Cameras({
             fittedKeys={fittedKeys}
             touchedRef={touchedRef}
           />
+          <CameraRestoreBridge
+            restore={cameraRestore}
+            onRestored={onCameraRestored}
+            snapId={snapId}
+            projection={projection}
+            persp={persp}
+            ortho={ortho}
+            perspControls={perspControls}
+            orthoControls={orthoControls}
+            fittedKeys={fittedKeys}
+            touchedRef={touchedRef}
+          />
           <CameraReadout
             projection={projection}
             persp={persp}
@@ -2081,7 +3041,14 @@ export function Cameras({
             perspControls={perspControls}
             orthoControls={orthoControls}
           />
-          <ExportBridge onExportReady={onExportReady} solarDiagramOn={solarDiagramOn} />
+          <ExportBridge
+            onExportReady={onExportReady}
+            solarDiagramOn={solarDiagramOn}
+            landmarkLabelsRef={landmarkLabelsRef}
+            ortho={ortho}
+            orthoControls={orthoControls}
+            siteBounds={cutBounds}
+          />
         </>
       )}
     </>
@@ -2090,14 +3057,18 @@ export function Cameras({
 
 function WindLayer({
   model,
-  table,
+  siteWind,
   period,
+  designWind,
+  sector,
   enabled,
   animateStreaks,
 }: {
   model: CityModel;
-  table: WindRoseTable | null;
+  siteWind: SiteWindSelection | null;
   period: WindPeriodId;
+  designWind: DesignWind | null;
+  sector: number | null;
   enabled: boolean;
   animateStreaks: boolean;
 }) {
@@ -2108,7 +3079,8 @@ function WindLayer({
     return () => document.removeEventListener("visibilitychange", onVis);
   }, []);
   if (!enabled) return null;
-  const stats = table ? analyzeWindPeriod(table, period) : null;
+  const seasonStats = siteWind ? analyzeSiteWind(siteWind, period) : null;
+  const stats = seasonStats ? headingPeriodStats(seasonStats, designWind, sector) : null;
   return (
     <GroundWindFlow model={model} stats={stats} animate={visible && animateStreaks} />
   );
@@ -2116,18 +3088,26 @@ function WindLayer({
 
 export function Scene3D({
   model,
+  windModel,
+  windPlanOutlineModel,
   uniformBuildings,
   colourBySource,
   showManualEdits,
-  projection,
+  projection: chosenProjection,
   corner,
   freeRotate,
   snapId,
   solar,
   windEnabled,
-  windTable,
+  siteWind,
   windPeriod,
+  windDesignWind = null,
+  windSector = null,
   windAnimateStreaks,
+  windDiagramStreams = null,
+  windSpreadRadiusM = null,
+  sunDomeRadiusM,
+  windPlan = null,
   onExportReady,
   onSceneInspectPick,
   onClearSceneInspect,
@@ -2136,6 +3116,8 @@ export function Scene3D({
   heightEditBuildingId,
   selectedBuildingIds,
   cameraMemory,
+  cameraRestore,
+  onCameraRestored,
   display,
   importedMassing = null,
   walkLayer = null,
@@ -2146,10 +3128,24 @@ export function Scene3D({
   onScenePoint = null,
   sectionKnife = null,
   onSectionKnifePoseChange = undefined,
-  onCompassNeedle = undefined,
+  onCompassHeading = undefined,
   quality = "high",
+  sunHoursGroundGrid = null,
+  sunHoursDirectOverlay = null,
+  sunHoursScaleMax = 0,
+  solarAnalysisActive = false,
+  introPlayed,
+  active = true,
+  landmarkSources = NO_LANDMARKS,
+  landmarkLabelsOn = false,
+  onLandmarkScreens,
+  exploded = false,
+  explodeGapM = 0,
+  inspectAnchorLayer = "ground",
 }: {
   model: CityModel;
+  windModel?: CityModel;
+  windPlanOutlineModel?: CityModel;
   uniformBuildings: boolean;
   colourBySource: boolean;
   showManualEdits: boolean;
@@ -2159,9 +3155,15 @@ export function Scene3D({
   snapId: number;
   solar: SolarViewSettings;
   windEnabled: boolean;
-  windTable: WindRoseTable | null;
+  siteWind: SiteWindSelection | null;
   windPeriod: WindPeriodId;
+  windDesignWind?: DesignWind | null;
+  windSector?: number | null;
   windAnimateStreaks: boolean;
+  windDiagramStreams?: readonly PrevailingStream[] | null;
+  windSpreadRadiusM?: number | null;
+  sunDomeRadiusM?: number;
+  windPlan?: WindPlanState | null;
   onExportReady: (exporter: SceneExporter | null) => void;
   onSceneInspectPick: (selection: SceneSelection) => void;
   onClearSceneInspect?: () => void;
@@ -2170,6 +3172,8 @@ export function Scene3D({
   heightEditBuildingId: number | null;
   selectedBuildingIds?: readonly number[];
   cameraMemory?: CameraMemoryRef;
+  cameraRestore?: CameraRestoreRequest | null;
+  onCameraRestored?: (id: number) => void;
   display: View3dDisplaySettings;
   importedMassing?: THREE.Object3D | null;
   walkLayer?: THREE.Object3D | null;
@@ -2180,10 +3184,54 @@ export function Scene3D({
   onScenePoint?: ((east: number, north: number, up: number) => void) | null;
   sectionKnife?: SectionKnifeToolState | null;
   onSectionKnifePoseChange?: (pose: SectionKnifePose) => void;
-  onCompassNeedle?: (deg: number) => void;
+  onCompassHeading?: (deg: number) => void;
   quality?: RenderQuality;
+  sunHoursGroundGrid?: SunHoursGroundGrid | null;
+  sunHoursDirectOverlay?: SunHoursDirectOverlay | null;
+  sunHoursScaleMax?: number;
+  solarAnalysisActive?: boolean;
+  introPlayed?: { current: string | null };
+  active?: boolean;
+  landmarkSources?: readonly LandmarkLabelSource[];
+  landmarkLabelsOn?: boolean;
+  onLandmarkScreens?: (state: LandmarkScreenState | null) => void;
+  exploded?: boolean;
+  explodeGapM?: number;
+  inspectAnchorLayer?: ExplodeLayerId;
 }) {
+  const explodeRuntime = useMemo<RefObject<ExplodeRuntime>>(() => ({ current: createExplodeRuntime() }), []);
+  const explodeOverlayRef = useRef<THREE.Group | null>(null);
+  const explodeLabelsRef = useRef<Partial<Record<ExplodeLayerId, HTMLElement | null>>>({});
+  const explodeLeadersRef = useRef<Partial<Record<ExplodeLayerId, SVGLineElement | null>>>({});
+  const { explodeLive, onExplodeCollapsed } = useExplodeLive(exploded, cameraRestore?.id ?? 0);
+  const projection: ProjectionMode = explodeLive ? "iso" : chosenProjection;
+  const [explodeTopLiftM, setExplodeTopLiftM] = useState(0);
+  const pickLifts = useRef(new WeakMap<SceneInspectWorld, number>());
+  const onInspectPick = useCallback(
+    (selection: SceneSelection) => {
+      pickLifts.current.set(selection.world, explodeRuntime.current.offsets[explodeLayerOfSelectionKind(selection.kind)]);
+      onSceneInspectPick(selection);
+    },
+    [explodeRuntime, onSceneInspectPick],
+  );
+  const inspectLift = useCallback(
+    () =>
+      inspectAnchor
+        ? explodeRuntime.current.offsets[inspectAnchorLayer] - (pickLifts.current.get(inspectAnchor) ?? 0)
+        : 0,
+    [explodeRuntime, inspectAnchor, inspectAnchorLayer],
+  );
+  const landmarkExportRef = useRef<LandmarkExportLabels | null>(null);
+  const sceneCutKey = modelCutSiteId(model.center, model.sideM);
+  const introSkip = useMemo(
+    () => introAlreadyPlayedForCut(introPlayed?.current ?? null, sceneCutKey),
+    [introPlayed, sceneCutKey],
+  );
   const boundsRef = useRef<Aabb | null>(null);
+  const windPlanStore = useMemo(() => createWindPlanTransformStore(), []);
+  const windPlanOn = windPlan?.active === true;
+  const windDiagramOn = windDiagramStreams != null && windDiagramStreams.length > 0;
+  const windLayers = windSceneLayers({ planMapOn: windPlanOn, flowOn: windEnabled, streamsOn: windDiagramOn });
   const onBounds = useCallback((bounds: Aabb) => {
     boundsRef.current = bounds;
     if (typeof document === "undefined") return;
@@ -2214,6 +3262,13 @@ export function Scene3D({
   );
   const solarNeutralFill = useMemo(() => getColour("--building-solar-neutral"), [colourTick]);
   const sunSample = useMelbourneSunSample(model.center.lat, model.center.lon, solar);
+  const sunHoursPickedOnly = Boolean(solar.sunHours && solar.sunHoursPickedOnly);
+  const sunHoursPickedKey = (selectedBuildingIds ?? []).join(",");
+  const sunHoursFaces = useMemo(() => {
+    if (!sunHoursDirectOverlay || !sunHoursPickedOnly) return sunHoursDirectOverlay;
+    const pickedIds = sunHoursPickedKey === "" ? [] : sunHoursPickedKey.split(",").map(Number);
+    return sunHoursOverlayForBuildings(sunHoursDirectOverlay, pickedIds);
+  }, [sunHoursDirectOverlay, sunHoursPickedOnly, sunHoursPickedKey]);
   const [glEpoch, setGlEpoch] = useState(0);
   const [glContextLost, setGlContextLost] = useState(false);
   const onGlContextLost = useCallback(() => setGlContextLost(true), []);
@@ -2225,16 +3280,14 @@ export function Scene3D({
     setGlContextLost(false);
     setGlEpoch((value) => value + 1);
   }, []);
-  const viewportLight = sunStudyViewportLighting({
-    showPath: solar.showPath && !display.primaryView,
+  const { fillKeyLight, fillAmbient, fillHemi, sunIntensity, noToneMapping } = studioSceneLighting({
+    primaryView: display.primaryView,
+    showPath: solar.showPath,
     castShadows: solar.castShadows,
+    solarAnalysisActive,
+    sunAboveHorizon: sunSample.aboveHorizon,
   });
-  const primaryLight = primaryViewportLighting(display.primaryView);
-  const fillKeyLight = display.primaryView ? primaryLight.fillKeyLight : viewportLight.fillKeyLight;
-  const fillAmbient = display.primaryView ? primaryLight.fillAmbient : viewportLight.fillAmbient;
-  const fillHemi = display.primaryView ? primaryLight.fillHemi : viewportLight.fillHemi;
-  const { sunIntensity, noToneMapping: sunStudyNoToneMapping } = viewportLight;
-  const noToneMapping = sunStudyNoToneMapping || display.primaryView;
+  const solarShadowsActive = solarAnalysisActive && solar.castShadows && sunSample.aboveHorizon;
   const heliodonRadius = heliodonRadiusM(model.sideM, solar.radiusFactor);
   const shadowTargetY = groundY;
   const siteTopY = useMemo(() => {
@@ -2276,10 +3329,11 @@ export function Scene3D({
         <ViewInset />
         <WebGlContextWatch onContextLost={onGlContextLost} onContextRestored={onGlContextRestored} />
         <SceneDemandBootstrap />
-        <SceneFrameloopGate />
+        <SceneFrameloopGate introSkip={introSkip} />
+        <ScenePause active={active} />
         <AdaptiveViewportDpr />
         <SceneContinuousBridge
-          windAnimate={windEnabled && windAnimateStreaks}
+          windAnimate={(windLayers.groundFlow || windLayers.streams) && windAnimateStreaks}
           walkRippleActive={walkRipplePlaying}
         />
         {qaModeFromSearch(typeof window === "undefined" ? "" : window.location.search) ? <QaPerfSampler /> : null}
@@ -2310,20 +3364,31 @@ export function Scene3D({
         enabled={solar.castShadows}
         intensity={sunIntensity}
         targetY={shadowTargetY}
-        topY={siteTopY}
+        topY={siteTopY + explodeTopLiftM}
       />
-      {SUN_HOURS_HEATMAP_ENABLED && solar.sunHours && (
-        <SunHoursLayer model={model} year={solar.year} month={solar.month} day={solar.day} groundY={groundY} />
-      )}
+      {sunHoursGroundShown(Boolean(solar.sunHours), sunHoursPickedOnly) && sunHoursGroundGrid ? (
+        <SunHoursLayer
+          grid={sunHoursGroundGrid}
+          overlay={null}
+          scaleMaxHours={sunHoursScaleMax || sunHoursGroundGrid.maxSunHours}
+          model={model}
+          planView={projection === "plan"}
+          groundOnly
+        />
+      ) : null}
       <City
         model={model}
         uniformBuildings={uniformBuildings}
         colourBySource={colourBySource}
         highlightManual={showManualEdits && model.manualHeightEditCount !== undefined && model.manualHeightEditCount > 0}
         solarDiagramOn={solar.showPath}
+        directSunHoursOn={Boolean(solar.sunHours && sunHoursDirectOverlay)}
+        sunHoursPickedOnly={sunHoursPickedOnly}
         solarNeutralFill={solarNeutralFill}
+        solarGreyscale={monoViewActive(display)}
+        solarShadowsActive={solarShadowsActive}
         onBounds={onBounds}
-        onSceneInspectPick={onSceneInspectPick}
+        onSceneInspectPick={onInspectPick}
         onClearSceneInspect={onClearSceneInspect}
         pickBuildings={model.layers.buildings && !onScenePoint}
         onScenePoint={onScenePoint}
@@ -2336,8 +3401,32 @@ export function Scene3D({
         projection={projection}
         walkRippleTint={walkRippleTint}
         walkRippleArrivals={walkRippleArrivals}
+        windFlowActive={windEnabled}
+        introSkip={introSkip}
+        introPlayed={introPlayed}
+        importedMassing={importedMassing}
+        exploded={exploded}
+        explodeGapM={explodeGapM}
+        explodeRuntime={explodeRuntime}
+        explodeOverlayRef={explodeOverlayRef}
+        cityBoundsRef={boundsRef}
+        onExplodeCollapsed={onExplodeCollapsed}
+        explodeSnapKey={cameraRestore?.id ?? 0}
+        onExplodeTopLift={setExplodeTopLiftM}
       />
-      {importedMassing ? <primitive object={importedMassing} /> : null}
+      <group ref={explodeOverlayRef}>
+        {solar.sunHours && sunHoursGroundGrid && sunHoursFaces ? (
+          <SunHoursLayer
+            grid={sunHoursGroundGrid}
+            overlay={sunHoursFaces}
+            scaleMaxHours={sunHoursScaleMax || sunHoursGroundGrid.maxSunHours}
+            model={model}
+            planView={projection === "plan"}
+            surfacesOnly
+          />
+        ) : null}
+        {importedMassing ? <primitive object={importedMassing} /> : null}
+      </group>
       {walkLayer ? <primitive object={walkLayer} /> : null}
       {walkRippleLayer ? <primitive object={walkRippleLayer} /> : null}
       {onScenePoint ? <ScenePointLayer onScenePoint={onScenePoint} /> : null}
@@ -2348,20 +3437,36 @@ export function Scene3D({
         groundY={groundY}
         terrain={model.terrain ?? undefined}
         settings={solar}
+        radiusM={sunDomeRadiusM}
       />
       <InspectHudProjector
         world={inspectAnchor}
         enabled={inspectAnchor != null}
         onScreen={onInspectHudScreen}
+        lift={inspectLift}
       />
-      {onCompassNeedle ? <StudioCompassTracker onNeedle={onCompassNeedle} /> : null}
+      {onLandmarkScreens ? (
+        <LandmarkLabelProjector
+          sources={landmarkSources}
+          enabled={landmarkLabelsOn && active && !explodeLive}
+          onScreens={onLandmarkScreens}
+          exportRef={landmarkExportRef}
+        />
+      ) : null}
+      {onCompassHeading ? <StudioCompassTracker onHeading={onCompassHeading} /> : null}
       <WindLayer
-        model={model}
-        table={windTable}
+        model={windModel ?? model}
+        siteWind={siteWind}
         period={windPeriod}
-        enabled={windEnabled}
+        designWind={windDesignWind}
+        sector={windSector}
+        enabled={windLayers.groundFlow}
         animateStreaks={windAnimateStreaks}
       />
+      {windLayers.streams ? (
+        <WindDiagramStreams model={windModel ?? model} streams={windDiagramStreams ?? []} spreadRadiusM={windSpreadRadiusM} animate={active && windAnimateStreaks} />
+      ) : null}
+      {windLayers.planOverlay ? <WindPlanProjector store={windPlanStore} /> : null}
       <Cameras
         side={model.sideM}
         frameWidthM={model.widthM ?? model.sideM}
@@ -2381,10 +3486,53 @@ export function Scene3D({
         lat={model.center.lat}
         lon={model.center.lon}
         cameraMemory={cameraMemory}
-        introEnabled
+        cameraRestore={cameraRestore}
+        onCameraRestored={onCameraRestored}
+        introEnabled={!introSkip}
         gizmoOrbitLock={sectionKnifeGizmoInteraction.orbitLock}
+        landmarkLabelsRef={landmarkExportRef}
+        explode={explodeRuntime}
+        explodeLive={explodeLive}
       />
+      {explodeLive ? (
+        <ExplodeLabelProjector
+          runtime={explodeRuntime}
+          exploding={exploded}
+          shown={active}
+          frame={cutFrame}
+          labelsRef={explodeLabelsRef}
+          leadersRef={explodeLeadersRef}
+        />
+      ) : null}
       </Canvas>
+      {explodeLive && active ? (
+        <div className="explode-label-layer">
+          <svg className="explode-leader-layer" aria-hidden="true">
+            {EXPLODE_LAYERS.map((layer) => (
+              <line
+                key={layer}
+                className="explode-leader"
+                ref={(element) => {
+                  explodeLeadersRef.current[layer] = element;
+                }}
+              />
+            ))}
+          </svg>
+          {EXPLODE_LAYERS.map((layer) => (
+            <div
+              key={layer}
+              className="explode-layer-label"
+              data-explode-layer={layer}
+              ref={(element) => {
+                explodeLabelsRef.current[layer] = element;
+              }}
+            >
+              {EXPLODE_LAYER_LABELS[layer]}
+            </div>
+          ))}
+        </div>
+      ) : null}
+      {windLayers.planOverlay && windPlan ? <WindPlanOverlay model={windPlanOutlineModel ?? model} plan={windPlan} store={windPlanStore} /> : null}
     </div>
   );
 }

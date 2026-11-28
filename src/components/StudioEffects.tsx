@@ -1,13 +1,19 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import { EffectComposer, N8AO, SMAA, ToneMapping } from "@react-three/postprocessing";
-import { ToneMappingMode } from "postprocessing";
+import { ToneMappingMode, type EffectComposer as EffectComposerImpl } from "postprocessing";
 import * as THREE from "three";
 import { getColour } from "../lib/colours";
 import { markScreenOnly } from "../lib/screenOnly";
 import { getPlinthShadowTexture, plinthShadowTextureCacheKey } from "../lib/plinthContactShadow";
 import { plinthShadowExtents, type SiteFrame } from "../lib/siteFrame";
 import { qaModeFromSearch } from "../lib/qaCameraBridge";
+import {
+  createDepthRestore,
+  postOverlayUsers,
+  renderPostOverlay,
+  setPostOverlayDeferred,
+} from "../lib/postOverlay";
 import {
   ambientOcclusionActive,
   studioAoActive,
@@ -69,6 +75,23 @@ export function useCameraMoving(): { readonly current: boolean } {
   return moving;
 }
 
+type ComposerDepth = { readonly stableDepthTexture?: THREE.Texture | null };
+
+function usePostOverlayPass(composer: RefObject<EffectComposerImpl | null>) {
+  const camera = useThree((state) => state.camera);
+  const restore = useMemo(createDepthRestore, []);
+  const depth = useRef<THREE.Texture | null>(null);
+  useEffect(() => () => restore.dispose(), [restore]);
+  useEffect(() => () => setPostOverlayDeferred(camera, false), [camera]);
+  useFrame(({ scene, camera: live }) => {
+    depth.current = postOverlayUsers(scene) > 0 ? (composer.current as ComposerDepth | null)?.stableDepthTexture ?? null : null;
+    setPostOverlayDeferred(live, depth.current != null);
+  });
+  useFrame(({ gl, scene, camera: live }) => {
+    if (depth.current) renderPostOverlay(gl, scene, live, restore, depth.current);
+  }, 2);
+}
+
 function StudioComposer({
   quality,
   noToneMapping,
@@ -81,6 +104,8 @@ function StudioComposer({
   primaryView: boolean;
 }) {
   const aoRef = useRef<AoPass | null>(null);
+  const composerRef = useRef<EffectComposerImpl | null>(null);
+  usePostOverlayPass(composerRef);
   const moving = useCameraMoving();
   const qualityRef = useRef(quality);
   qualityRef.current = quality;
@@ -100,7 +125,7 @@ function StudioComposer({
   });
   const ao = studioN8AoParams(sideM, primaryView);
   return (
-    <EffectComposer multisampling={0} renderPriority={1}>
+    <EffectComposer ref={composerRef} multisampling={0} renderPriority={1}>
       {studioAoActive(quality) ? (
         <N8AO
           ref={setAoPass}

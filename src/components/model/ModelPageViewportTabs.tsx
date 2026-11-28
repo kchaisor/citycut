@@ -1,4 +1,8 @@
-import { BuildingHeightPopover } from "../BuildingHeightPopover";
+import { useEffect, useState } from "react";
+import { attachShiftPickPass } from "../../lib/shiftPickPass";
+import { BuildingHeightPopover, ImportedBuildingPopover } from "../BuildingHeightPopover";
+import { LoadingHudPill } from "../LoadingHudPill";
+import { LandmarkLabelLayer } from "../LandmarkLabelLayer";
 
 import { TreeInspectHud, TerrainInspectHud } from "../SceneInspectHud";import { DrawingPlan } from "../DrawingPlan";
 
@@ -6,27 +10,31 @@ import { DrawingExplodedAxo } from "../DrawingExplodedAxo";
 import { DrawingIsometric } from "../DrawingIsometric";
 import { SatellitePane } from "../SatellitePane";import { Scene3D } from "../Scene3D";
 
-import { StudioCompass } from "../StudioCompass";
-import { studioCompassVisible } from "../../lib/studioCompass";
 import { sceneSelectionBuildingId } from "../../lib/sceneInspectPick";
+import { explodeLayerOfSelectionKind } from "../../lib/modelExplode";
 import { qaHideHeightPopoverFromSearch } from "../../lib/qaCameraBridge";
 import { sunStudyMutedOn, toggleSelection } from "../../lib/sunStudyPlan";
 import { SceneBoundary } from "../SceneBoundary";
-import { WindRoseOverlay } from "../WindRoseOverlay";import { ViewLegend } from "../ViewPanel";
+import { solarSettingsForActiveAnalysis, solarStudyViewActive, windDiagramActive, windFlowActive } from "../../lib/solarStudyView";
 
-import { SectionKnifeElevationPanel } from "../SectionKnifeElevationPanel";import { WalkRippleLegend } from "../WalkRipplePanel";
 
 
 import { shouldShowIntroBridgePill } from "./shouldShowIntroBridgePill";
 
 export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").ModelPageViewModel }) {
   const {
+    analyses,
     axoSettings,
     cameraMemory,
+    cameraRestore,
+    onCameraRestored,
+    introPlayed,
     colourByUse,
-    compassNeedleDeg,
     displayModel,
+    windModel,
+    windPlanOutlineModel,
     drawing,
+    drawingLandmarkSources,
     drawingModel,
     effectiveSunStudyCasters,
     explodedViewport,
@@ -39,12 +47,15 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
     inspectAnchor,
     inspectHudPosition,
     isoDrawingViewport,
+    landmarkByBuilding,
+    landmarkLabelsOn,
+    landmarkScreens,
+    landmarkSources,
     lineStyles,
     massing,
     model,
     onExportReady,
     onScale,
-    onSectionKnifePoseChange,
     overrideResult,
     persistHidden,
     showAllInCut,
@@ -52,19 +63,21 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
     planShadowInput,
     pickedBuilding,
     pickedTree,
+    pickedImported,
+    selectImportedBuilding,
+    clearImportedSelection,
     planViewport,
     renderQuality,
     resetBuildingHeight,
-    rippleAnalysisOpen,
     saveBuildingHeight,
     sceneSelection,
-    sectionKnifeTool,
     selectForHide,
     setAxoLayerLift,
-    setCompassNeedleDeg,
+    setCompassHeadingDeg,
     setExplodedViewport,
     setHideSelection,
     setInspectHudScreen,
+    setLandmarkScreens,
     setIsoDrawingViewport,
     setPlanViewport,
     setSceneSelection,
@@ -74,39 +87,57 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
     showSource,
     snapId,
     solar,
+    sunHoursGround,
+    sunHoursPlan,
     sunStudyDate,
     sunStudySelected,
     tab,
     view,
     view3dDisplay,
-    viewAnalysisOpen,
     walk,
     walkDrawing,
-    walkRipple,
-    walkRippleToast,
     windMotion,
+    windStreams,
+    windStreaksOn,
+    windSpreadRadiusM,
+    sunDome,
     windSettings,
-    windTable,
+    designWind,
+    windPlan,
+    siteWind,
   } = vm;
+  const viewSolar = solarSettingsForActiveAnalysis(solar, analyses);
+  const sunHoursOnPlan = Boolean(viewSolar.sunHours) && drawing === "site";
+  const [keep3d, setKeep3d] = useState(tab === "3d");
+  useEffect(() => {
+    if (tab === "3d") setKeep3d(true);
+  }, [tab]);
+  useEffect(() => attachShiftPickPass(), []);
+
+  const importedPopover = pickedImported ? (
+    <ImportedBuildingPopover
+      building={pickedImported.building}
+      fileName={pickedImported.massing.name}
+      onClose={clearImportedSelection}
+      floatingScreen={inspectHudPosition}
+    />
+  ) : null;
 
   return (
     <>
-        {tab === "3d" && (
-          <div className="fill">
+        {(tab === "3d" || keep3d) && (
+          <div className={tab === "3d" ? "fill" : "fill is-parked"} aria-hidden={tab === "3d" ? undefined : true}>
             {shouldShowIntroBridgePill() && (() => {
               const samples = typeof window !== "undefined" ? window.__citycutProgressSamples : undefined;
               const currentPct = Array.isArray(samples) && samples.length > 0 ? (samples[samples.length - 1] ?? 0) : 0;
               return (
-                <div className="loading-card loading-hud-pill is-model-bridge hud-card" aria-hidden="true" data-progress-pct={currentPct}>
-                  <div className="loading-hud-row">
-                    <span className="loading-pulse-dot" />
-                    <strong>Building 3D site cut · LiDAR + Vicmap…</strong>
-                    <div className="loading-prog-track">
-                      <div className="loading-prog-fill" style={{ width: `${currentPct}%` }} />
-                    </div>
-                    <span className="loading-prog-pct">{currentPct}%</span>
-                  </div>
-                </div>
+                <LoadingHudPill
+                  className="loading-card is-model-bridge"
+                  label="Building 3D site cut · LiDAR + Vicmap…"
+                  progress={currentPct / 100}
+                  aria-hidden="true"
+                  data-progress-pct={currentPct}
+                />
               );
             })()}
             {model.heightSourceLoadWarnings?.map((line) => (
@@ -117,6 +148,8 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
             <SceneBoundary>
               <Scene3D
                 model={displayModel}
+                windModel={windModel}
+                windPlanOutlineModel={windPlanOutlineModel}
                 uniformBuildings={!colourByUse && !showSource}
                 colourBySource={showSource}
                 showManualEdits={showManualEdits}
@@ -124,11 +157,17 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
                 corner={view.corner}
                 freeRotate={view.freeRotate}
                 snapId={snapId}
-                solar={solar}
-                windEnabled={windSettings.enabled}
-                windTable={windTable}
+                solar={viewSolar}
+                windEnabled={windFlowActive(windSettings.enabled, analyses)}
+                siteWind={siteWind}
                 windPeriod={windSettings.period}
+                windDesignWind={designWind}
+                windSector={windPlan.sector}
                 windAnimateStreaks={windMotion.animateStreaks}
+                windDiagramStreams={windDiagramActive(windStreaksOn, analyses) ? windStreams : null}
+                windSpreadRadiusM={windSpreadRadiusM}
+                sunDomeRadiusM={sunDome.radiusM}
+                windPlan={windPlan.active ? windPlan : null}
                 onExportReady={onExportReady}
                 onSceneInspectPick={(selection) => {
                   setSceneSelection(selection);
@@ -146,7 +185,7 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
                 }}
                 inspectAnchor={inspectAnchor}
                 onInspectHudScreen={setInspectHudScreen}
-                onCompassNeedle={setCompassNeedleDeg}
+                onCompassHeading={setCompassHeadingDeg}
                 heightEditBuildingId={sceneSelectionBuildingId(sceneSelection)}
                 selectedBuildingIds={
                   hideSelection.length > 0
@@ -156,49 +195,48 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
                       : []
                 }
                 cameraMemory={cameraMemory}
+                cameraRestore={cameraRestore}
+                onCameraRestored={onCameraRestored}
+                introPlayed={introPlayed}
+                active={tab === "3d"}
                 display={view3dDisplay}
                 importedMassing={massing.group}
                 walkLayer={walk.layer.root}
-                walkRippleLayer={rippleAnalysisOpen ? walkRipple.layer.root : null}
-                walkRippleTint={rippleAnalysisOpen ? walkRipple.tint : null}
-                walkRippleArrivals={rippleAnalysisOpen ? walkRipple.buildingArrivals : null}
-                walkRipplePlaying={rippleAnalysisOpen && walkRipple.ripplePlaying}
-                onScenePoint={
-                  walkRipple.placing
-                    ? (east, north) => walkRipple.placePoint(east, north)
-                    : walkDrawing
-                      ? walk.addPoint
-                      : massing.onScenePoint
-                }
-                sectionKnife={sectionKnifeTool}
-                onSectionKnifePoseChange={onSectionKnifePoseChange}
+                onScenePoint={walkDrawing ? walk.addPoint : massing.onScenePoint}
                 quality={renderQuality}
+                sunHoursGroundGrid={viewSolar.sunHours ? sunHoursGround.grid : null}
+                sunHoursDirectOverlay={viewSolar.sunHours ? sunHoursGround.overlay : null}
+                sunHoursScaleMax={viewSolar.sunHours ? sunHoursGround.scaleMaxHours : 0}
+                solarAnalysisActive={solarStudyViewActive(analyses)}
+                landmarkSources={landmarkSources}
+                landmarkLabelsOn={landmarkLabelsOn}
+                onLandmarkScreens={setLandmarkScreens}
+                exploded={vm.exploded}
+                explodeGapM={vm.explodeGap.gapM}
+                inspectAnchorLayer={explodeLayerOfSelectionKind(sceneSelection?.kind)}
               />
-              {tab === "3d" && sectionKnifeTool.active && (
-                <SectionKnifeElevationPanel model={displayModel} tool={sectionKnifeTool} />
-              )}
-              {viewAnalysisOpen && walk.clickCount > 0 && <ViewLegend />}
-              {rippleAnalysisOpen && walkRipple.buildingArrivals && <WalkRippleLegend />}
-              {walkRippleToast ? (
-                <p className="walk-ripple-toast" role="status">
-                  {walkRippleToast}
-                </p>
-              ) : null}
-              {tab === "3d" && studioCompassVisible(view.projection, view.freeRotate) && (
-                <StudioCompass needleDeg={compassNeedleDeg} />
-              )}
-              {windSettings.enabled && windSettings.showRose && windTable && tab === "3d" && (
-                <WindRoseOverlay
-                  table={windTable}
-                  period={windSettings.period}
-                  streaksPaused={windMotion.streaksPaused}
-                  animateAnyway={windMotion.animateAnyway}
-                  onAnimateAnyway={windMotion.setAnimateAnyway}
+              {tab === "3d" && landmarkLabelsOn && (
+                <LandmarkLabelLayer
+                  state={landmarkScreens}
+                  hiddenId={pickedBuilding ? pickedBuilding.id : null}
+                  onSelect={(label) => {
+                    const building = displayModel.buildings.find((item) => item.id === label.buildingId);
+                    setSceneSelection({
+                      kind: "building",
+                      buildingId: label.buildingId,
+                      clientX: label.x,
+                      clientY: label.y,
+                      world: { east: label.east, north: label.north, up: label.roofUp - (building?.height ?? 0) },
+                    });
+                    setInspectHudScreen({ clientX: label.x, clientY: label.y, inView: true });
+                    selectForHide(label.buildingId, false);
+                  }}
                 />
               )}
               {pickedBuilding && !qaHideHeightPopoverFromSearch(window.location.search) && (
                 <BuildingHeightPopover
                   building={pickedBuilding}
+                  landmark={landmarkByBuilding.get(pickedBuilding.id) ?? null}
                   center={displayModel.center}
                   allBuildings={displayModel.buildings}
                   damRecords={displayModel.developmentDamRecords ?? []}
@@ -216,6 +254,7 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
                   floatingScreen={inspectHudPosition}
                 />
               )}
+              {tab === "3d" && importedPopover}
               {pickedTree && (
                 <TreeInspectHud
                   tree={pickedTree}
@@ -270,7 +309,6 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
             ) : (
               <DrawingPlan
                 model={drawingModel}
-                sectionKnife={sectionKnifeTool}
                 kind={drawing}
                 onScale={onScale}
                 lineStyle={lineStyles}
@@ -298,8 +336,16 @@ export function ModelPageViewportTabs({ vm }: { vm: import("./useModelPage").Mod
                 viewport={planViewport}
                 onViewportChange={setPlanViewport}
                 fitCounter={fitCounter}
+                sunHoursGroundGrid={sunHoursOnPlan ? sunHoursPlan.grid : null}
+                sunHoursGroundScaleMax={sunHoursOnPlan ? sunHoursPlan.scaleMaxHours : 0}
+                sunHoursRoofPlanRaster={sunHoursOnPlan ? sunHoursPlan.roofPlanRaster : null}
+                landmarkLabels={drawing === "site" || drawing === "figure-ground" ? drawingLandmarkSources : []}
+                onImportedPick={(ref, clientX, clientY) =>
+                  selectImportedBuilding(ref.fileId, ref.buildingId, clientX, clientY)
+                }
               />
             )}
+            {importedPopover}
           </div>
         )}
         {tab === "satellite" && (
