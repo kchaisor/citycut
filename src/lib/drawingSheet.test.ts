@@ -2,8 +2,11 @@ import { describe, expect, it } from "vitest";
 import { themeSheetColor } from "./drawingSheet";
 
 describe("themeSheetColor", () => {
-  it("resolves --model-bg through var(--background)", () => {
-    expect(themeSheetColor("--model-bg")).toBe("#EBEBEB");
-    expect(themeSheetColor("--model-bg")).toBe(themeSheetColor("--background"));
+  it("reads --model-bg as the 3D view shows it", () => {
+    expect(themeSheetColor("--model-bg")).toBe("#DCDDE0");
+  });
+
+  it("resolves a var() reference", () => {
+    expect(themeSheetColor("--page-bg")).toBe(themeSheetColor("--background"));
   });
 });

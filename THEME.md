@@ -22,21 +22,25 @@ The name is `--background`. The value is `#EBEBEB`.
 
 ## What each setting does
 
-| Name | What you see on screen | Current value |
+Every setting in `src/theme.css`, in file order. The value column must match the file: `src/lib/themeDoc.test.ts` fails if it does not. Rules and reasons for these values live in DESIGN-SYSTEM.md.
+
+| Name | What it changes | Value |
 | --- | --- | --- |
-| `--background` | The grey used by the page, the area around the map, the 3D view, and the drawing. Change this one and all of those follow, unless you have given one of them its own colour. | `#EBEBEB` |
+| `--background` | The grey used by the page and the area around the map. `--page-bg`, `--landing-bg` and `--map-bg` follow it. | `#EBEBEB` |
 | `--page-bg` | The page behind the map. | `var(--background)` |
 | `--landing-bg` | Page chrome behind the map on the landing page (same as `--background` unless you set it apart). | `var(--background)` |
 | `--map-bg` | The colour behind the map while the streets are still loading. | `var(--background)` |
-| `--model-bg` | The sky colour of the 3D model. | `var(--background)` |
-| `--drawing-bg` | The on-screen site plan and figure-ground. | `var(--background)` |
+| `--model-bg` | The sky colour of the 3D model. | `#DCDDE0` |
+| `--drawing-bg` | The on-screen site plan and figure-ground. | `#E6E7E9` |
 | `--panel-bg` | Drawers, panels, and cards. | `#FFFCF8` |
 | `--panel-border` | The line around panels, cards, and inputs. | `#C8C8C8` |
-| `--text` | Main text, icons, and the Create model button. | `#1A1916` |
+| `--text` | Main text and icons. `--accent-ink`, `--accent-edge`, `--shape-toggle-on-bg`, `--float-ink`, `--float-line` and `--grid-cross` point to it. | `#1A1916` |
 | `--muted-text` | Notes, credits, and other secondary text. | `#6E685E` |
 | `--sun-hours-direct-dock-footnote` | Compact Direct Sun Hours dock legend footnote. | `#5F5F5F` |
-| `--font-sans` | The font for buttons, labels, and ordinary text. | `"Geist", -apple-system, BlinkMacSystemFont, sans-serif` |
-| `--font-mono` | The font for numbers and data, such as stats and coordinates. | `"Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace` |
+| `--font-sans` | Older name for `--sans`. Points to it. | `var(--sans)` |
+| `--font-mono` | Older name for `--mono`. Points to it. | `var(--mono)` |
+| `--sans` | The font for buttons, labels and ordinary text. | `"Geist", -apple-system, BlinkMacSystemFont, sans-serif` |
+| `--mono` | The font for numbers and data, such as stats and coordinates. | `"Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace` |
 | `--font-serif` | The font for the large “Your model is ready” title. Despite the name, it is Geist; a later change renames it `--sans`. | `"Geist", "Iowan Old Style", Georgia, serif` |
 | `--font-size` | The size of ordinary text. | `15px` |
 | `--font-size-brand` | The size of the CityCut name in the sidebar brand bar. | `18px` |
@@ -44,20 +48,19 @@ The name is `--background`. The value is `#EBEBEB`.
 | `--font-size-card` | The size of an export card title, such as Site plan. | `16px` |
 | `--font-size-stat` | The size of the big numbers in the model summary. | `22px` |
 | `--font-size-title` | The size of the large title in the model summary. | `28px` |
-| `--wind-rose-size` | Smallest width of the wind rose in the Wind Rose card; the rose never shrinks below it (Kelvin, 23 Nov 2026; was 168px). | `176px` |
-| `--wind-rose-size-tight` | Width of the wind rose when another analysis card shares the right-hand column, or the window is under 860 tall, so Flow / Streaks / Density stay in view (Kelvin, 23 Nov 2026). | `124px` |
+| `--wind-rose-size` | Smallest width of the wind rose in the Wind Rose card; the rose never shrinks below it. | `176px` |
 | `--analysis-label-col` | Width of the left-aligned label column on the analysis cards (ALT / AZ / Daylight, Eye height / Radius), so values and pills start on one x. | `80px` |
-| `--shape-toggle-on-bg` | Fill of the selected Square / Circle pill on the landing map. | `#1A1916` |
+| `--shape-toggle-on-bg` | Fill of the selected Square / Circle pill on the landing map. Points to `--text`. | `var(--text)` |
 | `--shape-toggle-on-text` | Label on the selected Square / Circle pill. | `#FFFCF8` |
 | `--accent` | The one accent colour in the model sidebar. Only ever a fill, with `--accent-ink` on top and a 1 px `--accent-edge` outline: the selected rail icon, a switch that is on, the selected segment (such as Colour by), and the Ready dot. Never used for text or thin lines. It is its own setting, separate from `--site-building`, so changing one does not change the other. | `#FFF500` |
-| `--accent-ink` | Text and icons on an `--accent` fill, and the knob of a switch that is on. | `#1A1916` |
-| `--on-ink` | Text on an `--ink` fill, such as the selected date and season pills on the analysis cards (Kelvin, 23 Nov 2026). | `#FFFFFF` |
-| `--accent-edge` | The 1 px outline around every `--accent` fill, so the yellow still reads on the near-white sidebar. | `#1A1916` |
+| `--accent-ink` | Text and icons on an `--accent` fill, and the knob of a switch that is on. Points to `--text`. | `var(--text)` |
+| `--on-ink` | Text on an `--ink` fill, such as the selected date and season pills on the analysis cards. | `#FFFFFF` |
+| `--accent-edge` | The 1 px outline around every `--accent` fill. Points to `--text`. | `var(--text)` |
 | `--accent-hover` | An `--accent` control under the pointer. | `#FFF9A6` |
-| `--sidebar-bg` | The model sidebar and its icon rail. | `#FFFCF8` |
-| `--sidebar-hairline` | Thin lines between sidebar groups, and the edges between rail, panel and model. | `#EEEAE3` |
+| `--sidebar-bg` | The model sidebar and its icon rail. | `transparent` |
+| `--sidebar-hairline` | Thin lines between sidebar groups, and the edges between rail, panel and model. | `transparent` |
 | `--sidebar-icon` | Rail icons that are not selected. | `#8F897E` |
-| `--sidebar-hover` | A rail icon or quiet sidebar button under the pointer. | `#F4F1EB` |
+| `--sidebar-hover` | A rail icon or quiet sidebar button under the pointer. | `#FFFFFF99` |
 | `--control-track` | The track behind a segmented control in the sidebar. | `#F1EEE8` |
 | `--control-off` | A switch that is off, and the outline of a secondary sidebar button. | `#DCD7CE` |
 | `--status-ok` | Status dot for a data source that loaded. | `#478C33` |
@@ -70,37 +73,71 @@ The name is `--background`. The value is `#EBEBEB`.
 | `--height-manual` | Manual height edits in that bar and key. | `#D4A017` |
 | `--sidebar-rail-w` | Width of the icon rail. The model view starts to its right when the sidebar is collapsed. | `56px` |
 | `--sidebar-panel-w` | Width of the sidebar panel next to the rail. | `320px` |
-| `--z-studio-inspector` | Stacking order of the fixed Site Intelligence panel. | `30` |
-| `--z-studio-topbar` | Stacking order of the floating top-bar HUD (menus paint above the inspector). | `40` |
-| `--fs-micro` / `--lh-micro` | Micro caps type: the ANALYSIS header in the Analysis bar and the kickers and ALT / AZ / DAYLIGHT labels on the analysis cards; the IMPORT, scheme and COLOUR headers in Buildings › Import. | `10px` / `12px` |
+| `--fs-micro` | Micro caps type: the ANALYSIS header in the Analysis bar and the kickers and ALT / AZ / DAYLIGHT labels on the analysis cards; the IMPORT, scheme and COLOUR headers in Buildings › Import. | `10px` |
+| `--lh-micro` | Micro caps type: the ANALYSIS header in the Analysis bar and the kickers and ALT / AZ / DAYLIGHT labels on the analysis cards; the IMPORT, scheme and COLOUR headers in Buildings › Import. | `12px` |
+| `--fs-caption` | Caption type: landmark label pills, the LANDMARK header, the Wikidata link and Buildings helper captions. | `11px` |
+| `--lh-caption` | Caption type: landmark label pills, the LANDMARK header, the Wikidata link and Buildings helper captions. | `16px` |
+| `--fs-sm` | Small type: Landmark block rows in the building popover and the Landmark labels toggle row. | `12px` |
 | `--fs-body` | Body type: rows in the imported building popover. | `13px` |
-| `--control-sm` | 28 px control: the Set use select in the imported building popover. | `28px` |
+| `--lh-sm` | Small type: Landmark block rows in the building popover and the Landmark labels toggle row. | `16px` |
+| `--fs-title` | Title step of the type scale: Site Intelligence Overview KPI values. | `16px` |
+| `--lh-title` | Title step of the type scale: Site Intelligence Overview KPI values. | `20px` |
+| `--control-sm` | 28 px control: the Set use select in the imported building popover. Also: Control heights: date options and the time readout (24), mode and overlay chips and the play button (28). | `28px` |
 | `--control-md` | 32 px control: eye toggles in Buildings › Import, the imported-building checkbox row. | `32px` |
 | `--row-imported-building` | Height of one imported building row in Buildings › Import. | `48px` |
-| `--hud-card-head` | Height of the header row on every right-hand analysis card (Solar Study, Wind Rose, Viewshed Walk) and of folded Site Intelligence; the row is also the card's fold toggle (Kelvin's yes to Designbot, 22 Nov 2026; all three cards since 23 Nov 2026). | `48px` |
-| `--fs-title` / `--lh-title` | Title step of the type scale: Site Intelligence Overview KPI values (mono 600; Designbot asked for 15, the scale has 16). | `16px` / `20px` |
-| `--radius-xs` / `--radius-sm` / `--radius-md` | Swatches and checkboxes / rows and segments / segment tracks and selects, in Buildings › Import and the imported building popover. | `4px` / `6px` / `8px` |
-| `--space-0-5` … `--space-3` | 4 pt spacing steps (2, 4, 6, 8, 12 px) used by Buildings › Import and the imported building popover. | `2px` … `12px` |
-| `--fs-caption` / `--lh-caption` | Caption type: landmark label pills, the LANDMARK header, the Wikidata link and Buildings helper captions. | `11px` / `16px` |
-| `--fs-sm` / `--lh-sm` | Small type: Landmark block rows in the building popover and the Landmark labels toggle row. | `12px` / `16px` |
+| `--hud-card-head` | Height of the header row on every right-hand analysis card (Solar Study, Wind Rose, Viewshed Walk) and of folded Site Intelligence; the row is also the card's fold toggle. | `48px` |
+| `--radius-xs` | Swatches and checkboxes / rows and segments / segment tracks and selects, in Buildings › Import and the imported building popover. | `4px` |
+| `--radius-sm` | Swatches and checkboxes / rows and segments / segment tracks and selects, in Buildings › Import and the imported building popover. Also: Corner radius of chips and card buttons (6), the High / Fast track (8) and the Analysis bar and card islands (12). | `6px` |
+| `--radius-md` | Swatches and checkboxes / rows and segments / segment tracks and selects, in Buildings › Import and the imported building popover. Also: Corner radius of chips and card buttons (6), the High / Fast track (8) and the Analysis bar and card islands (12). | `8px` |
+| `--space-0-5` | 4 pt spacing steps (2, 4, 6, 8, 12 px) used by Buildings › Import and the imported building popover. Also: 2 / 4 / 6 px gaps inside controls: the High / Fast track and the gaps between chips, icons and segmented buttons on the Analysis bar and cards. | `2px` |
+| `--space-1` | 4 pt spacing steps (2, 4, 6, 8, 12 px) used by Buildings › Import and the imported building popover. Also: 2 / 4 / 6 px gaps inside controls: the High / Fast track and the gaps between chips, icons and segmented buttons on the Analysis bar and cards. | `4px` |
+| `--space-1-5` | 4 pt spacing steps (2, 4, 6, 8, 12 px) used by Buildings › Import and the imported building popover. Also: 2 / 4 / 6 px gaps inside controls: the High / Fast track and the gaps between chips, icons and segmented buttons on the Analysis bar and cards. | `6px` |
+| `--space-2` | 4 pt spacing steps (2, 4, 6, 8, 12 px) used by Buildings › Import and the imported building popover. Also: 8 / 12 / 16 px layout spacing: Analysis bar padding, row and group gaps, divider height. | `8px` |
+| `--space-3` | 4 pt spacing steps (2, 4, 6, 8, 12 px) used by Buildings › Import and the imported building popover. Also: 8 / 12 / 16 px layout spacing: Analysis bar padding, row and group gaps, divider height. | `12px` |
 | `--bg-elev` | Raised white surface: landmark label pills and selected sub-options. | `#FFFFFF` |
 | `--ink` | Primary text: landmark label pills and Landmark block values. | `#141413` |
 | `--ink-2` | Secondary text: Landmark block row labels. | `#4A4945` |
-| `--ink-3` | Muted text: section headers, meta, counts, the LANDMARK header, the Wikidata link, Buildings helper captions. Darkened from `#787670` for contrast (DESIGN-SYSTEM.md). | `#6B6963` |
+| `--ink-3` | Muted text: section headers, meta, counts, the LANDMARK header, the Wikidata link, Buildings helper captions. | `#6B6963` |
 | `--border-outer` | 1 px edge of HUD islands and landmark label pills. | `rgb(20 20 19 / 13%)` |
 | `--shadow-raised` | Small lift under landmark label pills and the analysis-card slider thumbs (Density, Sun dome size, walk position). | `0 1px 2px rgb(20 20 19 / 8%)` |
 | `--slider-track` | Unfilled part of the 4 px analysis-card slider tracks (Density, Sun dome size, walk position; ink at 15%); the filled part is `--ink`. | `rgb(20 20 19 / 15%)` |
-| `--space-0-5` / `--space-1` / `--space-1-5` | 2 / 4 / 6 px gaps inside controls: the High / Fast track and the gaps between chips, icons and segmented buttons on the Analysis bar and cards. | `2px` / `4px` / `6px` |
-| `--space-2` / `--space-3` / `--space-4` | 8 / 12 / 16 px layout spacing: Analysis bar padding, row and group gaps, divider height. | `8px` / `12px` / `16px` |
-| `--radius-sm` / `--radius-md` / `--radius-lg` | Corner radius of chips and card buttons (6), the High / Fast track (8) and the Analysis bar and card islands (12). | `6px` / `8px` / `12px` |
-| `--control-xs` / `--control-sm` | Control heights: date options and the time readout (24), mode and overlay chips and the play button (28). | `24px` / `28px` |
+| `--space-4` | 8 / 12 / 16 px layout spacing: Analysis bar padding, row and group gaps, divider height. | `16px` |
+| `--radius-lg` | Corner radius of chips and card buttons (6), the High / Fast track (8) and the Analysis bar and card islands (12). | `12px` |
+| `--control-xs` | Control heights: date options and the time readout (24), mode and overlay chips and the play button (28). | `24px` |
 | `--z-hud` | Stacking band of the HUD islands. | `30` |
 | `--z-landmark-labels` | Landmark label pills in 3D and plan, just below `--z-hud`. | `29` |
 | `--dur-fast` | Landmark label fade in and out. | `120ms` |
+| `--z-studio-inspector` | Stacking order of the fixed Site Intelligence panel. | `30` |
+| `--z-studio-topbar` | Stacking order of the floating top-bar HUD (menus paint above the inspector). | `40` |
 | `--studio-intelligence-meta` | MGA / cut-size line in the Site Intelligence header (`~6.3:1` on `--bg-card`). | `#5F5E5A` |
 | `--studio-submode-select-edge` | 1 px outline on the collapsed Perspective / Site plan submode `<select>` below 1280. | `#D9D8D3` |
+| `--float-ink` | Text and icons in the landing sidebar and its buttons. Points to `--text`. | `var(--text)` |
+| `--float-label` | Labels in the landing sidebar. | `var(--sidebar-text)` |
+| `--float-line` | The 1 px track of sidebar range sliders. Points to `--text`. | `var(--text)` |
+| `--float-tile-line` | 1 px outline of sidebar toolbar buttons, sidebar selects and the hidden-buildings list. | `#9A9CA1` |
+| `--float-label-on-map` | The status line and the search placeholder on the landing map. | `var(--sidebar-text)` |
+| `--grid-cross` | MGA grid crosses on the map. Points to `--text`. | `var(--text)` |
+| `--grid-cross-opacity` | Opacity of the MGA grid crosses. | `0.7` |
+| `--grid-cross-arm` | Arm length of each MGA grid cross. | `4.2px` |
+| `--model-grid-line` | Grid lines on the 3D model backdrop. | `#FFFFFF` |
+| `--panel-3d-bg` | Background of the landing sidebar panel and the building detail panel. | `var(--sidebar-grey)` |
+| `--panel-3d-line` | Divider under the building detail panel header. | `#00000014` |
+| `--bg-card` | Background of every HUD island and panel (blurred behind). | `rgb(252 251 249 / 94%)` |
+| `--bg-sub` | Tracks, KPI cells, tonal buttons, chips and row hover. | `#F2F1EC` |
+| `--track-bg` | Track behind segmented controls, and the CRS tag on the landing screen. | `#F2F1EC` |
+| `--ink-muted` | Older muted text colour, still used by the landing chrome and some HUD labels. `--ink-3` is the darker design-system version. | `#787670` |
+| `--border-subtle` | Dividers inside panels and the edge of tonal buttons. | `rgb(20 20 19 / 8%)` |
+| `--shadow-hud` | Shadow under every HUD island. | `0 8px 28px -6px rgb(20 20 19 / 12%), 0 2px 6px -1px rgb(20 20 19 / 6%), inset 0 1px 0 0 rgb(255 255 255 / 85%)` |
+| `--font-display` | Older name for `--display`. Points to it. | `var(--display)` |
+| `--display` | The CityCut wordmark and the Create model button only. | `"Outfit", "Geist", sans-serif` |
+| `--hud-kpi-bg` | Layer rows in the left outliner, and selected chips in the landing bottom bar. | `#F7F6F2` |
+| `--hud-sub-toggle-bg` | Check fields in the left outliner, the right-rail tabs and the scale row. | `#F5F4F0` |
+| `--hud-track-bg` | Segment tracks in the left outliner, the top-bar projection group and the landing bottom bar. | `#F2F1EC` |
+| `--hud-muted` | Inactive style buttons, top-bar mode buttons and landing bottom-bar segments. | `#5A5850` |
+| `--hud-lidar-green` | Ink legend dot in Site Intelligence. | `#2E6B4F` |
+| `--hud-zone-orange` | Muted legend dot in Site Intelligence. | `#D97724` |
 
-`var(--background)` means “use whatever `--background` is set to”. That is why one edit recolours the page, the model, and the drawing together.
+`var(--name)` means “use whatever `--name` is set to”, so one edit changes every setting that points to it.
 
 Downloaded Illustrator and PNG files do not use the colours in this file. Pens for the site plan, both on screen and in the site-plan Illustrator download, use `src/drawing-style.css`. Fills for the plan, the 3D view, and every download use `src/colours.css`. Both files are described below.
 
@@ -135,7 +172,7 @@ Fraunces is no longer used.
 Keep the quotes around a name that has a space, and keep the commas. A good ordinary-text line is:
 
 ```css
---font-sans: "Geist", -apple-system, BlinkMacSystemFont, sans-serif;
+--sans: "Geist", -apple-system, BlinkMacSystemFont, sans-serif;
 ```
 
 A name the app does not load, such as a font from your computer only, will show for you and not for other people.
@@ -157,31 +194,31 @@ A name the app does not load, such as a font from your computer only, will show 
 | Variable | Default | What it controls |
 | --- | --- | --- |
 | `--landing-building-mask` | `#EAEAE5` | Positron building fill; hides use-coloured footprints outside the cut frame on the landing map. |
-| `--sheet-fill` | `#f4f1ea` | Illustrator site-plan page, and the casing under a rail so the line still reads on the road. |
-| `--ground-fill` | `#e6e0d4` | Flat 3D ground, the ground on the 3D-view Illustrator sheet, and the Rhino Ground layer. |
+| `--sheet-fill` | `#E7E6E6` | Illustrator site-plan page, and the casing under a rail so the line still reads on the road. |
+| `--ground-fill` | `#EAEAE5` | Flat 3D ground, the ground on the 3D-view Illustrator sheet, and the Rhino Ground layer. |
 | `--export-backdrop` | `#e7e4dc` | Backdrop of the 3D PNG, and the page behind the 3D-view Illustrator drawing. |
 | `--figure-fill` | `#000000` | Figure-ground buildings, the black frame, north mark, and scale bar on that drawing, on screen and in the Illustrator file, and the Rhino FigureGround layer. |
 | `--plan-empty` | `#6d675e` | The sentence shown when a plan has nothing in the frame. |
-| `--contour-label` | `#6A6A6A` | Elevation numbers on the site plan, on screen and in the Illustrator file. |
+| `--contour-label` | `#FFFFFF` | Elevation numbers on the site plan, on screen and in the Illustrator file. |
 | `--landmark-label` | `#141413` | Landmark label text in Drawing (site plan and figure-ground), the site-plan and figure-ground SVG, and the 3D 2× PNG. |
 | `--landmark-label-halo` | `#FFFFFF` | 2 px halo behind that text (SVG stroke with `paint-order`, and the PNG). |
 | `--building-uniform` | `#FFFFFF` | Buildings when colour-by-use is off, that legend swatch, and the Rhino Buildings layer. |
 | `--uniform-road` | `#555555` | Road fill in Drawing when the plan building style is uniform (3D Card view uses `--primary-surface` on canvas instead). |
 | `--building-manual` | `#D4A017` | 3D viewport tint for buildings with a manual height override when “Show manual edits” is on. |
-| `--site-building` | `#F2C230` | Buildings on the searched property: site plan, 3D, Rhino `Buildings::Site`, and Illustrator Site buildings layer. Manual-height amber and uniform colour apply to non-site buildings only; site buildings stay yellow unless manual-height tint is on for that building (manual wins in 3D). |
+| `--site-building` | `#FFF500` | Buildings on the searched property: site plan, 3D, Rhino `Buildings::Site`, and Illustrator Site buildings layer. Manual-height amber and uniform colour apply to non-site buildings only; site buildings stay yellow unless manual-height tint is on for that building (manual wins in 3D). |
 | `--imported-massing` | `#FFFFFF` | Fallback fill for imported .3dm massing in 3D, Drawing (site plan, figure-ground, exploded axo, isometric), .ai and .3dm, used only when a building has no colour set. Imported buildings normally take their use colour (`--use-unclassified` with no use), or the file colour from the Colour picker in Import (stored with the model). |
 | `--imported-massing-upper-stroke` | `#6E6E6E` | Solid linework for upper roof/setback outlines inside imported footprints. |
 | `--imported-massing-upper-tone` | `#E6E6E6` | Light plan fill behind upper-level outlines on screen. |
 | `--switch-knob` | `#000000` | Knob of every sidebar switch, on and off, so an off switch reads on its pale `--control-off` track. On = `--accent` track, knob right. |
 | `--site-building-edge` | `#3D3010` | Darker outline on site-building massing in the 3D viewport so they read against retail (`--use-retail`) and civic (`--use-civic`) yellows. |
 | `--site-boundary` | `#D7263D` | Searched-property parcel boundary on the site plan, the 3D ground line, Rhino `Site::Boundary`, and Illustrator/PDF Site boundary layer. |
-| `--use-residential` | `#E06C75` | Residential footprints, legend swatch, 3D massing, and the Residential Rhino layer. |
-| `--use-commercial` | `#61AFEF` | Commercial footprints, legend swatch, 3D massing, and the Commercial Rhino layer. |
+| `--use-residential` | `#CECBC6` | Residential footprints, legend swatch, 3D massing, and the Residential Rhino layer. |
+| `--use-commercial` | `#89533D` | Commercial footprints, legend swatch, 3D massing, and the Commercial Rhino layer. |
 | `--use-retail` | `#E5C07B` | Retail footprints, legend swatch, 3D massing, and the Retail Rhino layer. |
-| `--use-mixed` | `#C678DD` | Mixed-use footprints, legend swatch, 3D massing, and the MixedUse Rhino layer. |
-| `--use-industrial` | `#D19A66` | Industrial footprints, legend swatch, 3D massing, and the Industrial Rhino layer. |
-| `--use-civic` | `#98C379` | Civic footprints, legend swatch, 3D massing, and the Civic Rhino layer. |
-| `--use-recreation` | `#56B6C2` | Recreation footprints, legend swatch, 3D massing, and the Recreation Rhino layer. |
+| `--use-mixed` | `#2D3F6D` | Mixed-use footprints, legend swatch, 3D massing, and the MixedUse Rhino layer. |
+| `--use-industrial` | `#8228FF` | Industrial footprints, legend swatch, 3D massing, and the Industrial Rhino layer. |
+| `--use-civic` | `#FBAE3C` | Civic footprints, legend swatch, 3D massing, and the Civic Rhino layer. |
+| `--use-recreation` | `#EA4089` | Recreation footprints, legend swatch, 3D massing, and the Recreation Rhino layer. |
 | `--use-outbuilding` | `#5C6370` | Outbuilding footprints, legend swatch, 3D massing, and the Outbuilding Rhino layer. |
 | `--use-unclassified` | `#B8B8B8` | Unclassified footprints, legend swatch, 3D massing, and the Unclassified Rhino layer. |
 | `--source-osm` | `#1F4E79` | Buildings whose use came from an OpenStreetMap tag, and that legend swatch. |
@@ -190,21 +227,21 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--block-plan` | `#D4D4D4` | City blocks on the site plan (not the `#EBEBEB` paper). |
 | `--source-zone` | `#A9C4DE` | Buildings whose use was inferred from a planning zone, and that legend swatch. |
 | `--source-none` | `#B8B8B8` | Buildings with no tag and no zone, and that legend swatch. |
-| `--road-fill` | `#4A4A4A` | Unioned carriageway on the site plan and the figure-ground, on screen and in the Illustrator file. |
+| `--road-fill` | `#FFFFFF` | Unioned carriageway on the site plan and the figure-ground, on screen and in the Illustrator file. |
 | `--path-fill` | `#D2B48C` | Unioned footpath on the site plan and the figure-ground, on screen and in the Illustrator file. |
-| `--road-arterial` | `#3a3a3a` | Arterial ribbons in the 3D view and the 3D-view Illustrator file, and the Rhino Roads layer. |
-| `--road-local` | `#4a4a4a` | Local-street ribbons in the 3D view and the 3D-view Illustrator file. |
+| `--road-arterial` | `#FFFFFF` | Arterial ribbons in the 3D view and the 3D-view Illustrator file, and the Rhino Roads layer. |
+| `--road-local` | `#FFFFFF` | Local-street ribbons in the 3D view and the 3D-view Illustrator file. |
 | `--road-path` | `#5c5c5c` | Path ribbons in the 3D view and the 3D-view Illustrator file. |
-| `--green-fill` | `#b7d39a` | Parks and other green on the site plan, on screen and in the Illustrator file. |
-| `--green-3d` | `#7f9a62` | Green mesh in the 3D view, the 3D-view Illustrator green, and the Rhino Green layer. |
-| `--water-fill` | `#9ec9d1` | Water on the site plan, on screen and in the Illustrator file. |
-| `--water-3d` | `#8ebfc8` | Water mesh in the 3D view, the 3D-view Illustrator water, and the Rhino Water layer. |
+| `--green-fill` | `#D2D7BE` | Parks and other green on the site plan, on screen and in the Illustrator file. |
+| `--green-3d` | `#D2D7BE` | Green mesh in the 3D view, the 3D-view Illustrator green, and the Rhino Green layer. |
+| `--water-fill` | `#7FBFFF` | Water on the site plan, on screen and in the Illustrator file. |
+| `--water-3d` | `#7FBFFF` | Water mesh in the 3D view, the 3D-view Illustrator water, and the Rhino Water layer. |
 | `--water-3d-mono` | `#D6D6D2` | Flat, unlit water in the 3D view while the View Style is B&W, and the Water swatch in Scene Layers while B&W is on. |
 | `--water-sunpath` | `#4A9FE8` | Water in the 3D viewport while the sun path diagram is on. |
 | `--sun-study-surface` | `#FFFFFF` | Ground, roads, and parks in the 3D viewport while the sun path is on. |
 | `--card-white` | `#FAFAF8` | Building and surface massing in white-card 3D display mode. |
-| `--card-road` | `#FFFFFF` | Road fill in 3D Card view (Primary, Use and Source off). Matches the white Card default until the Roads colour chip changes it. |
-| `--card-footpath` | `#FFFFFF` | Footpath fill in 3D Card view. Matches the white Card default until the Footpaths colour chip changes it. |
+| `--card-road` | `#ffffff` | Road fill in 3D Card view (Primary, Use and Source off). Matches the white Card default until the Roads colour chip changes it. |
+| `--card-footpath` | `#ffffff` | Footpath fill in 3D Card view. Matches the white Card default until the Footpaths colour chip changes it. |
 | `--card-ground` | `#F2F2F0` | Ground and terrain in white-card 3D display mode. |
 | `--nsw-road-corridor` | `#E9E5DC` | NSW mode: cadastral road corridor fill under the carriageway on the site plan. |
 | `--nsw-lot-line` | `#5E5E5E` | NSW mode: cadastral lot boundaries on the site plan. |
@@ -224,12 +261,12 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--nsw-zone-w` | `#A9D6E8` | NSW mode: W1–W4 waterway zones on the site plan. |
 | `--nsw-zone-ru` | `#E8DCB5` | NSW mode: RU rural zones on the site plan. |
 | `--nsw-zone-other` | `#D9D4E8` | NSW mode: precinct and other zones (for example SEPP precinct codes) on the site plan. |
-| `--tree-fill` | `#6ea35a` | Tree-crown fill on the site plan, on screen and in the Illustrator file. |
-| `--tree-crown` | `#5d8a45` | Tree-crown fill on the 3D-view Illustrator sheet. |
-| `--tree-crown-edge` | `#2c4a28` | Outline around that 3D-view crown. |
+| `--tree-fill` | `#478C33` | Tree-crown fill on the site plan, on screen and in the Illustrator file. |
+| `--tree-crown` | `#478C33` | Tree-crown fill on the 3D-view Illustrator sheet. |
+| `--tree-crown-edge` | `#478C33` | Outline around that 3D-view crown. |
 | `--tree-trunk` | `#3e3428` | Trunk on the 3D-view Illustrator sheet. |
-| `--tree-layer` | `#3e8a48` | Rhino Trees layer. The 3D crowns themselves are the shipped tree models. |
-| `--rail-fill` | `#8d6244` | Rail ribbon in the 3D view and the Rhino Rail layer. The site-plan rail line stays a pen. |
+| `--tree-layer` | `#478C33` | Rhino Trees layer. The 3D crowns themselves are the shipped tree models. |
+| `--rail-fill` | `#000000` | Rail ribbon in the 3D view and the Rhino Rail layer. The site-plan rail line stays a pen. |
 | `--ground-edge` | `#2c2924` | Outline drawn around the flat ground slab in the 3D view. |
 | `--hatch-paper` | `#ffffff` | Light band of the hatch on a zone-inferred building. |
 | `--hatch-ink` | `#7d7d7d` | Dark band of the hatch on a zone-inferred building. |
@@ -239,8 +276,8 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--light-sky` | `#f7f4ee` | Sky side of the 3D hemisphere light. |
 | `--light-ground` | `#c9c0b2` | Ground side of the 3D hemisphere light. |
 | `--light-fill` | `#e4e8ee` | Soft studio fill light, from the side opposite the key light in the 3D view. Off while sun shadows are on. |
-| `--viewport-studio-top` | `#f6f6f5` | Top of the studio gradient behind the 3D model. It runs top, then `--viewport-bg`, then bottom. |
-| `--viewport-studio-bottom` | `#d9d9d6` | Bottom of the studio gradient behind the 3D model. |
+| `--viewport-studio-top` | `#ffffff` | Top of the studio gradient behind the 3D model. It runs top, then `--viewport-bg`, then bottom. |
+| `--viewport-studio-bottom` | `#ffffff` | Bottom of the studio gradient behind the 3D model. |
 | `--primary-plinth-wall` | `#000000` | Vertical plinth faces in Primary 3D only (`MeshBasic`); `--plinth-wall` stays for other modes and geometry defaults. |
 | `--plinth-shadow` | `#1a1916` | Soft contact shadow under the 3D plinth. Baked once per cut, screen only (not in the PNG). |
 | `--cut-line` | `#f7f4ee` | Frame drawn around the cut on the satellite preview. |
@@ -276,8 +313,8 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--sun-hours-direct-90` | `#fdae61` | Direct sun hours light orange. |
 | `--sun-hours-direct-max` | `#fee825` | Direct sun hours max (yellow). |
 | `--axo-water` | `#7eb8da` | Exploded axo floodplain / water layer. |
-| `--axo-road` | `#e8883a` | Exploded axo roads layer. |
-| `--axo-green` | `#8fbc8f` | Exploded axo green spaces layer. |
+| `--axo-road` | `#6B6C6F` | Exploded axo roads layer. |
+| `--axo-green` | `#7CB942` | Exploded axo green spaces layer. |
 | `--axo-building` | `#1a1916` | Exploded axo building footprints layer. |
 | `--axo-guide` | `#c8c8c8` | Exploded axo vertical guides and plate outlines (solid edges). |
 | `--axo-guide-dash` | `#c8c8c8` | Exploded axo vertical guide dashes (same colour as `--axo-guide`). |
@@ -303,7 +340,7 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--axo-pt-train` | `#003366` | Exploded axo PTV train route, and the Train line sample in the Transport legend card and the export sheet legend. |
 | `--axo-pt-tram` | `#000000` | Exploded axo PTV tram route, and the Tram line sample in the Transport legend card and the export sheet legend. |
 | `--axo-pt-bus` | `#c45c00` | Exploded axo PTV bus route, and the Bus line sample in the Transport legend card and the export sheet legend. |
-| `--axo-contour` | `#8a8578` | Exploded axo Vicmap contour stroke. |
+| `--axo-contour` | `#000000` | Exploded axo Vicmap contour stroke. |
 | `--axo-cadastre` | `#e8a33c` | Exploded axo cadastre (Vicmap parcel) boundary, orange. |
 | `--axo-terrain-mesh` | `#4a4a4a` | Exploded axo terrain (DTM) mesh grid. |
 | `--axo-base-outline` | `#1a1916` | Exploded axo base outline plate (frame edge and corner dots). |
@@ -422,10 +459,10 @@ A dash is two lengths in millimetres: how long the mark is, then how long the ga
 
 | Name | What it controls | Default | Units |
 | --- | --- | --- | --- |
-| `--building-stroke-mm` | Weight of the building outline. `0` leaves the fill with no edge | `0` | mm |
-| `--building-stroke` | Colour of the building outline | `#1C1B17` | colour |
+| `--building-stroke-mm` | Weight of the building outline. `0` leaves the fill with no edge | `0.08` | mm |
+| `--building-stroke` | Colour of the building outline | `var(--outline-building)` | colour |
 | `--building-dash` | Dash of the building outline | `none` | mm, on then off |
-| `--road-fill` | Fill of the unioned carriageway. Defined in `src/colours.css` | `#4A4A4A` | colour |
+| `--road-fill` | Fill of the unioned carriageway. Defined in `src/colours.css` | `#FFFFFF` | colour |
 | `--road-kerb` | Whether the kerb outline is drawn. `on` or `off` | `on` | on or off |
 | `--road-kerb-mm` | Weight of the kerb, on the outer edge of the road fill | `0.22` | mm |
 | `--road-kerb-stroke` | Colour of the kerb. Mid grey, so it shows on the road fill and on the page | `#8D8983` | colour |
@@ -437,17 +474,17 @@ A dash is two lengths in millimetres: how long the mark is, then how long the ga
 | `--path-edge-mm` | Weight of that outline, on the unioned edge only. `0` leaves the fill | `0` | mm |
 | `--path-edge-stroke` | Colour of the footpath outline | `#5C5C5C` | colour |
 | `--path-edge-dash` | Dash of the footpath outline | `none` | mm, on then off |
-| `--rail-stroke-mm` | Weight of a rail line | `0.15` | mm |
-| `--rail-stroke` | Colour of a rail line | `#8D6244` | colour |
-| `--rail-dash` | Dash of a rail line | `none` | mm, on then off |
+| `--rail-stroke-mm` | Weight of a rail line | `0.12` | mm |
+| `--rail-stroke` | Colour of a rail line | `var(--outline-rail)` | colour |
+| `--rail-dash` | Dash of a rail line | `1.2 0.6` | mm, on then off |
 | `--green-stroke-mm` | Weight of the edge around green. `0` leaves the fill with no edge | `0` | mm |
-| `--green-stroke` | Colour of the green edge | `#5E8A45` | colour |
+| `--green-stroke` | Colour of the green edge | `var(--outline-green)` | colour |
 | `--green-dash` | Dash of the green edge | `none` | mm, on then off |
-| `--water-stroke-mm` | Weight of the edge around water. `0` leaves the fill with no edge | `0` | mm |
-| `--water-stroke` | Colour of the water edge | `#3E7C86` | colour |
+| `--water-stroke-mm` | Weight of the edge around water. `0` leaves the fill with no edge | `0.08` | mm |
+| `--water-stroke` | Colour of the water edge | `var(--outline-water)` | colour |
 | `--water-dash` | Dash of the water edge | `none` | mm, on then off |
-| `--contour-stroke-mm` | Weight of a contour | `0.1` | mm |
-| `--contour-stroke` | Colour of a contour | `#B0B0B0` | colour |
+| `--contour-stroke-mm` | Weight of a contour | `0.02` | mm |
+| `--contour-stroke` | Colour of a contour | `#000000` | colour |
 | `--contour-dash` | Dash of a contour | `1.5 0.75` | mm, on then off |
 | `--contour-index-mm` | Weight of every Nth contour on the site plan and in exports. Same colour and dash as the other contours. The exploded axo scales its contour strokes by the same ratio, and 3D draws index contours dashed like the 1 m lines, not solid, and slightly heavier (about 1.5 px) so they still read as index (Kelvin, 22 Nov 2026) | `0.18` | mm |
 | `--contour-index-every` | How many drawn contours between index lines. Contours are drawn every 1 m on every site (official lines plus interpolated ones), so `5` is an index line every 5 m | `5` | count |
@@ -478,7 +515,7 @@ A dash is two lengths in millimetres: how long the mark is, then how long the ga
 | `--tram-stroke-mm` | Weight of a tram route line | `0.12` | mm |
 | `--tram-stroke` | Colour of a tram route. Uses `--tram-line-stroke` from `src/colours.css` | `var(--tram-line-stroke)` | colour |
 | `--tram-dash` | Dash of a tram route | `1.2 0.6` | mm, on then off |
-| `--axo-guide-dash` | Dash of exploded axo vertical guides | `0.8 0.5` | mm, on then off |
+| `--axo-guide-dash-pattern` | Dash of exploded axo vertical guides | `0.8 0.5` | mm, on then off |
 | `--building-edge` | Colour of the massing edge in the 3D view | `#000000` | colour |
 | `--wind-plan-contour-stroke` | Plan wind speed map: colour of the fine isolines every 0.25 m/s | `#5A5A5A` | colour |
 | `--wind-plan-contour-opacity` | Plan wind speed map: opacity of those isolines | `0.3` | 0–1 |
@@ -526,7 +563,7 @@ The same drawer has **Colours**, under Line styles. It lists every fill, with a 
 | Name | What you see on screen | Current value |
 | --- | --- | --- |
 | `--sidebar-grey` | Plain grey behind the sidebar on the landing page and the model page. | `#EBEBEB` |
-| `--viewport-bg` | Flat tint over the landing map, and the middle stop of the 3D studio gradient. | `#EBEBEB` |
+| `--viewport-bg` | Flat tint over the landing map, and the middle stop of the 3D studio gradient. | `#ffffff` |
 | `--sidebar-text` | All sidebar text, including section labels and card descriptions. | `#000000` |
 | `--sun-card-bg` | Sun tab date and preset cards, and the speed buttons. | `#FFFFFF` |
 | `--sun-card-border` | Border of an unselected Sun tab card. | `#CECBC6` |

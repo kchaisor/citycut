@@ -1,87 +1,51 @@
-
 :root {
   --background: #EBEBEB;
-
   --page-bg: var(--background);
-
   --landing-bg: var(--background);
-
   --map-bg: var(--background);
-
-  --model-bg: var(--background);
-
-  --drawing-bg: var(--background);
-
+  --model-bg: #DCDDE0;
+  --drawing-bg: #E6E7E9;
   --panel-bg: #FFFCF8;
-
   --panel-border: #C8C8C8;
-
   --text: #1A1916;
-
   --muted-text: #6E685E;
-
   --sun-hours-direct-dock-footnote: #5F5F5F;
-
-  --font-sans: "Geist", -apple-system, BlinkMacSystemFont, sans-serif;
-  --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-sans: var(--sans);
+  --font-mono: var(--mono);
   --sans: "Geist", -apple-system, BlinkMacSystemFont, sans-serif;
   --mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
-
   --font-serif: "Geist", "Iowan Old Style", Georgia, serif;
-
   --font-size: 15px;
-
   --font-size-brand: 18px;
-
   --font-size-drawer: 15px;
-
   --font-size-card: 16px;
-
   --font-size-stat: 22px;
-
   --font-size-title: 28px;
-
   --wind-rose-size: 176px;
   --analysis-label-col: 80px;
-
-  --shape-toggle-on-bg: #1A1916;
+  --shape-toggle-on-bg: var(--text);
   --shape-toggle-on-text: #FFFCF8;
-
   --accent: #FFF500;
-
-  --accent-ink: #1A1916;
-
+  --accent-ink: var(--text);
   --on-ink: #FFFFFF;
-
-  --accent-edge: #1A1916;
-
+  --accent-edge: var(--text);
   --accent-hover: #FFF9A6;
-
-  --sidebar-bg: #EBEBEB;
-
-  --sidebar-hairline: #EEEAE3;
-
+  --sidebar-bg: transparent;
+  --sidebar-hairline: transparent;
   --sidebar-icon: #8F897E;
-
-  --sidebar-hover: #F4F1EB;
-
+  --sidebar-hover: #FFFFFF99;
   --control-track: #F1EEE8;
-
   --control-off: #DCD7CE;
-
   --status-ok: #478C33;
   --status-failed: #8D3418;
   --status-idle: #B8B2A7;
-
   --height-measured: #2E6B4F;
   --height-overture: #3D5A73;
   --height-floors: #6B4F2E;
   --height-estimate: #7D7D7D;
   --height-manual: #D4A017;
-
   --sidebar-rail-w: 56px;
   --sidebar-panel-w: 320px;
-
   --fs-micro: 10px;
   --lh-micro: 12px;
   --fs-caption: 11px;
@@ -91,7 +55,6 @@
   --lh-sm: 16px;
   --fs-title: 16px;
   --lh-title: 20px;
-
   --control-sm: 28px;
   --control-md: 32px;
   --row-imported-building: 48px;
@@ -104,7 +67,6 @@
   --space-1-5: 6px;
   --space-2: 8px;
   --space-3: 12px;
-
   --bg-elev: #FFFFFF;
   --ink: #141413;
   --ink-2: #4A4945;
@@ -112,27 +74,39 @@
   --border-outer: rgb(20 20 19 / 13%);
   --shadow-raised: 0 1px 2px rgb(20 20 19 / 8%);
   --slider-track: rgb(20 20 19 / 15%);
-
-  --space-0-5: 2px;
-  --space-1: 4px;
-  --space-1-5: 6px;
-  --space-2: 8px;
-  --space-3: 12px;
   --space-4: 16px;
-  --radius-sm: 6px;
-  --radius-md: 8px;
   --radius-lg: 12px;
   --control-xs: 24px;
-  --control-sm: 28px;
-
   --z-hud: 30;
   --z-landmark-labels: 29;
-
   --dur-fast: 120ms;
-
   --z-studio-inspector: 30;
   --z-studio-topbar: 40;
-
   --studio-intelligence-meta: #5F5E5A;
   --studio-submode-select-edge: #D9D8D3;
+  --float-ink: var(--text);
+  --float-label: var(--sidebar-text);
+  --float-line: var(--text);
+  --float-tile-line: #9A9CA1;
+  --float-label-on-map: var(--sidebar-text);
+  --grid-cross: var(--text);
+  --grid-cross-opacity: 0.7;
+  --grid-cross-arm: 4.2px;
+  --model-grid-line: #FFFFFF;
+  --panel-3d-bg: var(--sidebar-grey);
+  --panel-3d-line: #00000014;
+  --bg-card: rgb(252 251 249 / 94%);
+  --bg-sub: #F2F1EC;
+  --track-bg: #F2F1EC;
+  --ink-muted: #787670;
+  --border-subtle: rgb(20 20 19 / 8%);
+  --shadow-hud: 0 8px 28px -6px rgb(20 20 19 / 12%), 0 2px 6px -1px rgb(20 20 19 / 6%), inset 0 1px 0 0 rgb(255 255 255 / 85%);
+  --font-display: var(--display);
+  --display: "Outfit", "Geist", sans-serif;
+  --hud-kpi-bg: #F7F6F2;
+  --hud-sub-toggle-bg: #F5F4F0;
+  --hud-track-bg: #F2F1EC;
+  --hud-muted: #5A5850;
+  --hud-lidar-green: #2E6B4F;
+  --hud-zone-orange: #D97724;
 }
