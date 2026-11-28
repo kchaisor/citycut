@@ -47,15 +47,22 @@ jobs:
           else
             npm run test:visual
           fi
+      - name: Upload PR screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-screenshots
+          path: pr-screenshots/*.png
+          if-no-files-found: ignore
       - name: Upload visual baseline PNGs
-        if: success() || github.event.inputs.update_visual_baselines == true
+        if: success() || inputs.update_visual_baselines
         uses: actions/upload-artifact@v4
         with:
           name: visual-baselines
           path: tests/visual/*-snapshots/*.png
           if-no-files-found: error
       - name: Upload Playwright report on failure
-        if: failure() && github.event.inputs.update_visual_baselines != true
+        if: failure() && !inputs.update_visual_baselines
         uses: actions/upload-artifact@v4
         with:
           name: playwright-visual-diffs
@@ -63,3 +70,91 @@ jobs:
             test-results/**
             tests/visual/**/*-diff.png
           if-no-files-found: ignore
+
+  pr-screenshots:
+    needs: verify
+    if: always() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    concurrency:
+      group: pr-screenshots-publish
+      cancel-in-progress: false
+    steps:
+      - name: Download PR screenshots
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: pr-screenshots
+          path: shots
+      - name: Publish screenshots and comment on the PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+          RESULT: ${{ needs.verify.result }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          marker='<!-- citycut-pr-screenshots -->'
+          short="${SHA:0:7}"
+          dir="pr-${PR}/${short}"
+          files=(shots/*.png)
+          if [ "${#files[@]}" -gt 0 ]; then
+            git init -q pub
+            cd pub
+            git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git"
+            if git fetch -q --depth=1 origin pr-screenshots; then
+              git checkout -q -B pr-screenshots FETCH_HEAD
+            else
+              git checkout -q --orphan pr-screenshots
+            fi
+            printf '{\n  "git": { "deploymentEnabled": false }\n}\n' > vercel.json
+            rm -rf "pr-${PR}"
+            mkdir -p "${dir}"
+            cp ../shots/*.png "${dir}/"
+            git add -A
+            git -c user.name="github-actions[bot]" -c user.email="41898283+github-actions[bot]@users.noreply.github.com" commit -q -m "PR screenshots"
+            if git rev-parse -q --verify HEAD~1 >/dev/null; then
+              git reset -q --soft "$(git rev-list --max-parents=0 HEAD)"
+              git -c user.name="github-actions[bot]" -c user.email="41898283+github-actions[bot]@users.noreply.github.com" commit -q --amend -m "PR screenshots"
+            fi
+            git push -q -f origin pr-screenshots
+            cd ..
+          fi
+          case "${RESULT}" in
+            success) status="✅ Visual check passed" ;;
+            cancelled) status="⏹️ Visual check cancelled" ;;
+            *) status="❌ Visual check failed (screenshots differ from the baselines, or an earlier step failed)" ;;
+          esac
+          {
+            echo "${marker}"
+            echo "### Screenshots for \`${short}\` (1440×900)"
+            echo
+            echo "${status} · [workflow run](${RUN_URL})"
+            echo
+            if [ "${#files[@]}" -eq 0 ]; then
+              echo "No screenshots this run: the job stopped before the browser step. See the workflow run."
+            fi
+            for f in landing-map model-3d drawing-view; do
+              [ -f "shots/${f}.png" ] || continue
+              case "${f}" in
+                landing-map) label="Landing map" ;;
+                model-3d) label="3D model" ;;
+                drawing-view) label="Drawing" ;;
+              esac
+              echo "**${label}**"
+              echo
+              echo "![${label}](https://raw.githubusercontent.com/${REPO}/pr-screenshots/${dir}/${f}.png)"
+              echo
+            done
+          } > body.md
+          existing="$(gh api "repos/${REPO}/issues/${PR}/comments" --paginate --jq ".[] | select(.body | startswith(\"${marker}\")) | .id" | head -n 1)"
+          if [ -n "${existing}" ]; then
+            gh api -X PATCH "repos/${REPO}/issues/comments/${existing}" -F body=@body.md >/dev/null
+          else
+            gh api -X POST "repos/${REPO}/issues/${PR}/comments" -F body=@body.md >/dev/null
+          fi

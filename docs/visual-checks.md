@@ -24,3 +24,6 @@ Baselines must be generated on **Linux** (same as CI). Options:
    Commit the updated files under `tests/visual/cleeland.spec.ts-snapshots/`.
 
 Do not refresh baselines for unrelated changes. Keep the three shots in sync with the thresholds documented in `playwright.config.ts` and `tests/visual/cleeland.spec.ts`.
+## Screenshots on every PR
+
+Each PR run saves the three full-window shots (landing map, 3D model, Drawing) whether the comparison passes or fails. A follow-up job publishes them to the `pr-screenshots` branch and keeps one comment on the PR up to date with the images inline and the pass or fail result. The `pr-screenshots` branch holds only the latest shots for each PR, is rewritten on every run, and has Vercel deploys turned off.
