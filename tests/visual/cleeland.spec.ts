@@ -19,6 +19,11 @@ async function savePrShot(target: Page | Locator, name: string) {
   await target.screenshot({ path: `${PR_SHOTS_DIR}/${name}`, animations: "disabled", caret: "hide" });
 }
 
+async function savePrShots(page: Page, target: Page | Locator, name: string) {
+  await savePrShot(page, name);
+  await savePrShot(target, `baseline-${name}`);
+}
+
 test.describe.configure({ mode: "default" });
 
 test.describe("Cleeland 1 km @ 1440×900", () => {
@@ -41,7 +46,7 @@ test.describe("Cleeland 1 km @ 1440×900", () => {
     await page.goto(`?${CLEELAND_CUT.searchParams}`, { waitUntil: "domcontentloaded", timeout: 180_000 });
     await page.waitForSelector("button.create-fab", { timeout: 120_000 });
     await page.waitForTimeout(2_500);
-    await savePrShot(page, "landing-map.png");
+    await savePrShots(page, page, "landing-map.png");
     await expect(page).toHaveScreenshot("landing-map.png", { maxDiffPixelRatio: LANDING_MAX_DIFF });
   });
 
@@ -59,7 +64,7 @@ test.describe("Cleeland 1 km @ 1440×900", () => {
     await introDone(page);
     await waitForModelSceneSettled(page);
     await applyAppDefaultOverviewCamera(page);
-    await savePrShot(page, "model-3d.png");
+    await savePrShots(page, page.locator(".scene-viewport"), "model-3d.png");
     await expect(page.locator(".scene-viewport")).toHaveScreenshot("model-3d.png", {
       maxDiffPixelRatio: MODEL_3D_MAX_DIFF,
       timeout: 120_000,
@@ -81,7 +86,7 @@ test.describe("Cleeland 1 km @ 1440×900", () => {
     await activateModelTab(page, "Drawing");
     await page.waitForSelector("svg.plan", { timeout: 120_000 });
     await page.waitForTimeout(500);
-    await savePrShot(page, "drawing-view.png");
+    await savePrShots(page, page.locator(".model"), "drawing-view.png");
     await expect(page.locator(".model")).toHaveScreenshot("drawing-view.png", {
       maxDiffPixelRatio: DRAWING_MAX_DIFF,
     });
