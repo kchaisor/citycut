@@ -4,6 +4,8 @@
 
 In Plan view with Wind Rose on, the ground becomes a top-down wind diagram. A **Wind speed | Comfort** switch in the bottom wind console flips between a velocity map in m/s for one season and direction, and a Lawson-style pedestrian comfort map that combines every direction in the season. Both reuse the wind data and flow model from the 3D wind draft (#232). They are indicative only, not a CFD study.
 
+Wind map is the default Plan view. The Wind Rose card also offers **Flow** as an alternative Plan view (Kelvin, 3:24 PM AEDT, 24 Nov 2026; see `wind-streaks.md`, preference 18): with Flow chosen, Plan shows the animated ground-flow and arrows from above instead of these diagrams. This spec describes the Wind map view.
+
 ## What it looks like
 
 Screens this touches: Plan view of the 3D model with Analysis → Wind Rose on; the wind-rose card (right, stacked under Site Intelligence since 22 Nov 2026), which holds the Velocity and Comfort legends and, in 3D, the Wind streaks slider; the bottom wind console; Site Intelligence (right).

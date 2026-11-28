@@ -18,6 +18,7 @@ import {
 import type { SiteWindSelection } from "./windRoseData";
 import { analyzeSiteWind } from "./windRoseStats";
 import { scaleBarLengthM, type SheetFrame } from "./sheetScale";
+import type { WindPlanViewId } from "./windState";
 import { windPrevailingBadge } from "../components/model/windRoseCard";
 
 export type SheetRect = { x: number; y: number; width: number; height: number };
@@ -67,6 +68,7 @@ export type WindSheetInput = {
   prevailing: string;
   calm: string | null;
   mode: WindPlanMode;
+  planView: WindPlanViewId;
   scaleMaxMs: number | null;
   comfortShares: ComfortShares | null;
   stationLine: string;
@@ -200,6 +202,7 @@ export function windSheetInput(
     prevailing: badge.prevailing,
     calm: badge.calm,
     mode: snapshot.windPlan.mode,
+    planView: snapshot.windPlan.view,
     scaleMaxMs: source.scaleMaxMs,
     comfortShares: source.comfortShares,
     stationLine: formatStationLine1(selection).replace(/⁠/g, "").replace(/ /g, " "),
@@ -356,14 +359,15 @@ function drawBandLegend(pen: Pen, y: number): number {
 }
 
 function drawPlanLegend(pen: Pen, input: WindSheetInput, y: number): number {
+  const comfort = input.mode === "comfort" && input.planView !== "flow";
   const { ctx, layout, fonts, style } = pen;
   const column = layout.column;
-  let cursor = kicker(pen, windPlanTitle({ mode: input.mode }), y);
+  let cursor = kicker(pen, windPlanTitle({ mode: comfort ? "comfort" : "speed" }), y);
   const barHeight = Math.round(layout.unit * 2.5);
-  const caption = input.mode === "comfort" ? "Comfort (m/s, 5% of the time)" : "Velocity (m/s)";
+  const caption = comfort ? "Comfort (m/s, 5% of the time)" : "Velocity (m/s)";
   text(pen, caption, column.x, cursor + fontSizePx(layout, -1), fonts.sans(-1, 600), style.ink);
   cursor += Math.round(fontSizePx(layout, -1) * 1.6);
-  if (input.mode === "comfort") {
+  if (comfort) {
     const segment = column.width / COMFORT_CLASSES.length;
     COMFORT_CLASSES.forEach((cls, k) => {
       ctx.fillStyle = getColour(COMFORT_SWATCH[cls]);

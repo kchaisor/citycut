@@ -31,7 +31,7 @@ function snapshot(period: NamedViewSnapshot["wind"]["period"], daypart: NamedVie
   return {
     ...flags("3d", "plan", true),
     wind: { enabled: false, period, designWind: null, daypart },
-    windPlan: { mode: "speed", vectorsOn: true, sector: null },
+    windPlan: { mode: "speed", vectorsOn: true, sector: null, view: "map" },
   } as NamedViewSnapshot;
 }
 
@@ -65,6 +65,44 @@ describe("isWindSheetView", () => {
     expect(isWindSheetView(flags("3d", "iso", true))).toBe(false);
     expect(isWindSheetView(flags("drawing", "plan", true))).toBe(false);
     expect(isWindSheetView(flags("satellite", "plan", true))).toBe(false);
+  });
+});
+
+describe("Plan Flow wind sheet", () => {
+  it("applies the sheet to Plan with Wind Rose on whichever Plan wind view is chosen", () => {
+    const flow = { ...flags("3d", "plan", true), windPlan: { mode: "speed", vectorsOn: true, sector: null, view: "flow" } };
+    expect(isWindSheetView(flow)).toBe(true);
+    expect(isWindSheetView({ ...flow, view: { projection: "perspective", corner: "ne", freeRotate: false } })).toBe(false);
+  });
+
+  it("carries the chosen Plan wind view into the sheet input", () => {
+    const flow = { ...snapshot("annual", "all"), windPlan: { mode: "speed", vectorsOn: true, sector: null, view: "flow" } } as NamedViewSnapshot;
+    const source = { selection: WIND_SHEET_SELECTION, scaleMaxMs: 8, comfortShares: null };
+    expect(windSheetInput(source, flow, "Rozelle NSW", "Flow")!.planView).toBe("flow");
+    expect(windSheetInput(source, snapshot("annual", "all"), "Rozelle NSW", "Map")!.planView).toBe("map");
+  });
+
+  it("shows the on-screen Velocity (m/s) legend in Flow, even when the saved mode is comfort", () => {
+    vi.stubGlobal("Path2D", class {});
+    const source = { selection: WIND_SHEET_SELECTION, scaleMaxMs: 8, comfortShares: null };
+    const draw = (view: "map" | "flow") => {
+      const input = windSheetInput(source, { ...snapshot("annual", "all"), windPlan: { mode: "comfort", vectorsOn: true, sector: null, view } } as NamedViewSnapshot, "Rozelle NSW", "V")!;
+      const { ctx, texts } = stubContext();
+      drawWindSheet(ctx, windSheetLayout(2480, 1754), { source: {} as CanvasImageSource, width: 1200, height: 800, frame: null }, input, STYLE, { transparent: false });
+      return texts;
+    };
+    const flow = draw("flow");
+    expect(flow).toContain("Velocity (m/s)");
+    expect(flow).not.toContain("Velocity (× open ground)");
+    expect(flow).not.toContain("FLOW SPEED");
+    expect(flow).toEqual(expect.arrayContaining(["Rozelle NSW", "Annual · All day", "Indicative only, not a CFD study"]));
+    expect(draw("map")).toContain("Comfort (m/s, 5% of the time)");
+  });
+
+  it("trims a Flow render to its content: streaks on the ground over the page colour", () => {
+    const page = { r: 255, g: 255, b: 255 };
+    const image = grid(20, 12, (x, y) => (x >= 4 && x <= 15 && y >= 2 && y <= 9 ? (x % 2 ? [36, 32, 138, 255] : [0, 156, 120, 255]) : [255, 255, 255, 255]));
+    expect(contentBounds(image, page)).toEqual({ x: 4, y: 2, width: 12, height: 8 });
   });
 });
 

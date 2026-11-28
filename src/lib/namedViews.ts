@@ -11,13 +11,13 @@ import type { View3dDisplaySettings } from "./view3dDisplay";
 import type { ViewMemory } from "./viewMemory";
 import { isDesignWindId } from "./windDesignWinds";
 import { isWindDaypartId } from "./windDayparts";
-import { isWindPeriod, type WindViewSettings } from "./windState";
+import { DEFAULT_WIND_PLAN_VIEW, isWindPeriod, isWindPlanViewId, type WindPlanViewId, type WindViewSettings } from "./windState";
 import type { WindPlanMode } from "./windPlanField";
 
 export const NAMED_VIEWS_STORAGE_KEY = "citycut.namedViews.v1";
 export const NAMED_VIEWS_VERSION = 1;
 
-export type NamedViewWindPlan = { mode: WindPlanMode; vectorsOn: boolean; sector: number | null };
+export type NamedViewWindPlan = { mode: WindPlanMode; vectorsOn: boolean; sector: number | null; view: WindPlanViewId };
 
 export type NamedViewSnapshot = {
   view: ViewMemory;
@@ -114,6 +114,7 @@ function parseWindPlan(value: unknown): NamedViewWindPlan {
     mode: plan.mode === "comfort" ? "comfort" : "speed",
     vectorsOn: plan.vectorsOn !== false,
     sector: finite(plan.sector) && Number.isInteger(plan.sector) && plan.sector >= 0 ? plan.sector : null,
+    view: isWindPlanViewId(plan.view) ? plan.view : DEFAULT_WIND_PLAN_VIEW,
   };
 }
 

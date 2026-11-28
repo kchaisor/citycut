@@ -12,6 +12,8 @@ const pyrmont = siteWindFromPublishedAsset(-33.86627, 151.18389)!;
 function stubPlan(mode: WindPlanState["mode"], scaleMaxMs: number | null, comfortShares: WindPlanState["comfortShares"] = null): WindPlanState {
   return {
     active: true,
+    view: "map",
+    setView: () => {},
     mode,
     setMode: () => {},
     vectorsOn: true,

@@ -7,6 +7,7 @@ import { seasonRecord } from "../lib/windRoseStats";
 import type { WindDaypartId } from "../lib/windDayparts";
 import { windSeasonWeights, type WindSeasonWeights } from "../lib/windComfort";
 import { comfortShares, type ComfortShares } from "../lib/windComfortShares";
+import type { WindPlanViewId } from "../lib/windState";
 import { windPlanSiteClip } from "../lib/windPlanSiteClip";
 import {
   cachedWindPlanComfort,
@@ -42,9 +43,12 @@ declare global {
 
 const SLICE_BUDGET_MS = 8;
 const NO_DESIGN_WINDS: readonly DesignWind[] = [];
+const NOOP_SET_VIEW = () => undefined;
 
 export type WindPlanState = {
   active: boolean;
+  view: WindPlanViewId;
+  setView: (view: WindPlanViewId) => void;
   mode: WindPlanMode;
   setMode: (mode: WindPlanMode) => void;
   vectorsOn: boolean;
@@ -121,6 +125,8 @@ export function useWindPlan({
   clearDesignWind,
   active,
   scaleWanted = false,
+  view = "map",
+  setView = NOOP_SET_VIEW,
 }: {
   model: CityModel;
   siteWind: SiteWindSelection | null;
@@ -131,6 +137,8 @@ export function useWindPlan({
   clearDesignWind?: () => void;
   active: boolean;
   scaleWanted?: boolean;
+  view?: WindPlanViewId;
+  setView?: (view: WindPlanViewId) => void;
 }): WindPlanState {
   const [mode, setMode] = useState<WindPlanMode>("speed");
   const [vectorsOn, setVectorsOn] = useState(true);
@@ -238,6 +246,8 @@ export function useWindPlan({
 
   return {
     active,
+    view,
+    setView,
     mode,
     setMode,
     vectorsOn,

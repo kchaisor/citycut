@@ -129,6 +129,7 @@ import {
   useMelbourneSunSample,
   type SolarViewSettings,
 } from "./SolarHeliodon";
+import { windSceneLayers } from "../lib/windState";
 import { GroundWindFlow } from "./GroundWindFlow";
 import { WindDiagramStreams } from "./WindDiagramStreams";
 import type { PrevailingStream } from "../lib/windPrevailingStreams";
@@ -3180,6 +3181,7 @@ export function Scene3D({
   const windPlanStore = useMemo(() => createWindPlanTransformStore(), []);
   const windPlanOn = windPlan?.active === true;
   const windDiagramOn = windDiagramStreams != null && windDiagramStreams.length > 0;
+  const windLayers = windSceneLayers({ planMapOn: windPlanOn, flowOn: windEnabled, streamsOn: windDiagramOn });
   const onBounds = useCallback((bounds: Aabb) => {
     boundsRef.current = bounds;
     if (typeof document === "undefined") return;
@@ -3281,7 +3283,7 @@ export function Scene3D({
         <ScenePause active={active} />
         <AdaptiveViewportDpr />
         <SceneContinuousBridge
-          windAnimate={(windEnabled || windDiagramOn) && windAnimateStreaks && !windPlanOn}
+          windAnimate={(windLayers.groundFlow || windLayers.streams) && windAnimateStreaks}
           walkRippleActive={walkRipplePlaying}
         />
         {qaModeFromSearch(typeof window === "undefined" ? "" : window.location.search) ? <QaPerfSampler /> : null}
@@ -3408,13 +3410,13 @@ export function Scene3D({
         period={windPeriod}
         designWind={windDesignWind}
         sector={windSector}
-        enabled={windEnabled && !windPlanOn}
+        enabled={windLayers.groundFlow}
         animateStreaks={windAnimateStreaks}
       />
-      {windDiagramOn && !windPlanOn ? (
+      {windLayers.streams ? (
         <WindDiagramStreams model={windModel ?? model} streams={windDiagramStreams ?? []} spreadRadiusM={windSpreadRadiusM} animate={active && windAnimateStreaks} />
       ) : null}
-      {windPlanOn ? <WindPlanProjector store={windPlanStore} /> : null}
+      {windLayers.planOverlay ? <WindPlanProjector store={windPlanStore} /> : null}
       <Cameras
         side={model.sideM}
         frameWidthM={model.widthM ?? model.sideM}
@@ -3480,7 +3482,7 @@ export function Scene3D({
           ))}
         </div>
       ) : null}
-      {windPlanOn && windPlan ? <WindPlanOverlay model={windPlanOutlineModel ?? model} plan={windPlan} store={windPlanStore} /> : null}
+      {windLayers.planOverlay && windPlan ? <WindPlanOverlay model={windPlanOutlineModel ?? model} plan={windPlan} store={windPlanStore} /> : null}
     </div>
   );
 }

@@ -6,6 +6,61 @@ export const WIND_ENABLED_KEY = "citycut.wind.enabled";
 export const WIND_PERIOD_KEY = "citycut.wind.period";
 export const WIND_DESIGN_WIND_KEY = "citycut.wind.designWind";
 export const WIND_DAYPART_KEY = "citycut.wind.daypart";
+export const WIND_PLAN_VIEW_KEY = "citycut.wind.planView";
+
+export type WindPlanViewId = "map" | "flow";
+
+export const DEFAULT_WIND_PLAN_VIEW: WindPlanViewId = "map";
+
+export function isWindPlanViewId(value: unknown): value is WindPlanViewId {
+  return value === "map" || value === "flow";
+}
+
+export function readStoredWindPlanView(storage: Storage): WindPlanViewId {
+  try {
+    const stored = storage.getItem(WIND_PLAN_VIEW_KEY);
+    return isWindPlanViewId(stored) ? stored : DEFAULT_WIND_PLAN_VIEW;
+  } catch {
+    return DEFAULT_WIND_PLAN_VIEW;
+  }
+}
+
+export function writeStoredWindPlanView(storage: Storage, view: WindPlanViewId): void {
+  try {
+    storage.setItem(WIND_PLAN_VIEW_KEY, view);
+  } catch {
+  }
+}
+
+export type WindSceneLayers = { groundFlow: boolean; streams: boolean; planOverlay: boolean };
+
+export function windSceneLayers({
+  planMapOn,
+  flowOn,
+  streamsOn,
+}: {
+  planMapOn: boolean;
+  flowOn: boolean;
+  streamsOn: boolean;
+}): WindSceneLayers {
+  return { groundFlow: flowOn && !planMapOn, streams: streamsOn && !planMapOn, planOverlay: planMapOn };
+}
+
+export function windPlanMapShown({
+  tab,
+  projection,
+  windOn,
+  hasSiteWind,
+  planView,
+}: {
+  tab: string;
+  projection: string;
+  windOn: boolean;
+  hasSiteWind: boolean;
+  planView: WindPlanViewId;
+}): boolean {
+  return tab === "3d" && projection === "plan" && windOn && hasSiteWind && planView === "map";
+}
 
 export type WindViewSettings = {
   enabled: boolean;

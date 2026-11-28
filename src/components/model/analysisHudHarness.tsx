@@ -8,7 +8,7 @@ import {
 import { resolveSunDomeRadiusM, sunDomeRange } from "../../lib/heliodonRadius";
 import { NO_ANALYSES, analysesOf, type ActiveAnalyses, type SiteAnalysisKind } from "../../lib/sidebarSections";
 import type { DesignWind } from "../../lib/windDesignWinds";
-import { DEFAULT_WIND_SETTINGS, type WindViewSettings } from "../../lib/windState";
+import { DEFAULT_WIND_SETTINGS, windPlanMapShown, type WindPlanViewId, type WindViewSettings } from "../../lib/windState";
 import { findDesignWind } from "../../lib/windDesignWinds";
 import { windMotionPaused } from "../../lib/windStreakMotion";
 import type { SolarViewSettings } from "../SolarHeliodon";
@@ -37,6 +37,7 @@ export type AnalysisHudHarnessProps = {
   walk?: Partial<WalkViewshed>;
   sunHoursReady?: boolean;
   pickedBuildingIds?: readonly number[];
+  initialPlanView?: WindPlanViewId;
 };
 
 export function AnalysisHudHarness({
@@ -53,6 +54,7 @@ export function AnalysisHudHarness({
   walk: walkOverrides = {},
   sunHoursReady = false,
   pickedBuildingIds = [],
+  initialPlanView = "map",
 }: AnalysisHudHarnessProps) {
   const [solar, setSolar] = useState(() => initialSolarSettings("", emptyStorage));
   const [analyses, setAnalyses] = useState<ActiveAnalyses>(
@@ -68,6 +70,7 @@ export function AnalysisHudHarness({
   const [sunDomeSizeM, setSunDomeSizeM] = useState<number | null>(null);
   const [planMode, setPlanMode] = useState<"speed" | "comfort">("speed");
   const [vectorsOn, setVectorsOn] = useState(true);
+  const [planView, setPlanView] = useState<WindPlanViewId>(initialPlanView);
   const [eyeM, setEyeM] = useState(1.6);
   const [radiusM, setRadiusM] = useState(200);
   const [speed, setSpeed] = useState(1);
@@ -150,9 +153,12 @@ export function AnalysisHudHarness({
       ...walkOverrides,
     },
     walkAt: { index: 0, distanceM: 0 },
+    view: { projection },
     windSettings,
     windPlan: {
-      active: tab === "3d" && projection === "plan" && analyses.wind,
+      active: windPlanMapShown({ tab, projection, windOn: analyses.wind, hasSiteWind: true, planView }),
+      view: planView,
+      setView: setPlanView,
       mode: planMode,
       setMode: setPlanMode,
       vectorsOn,

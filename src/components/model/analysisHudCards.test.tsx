@@ -402,6 +402,43 @@ describe("Wind Rose card", () => {
     expect(wind.getByRole("group", { name: "Wind season presets" })).toBeTruthy();
   });
 
+  it("offers Wind map | Flow in Plan, with Wind map showing today's plan content", () => {
+    render(<Hud projection="plan" />);
+    fireEvent.click(mode("Wind Rose"));
+    const wind = within(card("wind")!);
+    const choice = wind.getByRole("group", { name: "Plan wind view" });
+    expect(within(choice).getByText("Wind map")).toBeTruthy();
+    expect(within(choice).getByRole("button", { name: "Wind map" }).getAttribute("aria-pressed")).toBe("true");
+    expect(within(choice).getByRole("button", { name: "Flow" }).getAttribute("aria-pressed")).toBe("false");
+    expect(wind.getByRole("button", { name: "Wind speed" })).toBeTruthy();
+    expect(wind.queryByRole("group", { name: "Wind overlay toggles" })).toBeNull();
+  });
+
+  it("reveals the Overlays row and the Density slider with Flow chosen in Plan, and hides the map-only controls", () => {
+    render(<Hud projection="plan" />);
+    fireEvent.click(mode("Wind Rose"));
+    const wind = within(card("wind")!);
+    fireEvent.click(wind.getByRole("button", { name: "Flow" }));
+    expect(wind.getByRole("button", { name: "Flow" }).getAttribute("aria-pressed")).toBe("true");
+    const overlays = wind.getByRole("group", { name: "Wind overlay toggles" });
+    expect(within(overlays).getByRole("button", { name: "3D Wind Flow" })).toBeTruthy();
+    expect(within(overlays).getByRole("button", { name: "Wind streaks" })).toBeTruthy();
+    expect(within(overlays).getByRole("button", { name: /wind animation/ })).toBeTruthy();
+    expect(wind.getByRole("slider", { name: "Density" })).toBeTruthy();
+    expect(wind.queryByRole("button", { name: "Wind speed" })).toBeNull();
+    expect(wind.queryByRole("button", { name: "Arrows" })).toBeNull();
+    expect(card("wind")!.className).not.toContain("is-plan");
+    fireEvent.click(wind.getByRole("button", { name: "Wind map" }));
+    expect(wind.queryByRole("group", { name: "Wind overlay toggles" })).toBeNull();
+    expect(wind.getByRole("button", { name: "Wind speed" })).toBeTruthy();
+  });
+
+  it("does not show the Plan wind view choice in Perspective", () => {
+    render(<Hud />);
+    fireEvent.click(mode("Wind Rose"));
+    expect(within(card("wind")!).queryByRole("group", { name: "Plan wind view" })).toBeNull();
+  });
+
   it("keeps the rose full card width while another analysis shares the stack", () => {
     render(<Hud initialKinds={["wind"]} />);
     expect(card("wind")!.className).not.toContain("is-tight");

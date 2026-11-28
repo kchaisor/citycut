@@ -82,6 +82,8 @@ describe("WindPlanRows water note", () => {
 
   const plan = {
     active: true,
+    view: "map" as const,
+    setView: () => {},
     mode: "speed" as const,
     setMode: () => {},
     vectorsOn: true,
