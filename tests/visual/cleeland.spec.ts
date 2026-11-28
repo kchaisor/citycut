@@ -19,7 +19,7 @@ async function savePrShot(target: Page | Locator, name: string) {
   await target.screenshot({ path: `${PR_SHOTS_DIR}/${name}`, animations: "disabled", caret: "hide" });
 }
 
-test.describe.configure({ mode: "serial" });
+test.describe.configure({ mode: "default" });
 
 test.describe("Cleeland 1 km @ 1440×900", () => {
   const consoleErrors: string[] = [];
