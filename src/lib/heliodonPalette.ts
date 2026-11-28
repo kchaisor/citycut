@@ -13,7 +13,7 @@ export type HeliodonPalette = {
 };
 
 export function heliodonPalette(): HeliodonPalette {
-  const background = themeColor(HELIODON_BACKGROUND_KEY, themeSheetColor("--background"));
+  const background = themeColor(HELIODON_BACKGROUND_KEY, themeSheetColor(HELIODON_BACKGROUND_KEY));
   return {
     casing: background,
     halo: background,

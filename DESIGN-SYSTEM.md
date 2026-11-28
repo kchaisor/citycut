@@ -1,7 +1,7 @@
 # CityCut design system
 
 Version 1, 17 Nov 2026. Built from `main` @ `e9e4b35` and the live site at 1440×900 and 1280×800. Desktop only.
-Source token files: `src/theme.css` (chrome), `src/colours.css` (fills), `src/drawing-style.css` (site-plan lines), `src/floating.css` `:root` blocks (Studio HUD). Proposed consolidated block: `tokens-proposed.css`.
+Source token files: `src/theme.css` (all chrome, including the Studio HUD), `src/colours.css` (fills), `src/drawing-style.css` (site-plan lines). Each token name lives in one file only. THEME.md lists every value and `src/lib/themeDoc.test.ts` keeps it in step with the files. Proposed consolidated block: `docs/tokens-proposed.css`.
 
 ## 1. The rule
 
@@ -182,6 +182,8 @@ Reduced motion (MUST): under `prefers-reduced-motion: reduce`, set movement (tra
 
 ## 10. Cleanup list (for a later code pass, not this PR)
 
+Line numbers are from the 17 Nov audit and have drifted. Items 1, 11, 12 and 21 change how the app looks, so they wait for a design call: on 28 Nov 2026 Kelvin chose to keep today's look when the token files were merged.
+
 | # | Where | Now | → Token |
 |---|---|---|---|
 | 1 | `floating.css:392–393` `--ink-3` / `--ink-muted` | `#787670` (4.39 on card, 4.02 on sub, 4.20 on KPI) | `#6B6963` (5.31 / 4.85 / 5.08). **Contrast fail: do first** |
@@ -203,4 +205,4 @@ Reduced motion (MUST): under `prefers-reduced-motion: reduce`, set movement (tra
 | 17 | `floating.css:3756` `.loading-pulse-dot{box-shadow:0 0 8px #FFF500}`; `:3422, 3601` `box-shadow 1314ms` | glow (CLAUDE.md bans glow), shadow animation | ink edge, no glow; animate opacity/transform |
 | 18 | MapLibre zoom controls (landing) | default blue focus glow `rgb(0 150 255)` (2.98) | `--focus-ring` |
 | 19 | Raw colours outside `:root`: `index.css` ×54, `floating.css` ×98 (e.g. `floating.css:487, 1074, 1083, 1305` `#FFFFFF`) | breaks rule 1 | `--on-ink` / `--bg-elev` / named tokens |
-| 20 | `THEME.md:37–38, 94–101` | says Outfit/Fraunces; the app uses Geist | update the doc; `--font-serif` is Geist, so rename it or drop it |
+| 21 | `theme.css` `--font-size` (page body), `--font-size-brand`, `--font-size-drawer`, `--font-size-card`, `--font-size-stat`, `--font-size-title` | 15 / 18 / 15 / 16 / 22 / 28px | `--fs-body` 13 / `--fs-title` 16 / `--fs-stat` 20 / `--fs-display` 24 |

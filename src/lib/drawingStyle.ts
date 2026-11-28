@@ -422,7 +422,7 @@ export function styleFromProperties(
   if (coarseFrom != null) next.contourCoarseFromScale = coarseFrom;
   const treeOpacity = Number(read("--tree-fill-opacity"));
   if (Number.isFinite(treeOpacity) && treeOpacity >= 0 && treeOpacity <= 1) next.treeFillOpacity = treeOpacity;
-  const axoGuide = normalizeDash(read("--axo-guide-dash"));
+  const axoGuide = normalizeDash(read("--axo-guide-dash-pattern"));
   if (axoGuide) next.axoGuideDash = axoGuide;
   const pathVars = STROKE_VARS.path;
   if (parseMm(read(pathVars.mm)) == null) {

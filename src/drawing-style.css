@@ -61,7 +61,7 @@
   --tree-dash: none;
   --tree-fill-opacity: 0.7;
 
-  --axo-guide-dash: 0.8 0.5;
+  --axo-guide-dash-pattern: 0.8 0.5;
 
   --site-building-stroke-mm: 0.35;
   --site-building-stroke: #3D3010;
