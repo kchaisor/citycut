@@ -7,7 +7,9 @@ import {
   createGroundWindGridBuilder,
   groundWindFieldCache,
   groundWindHeightAt,
+  groundWindIsWater,
   groundWindSector,
+  groundWindWaterMask,
   type GroundWindFlowGrid,
   type GroundWindGridBuilder,
 } from "../lib/groundWindField";
@@ -23,6 +25,7 @@ import {
   warmGroundWindStreaks,
   writeGroundWindStreakVertices,
   type GroundWindStreaks,
+  type OverWater,
 } from "../lib/groundWindStreaks";
 import { useColourRevision } from "../lib/useColourRevision";
 import { GROUND_WIND_EMPTY_MASK_RECT, groundWindHudMaskFromDom, type GroundWindMaskRect } from "../lib/groundWindHudMask";
@@ -101,6 +104,8 @@ void main() {
   float a = vAlpha * coverage;
   if (a < 0.004) discard;
   gl_FragColor = vec4(rampAt(vSpeed), a);
+#include <tonemapping_fragment>
+#include <colorspace_fragment>
 }
 `;
 
@@ -120,7 +125,7 @@ function createStreakGeometry(count: number) {
   return { geometry, data, vertices };
 }
 
-function makeWindMaterial(width: number, height: number) {
+export function makeWindMaterial(width: number, height: number) {
   const empty = GROUND_WIND_EMPTY_MASK_RECT;
   return new THREE.ShaderMaterial({
     vertexShader: VERTEX_SHADER,
@@ -137,8 +142,10 @@ function makeWindMaterial(width: number, height: number) {
     transparent: true,
     depthWrite: false,
     depthTest: true,
+    polygonOffset: true,
+    polygonOffsetFactor: SURFACE.water.polygonOffsetFactor,
+    polygonOffsetUnits: SURFACE.water.polygonOffsetUnits,
     side: THREE.DoubleSide,
-    toneMapped: false,
   });
 }
 
@@ -229,8 +236,10 @@ export function GroundWindFlow({
     if (!frozen) invalidate();
   }, [frozen, invalidate]);
 
+  const overWaterRef = useRef<OverWater | null>(null);
+
   const upload = (streaks: GroundWindStreaks) => {
-    const drawn = writeGroundWindStreakVertices(streaks);
+    const drawn = writeGroundWindStreakVertices(streaks, overWaterRef.current ?? undefined);
     data.needsUpdate = true;
     data.updateRanges.length = 0;
     data.addUpdateRange(0, drawn * GROUND_WIND_VERTS_PER_STREAK * GROUND_WIND_VERTEX_STRIDE);
@@ -247,6 +256,9 @@ export function GroundWindFlow({
       const grid = builder.finish();
       builderRef.current = null;
       gridRef.current = grid;
+      const obs = grid.obstacles;
+      const mask = groundWindWaterMask(model, obs);
+      overWaterRef.current = (east, north) => groundWindIsWater(obs, mask, east, north);
       if (!streaksRef.current) {
         const streaks = createGroundWindStreaks(model, grid, heightAt, speedRef.current, count, vertices);
         warmGroundWindStreaks(streaks, grid, heightAt, speedRef.current);

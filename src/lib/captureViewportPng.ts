@@ -1,5 +1,5 @@
-import type * as THREE from "three";
-import { POST_OVERLAY_LAYER } from "./postOverlay";
+import * as THREE from "three";
+import { POST_OVERLAY_LAYER, createDepthRestore, postOverlayUsers, renderPostOverlay } from "./postOverlay";
 
 export type ViewportOverlayLabel = {
   text: string;
@@ -235,6 +235,83 @@ export function renderViewportWithOverlays(gl: THREE.WebGLRenderer, scene: THREE
   }
 }
 
+const OUTPUT_FRAGMENT = `
+uniform sampler2D tColour;
+varying vec2 vUv;
+void main() {
+  vec4 linear = texture2D(tColour, vUv);
+  float alpha = linear.a;
+  gl_FragColor = vec4(alpha > 0.0 ? linear.rgb / alpha : linear.rgb, alpha);
+  #include <tonemapping_fragment>
+  #include <colorspace_fragment>
+  gl_FragColor.rgb *= alpha;
+}
+`;
+
+export function createOutputPass() {
+  const material = new THREE.ShaderMaterial({
+    uniforms: { tColour: { value: null } },
+    vertexShader: "varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }",
+    fragmentShader: OUTPUT_FRAGMENT,
+    blending: THREE.NoBlending,
+    depthTest: false,
+    depthWrite: false,
+  });
+  const geometry = new THREE.PlaneGeometry(2, 2);
+  const quad = new THREE.Mesh(geometry, material);
+  quad.frustumCulled = false;
+  const scene = new THREE.Scene();
+  scene.add(quad);
+  return {
+    scene,
+    material,
+    camera: new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1),
+    dispose: () => {
+      geometry.dispose();
+      material.dispose();
+    },
+  };
+}
+
+export function renderLinearViewport(gl: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.Camera): void {
+  const { width, height } = gl.domElement;
+  const deferred = postOverlayUsers(scene) > 0;
+  const mask = camera.layers.mask;
+  const depthTexture = new THREE.DepthTexture(width, height);
+  const target = new THREE.WebGLRenderTarget(width, height, {
+    type: THREE.HalfFloatType,
+    minFilter: THREE.NearestFilter,
+    magFilter: THREE.NearestFilter,
+    depthTexture,
+  });
+  const output = createOutputPass();
+  const restore = deferred ? createDepthRestore() : null;
+  const autoClear = gl.autoClear;
+  try {
+    if (deferred) camera.layers.disable(POST_OVERLAY_LAYER);
+    else camera.layers.enable(POST_OVERLAY_LAYER);
+    gl.setRenderTarget(target);
+    gl.render(scene, camera);
+    camera.layers.mask = mask;
+    gl.setRenderTarget(null);
+    output.material.uniforms.tColour!.value = target.texture;
+    gl.autoClear = false;
+    gl.render(output.scene, output.camera);
+    if (restore) {
+      gl.clearDepth();
+      renderPostOverlay(gl, scene, camera, restore, depthTexture);
+    }
+  } finally {
+    gl.autoClear = autoClear;
+    camera.layers.mask = mask;
+    gl.setRenderTarget(null);
+    output.dispose();
+    restore?.dispose();
+    target.dispose();
+    depthTexture.dispose();
+  }
+}
+
 export async function captureViewportPng(
   gl: THREE.WebGLRenderer,
   scene: THREE.Scene,
@@ -267,7 +344,7 @@ export async function captureViewportPng(
     gl.setClearAlpha(0);
   }
   try {
-    renderViewportWithOverlays(gl, scene, camera);
+    renderLinearViewport(gl, scene, camera);
     const bufferRatio = source.width / cssWidth;
     const sx = Math.max(0, Math.round(crop.x * bufferRatio));
     const sy = Math.max(0, Math.round(crop.y * bufferRatio));

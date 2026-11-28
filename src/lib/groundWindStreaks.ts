@@ -1,5 +1,6 @@
 import type { CityModel } from "../types";
 import {
+  groundWindWaterAlpha,
   sampleGroundWindFlow,
   type GroundWindFlowGrid,
   type GroundWindFlowSample,
@@ -345,7 +346,9 @@ function writeVertex(
   out[o + 7] = alpha;
 }
 
-export function writeGroundWindStreakVertices(streaks: GroundWindStreaks): number {
+export type OverWater = (east: number, north: number) => boolean;
+
+export function writeGroundWindStreakVertices(streaks: GroundWindStreaks, overWater?: OverWater): number {
   const out = streaks.vertices;
   const last = GROUND_WIND_TRAIL_POINTS - 1;
   const phase = streaks.sampleClock / GROUND_WIND_TRAIL_SAMPLE_S;
@@ -389,9 +392,10 @@ export function writeGroundWindStreakVertices(streaks: GroundWindStreaks): numbe
         te = fe;
         tn = fn;
       }
-      const alpha = lifeAlpha * (1 - (k / last) * GROUND_WIND_TAIL_FADE);
       const e = trailE[k]!;
       const n = trailN[k]!;
+      const alpha =
+        lifeAlpha * (1 - (k / last) * GROUND_WIND_TAIL_FADE) * (overWater ? groundWindWaterAlpha(overWater(e, n)) : 1);
       const y = trailY[k]!;
       const s = trailS[k]!;
       writeVertex(out, o, e, y, n, te, tn, -1, s, alpha);
