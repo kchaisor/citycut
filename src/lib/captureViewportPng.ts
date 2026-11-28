@@ -322,7 +322,7 @@ export async function captureViewportPng(
 ): Promise<Blob> {
   const source = gl.domElement;
   if (source.width < 2 || source.height < 2) throw new Error("The 3D view is not on screen.");
-  const hq = options.transparent === true;
+  const transparent = options.transparent === true;
   const sheet = typeof options.crop === "object" ? options.crop : null;
   const cssWidth = source.clientWidth || source.width;
   const cssHeight = source.clientHeight || source.height;
@@ -334,13 +334,13 @@ export async function captureViewportPng(
   const previousBackground = scene.background;
   const previousAlpha = typeof gl.getClearAlpha === "function" ? gl.getClearAlpha() : 1;
   let ratio = source.width / cssWidth;
-  const resize = hq || sheet !== null;
+  const resize = options.scale != null || sheet !== null;
   if (resize) {
     const requested = sheet ? sheet.minWidthPx / Math.max(crop.width, 1) : Math.max(2, options.scale ?? HQ_DEFAULT_SCALE);
     ratio = hqPixelRatio(cssWidth, cssHeight, requested, maxTextureSize(gl));
     gl.setPixelRatio(ratio);
   }
-  if (hq) {
+  if (transparent) {
     scene.background = null;
     gl.setClearAlpha(0);
   }
@@ -356,7 +356,7 @@ export async function captureViewportPng(
     canvas.height = sh;
     const context = canvas.getContext("2d");
     if (!context) throw new Error("Could not prepare the PNG.");
-    if (!hq && capture.background) {
+    if (!transparent && capture.background) {
       context.fillStyle = capture.background;
       context.fillRect(0, 0, sw, sh);
     }
@@ -384,7 +384,7 @@ export async function captureViewportPng(
     if (!blob) throw new Error("Could not encode the PNG.");
     return blob;
   } finally {
-    if (hq) {
+    if (transparent) {
       scene.background = previousBackground;
       gl.setClearAlpha(previousAlpha);
     }

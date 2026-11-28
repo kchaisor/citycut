@@ -395,6 +395,34 @@ describe("high quality capture", () => {
     expect(log.indexOf("render:clear")).toBeLessThan(log.indexOf("alpha:1"));
   });
 
+  it("scales and clears the background independently", async () => {
+    const fills: string[] = [];
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({
+      fillRect: vi.fn(),
+      drawImage: vi.fn(),
+      beginPath: vi.fn(),
+      roundRect: vi.fn(),
+      fill: vi.fn(),
+      stroke: vi.fn(),
+      fillText: vi.fn(),
+      set fillStyle(value: string) {
+        fills.push(value);
+      },
+    } as unknown as CanvasRenderingContext2D);
+    vi.spyOn(HTMLCanvasElement.prototype, "toBlob").mockImplementation((callback) => callback(new Blob([new Uint8Array([1])])));
+    const scaled = hqRenderer();
+    await captureViewportPng(scaled.gl, new THREE.Scene(), new THREE.PerspectiveCamera(), { background: "rgb(250, 250, 250)", labels: [] }, { transparent: false, scale: 3 });
+    expect(scaled.raw.setPixelRatio.mock.calls[0]![0]).toBe(3);
+    expect(scaled.raw.setClearAlpha).not.toHaveBeenCalled();
+    expect(fills).toContain("rgb(250, 250, 250)");
+    fills.length = 0;
+    const clear = hqRenderer();
+    await captureViewportPng(clear.gl, new THREE.Scene(), new THREE.PerspectiveCamera(), { background: "rgb(250, 250, 250)", labels: [] }, { transparent: true });
+    expect(clear.raw.setPixelRatio).not.toHaveBeenCalled();
+    expect(clear.raw.setClearAlpha).toHaveBeenCalledWith(0);
+    expect(fills).not.toContain("rgb(250, 250, 250)");
+  });
+
   it("renders post-overlay objects in the high quality capture and in the restoring frame", async () => {
     vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({
       fillRect: vi.fn(),
