@@ -49,10 +49,22 @@ function mount(overrides: Partial<NamedViewsPanelProps> = {}) {
     onDelete: vi.fn(),
     onExportSelected: vi.fn(),
     onExportAll: vi.fn(),
+    windSheetFraming: "whole-site",
+    onWindSheetFramingChange: vi.fn(),
     ...overrides,
   };
   render(<NamedViewsPanel {...props} />);
   return props;
+}
+
+const WIND_SHEET_SNAPSHOT: NamedViewSnapshot = {
+  ...SNAPSHOT,
+  view: { projection: "plan", corner: "ne", freeRotate: false },
+  analyses: { solar: false, wind: true, view: false },
+};
+
+function windSheetViews(): NamedView[] {
+  return [...makeViews(), captureNamedView("Wind sheet", WIND_SHEET_SNAPSHOT, { id: "w" })!];
 }
 
 afterEach(cleanup);
@@ -130,11 +142,11 @@ describe("NamedViewsPanel", () => {
     await user.click(screen.getByRole("checkbox", { name: "Tick Corner" }));
     expect(selected.disabled).toBe(false);
     await user.click(selected);
-    expect(props.onExportSelected).toHaveBeenCalledWith(["b"], false);
+    expect(props.onExportSelected).toHaveBeenCalledWith(["b"], false, "whole-site");
     await user.click(screen.getByRole("checkbox", { name: "Tick Corner" }));
     expect(selected.disabled).toBe(true);
     await user.click(screen.getByRole("button", { name: "Export all" }));
-    expect(props.onExportAll).toHaveBeenCalledWith(false);
+    expect(props.onExportAll).toHaveBeenCalledWith(false, "whole-site");
   });
 
   it("passes the High quality, transparent toggle through to both exports", async () => {
@@ -145,9 +157,9 @@ describe("NamedViewsPanel", () => {
     await user.click(toggle);
     await user.click(screen.getByRole("checkbox", { name: "Tick Plaza" }));
     await user.click(screen.getByRole("button", { name: "Export selected" }));
-    expect(props.onExportSelected).toHaveBeenCalledWith(["a"], true);
+    expect(props.onExportSelected).toHaveBeenCalledWith(["a"], true, "whole-site");
     await user.click(screen.getByRole("button", { name: "Export all" }));
-    expect(props.onExportAll).toHaveBeenCalledWith(true);
+    expect(props.onExportAll).toHaveBeenCalledWith(true, "whole-site");
   });
 
   it("marks non-3D views as restore only and disables export while busy", () => {
@@ -169,5 +181,34 @@ describe("NamedViewsPanel", () => {
     expect(buttonRule).toContain("min-width: max-content");
     mount({ views: [captureNamedView("Southbank Isometric Perspective Solar Study", SNAPSHOT, { id: "c" })!] });
     expect(screen.getByTitle("Southbank Isometric Perspective Solar Study")).toBeTruthy();
+  });
+
+  it("shows the A3 map framing only when a saved view is a Plan wind sheet", () => {
+    mount();
+    expect(screen.queryByRole("group", { name: "A3 map framing" })).toBeNull();
+    cleanup();
+    mount({ views: windSheetViews() });
+    const group = screen.getByRole("group", { name: "A3 map framing" });
+    expect(within(group).getByRole("button", { name: "Whole site" }).getAttribute("aria-pressed")).toBe("true");
+    expect(within(group).getByRole("button", { name: "Saved zoom" }).getAttribute("aria-pressed")).toBe("false");
+  });
+
+  it("reports the framing choice and passes it to both exports", async () => {
+    const user = userEvent.setup();
+    const props = mount({ views: windSheetViews(), windSheetFraming: "saved" });
+    const group = screen.getByRole("group", { name: "A3 map framing" });
+    await user.click(within(group).getByRole("button", { name: "Whole site" }));
+    expect(props.onWindSheetFramingChange).toHaveBeenCalledWith("whole-site");
+    await user.click(screen.getByRole("checkbox", { name: "Tick Wind sheet" }));
+    await user.click(screen.getByRole("button", { name: "Export selected" }));
+    expect(props.onExportSelected).toHaveBeenCalledWith(["w"], false, "saved");
+    await user.click(screen.getByRole("button", { name: "Export all" }));
+    expect(props.onExportAll).toHaveBeenCalledWith(false, "saved");
+  });
+
+  it("disables the framing choice while exporting", () => {
+    mount({ views: windSheetViews(), busy: "all" });
+    const group = screen.getByRole("group", { name: "A3 map framing" });
+    for (const button of within(group).getAllByRole("button")) expect((button as HTMLButtonElement).disabled).toBe(true);
   });
 });
