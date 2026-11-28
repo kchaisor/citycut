@@ -90,7 +90,7 @@ function applyPrimaryPlinthMaterial(mesh: THREE.Mesh, primaryOn: boolean): void 
 export type CanvasRoadTintMode = "off" | "primary" | "white";
 
 function roadFillForCanvas(mode: Exclude<CanvasRoadTintMode, "off">, grade: string | undefined): string {
-  if (mode === "white") return getColour("--primary-surface");
+  if (mode === "white") return grade === "path" ? getColour("--card-footpath") : getColour("--card-road");
   return grade === "path" ? getColour("--primary-footpath") : getColour("--primary-road");
 }
 

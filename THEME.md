@@ -203,6 +203,8 @@ A name the app does not load, such as a font from your computer only, will show 
 | `--water-sunpath` | `#4A9FE8` | Water in the 3D viewport while the sun path diagram is on. |
 | `--sun-study-surface` | `#FFFFFF` | Ground, roads, and parks in the 3D viewport while the sun path is on. |
 | `--card-white` | `#FAFAF8` | Building and surface massing in white-card 3D display mode. |
+| `--card-road` | `#FFFFFF` | Road fill in 3D Card view (Primary, Use and Source off). Matches the white Card default until the Roads colour chip changes it. |
+| `--card-footpath` | `#FFFFFF` | Footpath fill in 3D Card view. Matches the white Card default until the Footpaths colour chip changes it. |
 | `--card-ground` | `#F2F2F0` | Ground and terrain in white-card 3D display mode. |
 | `--nsw-road-corridor` | `#E9E5DC` | NSW mode: cadastral road corridor fill under the carriageway on the site plan. |
 | `--nsw-lot-line` | `#5E5E5E` | NSW mode: cadastral lot boundaries on the site plan. |
