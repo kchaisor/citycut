@@ -143,24 +143,28 @@ describe("NamedViewsPanel", () => {
     await user.click(screen.getByRole("checkbox", { name: "Tick Corner" }));
     expect(selected.disabled).toBe(false);
     await user.click(selected);
-    expect(props.onExportSelected).toHaveBeenCalledWith(["b"], false, "whole-site");
+    expect(props.onExportSelected).toHaveBeenCalledWith(["b"], { highQuality: false, transparent: false }, "whole-site");
     await user.click(screen.getByRole("checkbox", { name: "Tick Corner" }));
     expect(selected.disabled).toBe(true);
     await user.click(screen.getByRole("button", { name: "Export all" }));
-    expect(props.onExportAll).toHaveBeenCalledWith(false, "whole-site");
+    expect(props.onExportAll).toHaveBeenCalledWith({ highQuality: false, transparent: false }, "whole-site");
   });
 
-  it("passes the High quality, transparent toggle through to both exports", async () => {
+  it("has separate High quality and Transparent background toggles, passed through to both exports", async () => {
     const user = userEvent.setup();
     const props = mount();
-    const toggle = screen.getByRole("checkbox", { name: "High quality, transparent" }) as HTMLInputElement;
-    expect(toggle.checked).toBe(false);
-    await user.click(toggle);
+    const hq = screen.getByRole("checkbox", { name: "High quality" }) as HTMLInputElement;
+    const clear = screen.getByRole("checkbox", { name: "Transparent background" }) as HTMLInputElement;
+    expect(hq.checked).toBe(false);
+    expect(clear.checked).toBe(false);
+    expect(hq.compareDocumentPosition(clear) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    await user.click(clear);
     await user.click(screen.getByRole("checkbox", { name: "Tick Plaza" }));
     await user.click(screen.getByRole("button", { name: "Export selected" }));
-    expect(props.onExportSelected).toHaveBeenCalledWith(["a"], true, "whole-site");
+    expect(props.onExportSelected).toHaveBeenLastCalledWith(["a"], { highQuality: false, transparent: true }, "whole-site");
+    await user.click(hq);
     await user.click(screen.getByRole("button", { name: "Export all" }));
-    expect(props.onExportAll).toHaveBeenCalledWith(true, "whole-site");
+    expect(props.onExportAll).toHaveBeenLastCalledWith({ highQuality: true, transparent: true }, "whole-site");
   });
 
   it("marks non-3D views as restore only and disables export while busy", () => {
@@ -202,9 +206,9 @@ describe("NamedViewsPanel", () => {
     expect(props.onWindSheetFramingChange).toHaveBeenCalledWith("whole-site");
     await user.click(screen.getByRole("checkbox", { name: "Tick Wind sheet" }));
     await user.click(screen.getByRole("button", { name: "Export selected" }));
-    expect(props.onExportSelected).toHaveBeenCalledWith(["w"], false, "saved");
+    expect(props.onExportSelected).toHaveBeenCalledWith(["w"], { highQuality: false, transparent: false }, "saved");
     await user.click(screen.getByRole("button", { name: "Export all" }));
-    expect(props.onExportAll).toHaveBeenCalledWith(false, "saved");
+    expect(props.onExportAll).toHaveBeenCalledWith({ highQuality: false, transparent: false }, "saved");
   });
 
   it("disables the framing choice while exporting", () => {

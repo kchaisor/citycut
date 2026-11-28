@@ -130,7 +130,7 @@ describe("useNamedViews", () => {
     const live = { current: windPlanSnapshot("spring", "morning") };
     const { hook, frameWholeSite } = mount(live);
     act(() => void hook.result.current.save("WS - Spring"));
-    act(() => hook.result.current.exportAll(false, "saved"));
+    act(() => hook.result.current.exportAll({ highQuality: false, transparent: false }, "saved"));
     await waitFor(() => expect(hook.result.current.busy).toBeNull());
     expect(frameWholeSite).not.toHaveBeenCalled();
     expect(sheets.composeWindSheet.mock.calls[0]![2]).not.toHaveProperty("cutMargin", expect.any(Number));
@@ -144,14 +144,14 @@ describe("useNamedViews", () => {
     act(() => void hook.result.current.save("Axo"));
     const plan = hook.result.current.views.find((view) => view.name === "WS - Spring")!;
     const axo = hook.result.current.views.find((view) => view.name === "Axo")!;
-    act(() => hook.result.current.exportSelected([axo.id], false, "whole-site"));
+    act(() => hook.result.current.exportSelected([axo.id], { highQuality: false, transparent: false }, "whole-site"));
     await waitFor(() => expect(hook.result.current.busy).toBeNull());
     expect(frameWholeSite).not.toHaveBeenCalled();
-    act(() => hook.result.current.exportSelected([plan.id], false, "whole-site"));
+    act(() => hook.result.current.exportSelected([plan.id], { highQuality: false, transparent: false }, "whole-site"));
     await waitFor(() => expect(hook.result.current.busy).toBeNull());
     expect(frameWholeSite).toHaveBeenCalledTimes(1);
     expect(sheets.composeWindSheet.mock.calls[0]![2]).toMatchObject({ cutMargin: 0.045 });
-    act(() => hook.result.current.exportAll(false, "whole-site"));
+    act(() => hook.result.current.exportAll({ highQuality: false, transparent: false }, "whole-site"));
     await waitFor(() => expect(hook.result.current.busy).toBeNull());
     expect(frameWholeSite).toHaveBeenCalledTimes(2);
   });
@@ -213,16 +213,16 @@ describe("useNamedViews", () => {
     live.current = snapshot("3d");
     act(() => void hook.result.current.save("Axo"));
     live.current = snapshot("3d", "sw");
-    act(() => hook.result.current.exportAll(true));
+    act(() => hook.result.current.exportAll({ highQuality: true, transparent: true }));
     await waitFor(() => expect(downloads.downloadBytes).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(hook.result.current.busy).toBeNull());
     expect(png).toHaveBeenCalledTimes(3);
     expect(sheets.composeWindSheet).toHaveBeenCalledTimes(2);
-    const labels = sheets.composeWindSheet.mock.calls.map(([, input, options]) => [input.viewName, input.seasonTimeLabel, options.highQuality]);
+    const labels = sheets.composeWindSheet.mock.calls.map(([, input, options]) => [input.viewName, input.seasonTimeLabel, options.highQuality, options.transparent]);
     expect(labels).toEqual(
       expect.arrayContaining([
-        ["WS - Spring", "Spring · Morning", true],
-        ["WS - Winter", "Winter · Afternoon", true],
+        ["WS - Spring", "Spring · Morning", true, true],
+        ["WS - Winter", "Winter · Afternoon", true, true],
       ]),
     );
     expect(sheets.composeWindSheet.mock.calls[0]![1].siteName).toBe("Melbourne");
@@ -305,18 +305,25 @@ describe("useNamedViews", () => {
     await waitFor(() => expect(png).toHaveBeenCalledTimes(1));
   });
 
-  it("asks for a high quality transparent capture only when the toggle is on", async () => {
+  it("asks for high quality and a transparent background separately", async () => {
     const live = { current: snapshot("3d") };
     const { hook, png } = mount(live);
     act(() => void hook.result.current.save("One"));
-    act(() => hook.result.current.exportAll(false));
-    await waitFor(() => expect(hook.result.current.busy).toBeNull());
-    expect(png).toHaveBeenLastCalledWith(undefined);
-    act(() => hook.result.current.exportAll(true));
-    await waitFor(() => expect(png).toHaveBeenCalledTimes(2));
-    const options = (png.mock.calls[1] as unknown[])[0] as { transparent: boolean; scale: number };
-    expect(options.transparent).toBe(true);
-    expect(options.scale).toBeGreaterThanOrEqual(2);
+    const run = async (opts: { highQuality: boolean; transparent: boolean }, calls: number) => {
+      act(() => hook.result.current.exportAll(opts));
+      await waitFor(() => expect(png).toHaveBeenCalledTimes(calls));
+      await waitFor(() => expect(hook.result.current.busy).toBeNull());
+      return (png.mock.calls[calls - 1] as unknown[])[0] as { transparent: boolean; scale?: number } | undefined;
+    };
+    expect(await run({ highQuality: false, transparent: false }, 1)).toBeUndefined();
+    const hq = await run({ highQuality: true, transparent: false }, 2);
+    expect(hq?.transparent).toBe(false);
+    expect(hq?.scale).toBeGreaterThanOrEqual(2);
+    const clear = await run({ highQuality: false, transparent: true }, 3);
+    expect(clear).toEqual({ transparent: true, scale: undefined });
+    const both = await run({ highQuality: true, transparent: true }, 4);
+    expect(both?.transparent).toBe(true);
+    expect(both?.scale).toBeGreaterThanOrEqual(2);
   });
 });
 

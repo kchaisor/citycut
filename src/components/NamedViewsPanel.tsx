@@ -2,6 +2,7 @@ import { Check, Pencil, Trash2 } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { isPngExportable, type NamedView } from "../lib/namedViews";
 import type { WindSheetFraming } from "../lib/sheetFraming";
+import type { ViewPngOptions } from "../lib/viewPngOptions";
 import { isWindSheetView } from "../lib/windSheet";
 
 export type NamedViewsBusy = "selected" | "all" | null;
@@ -14,8 +15,8 @@ export type NamedViewsPanelProps = {
   onRestore: (id: string) => void;
   onRename: (id: string, name: string) => void;
   onDelete: (id: string) => void;
-  onExportSelected: (ids: string[], highQuality: boolean, framing: WindSheetFraming) => void;
-  onExportAll: (highQuality: boolean, framing: WindSheetFraming) => void;
+  onExportSelected: (ids: string[], png: ViewPngOptions, framing: WindSheetFraming) => void;
+  onExportAll: (png: ViewPngOptions, framing: WindSheetFraming) => void;
   windSheetFraming: WindSheetFraming;
   onWindSheetFramingChange: (framing: WindSheetFraming) => void;
 };
@@ -38,6 +39,8 @@ export function NamedViewsPanel(props: NamedViewsPanelProps) {
   const [ticked, setTicked] = useState<ReadonlySet<string>>(new Set());
   const [renaming, setRenaming] = useState<{ id: string; text: string } | null>(null);
   const [highQuality, setHighQuality] = useState(false);
+  const [transparent, setTransparent] = useState(false);
+  const png: ViewPngOptions = { highQuality, transparent };
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const tickedIds = views.filter((view) => ticked.has(view.id)).map((view) => view.id);
   const exporting = busy !== null;
@@ -176,7 +179,11 @@ export function NamedViewsPanel(props: NamedViewsPanelProps) {
       <p className="massing-micro named-views-export-head">Export PNG</p>
       <label className="named-views-quality">
         <input type="checkbox" checked={highQuality} disabled={exporting} onChange={(event) => setHighQuality(event.target.checked)} />
-        <span>High quality, transparent</span>
+        <span>High quality</span>
+      </label>
+      <label className="named-views-quality">
+        <input type="checkbox" checked={transparent} disabled={exporting} onChange={(event) => setTransparent(event.target.checked)} />
+        <span>Transparent background</span>
       </label>
       {hasWindSheet && (
         <>
@@ -202,7 +209,7 @@ export function NamedViewsPanel(props: NamedViewsPanelProps) {
           type="button"
           className="named-views-primary"
           disabled={tickedIds.length === 0 || exporting}
-          onClick={() => props.onExportSelected(tickedIds, highQuality, props.windSheetFraming)}
+          onClick={() => props.onExportSelected(tickedIds, png, props.windSheetFraming)}
         >
           {busy === "selected" ? "Exporting…" : "Export selected"}
         </button>
@@ -210,12 +217,12 @@ export function NamedViewsPanel(props: NamedViewsPanelProps) {
           type="button"
           className="named-views-primary"
           disabled={views.length === 0 || exporting}
-          onClick={() => props.onExportAll(highQuality, props.windSheetFraming)}
+          onClick={() => props.onExportAll(png, props.windSheetFraming)}
         >
           {busy === "all" ? "Exporting…" : "Export all"}
         </button>
       </div>
-      <p className="massing-helper">One view downloads as a PNG; several download as a zip. Only 3D views export. High quality renders at 3x on a transparent background. Plan wind sheets can frame the whole site or keep the saved zoom.</p>
+      <p className="massing-helper">One view downloads as a PNG; several download as a zip. Only 3D views export. High quality renders at 3x; Transparent background drops the page colour. Plan wind sheets can frame the whole site or keep the saved zoom.</p>
       {warning && <p className="massing-warning is-error" role="alert">{warning}</p>}
     </div>
   );

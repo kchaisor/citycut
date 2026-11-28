@@ -579,7 +579,7 @@ function measureTrim(bitmap: ImageBitmap, page: string, transparent: boolean): S
 export async function composeWindSheet(
   capture: Blob,
   input: WindSheetInput,
-  options: { highQuality: boolean; frame: SheetFrame | null; cutMargin?: number },
+  options: { highQuality: boolean; transparent: boolean; frame: SheetFrame | null; cutMargin?: number },
 ): Promise<Uint8Array> {
   const size = WIND_SHEET_SIZES[options.highQuality ? "highQuality" : "normal"];
   const layout = windSheetLayout(size.width, size.height);
@@ -596,9 +596,9 @@ export async function composeWindSheet(
       options.cutMargin != null && options.frame?.cutM
         ? cutMarginTrim(bitmap, options.frame.metresAcross, options.frame.cutM, options.cutMargin)
         : null;
-    const trim = cutTrim ?? measureTrim(bitmap, style.page, options.highQuality);
+    const trim = cutTrim ?? measureTrim(bitmap, style.page, options.transparent);
     drawWindSheet(ctx, layout, { source: bitmap, width: bitmap.width, height: bitmap.height, frame: options.frame, trim }, input, style, {
-      transparent: options.highQuality,
+      transparent: options.transparent,
     });
     const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
     if (!blob) throw new Error("Could not encode the wind sheet.");

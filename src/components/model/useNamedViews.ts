@@ -19,6 +19,7 @@ import {
   type NamedViewsStore,
 } from "../../lib/namedViews";
 import { HQ_DEFAULT_SCALE as HQ_EXPORT_SCALE } from "../../lib/captureViewportPng";
+import { PLAIN_PNG, type ViewPngOptions } from "../../lib/viewPngOptions";
 import {
   WIND_SHEET_FRAMING,
   WIND_SHEET_MARGIN,
@@ -113,7 +114,8 @@ export function useNamedViews({ model, getSnapshot, applySnapshot, getExporter, 
   );
 
   const exportViews = useCallback(
-    async (list: NamedView[], mode: Exclude<NamedViewsBusy, null>, highQuality: boolean, framing: WindSheetFraming) => {
+    async (list: NamedView[], mode: Exclude<NamedViewsBusy, null>, png: ViewPngOptions, framing: WindSheetFraming) => {
+      const { highQuality, transparent } = png;
       const exportable = list.filter(isPngExportable);
       if (exportable.length === 0) {
         setWarning("Only 3D views can be exported as PNG. Pick a view saved in 3D.");
@@ -137,7 +139,7 @@ export function useNamedViews({ model, getSnapshot, applySnapshot, getExporter, 
               ? windSheetInput(getWindSheetSource(), snapshot, model.placeLabel, view.name)
               : null;
           const crop = sheet ? windSheetCropOption(highQuality) : null;
-          const base = highQuality ? { transparent: true, scale: HQ_EXPORT_SCALE } : undefined;
+          const base = highQuality || transparent ? { transparent, scale: highQuality ? HQ_EXPORT_SCALE : undefined } : undefined;
           const restoreCamera = crop && framing === "whole-site" ? exporter.frameWholeSite(crop) : null;
           let bytes: Uint8Array;
           try {
@@ -145,7 +147,7 @@ export function useNamedViews({ model, getSnapshot, applySnapshot, getExporter, 
             const blob = await exporter.viewportPng(crop ? { ...base, crop } : base);
             bytes =
               sheet && crop
-                ? await composeWindSheet(blob, sheet, { highQuality, frame: exporter.sheetFrame(crop), cutMargin: restoreCamera ? WIND_SHEET_MARGIN : undefined })
+                ? await composeWindSheet(blob, sheet, { highQuality, transparent, frame: exporter.sheetFrame(crop), cutMargin: restoreCamera ? WIND_SHEET_MARGIN : undefined })
                 : new Uint8Array(await blob.arrayBuffer());
           } finally {
             restoreCamera?.();
@@ -169,15 +171,15 @@ export function useNamedViews({ model, getSnapshot, applySnapshot, getExporter, 
   );
 
   const exportSelected = useCallback(
-    (ids: string[], highQuality = false, framing: WindSheetFraming = WIND_SHEET_FRAMING) => {
+    (ids: string[], png: ViewPngOptions = PLAIN_PNG, framing: WindSheetFraming = WIND_SHEET_FRAMING) => {
       const list = selectedViews(views, ids);
-      if (list.length) void exportViews(list, "selected", highQuality, framing);
+      if (list.length) void exportViews(list, "selected", png, framing);
     },
     [exportViews, views],
   );
 
-  const exportAll = useCallback((highQuality = false, framing: WindSheetFraming = WIND_SHEET_FRAMING) => {
-    if (views.length) void exportViews([...views], "all", highQuality, framing);
+  const exportAll = useCallback((png: ViewPngOptions = PLAIN_PNG, framing: WindSheetFraming = WIND_SHEET_FRAMING) => {
+    if (views.length) void exportViews([...views], "all", png, framing);
   }, [exportViews, views]);
 
   return { views, busy, warning, windSheetFraming, setWindSheetFraming, save, rename, remove, restore, exportSelected, exportAll };
