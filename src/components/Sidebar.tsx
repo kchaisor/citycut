@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useId, useState, type KeyboardEvent, type ReactNode } from "react";
-import { Crop, PanelLeftClose, PanelLeftOpen, Plus } from "lucide-react";
+import { Crop, MoveUpRight, PanelLeftClose, PanelLeftOpen, Plus } from "lucide-react";
 import { NARROW_PANEL_QUERY } from "../lib/panelCollapse";
 import { Mark } from "./Mark";
 
@@ -57,6 +57,7 @@ export function Sidebar({
   headerRight,
   rightMeta = "MGA55",
   siteIntel,
+  arrows,
   children,
   rightChildren,
   rightBelow,
@@ -90,6 +91,7 @@ export function Sidebar({
     icon: ReactNode;
     fold?: { folded: boolean; onToggle: () => void; chevron: ReactNode };
   };
+  arrows?: { active: boolean; onToggle: () => void };
   children: ReactNode;
   rightChildren?: ReactNode;
   rightBelow?: ReactNode;
@@ -255,6 +257,24 @@ export function Sidebar({
                     </span>
                   </button>
                 </span>
+                {arrows ? (
+                  <span className="sidebar-rail-slot">
+                    <button
+                      type="button"
+                      className={arrows.active ? "rail-btn active is-active" : "rail-btn"}
+                      data-rail-item=""
+                      data-diagram="arrows"
+                      aria-label="Arrows"
+                      aria-pressed={arrows.active}
+                      onClick={arrows.onToggle}
+                    >
+                      <MoveUpRight size={18} strokeWidth={1.75} aria-hidden="true" />
+                      <span className="rail-tip" aria-hidden="true">
+                        Arrows
+                      </span>
+                    </button>
+                  </span>
+                ) : null}
               </Fragment>
             ) : (
               renderRailButton(item, false)

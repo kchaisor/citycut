@@ -52,6 +52,7 @@ const SNAPSHOT: NamedViewSnapshot = {
   lineStyles: null,
   exploded: false,
   explodeGapM: null,
+  arrows: null,
 };
 
 function memoryStorage(initial: Record<string, string> = {}) {
@@ -322,3 +323,50 @@ describe("saved wind season and time of day", () => {
   });
 });
 
+
+describe("saved arrows", () => {
+  const arrow = {
+    id: "a1",
+    points: [[0, 0], [30, 10]],
+    style: "streak",
+    colour: "blue",
+    width: 1.65,
+    heightM: 40,
+    animation: "none",
+    speed: 1,
+    showIn3d: true,
+    showInDrawing: false,
+  };
+
+  it("keeps the arrows toggle and the arrow set as of save", () => {
+    const saved = captureNamedView("Arrows", { ...SNAPSHOT, arrows: { visible: false, items: [arrow as never] } })!;
+    const reread = parseNamedViewsStore(JSON.stringify(saveView(emptyNamedViewsStore(), "cut", saved)));
+    const restored = applyNamedView(viewsForCut(reread, "cut")[0]!)!;
+    expect(restored.arrows).toEqual({ visible: false, items: [arrow] });
+  });
+
+  it("reads a view saved with the old label and S, M, L width", () => {
+    const old = { ...arrow, width: "l", label: "Wind" };
+    const saved = captureNamedView("Old", { ...SNAPSHOT, arrows: { visible: true, items: [old as never] } })!;
+    expect(applyNamedView(saved)!.arrows!.items).toEqual([arrow]);
+  });
+
+  it("round-trips a view without arrows", () => {
+    const saved = captureNamedView("Plain", SNAPSHOT)!;
+    expect(applyNamedView(saved)!.arrows).toBeNull();
+  });
+
+  it("restores nothing for a view saved before arrows existed", () => {
+    const legacy = JSON.parse(JSON.stringify(SNAPSHOT)) as Record<string, unknown>;
+    delete legacy.arrows;
+    const raw = JSON.stringify({ version: 1, byCut: { cut: [{ id: "o", name: "Old", savedAt: 1, snapshot: legacy }] } });
+    expect(applyNamedView(viewsForCut(parseNamedViewsStore(raw), "cut")[0]!)!.arrows).toBeNull();
+  });
+
+  it("drops malformed arrows from a saved view and keeps the good ones", () => {
+    const messy = { ...SNAPSHOT, arrows: { visible: true, items: [arrow, { id: "bad" }, 3] } };
+    const restored = applyNamedView(captureNamedView("Messy", messy as never)!)!;
+    expect(restored.arrows!.items).toEqual([arrow]);
+    expect(applyNamedView(captureNamedView("Junk", { ...SNAPSHOT, arrows: "x" } as never)!)!.arrows).toBeNull();
+  });
+});

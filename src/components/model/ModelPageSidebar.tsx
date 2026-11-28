@@ -1,4 +1,6 @@
 import { ChevronDown, Download, PanelRight, RotateCcw } from "lucide-react";
+import { useMemo } from "react";
+import { groundAtFor } from "../../lib/diagramArrows3d";
 import { StudioCompass } from "../StudioCompass";
 import { studioCompassVisible } from "../../lib/studioCompass";
 import { Sidebar } from "../Sidebar";
@@ -19,6 +21,7 @@ import { ModelPageSidebarRight } from "./ModelPageSidebarRight";
 import { ExplodedAxoHudCard } from "./ExplodedAxoHudCard";
 import { SolarStudyHudCard } from "./SolarStudyHudCard";
 import { ViewshedHudCard } from "./ViewshedHudCard";
+import { ArrowsHudCard } from "./ArrowsHudCard";
 import { WindRoseHudCard } from "./WindRoseHudCard";
 import { SunHoursLegendDock } from "./SunHoursLegendDock";
 import { solarSettingsForActiveAnalysis } from "../../lib/solarStudyView";
@@ -73,7 +76,9 @@ export function ModelPageSidebar({ vm }: { vm: import("./useModelPage").ModelPag
     view,
   } = vm;
   const { analysisCards, analysisCardOn, siteIntelFolded, setSiteIntelFolded, exploded, explodeModel, showIsometric } = vm;
+  const arrowGround = useMemo(() => groundAtFor(model), [model.terrain, model.sideM]);
   const explodeCardOn = tab === "3d" && exploded;
+  const arrowsCardOn = vm.diagramArrows.state.active;
   const sunHoursLegendOn = sunHoursLegendCardOn({
     tab,
     drawing,
@@ -104,7 +109,7 @@ export function ModelPageSidebar({ vm }: { vm: import("./useModelPage").ModelPag
               open: siteIntelOpen,
               onToggle: () => setSiteIntelOpen(!siteIntelOpen),
               icon: <PanelRight size={16} strokeWidth={1.75} aria-hidden="true" />,
-              fold: analysisCardOn
+              fold: analysisCardOn || arrowsCardOn
                 ? {
                     folded: siteIntelFolded,
                     onToggle: () => setSiteIntelFolded(!siteIntelFolded),
@@ -112,11 +117,16 @@ export function ModelPageSidebar({ vm }: { vm: import("./useModelPage").ModelPag
                   }
                 : undefined,
             }}
+            arrows={{
+              active: arrowsCardOn,
+              onToggle: () => vm.diagramArrows.dispatch({ type: "setActive", active: !arrowsCardOn }),
+            }}
             rightMeta={`MGA${mgaCrs(model.center.lon).zone}`}
             rightBelow={
-              analysisCardOn || sunHoursLegendAlone || explodeCardOn ? (
+              analysisCardOn || sunHoursLegendAlone || explodeCardOn || arrowsCardOn ? (
                 <>
                   {explodeCardOn ? <ExplodedAxoHudCard vm={vm} /> : null}
+                  {arrowsCardOn ? <ArrowsHudCard arrows={vm.diagramArrows} groundAt={arrowGround} /> : null}
                   {analysisCards.solar ? <SolarStudyHudCard vm={vm} /> : null}
                   {analysisCards.wind ? <WindRoseHudCard vm={vm} /> : null}
                   {analysisCards.view ? <ViewshedHudCard vm={vm} /> : null}

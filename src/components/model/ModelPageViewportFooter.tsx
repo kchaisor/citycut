@@ -1,5 +1,4 @@
 import { Eye, Sun, Wind } from "lucide-react";
-
 import { activeAnalysisKinds, toggleAnalysis, type SiteAnalysisKind } from "../../lib/sidebarSections";
 import { solarSettingsOnStudyStart } from "../../lib/solarStudyView";
 

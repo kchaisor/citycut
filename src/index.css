@@ -2546,6 +2546,7 @@ input[type="range"].wind-streaks-input::-moz-range-thumb {
   overflow: hidden;
   pointer-events: none;
 }
+.diagram-arrows-plan { z-index: 2; }
 .wind-plan-canvas {
   position: absolute;
   inset: 0;

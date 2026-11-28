@@ -83,6 +83,16 @@ describe("Analysis bar", () => {
     expect(bar().querySelector(".env-solar-idle, .env-solar-chrome, .env-bottom-row")).toBeNull();
   });
 
+  it("no longer carries the Arrows tool, which lives in the left rail", () => {
+    for (const props of [{}, { tab: "drawing" as const }]) {
+      render(<Hud {...props} />);
+      expect(within(bar()).queryByRole("button", { name: "Arrows" })).toBeNull();
+      expect(within(bar()).queryByText("Diagram")).toBeNull();
+      expect(bar().querySelector("[data-diagram]")).toBeNull();
+      cleanup();
+    }
+  });
+
   it("stays that one row with any mix of analyses on, in 3D, Plan and Drawing", () => {
     for (const props of [{}, { projection: "plan" as const }, { tab: "drawing" as const }]) {
       render(<Hud {...props} />);

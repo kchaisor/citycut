@@ -11,6 +11,7 @@ import {
   visibleViewportRect,
 } from "./captureViewportPng";
 import { POST_OVERLAY_LAYER, moveToPostOverlay, retainPostOverlay, setPostOverlayDeferred } from "./postOverlay";
+import { registerStaticPlanArrows } from "./diagramArrowsPlanDraw";
 import { markScreenOnly } from "./screenOnly";
 
 const guards = vi.hoisted(() => ({
@@ -231,6 +232,24 @@ describe("readViewportCapture", () => {
     const capture = readViewportCapture(document.getElementById("c") as HTMLCanvasElement);
     expect(capture.background).toBe("rgb(250, 250, 250)");
     expect(capture.labels.map((label) => label.text)).toEqual(["Flinders"]);
+  });
+
+  it("composites a static snapshot of the registered Plan arrow canvas, not the live animated one", () => {
+    document.body.innerHTML = `
+      <div class="viewport"><canvas id="c"></canvas>
+      <div class="wind-plan-overlay"><canvas id="plan" width="40" height="40"></canvas></div></div>`;
+    const plan = document.getElementById("plan") as HTMLCanvasElement;
+    const paint = vi.fn((target: HTMLCanvasElement) => {
+      target.width = 40;
+      target.height = 40;
+    });
+    const unregister = registerStaticPlanArrows(plan, paint);
+    const capture = readViewportCapture(document.getElementById("c") as HTMLCanvasElement);
+    expect(paint).toHaveBeenCalledTimes(1);
+    expect(capture.overlays).toHaveLength(1);
+    expect(capture.overlays?.[0].canvas).not.toBe(plan);
+    unregister();
+    expect(readViewportCapture(document.getElementById("c") as HTMLCanvasElement).overlays?.[0].canvas).toBe(plan);
   });
 
   it("reads the exploded axo layer labels and leaders once they are showing", () => {

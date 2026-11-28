@@ -146,6 +146,7 @@ import type { CameraMemoryRef, CameraRestoreRequest } from "../../lib/cameraMemo
 import type { NamedViewSnapshot } from "../../lib/namedViews";
 import type { WindSheetSource } from "../../lib/windSheet";
 import { useNamedViews } from "./useNamedViews";
+import { useDiagramArrows } from "./useDiagramArrows";
 import { explodeSettledOnCanvas, waitForExplodeSettled, waitForStudies, type StudyReadySignals } from "../../lib/studyReady";import { ExportBusy } from "../../lib/exportTiles";
 
 import { useWalkPlayback, useWalkViewshed } from "../useWalkViewshed";
@@ -468,6 +469,7 @@ export function useModelPage({
           ? { selection: siteWind, period: windSettings.period }
           : null,
       landmarkLabels: drawingLandmarkSources,
+      arrows: diagramArrows.state.visible ? diagramArrows.state.arrows : null,
     };
   }
 
@@ -1976,6 +1978,19 @@ export function useModelPage({
     }
   }, []);
 
+  const diagramArrows = useDiagramArrows(model);
+  const arrowToolActive = diagramArrows.state.active;
+  const foldBeforeArrows = useRef<boolean | null>(null);
+  useEffect(() => {
+    if (arrowToolActive) {
+      foldBeforeArrows.current = siteIntelFolded;
+      setSiteIntelFolded(true);
+    } else if (foldBeforeArrows.current !== null) {
+      setSiteIntelFolded(foldBeforeArrows.current);
+      foldBeforeArrows.current = null;
+    }
+  }, [arrowToolActive]);
+
   function namedViewSnapshot(): NamedViewSnapshot {
     const memory = cameraMemory.current;
     const pose = memory ? (view.projection === "perspective" ? memory.persp : memory.ortho) : null;
@@ -2006,6 +2021,7 @@ export function useModelPage({
       lineStyles,
       exploded: tab === "3d" && exploded,
       explodeGapM: tab === "3d" && exploded ? explodeGap.gapM : null,
+      arrows: diagramArrows.snapshot(),
     };
   }
 
@@ -2038,6 +2054,7 @@ export function useModelPage({
     setShowSource(snapshot.showSource);
     setHiddenBuildingUses(new Set(snapshot.hiddenUses));
     setLandmarkLabelsOn(snapshot.landmarkLabelsOn);
+    diagramArrows.restore(snapshot.arrows);
     const savedLines = snapshot.lineStyles;
     if (savedLines) setLineStyles((current) => ({ ...current, ...savedLines }));
     if (!snapshot.pose) return Promise.resolve();
@@ -2369,6 +2386,7 @@ export function useModelPage({
     landmarkLabelsOn,
     landmarkScreens,
     landmarkSources,
+    diagramArrows,
     setLandmarkLabelsOn,
     setLandmarkScreens,
     wikidataStatus: wikidata.status,

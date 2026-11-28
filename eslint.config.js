@@ -10,6 +10,7 @@ const legacyOversized = [
   "src/lib/aiPlan.ts",
   "src/lib/aiView.ts",
   "src/lib/buildCity.ts",
+  "src/lib/colours.ts",
   "src/lib/explodedAxo.ts",
   "src/lib/isometricDrawing.ts",
   "src/lib/rhinoExport.ts",

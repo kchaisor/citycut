@@ -133,6 +133,15 @@ import {
 import { windSceneLayers } from "../lib/windState";
 import { GroundWindFlow } from "./GroundWindFlow";
 import { WindDiagramStreams } from "./WindDiagramStreams";
+import { withArrowEditorHidden } from "../lib/diagramArrows3d";
+import { DiagramArrowsPlanOverlay } from "./DiagramArrowsPlanOverlay";
+import { DiagramArrows3D } from "./DiagramArrows3D";
+import type { ArrowToolAction, ArrowToolState } from "../lib/diagramArrowsTool";
+
+export type DiagramArrowsBinding = {
+  state: ArrowToolState;
+  dispatch: (action: ArrowToolAction) => void;
+};
 import type { PrevailingStream } from "../lib/windPrevailingStreams";
 import { createWindPlanTransformStore, WindPlanOverlay, WindPlanProjector } from "./WindPlanOverlay";
 import type { WindPlanState } from "./useWindPlan";
@@ -1041,6 +1050,7 @@ function City({
   onClearSceneInspect,
   pickBuildings,
   onScenePoint,
+  arrowToolActive = false,
   sectionKnife,
   onSectionKnifePoseChange,
   onSectionKnifeGizmoInteractionChange,
@@ -1078,6 +1088,7 @@ function City({
   onClearSceneInspect?: () => void;
   pickBuildings: boolean;
   onScenePoint?: ((east: number, north: number, up: number) => void) | null;
+  arrowToolActive?: boolean;
   sectionKnife?: SectionKnifeToolState | null;
   onSectionKnifePoseChange?: (pose: SectionKnifePose) => void;
   onSectionKnifeGizmoInteractionChange?: (state: SectionKnifeGizmoInteraction) => void;
@@ -1643,7 +1654,7 @@ function City({
       <SceneInspectPickLayer
         root={group}
         model={model}
-        enabled={!sectionKnife?.active && !onScenePoint}
+        enabled={!sectionKnife?.active && !onScenePoint && !arrowToolActive}
         buildingsPickable={pickBuildings && buildingsVisible}
         treesPickable={Boolean(model.layers.trees) && treesVisible}
         importedMassing={importedMassing}
@@ -2587,7 +2598,12 @@ function ExportBridge({
         if (city && solarDiagramOn) return withBuildingExportColours(city, false, render);
         return render();
       },
-      viewportPng: (options) => captureViewportPng(gl, scene, get().camera, readViewportCapture(gl.domElement), options),
+      viewportPng: (options) => {
+        const canvas = gl.domElement;
+        const camera = get().camera;
+        const capture = readViewportCapture(canvas);
+        return withArrowEditorHidden(scene, () => captureViewportPng(gl, scene, camera, capture, options));
+      },
       sheetFrame: (crop) => {
         const canvas = gl.domElement;
         const cssWidth = canvas.clientWidth || canvas.width;
@@ -3126,6 +3142,7 @@ export function Scene3D({
   walkRippleArrivals = null,
   walkRipplePlaying = false,
   onScenePoint = null,
+  diagramArrows = null,
   sectionKnife = null,
   onSectionKnifePoseChange = undefined,
   onCompassHeading = undefined,
@@ -3182,6 +3199,7 @@ export function Scene3D({
   walkRippleArrivals?: Map<number, number> | null;
   walkRipplePlaying?: boolean;
   onScenePoint?: ((east: number, north: number, up: number) => void) | null;
+  diagramArrows?: DiagramArrowsBinding | null;
   sectionKnife?: SectionKnifeToolState | null;
   onSectionKnifePoseChange?: (pose: SectionKnifePose) => void;
   onCompassHeading?: (deg: number) => void;
@@ -3248,6 +3266,7 @@ export function Scene3D({
   const onSectionKnifeGizmoInteractionChange = useCallback((state: SectionKnifeGizmoInteraction) => {
     setSectionKnifeGizmoInteraction(state);
   }, []);
+  const [arrowOrbitLock, setArrowOrbitLock] = useState(false);
   const lift = model.terrain ? (model.terrain.min + model.terrain.max) / 2 : 0;
   const colourTick = useColourRevision();
   const modelBg = useMemo(() => themeColor("--model-bg"), [colourTick]);
@@ -3390,8 +3409,9 @@ export function Scene3D({
         onBounds={onBounds}
         onSceneInspectPick={onInspectPick}
         onClearSceneInspect={onClearSceneInspect}
-        pickBuildings={model.layers.buildings && !onScenePoint}
+        pickBuildings={model.layers.buildings && !onScenePoint && !diagramArrows?.state.active}
         onScenePoint={onScenePoint}
+        arrowToolActive={Boolean(diagramArrows?.state.active)}
         heightEditBuildingId={heightEditBuildingId}
         selectedBuildingIds={selectedBuildingIds}
         display={display}
@@ -3453,6 +3473,16 @@ export function Scene3D({
           exportRef={landmarkExportRef}
         />
       ) : null}
+      {diagramArrows ? (
+        <DiagramArrows3D
+          model={model}
+          state={diagramArrows.state}
+          dispatch={diagramArrows.dispatch}
+          active={active}
+          flat={projection === "plan" || windLayers.planOverlay}
+          onOrbitLock={setArrowOrbitLock}
+        />
+      ) : null}
       {onCompassHeading ? <StudioCompassTracker onHeading={onCompassHeading} /> : null}
       <WindLayer
         model={windModel ?? model}
@@ -3489,7 +3519,7 @@ export function Scene3D({
         cameraRestore={cameraRestore}
         onCameraRestored={onCameraRestored}
         introEnabled={!introSkip}
-        gizmoOrbitLock={sectionKnifeGizmoInteraction.orbitLock}
+        gizmoOrbitLock={sectionKnifeGizmoInteraction.orbitLock || arrowOrbitLock}
         landmarkLabelsRef={landmarkExportRef}
         explode={explodeRuntime}
         explodeLive={explodeLive}
@@ -3533,6 +3563,9 @@ export function Scene3D({
         </div>
       ) : null}
       {windLayers.planOverlay && windPlan ? <WindPlanOverlay model={windPlanOutlineModel ?? model} plan={windPlan} store={windPlanStore} /> : null}
+      {windLayers.planOverlay && windPlan && diagramArrows && diagramArrows.state.visible && active ? (
+        <DiagramArrowsPlanOverlay model={model} arrows={diagramArrows.state.arrows} store={windPlanStore} />
+      ) : null}
     </div>
   );
 }

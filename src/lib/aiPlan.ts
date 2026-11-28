@@ -22,6 +22,8 @@ import {
 } from "./figureGround";
 import { formatCoord, openRing } from "./geo";
 import { LINE_MM, hexRgb } from "./lineweights";
+import { diagramArrowsChunk } from "./diagramArrowsDrawingExport";
+import type { DiagramArrow } from "./diagramArrows";
 import { heliodonPlanPdfChunk } from "./heliodonPlanExport";
 import { planFrameAnnotationChunks } from "./planFrameAnnotations";
 import type { SunStudyDate } from "./sunStudyPlan";
@@ -81,6 +83,7 @@ export const SITE_LAYER_ORDER = [
   "North arrow",
   "Scale bar",
   "Wind",
+  "Diagram arrows",
   "Annotation",
 ] as const;
 
@@ -278,6 +281,7 @@ export type SitePlanExportOptions = {
   sunStudyMuted?: boolean;
   sunStudySelected?: readonly number[];
   landmarkLabels?: readonly LandmarkLabelSource[] | null;
+  arrows?: readonly DiagramArrow[] | null;
 };
 
 export const LANDMARK_LABEL_LAYER = "Landmark labels";
@@ -356,6 +360,7 @@ function resolveSitePlanExport(
     "wind" in exportOptions ||
     "sunStudy" in exportOptions ||
     "landmarkLabels" in exportOptions ||
+    "arrows" in exportOptions ||
     "uniformBuildings" in exportOptions ||
     "sectionKnife" in exportOptions
   ) {
@@ -625,6 +630,8 @@ export function sitePlanChunks(
   if (resolved.wind?.selection) {
     chunks.push(windPlanPdfChunk(resolved.wind.selection, resolved.wind.period, layout, model.sideM));
   }
+  const arrowsLayer = diagramArrowsChunk(resolved.arrows, model.sideM, (east, north) => sheetPoint(east, north, model.sideM, layout));
+  if (arrowsLayer) chunks.push(arrowsLayer);
   chunks.push(frameStroke(layout, style.frame));
   if (heliodon) {
     const studyDate =
